@@ -21,6 +21,7 @@ const route = useRoute()
 const pageTitle = computed(() => {
   const titles = {
     Home: 'Home',
+    Todos: 'Todos',
     Tasks: 'Tasks',
     Goals: 'Goals',
     Notes: 'Notes',

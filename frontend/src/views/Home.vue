@@ -62,7 +62,7 @@
             </svg>
             Recent Tasks
           </h3>
-          <router-link to="/tasks" class="section-link">View All</router-link>
+          <router-link to="/todos" class="section-link">View All</router-link>
         </div>
         <div class="section-body">
           <div v-if="loadingTasks" class="loading-state">
@@ -97,7 +97,7 @@
             </svg>
             Recent Goals
           </h3>
-          <router-link to="/goals" class="section-link">View All</router-link>
+          <router-link to="/todos" class="section-link">View All</router-link>
         </div>
         <div class="section-body">
           <div v-if="loadingGoals" class="loading-state">

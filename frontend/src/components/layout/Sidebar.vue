@@ -58,20 +58,12 @@
         </svg>
         <span>Home</span>
       </router-link>
-      <router-link to="/tasks" class="nav-item" active-class="nav-item--active">
+      <router-link to="/todos" class="nav-item" active-class="nav-item--active">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M9 11l3 3L22 4" />
           <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
         </svg>
-        <span>Tasks</span>
-      </router-link>
-      <router-link to="/goals" class="nav-item" active-class="nav-item--active">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <circle cx="12" cy="12" r="10" />
-          <circle cx="12" cy="12" r="6" />
-          <circle cx="12" cy="12" r="2" />
-        </svg>
-        <span>Goals</span>
+        <span>Todos</span>
       </router-link>
       <router-link to="/notes" class="nav-item" active-class="nav-item--active">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
