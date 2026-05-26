@@ -22,7 +22,20 @@
         :class="{ 'tab-btn--active': activeTab === tab.id }"
         @click="activeTab = tab.id"
       >
-        <span class="tab-icon" v-html="tab.icon"></span>
+        <span class="tab-icon">
+          <svg v-if="tab.id === 'habits'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+          </svg>
+          <svg v-else-if="tab.id === 'tasks'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M9 11l3 3L22 4" />
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+          </svg>
+          <svg v-else-if="tab.id === 'goals'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            <circle cx="12" cy="12" r="6" />
+            <circle cx="12" cy="12" r="2" />
+          </svg>
+        </span>
         <span class="tab-label">{{ tab.label }}</span>
         <span class="tab-count" :class="'tab-count--' + tab.id">{{ getCount(tab.id) }}</span>
       </button>
@@ -268,6 +281,22 @@
       </Transition>
     </Teleport>
 
+    <!-- Error Toast -->
+    <Teleport to="body">
+      <Transition name="toast">
+        <div v-if="errorToast" class="error-toast">
+          <div class="error-toast-content">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+              <line x1="9" y1="9" x2="15" y2="15" />
+            </svg>
+            <span>{{ errorToast }}</span>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
     <!-- Create Dialog -->
     <Teleport to="body">
       <div v-if="showCreateDialog" class="dialog-overlay" @click.self="cancelDialog">
@@ -383,7 +412,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { todoService } from '../services/todo'
 import { useAuthStore } from '../stores/auth'
 
@@ -397,6 +426,9 @@ const loading = ref(true)
 const error = ref(null)
 const completingId = ref(null)
 const rewardToast = ref(null)
+const rewardToastTimeout = ref(null)
+const errorToast = ref(null)
+const errorToastTimeout = ref(null)
 
 const showCreateDialog = ref(false)
 const creating = ref(false)
@@ -404,21 +436,9 @@ const dialogError = ref(null)
 const dialogTitleInput = ref(null)
 
 const tabs = [
-  {
-    id: 'habits',
-    label: 'Habits',
-    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>'
-  },
-  {
-    id: 'tasks',
-    label: 'Tasks',
-    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>'
-  },
-  {
-    id: 'goals',
-    label: 'Goals',
-    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></svg>'
-  }
+  { id: 'habits', label: 'Habits' },
+  { id: 'tasks', label: 'Tasks' },
+  { id: 'goals', label: 'Goals' }
 ]
 
 const defaultForms = {
@@ -519,10 +539,26 @@ function trapFocus(event) {
 
 function showReward(coins, exp) {
   rewardToast.value = { coins, exp }
-  setTimeout(() => {
+  if (rewardToastTimeout.value) clearTimeout(rewardToastTimeout.value)
+  rewardToastTimeout.value = setTimeout(() => {
     rewardToast.value = null
+    rewardToastTimeout.value = null
   }, 3000)
 }
+
+function showError(message) {
+  errorToast.value = message
+  if (errorToastTimeout.value) clearTimeout(errorToastTimeout.value)
+  errorToastTimeout.value = setTimeout(() => {
+    errorToast.value = null
+    errorToastTimeout.value = null
+  }, 4000)
+}
+
+onUnmounted(() => {
+  if (rewardToastTimeout.value) clearTimeout(rewardToastTimeout.value)
+  if (errorToastTimeout.value) clearTimeout(errorToastTimeout.value)
+})
 
 async function fetchHabits() {
   habits.value = await todoService.getHabits()
@@ -562,6 +598,7 @@ async function completeHabit(habit) {
     await authStore.fetchUser()
   } catch (e) {
     console.error('Failed to complete habit:', e)
+    showError(e.response?.data?.detail || 'Failed to complete habit. Please try again.')
   } finally {
     completingId.value = null
   }
@@ -581,6 +618,7 @@ async function completeTask(task) {
     await authStore.fetchUser()
   } catch (e) {
     console.error('Failed to complete task:', e)
+    showError(e.response?.data?.detail || 'Failed to complete task. Please try again.')
   } finally {
     completingId.value = null
   }
@@ -600,6 +638,7 @@ async function completeGoal(goal) {
     await authStore.fetchUser()
   } catch (e) {
     console.error('Failed to complete goal:', e)
+    showError(e.response?.data?.detail || 'Failed to complete goal. Please try again.')
   } finally {
     completingId.value = null
   }
@@ -1146,6 +1185,33 @@ onMounted(() => {
 .reward-toast-content svg {
   width: 18px;
   height: 18px;
+}
+
+/* Error Toast */
+.error-toast {
+  position: fixed;
+  top: calc(var(--spacing-lg) + 60px);
+  right: var(--spacing-lg);
+  z-index: 1100;
+}
+
+.error-toast-content {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  background: var(--color-error);
+  color: #fff;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  box-shadow: var(--shadow-lg);
+}
+
+.error-toast-content svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 .toast-enter-active {
