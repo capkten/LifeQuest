@@ -278,15 +278,111 @@
           <div class="goal-progress-section">
             <div class="goal-progress-info">
               <span class="goal-progress-label">进度</span>
-              <span class="goal-progress-value">{{ Math.round(goal.progress || 0) }}%</span>
+              <span class="goal-progress-value">{{ getSubtaskProgress(goal.id) !== null ? getSubtaskProgress(goal.id) : Math.round(goal.progress || 0) }}%</span>
             </div>
             <div class="goal-progress-bar">
               <div
                 class="goal-progress-fill"
-                :style="{ width: Math.round(goal.progress || 0) + '%' }"
+                :style="{ width: (getSubtaskProgress(goal.id) !== null ? getSubtaskProgress(goal.id) : Math.round(goal.progress || 0)) + '%' }"
               ></div>
             </div>
           </div>
+
+          <!-- Subtask Section -->
+          <div class="subtask-section">
+            <button
+              class="subtask-toggle-btn"
+              @click="toggleGoalExpand(goal)"
+              :aria-expanded="expandedGoalId === goal.id"
+            >
+              <svg
+                class="subtask-toggle-icon"
+                :class="{ 'subtask-toggle-icon--expanded': expandedGoalId === goal.id }"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+              <span>子任务</span>
+              <span v-if="goalSubtasks[goal.id]" class="subtask-count-badge">
+                {{ goalSubtasks[goal.id].filter(s => s.status === 'completed').length }}/{{ goalSubtasks[goal.id].length }}
+              </span>
+            </button>
+
+            <div v-if="expandedGoalId === goal.id" class="subtask-content">
+              <div v-if="loadingSubtasks && !goalSubtasks[goal.id]" class="subtask-loading">
+                <span class="loading-spinner loading-spinner--sm"></span>
+              </div>
+
+              <template v-else>
+                <!-- Subtask list -->
+                <div v-if="goalSubtasks[goal.id] && goalSubtasks[goal.id].length > 0" class="subtask-list">
+                  <div
+                    v-for="subtask in goalSubtasks[goal.id]"
+                    :key="subtask.id"
+                    class="subtask-item"
+                    :class="{ 'subtask-item--done': subtask.status === 'completed' }"
+                  >
+                    <button
+                      class="subtask-complete-btn"
+                      :class="{ 'subtask-complete-btn--done': subtask.status === 'completed' }"
+                      :disabled="subtask.status === 'completed' || completingSubtaskId === subtask.id"
+                      @click="completeSubtask(subtask, goal.id)"
+                    >
+                      <span v-if="completingSubtaskId === subtask.id" class="loading-spinner loading-spinner--sm"></span>
+                      <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </button>
+                    <span class="subtask-title" :class="{ 'subtask-title--done': subtask.status === 'completed' }">
+                      {{ subtask.title }}
+                    </span>
+                    <button
+                      class="subtask-delete-btn"
+                      :disabled="deletingSubtaskId === subtask.id"
+                      @click="deleteSubtask(subtask, goal.id)"
+                      aria-label="删除子任务"
+                    >
+                      <span v-if="deletingSubtaskId === subtask.id" class="loading-spinner loading-spinner--sm"></span>
+                      <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div v-else class="subtask-empty">
+                  暂无子任务
+                </div>
+
+                <!-- Add subtask input -->
+                <form class="subtask-add-form" @submit.prevent="addSubtask(goal.id)">
+                  <input
+                    v-model="newSubtaskTitle"
+                    type="text"
+                    class="subtask-input"
+                    placeholder="添加子任务..."
+                    maxlength="200"
+                  />
+                  <button
+                    type="submit"
+                    class="subtask-add-btn"
+                    :disabled="!newSubtaskTitle.trim() || creatingSubtask"
+                  >
+                    <span v-if="creatingSubtask" class="loading-spinner loading-spinner--sm"></span>
+                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                  </button>
+                </form>
+              </template>
+            </div>
+          </div>
+
           <div class="todo-card-footer">
             <div class="todo-card-stats">
               <span v-if="goal.deadline" class="stat-item">
@@ -525,6 +621,15 @@ const deletingItem = ref(null)
 const deletingType = ref(null)
 const deleting = ref(false)
 
+// Subtask state
+const expandedGoalId = ref(null)
+const goalSubtasks = ref({})
+const loadingSubtasks = ref(false)
+const newSubtaskTitle = ref('')
+const creatingSubtask = ref(false)
+const completingSubtaskId = ref(null)
+const deletingSubtaskId = ref(null)
+
 const tabs = [
   { id: 'habits', label: '日常习惯' },
   { id: 'tasks', label: '普通待办' },
@@ -739,6 +844,96 @@ async function completeGoal(goal) {
     showError(e.response?.data?.detail || '完成目标失败，请重试。')
   } finally {
     completingId.value = null
+  }
+}
+
+function getSubtaskProgress(goalId) {
+  const subtasks = goalSubtasks.value[goalId]
+  if (!subtasks || subtasks.length === 0) return null
+  const completed = subtasks.filter(s => s.status === 'completed').length
+  return Math.round((completed / subtasks.length) * 100)
+}
+
+async function toggleGoalExpand(goal) {
+  if (expandedGoalId.value === goal.id) {
+    expandedGoalId.value = null
+    return
+  }
+  expandedGoalId.value = goal.id
+  if (!goalSubtasks.value[goal.id]) {
+    await fetchSubtasks(goal.id)
+  }
+}
+
+async function fetchSubtasks(goalId) {
+  loadingSubtasks.value = true
+  try {
+    const subtasks = await todoService.getSubtasks(goalId)
+    goalSubtasks.value[goalId] = subtasks
+  } catch (e) {
+    console.error('Failed to fetch subtasks:', e)
+    showError('加载子任务失败')
+  } finally {
+    loadingSubtasks.value = false
+  }
+}
+
+async function addSubtask(goalId) {
+  const title = newSubtaskTitle.value.trim()
+  if (!title) return
+  creatingSubtask.value = true
+  try {
+    const subtask = await todoService.createSubtask(goalId, { title })
+    if (!goalSubtasks.value[goalId]) {
+      goalSubtasks.value[goalId] = []
+    }
+    goalSubtasks.value[goalId].push(subtask)
+    newSubtaskTitle.value = ''
+  } catch (e) {
+    console.error('Failed to create subtask:', e)
+    showError(e.response?.data?.detail || '创建子任务失败')
+  } finally {
+    creatingSubtask.value = false
+  }
+}
+
+async function completeSubtask(subtask, goalId) {
+  if (subtask.status === 'completed' || completingSubtaskId.value) return
+  completingSubtaskId.value = subtask.id
+  try {
+    const updated = await todoService.completeSubtask(subtask.id)
+    const subtasks = goalSubtasks.value[goalId]
+    if (subtasks) {
+      const idx = subtasks.findIndex(s => s.id === subtask.id)
+      if (idx !== -1) {
+        subtasks[idx] = updated
+      }
+    }
+    if (updated.coins_reward || updated.exp_reward) {
+      showReward(updated.coins_reward || 0, updated.exp_reward || 0)
+      await authStore.fetchUser()
+    }
+  } catch (e) {
+    console.error('Failed to complete subtask:', e)
+    showError(e.response?.data?.detail || '完成子任务失败')
+  } finally {
+    completingSubtaskId.value = null
+  }
+}
+
+async function deleteSubtask(subtask, goalId) {
+  deletingSubtaskId.value = subtask.id
+  try {
+    await todoService.deleteSubtask(subtask.id)
+    const subtasks = goalSubtasks.value[goalId]
+    if (subtasks) {
+      goalSubtasks.value[goalId] = subtasks.filter(s => s.id !== subtask.id)
+    }
+  } catch (e) {
+    console.error('Failed to delete subtask:', e)
+    showError(e.response?.data?.detail || '删除子任务失败')
+  } finally {
+    deletingSubtaskId.value = null
   }
 }
 
@@ -1325,6 +1520,236 @@ onMounted(() => {
   background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
   border-radius: var(--radius-full);
   transition: width 0.5s ease;
+}
+
+/* Subtask Section */
+.subtask-section {
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.subtask-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family);
+  padding: var(--spacing-xs) 0;
+  transition: color 0.15s ease;
+}
+
+.subtask-toggle-btn:hover {
+  color: var(--color-text);
+}
+
+.subtask-toggle-icon {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.2s ease;
+}
+
+.subtask-toggle-icon--expanded {
+  transform: rotate(180deg);
+}
+
+.subtask-count-badge {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: rgba(108, 99, 255, 0.12);
+  color: var(--color-primary);
+}
+
+.subtask-content {
+  margin-top: var(--spacing-sm);
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.subtask-loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-md) 0;
+}
+
+.subtask-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.subtask-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  transition: opacity 0.2s ease;
+}
+
+.subtask-item--done {
+  opacity: 0.6;
+}
+
+.subtask-complete-btn {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  transition: all 0.15s ease;
+}
+
+.subtask-complete-btn:hover:not(:disabled) {
+  border-color: var(--color-success);
+  color: var(--color-success);
+  background: rgba(81, 207, 102, 0.1);
+}
+
+.subtask-complete-btn--done {
+  border-color: var(--color-success);
+  background: var(--color-success);
+  color: #fff;
+  cursor: default;
+}
+
+.subtask-complete-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.subtask-complete-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.subtask-title {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  min-width: 0;
+  word-break: break-word;
+}
+
+.subtask-title--done {
+  text-decoration: line-through;
+  color: var(--color-text-tertiary);
+}
+
+.subtask-delete-btn {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  transition: all 0.15s ease;
+  opacity: 0;
+}
+
+.subtask-item:hover .subtask-delete-btn {
+  opacity: 1;
+}
+
+.subtask-delete-btn:hover {
+  color: var(--color-error);
+  background: rgba(255, 107, 107, 0.08);
+}
+
+.subtask-delete-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.subtask-delete-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.subtask-empty {
+  text-align: center;
+  padding: var(--spacing-md) 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+}
+
+.subtask-add-form {
+  display: flex;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-sm);
+}
+
+.subtask-input {
+  flex: 1;
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family);
+  color: var(--color-text);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.subtask-input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.subtask-input:focus {
+  border-color: var(--color-primary);
+}
+
+.subtask-add-btn {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: #fff;
+  transition: background 0.15s ease;
+}
+
+.subtask-add-btn:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+}
+
+.subtask-add-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.subtask-add-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* Footer Stats */

@@ -143,5 +143,44 @@ export const todoService = {
    */
   async deleteGoal(goalId) {
     await api.delete(`/todos/goals/${goalId}`)
+  },
+
+  /**
+   * Get subtasks for a goal
+   * @param {string} goalId - Goal ID
+   * @returns {Promise<Array>} List of subtasks
+   */
+  async getSubtasks(goalId) {
+    const response = await api.get(`/todos/goals/${goalId}/subtasks`)
+    return response.data
+  },
+
+  /**
+   * Create a subtask for a goal
+   * @param {string} goalId - Goal ID
+   * @param {Object} data - Subtask data
+   * @returns {Promise<Object>} Created subtask
+   */
+  async createSubtask(goalId, data) {
+    const response = await api.post(`/todos/goals/${goalId}/subtasks`, data)
+    return response.data
+  },
+
+  /**
+   * Complete a subtask
+   * @param {string} subtaskId - Subtask ID
+   * @returns {Promise<Object>} Updated subtask
+   */
+  async completeSubtask(subtaskId) {
+    const response = await api.post(`/todos/subtasks/${subtaskId}/complete`)
+    return response.data
+  },
+
+  /**
+   * Delete a subtask
+   * @param {string} subtaskId - Subtask ID
+   */
+  async deleteSubtask(subtaskId) {
+    await api.delete(`/todos/subtasks/${subtaskId}`)
   }
 }
