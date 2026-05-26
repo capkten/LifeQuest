@@ -2,7 +2,8 @@
   <div class="profile-page">
     <div class="profile-header">
       <div class="profile-avatar">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <img v-if="user?.avatar" :src="user.avatar" alt="用户头像" class="profile-avatar-img" />
+        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <circle cx="12" cy="8" r="4" />
           <path d="M20 21a8 8 0 1 0-16 0" />
         </svg>
@@ -12,9 +13,12 @@
         <span class="profile-title">{{ user?.title || '冒险者' }}</span>
         <span class="profile-email">{{ user?.email || '' }}</span>
       </div>
-      <div class="profile-level-badge">
-        <span class="level-badge-number">{{ user?.level || 1 }}</span>
-        <span class="level-badge-label">等级</span>
+      <div class="profile-actions">
+        <button class="edit-profile-btn" @click="goToEditProfile">编辑资料</button>
+        <div class="profile-level-badge">
+          <span class="level-badge-number">{{ user?.level || 1 }}</span>
+          <span class="level-badge-label">等级</span>
+        </div>
       </div>
     </div>
 
@@ -123,9 +127,15 @@
 </template>
 
 <script setup>
+import { useRouter } from 'vue-router'
 import { useUserStats } from '../composables/useUserStats'
 
+const router = useRouter()
 const { user, requiredExp, expPercent } = useUserStats()
+
+function goToEditProfile() {
+  router.push({ name: 'EditProfile' })
+}
 </script>
 
 <style scoped>
@@ -154,6 +164,13 @@ const { user, requiredExp, expPercent } = useUserStats()
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.profile-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .profile-avatar svg {
@@ -197,6 +214,32 @@ const { user, requiredExp, expPercent } = useUserStats()
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+.profile-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-shrink: 0;
+}
+
+.edit-profile-btn {
+  padding: var(--spacing-sm) var(--spacing-lg);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.edit-profile-btn:hover {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
 }
 
 .level-badge-number {

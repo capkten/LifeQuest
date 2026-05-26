@@ -37,5 +37,29 @@ export const authService = {
   async getCurrentUser() {
     const response = await api.get('/users/me')
     return response.data
+  },
+
+  /**
+   * Update current user profile
+   * @param {Object} data - { username, email }
+   * @returns {Promise<Object>} Updated user data
+   */
+  async updateProfile(data) {
+    const response = await api.put('/users/me', data)
+    return response.data
+  },
+
+  /**
+   * Upload avatar for current user
+   * @param {File} file - The avatar image file
+   * @returns {Promise<Object>} Response with avatar URL
+   */
+  async uploadAvatar(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await api.post('/users/me/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    return response.data
   }
 }
