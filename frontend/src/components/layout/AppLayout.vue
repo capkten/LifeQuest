@@ -40,7 +40,7 @@ const pageTitle = computed(() => {
 
 .app-main {
   flex: 1;
-  margin-left: 260px;
+  margin-left: var(--sidebar-width);
   display: flex;
   flex-direction: column;
 }

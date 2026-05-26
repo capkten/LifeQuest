@@ -7,7 +7,7 @@
 
     <div class="user-card">
       <div class="user-avatar">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <circle cx="12" cy="8" r="4" />
           <path d="M20 21a8 8 0 1 0-16 0" />
         </svg>
@@ -21,7 +21,7 @@
     <div class="user-stats">
       <div class="stat-item">
         <span class="stat-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
           </svg>
         </span>
@@ -30,7 +30,7 @@
       </div>
       <div class="stat-item">
         <span class="stat-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="12" cy="12" r="10" />
             <path d="M12 6v12M6 12h12" />
           </svg>
@@ -52,21 +52,21 @@
 
     <nav class="sidebar-nav">
       <router-link to="/" class="nav-item" active-class="nav-item--active">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z" />
           <polyline points="9 22 9 12 15 12 15 22" />
         </svg>
         <span>Home</span>
       </router-link>
       <router-link to="/tasks" class="nav-item" active-class="nav-item--active">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M9 11l3 3L22 4" />
           <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
         </svg>
         <span>Tasks</span>
       </router-link>
       <router-link to="/goals" class="nav-item" active-class="nav-item--active">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <circle cx="12" cy="12" r="10" />
           <circle cx="12" cy="12" r="6" />
           <circle cx="12" cy="12" r="2" />
@@ -74,7 +74,7 @@
         <span>Goals</span>
       </router-link>
       <router-link to="/notes" class="nav-item" active-class="nav-item--active">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
           <polyline points="14 2 14 8 20 8" />
           <line x1="16" y1="13" x2="8" y2="13" />
@@ -84,7 +84,7 @@
         <span>Notes</span>
       </router-link>
       <router-link to="/shop" class="nav-item" active-class="nav-item--active">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
           <line x1="3" y1="6" x2="21" y2="6" />
           <path d="M16 10a4 4 0 0 1-8 0" />
@@ -92,7 +92,7 @@
         <span>Shop</span>
       </router-link>
       <router-link to="/backpack" class="nav-item" active-class="nav-item--active">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
           <path d="M16 7V5a4 4 0 0 0-8 0v2" />
           <line x1="12" y1="12" x2="12" y2="16" />
@@ -112,15 +112,20 @@ const authStore = useAuthStore()
 
 const user = computed(() => authStore.user)
 
+const requiredExp = computed(() => {
+  const level = user.value?.level || 1
+  return Math.floor(100 * Math.pow(1.5, level - 1))
+})
+
 const expPercent = computed(() => {
   if (!user.value) return 0
-  return Math.min(100, Math.round((user.value.experience % 100)))
+  return Math.min(100, Math.round((user.value.experience / requiredExp.value) * 100))
 })
 </script>
 
 <style scoped>
 .sidebar {
-  width: 260px;
+  width: var(--sidebar-width);
   min-height: 100vh;
   background: var(--color-bg-secondary);
   border-right: 1px solid var(--color-border);

@@ -6,7 +6,7 @@
         <p class="welcome-subtitle">Ready for today's quest?</p>
       </div>
       <div class="welcome-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
           <path d="M12 2L2 7l10 5 10-5-10-5z" />
           <path d="M2 17l10 5 10-5" />
           <path d="M2 12l10 5 10-5" />
@@ -17,7 +17,7 @@
     <div class="stats-grid">
       <div class="stat-card stat-card--level">
         <div class="stat-card-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
           </svg>
         </div>
@@ -28,7 +28,7 @@
       </div>
       <div class="stat-card stat-card--coins">
         <div class="stat-card-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="12" cy="12" r="10" />
             <path d="M12 6v12M6 12h12" />
           </svg>
@@ -40,7 +40,7 @@
       </div>
       <div class="stat-card stat-card--tasks">
         <div class="stat-card-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="12" cy="12" r="10" />
             <path d="M12 8v4l3 3" />
           </svg>
@@ -56,7 +56,7 @@
       <div class="content-section">
         <div class="section-header">
           <h3 class="section-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="M9 11l3 3L22 4" />
               <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
             </svg>
@@ -67,6 +67,10 @@
         <div class="section-body">
           <div v-if="loadingTasks" class="loading-state">
             <span class="loading-spinner"></span>
+          </div>
+          <div v-else-if="errorTasks" class="error-state">
+            <p>{{ errorTasks }}</p>
+            <button class="retry-btn" @click="fetchTasks">Retry</button>
           </div>
           <div v-else-if="recentTasks.length === 0" class="empty-state">
             <p>No tasks yet. Create your first task!</p>
@@ -86,7 +90,7 @@
       <div class="content-section">
         <div class="section-header">
           <h3 class="section-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <circle cx="12" cy="12" r="10" />
               <circle cx="12" cy="12" r="6" />
               <circle cx="12" cy="12" r="2" />
@@ -98,6 +102,10 @@
         <div class="section-body">
           <div v-if="loadingGoals" class="loading-state">
             <span class="loading-spinner"></span>
+          </div>
+          <div v-else-if="errorGoals" class="error-state">
+            <p>{{ errorGoals }}</p>
+            <button class="retry-btn" @click="fetchGoals">Retry</button>
           </div>
           <div v-else-if="recentGoals.length === 0" class="empty-state">
             <p>No goals yet. Set your first goal!</p>
@@ -134,28 +142,42 @@ const tasks = ref([])
 const goals = ref([])
 const loadingTasks = ref(true)
 const loadingGoals = ref(true)
+const errorTasks = ref(null)
+const errorGoals = ref(null)
 
 const recentTasks = computed(() => tasks.value.slice(0, 5))
 const recentGoals = computed(() => goals.value.slice(0, 5))
 const pendingTasksCount = computed(() =>
-  tasks.value.filter(t => t.status === 'pending' || t.status === 'in_progress').length
+  (tasks.value || []).filter(t => t.status === 'pending' || t.status === 'in_progress').length
 )
 
-onMounted(async () => {
-  const [tasksResult, goalsResult] = await Promise.allSettled([
-    todoService.getTasks(),
-    todoService.getGoals()
-  ])
-
-  if (tasksResult.status === 'fulfilled') {
-    tasks.value = tasksResult.value
+async function fetchTasks() {
+  loadingTasks.value = true
+  errorTasks.value = null
+  try {
+    tasks.value = await todoService.getTasks()
+  } catch (e) {
+    errorTasks.value = 'Failed to load tasks. Please try again.'
+  } finally {
+    loadingTasks.value = false
   }
-  loadingTasks.value = false
+}
 
-  if (goalsResult.status === 'fulfilled') {
-    goals.value = goalsResult.value
+async function fetchGoals() {
+  loadingGoals.value = true
+  errorGoals.value = null
+  try {
+    goals.value = await todoService.getGoals()
+  } catch (e) {
+    errorGoals.value = 'Failed to load goals. Please try again.'
+  } finally {
+    loadingGoals.value = false
   }
-  loadingGoals.value = false
+}
+
+onMounted(() => {
+  fetchTasks()
+  fetchGoals()
 })
 </script>
 
@@ -351,6 +373,34 @@ onMounted(async () => {
   min-height: 160px;
   color: var(--color-text-tertiary);
   font-size: var(--font-size-sm);
+}
+
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  gap: var(--spacing-sm);
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+}
+
+.retry-btn {
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-primary);
+  background: transparent;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-family: var(--font-family);
+  transition: all 0.15s ease;
+}
+
+.retry-btn:hover {
+  background: var(--color-primary);
+  color: #fff;
 }
 
 .task-list {

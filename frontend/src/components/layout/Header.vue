@@ -4,30 +4,30 @@
       <h2 class="page-title">{{ title }}</h2>
     </div>
     <div class="header-right">
-      <div class="user-dropdown" @click="toggleDropdown" ref="dropdownRef">
+      <div class="user-dropdown" @click="toggleDropdown" @keydown.escape="dropdownOpen = false" @keydown.enter.prevent="toggleDropdown" @keydown.space.prevent="toggleDropdown" ref="dropdownRef" role="button" tabindex="0" :aria-expanded="dropdownOpen" aria-haspopup="true" aria-label="User menu">
         <div class="user-avatar-sm">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="12" cy="8" r="4" />
             <path d="M20 21a8 8 0 1 0-16 0" />
           </svg>
         </div>
         <span class="user-name">{{ user?.username || '' }}</span>
-        <svg class="chevron" :class="{ 'chevron--open': dropdownOpen }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg class="chevron" :class="{ 'chevron--open': dropdownOpen }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <polyline points="6 9 12 15 18 9" />
         </svg>
 
         <transition name="dropdown">
-          <div v-if="dropdownOpen" class="dropdown-menu">
-            <router-link to="/profile" class="dropdown-item" @click="dropdownOpen = false">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <div v-if="dropdownOpen" class="dropdown-menu" role="menu">
+            <router-link to="/profile" class="dropdown-item" role="menuitem" @click="dropdownOpen = false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                 <circle cx="12" cy="7" r="4" />
               </svg>
               <span>Profile</span>
             </router-link>
-            <div class="dropdown-divider"></div>
-            <button class="dropdown-item dropdown-item--danger" @click="handleLogout">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <div class="dropdown-divider" role="separator"></div>
+            <button class="dropdown-item dropdown-item--danger" role="menuitem" @click="handleLogout">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                 <polyline points="16 17 21 12 16 7" />
                 <line x1="21" y1="12" x2="9" y2="12" />
