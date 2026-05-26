@@ -95,13 +95,29 @@
                 <p v-if="habit.description" class="todo-card-desc">{{ habit.description }}</p>
               </div>
             </div>
-            <div class="todo-card-meta">
-              <span class="difficulty-badge" :class="'difficulty-badge--' + habit.difficulty">
-                {{ habit.difficulty === 'easy' ? '简单' : habit.difficulty === 'medium' ? '中等' : '困难' }}
-              </span>
-              <span class="frequency-badge" :class="'frequency-badge--' + habit.frequency">
-                {{ habit.frequency === 'daily' ? '每日' : habit.frequency === 'weekly' ? '每周' : '每月' }}
-              </span>
+            <div class="todo-card-actions">
+              <div class="todo-card-meta">
+                <span class="difficulty-badge" :class="'difficulty-badge--' + habit.difficulty">
+                  {{ habit.difficulty === 'easy' ? '简单' : habit.difficulty === 'medium' ? '中等' : '困难' }}
+                </span>
+                <span class="frequency-badge" :class="'frequency-badge--' + habit.frequency">
+                  {{ habit.frequency === 'daily' ? '每日' : habit.frequency === 'weekly' ? '每周' : '每月' }}
+                </span>
+              </div>
+              <div class="action-buttons">
+                <button class="action-btn action-btn--edit" @click="openEditDialog(habit, 'habits')" aria-label="编辑">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                </button>
+                <button class="action-btn action-btn--delete" @click="openDeleteDialog(habit, 'habits')" aria-label="删除">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
           <div class="todo-card-footer">
@@ -156,13 +172,29 @@
                 <p v-if="task.description" class="todo-card-desc">{{ task.description }}</p>
               </div>
             </div>
-            <div class="todo-card-meta">
-              <span class="difficulty-badge" :class="'difficulty-badge--' + task.difficulty">
-                {{ task.difficulty === 'easy' ? '简单' : task.difficulty === 'medium' ? '中等' : '困难' }}
-              </span>
-              <span class="status-badge" :class="'status-badge--' + task.status">
-                {{ formatStatus(task.status) }}
-              </span>
+            <div class="todo-card-actions">
+              <div class="todo-card-meta">
+                <span class="difficulty-badge" :class="'difficulty-badge--' + task.difficulty">
+                  {{ task.difficulty === 'easy' ? '简单' : task.difficulty === 'medium' ? '中等' : '困难' }}
+                </span>
+                <span class="status-badge" :class="'status-badge--' + task.status">
+                  {{ formatStatus(task.status) }}
+                </span>
+              </div>
+              <div class="action-buttons">
+                <button class="action-btn action-btn--edit" @click="openEditDialog(task, 'tasks')" aria-label="编辑">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                </button>
+                <button class="action-btn action-btn--delete" @click="openDeleteDialog(task, 'tasks')" aria-label="删除">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
           <div class="todo-card-footer">
@@ -218,13 +250,29 @@
                 <p v-if="goal.description" class="todo-card-desc">{{ goal.description }}</p>
               </div>
             </div>
-            <div class="todo-card-meta">
-              <span class="difficulty-badge" :class="'difficulty-badge--' + goal.difficulty">
-                {{ goal.difficulty === 'easy' ? '简单' : goal.difficulty === 'medium' ? '中等' : '困难' }}
-              </span>
-              <span class="status-badge" :class="'status-badge--' + goal.status">
-                {{ formatStatus(goal.status) }}
-              </span>
+            <div class="todo-card-actions">
+              <div class="todo-card-meta">
+                <span class="difficulty-badge" :class="'difficulty-badge--' + goal.difficulty">
+                  {{ goal.difficulty === 'easy' ? '简单' : goal.difficulty === 'medium' ? '中等' : '困难' }}
+                </span>
+                <span class="status-badge" :class="'status-badge--' + goal.status">
+                  {{ formatStatus(goal.status) }}
+                </span>
+              </div>
+              <div class="action-buttons">
+                <button class="action-btn action-btn--edit" @click="openEditDialog(goal, 'goals')" aria-label="编辑">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                </button>
+                <button class="action-btn action-btn--delete" @click="openDeleteDialog(goal, 'goals')" aria-label="删除">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
           <div class="goal-progress-section">
@@ -308,7 +356,7 @@
           @keydown="trapFocus"
         >
           <div class="dialog-header">
-            <h3 id="create-dialog-title" class="dialog-title">新建{{ activeTabSingular }}</h3>
+            <h3 id="create-dialog-title" class="dialog-title">{{ isEditing ? '编辑' : '新建' }}{{ activeTabSingular }}</h3>
             <button class="dialog-close" @click="cancelDialog" aria-label="Close">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -316,7 +364,7 @@
               </svg>
             </button>
           </div>
-          <form class="dialog-body" @submit.prevent="createItem">
+          <form class="dialog-body" @submit.prevent="saveItem">
             <!-- Common fields -->
             <div class="form-group">
               <label class="form-label" for="item-title">标题</label>
@@ -401,10 +449,45 @@
               <button type="button" class="btn-secondary" @click="cancelDialog">取消</button>
               <button type="submit" class="btn-primary" :disabled="creating || !form.title.trim()">
                 <span v-if="creating" class="loading-spinner loading-spinner--sm"></span>
-                {{ creating ? '创建中...' : '创建' }}
+                {{ creating ? (isEditing ? '保存中...' : '创建中...') : (isEditing ? '保存' : '创建') }}
               </button>
             </div>
           </form>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Delete Confirmation Dialog -->
+    <Teleport to="body">
+      <div v-if="showDeleteDialog" class="dialog-overlay" @click.self="closeDeleteDialog">
+        <div
+          class="dialog dialog--sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-dialog-title"
+          @keydown.escape="closeDeleteDialog"
+        >
+          <div class="dialog-header">
+            <h3 id="delete-dialog-title" class="dialog-title">确认删除</h3>
+            <button class="dialog-close" @click="closeDeleteDialog" aria-label="Close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+          <div class="dialog-body">
+            <p class="delete-message">
+              确定要删除「{{ deletingItem?.title }}」吗？此操作不可撤销。
+            </p>
+            <div class="dialog-actions">
+              <button type="button" class="btn-secondary" @click="closeDeleteDialog" :disabled="deleting">取消</button>
+              <button type="button" class="btn-danger" @click="confirmDelete" :disabled="deleting">
+                <span v-if="deleting" class="loading-spinner loading-spinner--sm"></span>
+                {{ deleting ? '删除中...' : '删除' }}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </Teleport>
@@ -434,6 +517,13 @@ const showCreateDialog = ref(false)
 const creating = ref(false)
 const dialogError = ref(null)
 const dialogTitleInput = ref(null)
+
+const editingItem = ref(null)
+const editingType = ref(null)
+const showDeleteDialog = ref(false)
+const deletingItem = ref(null)
+const deletingType = ref(null)
+const deleting = ref(false)
 
 const tabs = [
   { id: 'habits', label: '日常习惯' },
@@ -521,6 +611,8 @@ watch(showCreateDialog, (open) => {
     })
   }
 })
+
+const isEditing = computed(() => editingItem.value !== null)
 
 function trapFocus(event) {
   if (event.key !== 'Tab') return
@@ -652,6 +744,8 @@ async function completeGoal(goal) {
 
 function cancelDialog() {
   showCreateDialog.value = false
+  editingItem.value = null
+  editingType.value = null
   form.value = { ...defaultForms[activeTab.value] }
   dialogError.value = null
 }
@@ -690,6 +784,108 @@ async function createItem() {
     dialogError.value = e.response?.data?.detail || '创建失败，请重试。'
   } finally {
     creating.value = false
+  }
+}
+
+function openEditDialog(item, type) {
+  editingItem.value = item
+  editingType.value = type
+  const deadlineValue = item.deadline
+    ? new Date(item.deadline).toISOString().slice(0, 16)
+    : ''
+  form.value = {
+    title: item.title || '',
+    description: item.description || '',
+    difficulty: item.difficulty || 'medium',
+    frequency: item.frequency || 'daily',
+    deadline: deadlineValue,
+    coins_reward: item.coins_reward ?? 10,
+    exp_reward: item.exp_reward ?? 5
+  }
+  // Switch to the correct tab so the dialog shows the right fields
+  if (type !== activeTab.value) {
+    activeTab.value = type
+  }
+  showCreateDialog.value = true
+}
+
+async function saveItem() {
+  if (!form.value.title.trim()) return
+  if (!isEditing.value) {
+    return createItem()
+  }
+  creating.value = true
+  dialogError.value = null
+  try {
+    const base = {
+      title: form.value.title.trim(),
+      description: form.value.description?.trim() || undefined,
+      difficulty: form.value.difficulty,
+      coins_reward: form.value.coins_reward,
+      exp_reward: form.value.exp_reward
+    }
+
+    if (form.value.deadline) {
+      base.deadline = new Date(form.value.deadline).toISOString()
+    } else if (editingType.value === 'tasks' || editingType.value === 'goals') {
+      base.deadline = null
+    }
+
+    if (editingType.value === 'habits') {
+      base.frequency = form.value.frequency
+      const updated = await todoService.updateHabit(editingItem.value.id, base)
+      const idx = habits.value.findIndex(h => h.id === editingItem.value.id)
+      if (idx !== -1) habits.value[idx] = updated
+    } else if (editingType.value === 'tasks') {
+      const updated = await todoService.updateTask(editingItem.value.id, base)
+      const idx = tasks.value.findIndex(t => t.id === editingItem.value.id)
+      if (idx !== -1) tasks.value[idx] = updated
+    } else {
+      const updated = await todoService.updateGoal(editingItem.value.id, base)
+      const idx = goals.value.findIndex(g => g.id === editingItem.value.id)
+      if (idx !== -1) goals.value[idx] = updated
+    }
+    cancelDialog()
+  } catch (e) {
+    dialogError.value = e.response?.data?.detail || '保存失败，请重试。'
+  } finally {
+    creating.value = false
+  }
+}
+
+function openDeleteDialog(item, type) {
+  deletingItem.value = item
+  deletingType.value = type
+  showDeleteDialog.value = true
+}
+
+function closeDeleteDialog() {
+  showDeleteDialog.value = false
+  deletingItem.value = null
+  deletingType.value = null
+}
+
+async function confirmDelete() {
+  if (!deletingItem.value) return
+  deleting.value = true
+  try {
+    if (deletingType.value === 'habits') {
+      await todoService.deleteHabit(deletingItem.value.id)
+      habits.value = habits.value.filter(h => h.id !== deletingItem.value.id)
+    } else if (deletingType.value === 'tasks') {
+      await todoService.deleteTask(deletingItem.value.id)
+      tasks.value = tasks.value.filter(t => t.id !== deletingItem.value.id)
+    } else {
+      await todoService.deleteGoal(deletingItem.value.id)
+      goals.value = goals.value.filter(g => g.id !== deletingItem.value.id)
+    }
+    closeDeleteDialog()
+  } catch (e) {
+    console.error('Failed to delete item:', e)
+    showError(e.response?.data?.detail || '删除失败，请重试。')
+    closeDeleteDialog()
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -1411,6 +1607,94 @@ onMounted(() => {
 }
 
 .btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Card Actions */
+.todo-card-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--spacing-sm);
+  flex-shrink: 0;
+}
+
+.action-buttons {
+  display: flex;
+  gap: var(--spacing-xs);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.todo-card:hover .action-buttons {
+  opacity: 1;
+}
+
+.action-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  transition: all 0.15s ease;
+}
+
+.action-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.action-btn--edit:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(108, 99, 255, 0.08);
+}
+
+.action-btn--delete:hover {
+  border-color: var(--color-error);
+  color: var(--color-error);
+  background: rgba(255, 107, 107, 0.08);
+}
+
+/* Delete Dialog */
+.dialog--sm {
+  max-width: 400px;
+}
+
+.delete-message {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+  margin-bottom: var(--spacing-md);
+}
+
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: #fff;
+  background: var(--color-error);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-family: var(--font-family);
+  transition: background 0.15s ease;
+}
+
+.btn-danger:hover {
+  background: #e05555;
+}
+
+.btn-danger:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

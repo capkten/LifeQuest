@@ -86,5 +86,62 @@ export const todoService = {
   async completeGoal(goalId) {
     const response = await api.post(`/todos/goals/${goalId}/complete`)
     return response.data
+  },
+
+  /**
+   * Update a habit
+   * @param {string} habitId - Habit ID
+   * @param {Object} data - Updated habit data
+   * @returns {Promise<Object>} Updated habit
+   */
+  async updateHabit(habitId, data) {
+    const response = await api.put(`/todos/habits/${habitId}`, data)
+    return response.data
+  },
+
+  /**
+   * Delete a habit
+   * @param {string} habitId - Habit ID
+   */
+  async deleteHabit(habitId) {
+    await api.delete(`/todos/habits/${habitId}`)
+  },
+
+  /**
+   * Update a task
+   * @param {string} taskId - Task ID
+   * @param {Object} data - Updated task data
+   * @returns {Promise<Object>} Updated task
+   */
+  async updateTask(taskId, data) {
+    const response = await api.put(`/todos/tasks/${taskId}`, data)
+    return response.data
+  },
+
+  /**
+   * Delete a task
+   * @param {string} taskId - Task ID
+   */
+  async deleteTask(taskId) {
+    await api.delete(`/todos/tasks/${taskId}`)
+  },
+
+  /**
+   * Update a goal
+   * @param {string} goalId - Goal ID
+   * @param {Object} data - Updated goal data
+   * @returns {Promise<Object>} Updated goal
+   */
+  async updateGoal(goalId, data) {
+    const response = await api.put(`/todos/goals/${goalId}`, data)
+    return response.data
+  },
+
+  /**
+   * Delete a goal
+   * @param {string} goalId - Goal ID
+   */
+  async deleteGoal(goalId) {
+    await api.delete(`/todos/goals/${goalId}`)
   }
 }
