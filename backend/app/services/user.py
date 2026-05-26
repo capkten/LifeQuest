@@ -36,6 +36,9 @@ class UserService:
     def get_by_id(self, user_id: UUID) -> Optional[User]:
         return self.repository.get_by_id(user_id)
 
+    def get_by_username(self, username: str) -> Optional[User]:
+        return self.repository.get_by_username(username)
+
     def update_user(self, user: User, user_in: UserUpdate) -> User:
         update_data = user_in.model_dump(exclude_unset=True)
         return self.repository.update(user, update_data)
