@@ -7,11 +7,7 @@ from sqlalchemy.orm import relationship
 
 from app.database import Base
 
-
-class TaskType(str, Enum):
-    HABIT = "habit"
-    TASK = "task"
-    GOAL = "goal"
+GOAL_COMPLETED_PROGRESS = 100.0
 
 
 class Difficulty(str, Enum):

@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.todo import TaskType, Difficulty, TaskStatus, Frequency
+from app.models.todo import Difficulty, TaskStatus, Frequency
 
 
 # Habit schemas

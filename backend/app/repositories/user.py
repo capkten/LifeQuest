@@ -33,5 +33,14 @@ class UserRepository(BaseRepository[User]):
         self.db.refresh(user)
         return user
 
+    def _update_coins_no_commit(self, user: User, amount: int) -> None:
+        user.coins += amount
+
+    def _update_experience_no_commit(self, user: User, exp: int) -> None:
+        user.experience += exp
+        while user.experience >= self._get_required_exp(user.level):
+            user.experience -= self._get_required_exp(user.level)
+            user.level += 1
+
     def _get_required_exp(self, level: int) -> int:
         return int(100 * (1.5 ** (level - 1)))

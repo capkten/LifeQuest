@@ -1,7 +1,7 @@
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -54,12 +54,7 @@ def get_habit(
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
-    if not service.verify_habit_ownership(habit_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
-    habit = service.get_habit(habit_id)
-    if not habit:
-        raise HTTPException(status_code=404, detail="Habit not found")
-    return habit
+    return service.get_habit_for_user(habit_id, current_user.id)
 
 
 @router.put("/habits/{habit_id}", response_model=HabitResponse)
@@ -70,11 +65,7 @@ def update_habit(
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
-    if not service.verify_habit_ownership(habit_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
-    habit = service.get_habit(habit_id)
-    if not habit:
-        raise HTTPException(status_code=404, detail="Habit not found")
+    habit = service.get_habit_for_user(habit_id, current_user.id)
     return service.update_habit(habit, habit_in)
 
 
@@ -85,11 +76,7 @@ def delete_habit(
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
-    if not service.verify_habit_ownership(habit_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
-    habit = service.get_habit(habit_id)
-    if not habit:
-        raise HTTPException(status_code=404, detail="Habit not found")
+    service.get_habit_for_user(habit_id, current_user.id)
     service.delete_habit(habit_id)
     return {"message": "Habit deleted"}
 
@@ -101,11 +88,7 @@ def complete_habit(
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
-    if not service.verify_habit_ownership(habit_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
-    habit = service.get_habit(habit_id)
-    if not habit:
-        raise HTTPException(status_code=404, detail="Habit not found")
+    habit = service.get_habit_for_user(habit_id, current_user.id)
     return service.complete_habit(habit)
 
 
@@ -137,12 +120,7 @@ def get_task(
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
-    if not service.verify_task_ownership(task_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
-    task = service.get_task(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return task
+    return service.get_task_for_user(task_id, current_user.id)
 
 
 @router.put("/tasks/{task_id}", response_model=TaskResponse)
@@ -153,11 +131,7 @@ def update_task(
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
-    if not service.verify_task_ownership(task_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
-    task = service.get_task(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = service.get_task_for_user(task_id, current_user.id)
     return service.update_task(task, task_in)
 
 
@@ -168,11 +142,7 @@ def delete_task(
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
-    if not service.verify_task_ownership(task_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
-    task = service.get_task(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    service.get_task_for_user(task_id, current_user.id)
     service.delete_task(task_id)
     return {"message": "Task deleted"}
 
@@ -184,11 +154,7 @@ def complete_task(
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
-    if not service.verify_task_ownership(task_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
-    task = service.get_task(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = service.get_task_for_user(task_id, current_user.id)
     return service.complete_task(task, current_user.id)
 
 
@@ -220,12 +186,7 @@ def get_goal(
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
-    if not service.verify_goal_ownership(goal_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
-    goal = service.get_goal(goal_id)
-    if not goal:
-        raise HTTPException(status_code=404, detail="Goal not found")
-    return goal
+    return service.get_goal_for_user(goal_id, current_user.id)
 
 
 @router.put("/goals/{goal_id}", response_model=GoalResponse)
@@ -236,11 +197,7 @@ def update_goal(
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
-    if not service.verify_goal_ownership(goal_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
-    goal = service.get_goal(goal_id)
-    if not goal:
-        raise HTTPException(status_code=404, detail="Goal not found")
+    goal = service.get_goal_for_user(goal_id, current_user.id)
     return service.update_goal(goal, goal_in)
 
 
@@ -251,11 +208,7 @@ def delete_goal(
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
-    if not service.verify_goal_ownership(goal_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
-    goal = service.get_goal(goal_id)
-    if not goal:
-        raise HTTPException(status_code=404, detail="Goal not found")
+    service.get_goal_for_user(goal_id, current_user.id)
     service.delete_goal(goal_id)
     return {"message": "Goal deleted"}
 
@@ -267,11 +220,7 @@ def complete_goal(
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
-    if not service.verify_goal_ownership(goal_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
-    goal = service.get_goal(goal_id)
-    if not goal:
-        raise HTTPException(status_code=404, detail="Goal not found")
+    goal = service.get_goal_for_user(goal_id, current_user.id)
     return service.complete_goal(goal, current_user.id)
 
 
@@ -284,8 +233,7 @@ def create_subtask(
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
-    if not service.verify_task_ownership(subtask_in.task_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
+    service.get_task_for_user(subtask_in.task_id, current_user.id)
     return service.create_subtask(subtask_in)
 
 
@@ -296,8 +244,7 @@ def get_subtasks_by_task(
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
-    if not service.verify_task_ownership(task_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
+    service.get_task_for_user(task_id, current_user.id)
     return service.get_subtasks(task_id)
 
 
@@ -308,12 +255,7 @@ def get_subtask(
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
-    if not service.verify_subtask_ownership(subtask_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
-    subtask = service.get_subtask(subtask_id)
-    if not subtask:
-        raise HTTPException(status_code=404, detail="Subtask not found")
-    return subtask
+    return service.get_subtask_for_user(subtask_id, current_user.id)
 
 
 @router.put("/subtasks/{subtask_id}", response_model=SubtaskResponse)
@@ -324,11 +266,7 @@ def update_subtask(
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
-    if not service.verify_subtask_ownership(subtask_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
-    subtask = service.get_subtask(subtask_id)
-    if not subtask:
-        raise HTTPException(status_code=404, detail="Subtask not found")
+    subtask = service.get_subtask_for_user(subtask_id, current_user.id)
     return service.update_subtask(subtask, subtask_in)
 
 
@@ -339,10 +277,6 @@ def delete_subtask(
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
-    if not service.verify_subtask_ownership(subtask_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
-    subtask = service.get_subtask(subtask_id)
-    if not subtask:
-        raise HTTPException(status_code=404, detail="Subtask not found")
+    service.get_subtask_for_user(subtask_id, current_user.id)
     service.delete_subtask(subtask_id)
     return {"message": "Subtask deleted"}
