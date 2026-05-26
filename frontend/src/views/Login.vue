@@ -10,6 +10,7 @@
         ref="formRef"
         :model="form"
         :rules="rules"
+        label-position="top"
         class="login-form"
         @submit.prevent="handleLogin"
       >
@@ -38,7 +39,7 @@
             type="primary"
             size="large"
             class="login-button"
-            :loading="authStore.loading"
+            :loading="loading"
             @click="handleLogin"
           >
             登录
@@ -65,6 +66,7 @@ import { ElMessage } from 'element-plus'
 
 const authStore = useAuthStore()
 const formRef = ref(null)
+const loading = ref(false)
 
 const form = reactive({
   username: '',
@@ -85,14 +87,17 @@ const rules = {
 async function handleLogin() {
   if (!formRef.value) return
 
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) return
+
+  loading.value = true
   try {
-    await formRef.value.validate()
     await authStore.login(form)
     ElMessage.success('登录成功')
   } catch (error) {
-    if (error.response) {
-      ElMessage.error(error.response.data.detail || '登录失败，请检查用户名和密码')
-    }
+    ElMessage.error(error.response?.data?.detail || '登录失败，请检查用户名和密码')
+  } finally {
+    loading.value = false
   }
 }
 </script>

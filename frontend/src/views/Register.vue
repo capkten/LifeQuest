@@ -10,6 +10,7 @@
         ref="formRef"
         :model="form"
         :rules="rules"
+        label-position="top"
         class="register-form"
         @submit.prevent="handleRegister"
       >
@@ -59,7 +60,7 @@
             type="primary"
             size="large"
             class="register-button"
-            :loading="authStore.loading"
+            :loading="loading"
             @click="handleRegister"
           >
             注册
@@ -86,6 +87,7 @@ import { ElMessage } from 'element-plus'
 
 const authStore = useAuthStore()
 const formRef = ref(null)
+const loading = ref(false)
 
 const form = reactive({
   username: '',
@@ -124,18 +126,21 @@ const rules = {
 async function handleRegister() {
   if (!formRef.value) return
 
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) return
+
+  loading.value = true
   try {
-    await formRef.value.validate()
     await authStore.register({
       username: form.username,
       email: form.email,
       password: form.password
     })
-    ElMessage.success('注册成功')
+    ElMessage.success('注册成功，请登录')
   } catch (error) {
-    if (error.response) {
-      ElMessage.error(error.response.data.detail || '注册失败，请稍后重试')
-    }
+    ElMessage.error(error.response?.data?.detail || '注册失败，请稍后重试')
+  } finally {
+    loading.value = false
   }
 }
 </script>

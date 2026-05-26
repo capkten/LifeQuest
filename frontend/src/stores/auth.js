@@ -40,8 +40,8 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     try {
       await authService.register(userData)
-      // After registration, login automatically
-      await login({ username: userData.username, password: userData.password })
+      // Redirect to login page after successful registration
+      router.push({ name: 'Login' })
     } finally {
       loading.value = false
     }
@@ -72,7 +72,6 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   return {
-    token,
     user,
     loading,
     isAuthenticated,
