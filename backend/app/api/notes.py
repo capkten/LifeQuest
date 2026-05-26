@@ -53,6 +53,33 @@ def get_notebooks(
     return service.get_notebooks(current_user.id)
 
 
+@router.get("/notebooks/{notebook_id}", response_model=NotebookResponse)
+def get_notebook(
+    notebook_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    service = NoteService(db)
+    if not service.verify_notebook_ownership(notebook_id, current_user.id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    notebook = service.notebook_repo.get_by_id(notebook_id)
+    if not notebook:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    return notebook
+
+
+@router.get("/notebooks/{notebook_id}/folders", response_model=List[FolderResponse])
+def get_folders_by_notebook(
+    notebook_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    service = NoteService(db)
+    if not service.verify_notebook_ownership(notebook_id, current_user.id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return service.get_folders(notebook_id)
+
+
 @router.post("/folders", response_model=FolderResponse)
 def create_folder(
     folder_in: FolderCreate,
