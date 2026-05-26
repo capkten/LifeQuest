@@ -83,12 +83,16 @@ class TodoService:
     def delete_habit(self, habit_id: UUID) -> bool:
         return self.habit_repo.delete(habit_id)
 
-    def complete_habit(self, habit: Habit) -> Habit:
-        """Mark habit as completed for today, incrementing streak."""
+    def complete_habit(self, habit: Habit, user_id: UUID) -> Habit:
+        """Mark habit as completed for today, incrementing streak and awarding rewards."""
         habit.streak += 1
         if habit.streak > habit.best_streak:
             habit.best_streak = habit.streak
-        self.habit_repo.db.commit()
+
+        user = self.user_repo.get_by_id(user_id)
+        if user:
+            self._update_rewards(user, habit.coins_reward, habit.exp_reward)
+
         self.habit_repo.db.refresh(habit)
         return habit
 

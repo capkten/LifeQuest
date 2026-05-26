@@ -82,3 +82,42 @@ def test_complete_task_awards_rewards(client):
     user_after = client.get("/api/users/me", headers=headers).json()
     assert user_after["coins"] == coins_before + 20
     assert user_after["experience"] == exp_before + 15
+
+
+def test_complete_habit_awards_rewards(client):
+    headers = _register_and_login(client)
+
+    # Create a habit
+    create_response = client.post(
+        "/api/todos/habits",
+        json={
+            "title": "Morning exercise",
+            "description": "Do 30 minutes of exercise",
+            "difficulty": "medium",
+            "coins_reward": 15,
+            "exp_reward": 10,
+        },
+        headers=headers,
+    )
+    assert create_response.status_code == 200
+    habit_id = create_response.json()["id"]
+
+    # Get user state before completion
+    user_before = client.get("/api/users/me", headers=headers).json()
+    coins_before = user_before["coins"]
+    exp_before = user_before["experience"]
+
+    # Complete the habit
+    complete_response = client.post(
+        f"/api/todos/habits/{habit_id}/complete",
+        headers=headers,
+    )
+    assert complete_response.status_code == 200
+    completed = complete_response.json()
+    assert completed["streak"] == 1
+    assert completed["best_streak"] == 1
+
+    # Verify rewards were awarded
+    user_after = client.get("/api/users/me", headers=headers).json()
+    assert user_after["coins"] == coins_before + 15
+    assert user_after["experience"] == exp_before + 10

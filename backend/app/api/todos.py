@@ -89,7 +89,7 @@ def complete_habit(
 ):
     service = TodoService(db)
     habit = service.get_habit_for_user(habit_id, current_user.id)
-    return service.complete_habit(habit)
+    return service.complete_habit(habit, current_user.id)
 
 
 # --- Task endpoints ---
