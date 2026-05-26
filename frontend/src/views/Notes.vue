@@ -223,7 +223,7 @@ onMounted(() => {
 <style scoped>
 .notes-page {
   padding: var(--spacing-xl);
-  max-width: 1100px;
+  width: 100%;
 }
 
 .page-header {

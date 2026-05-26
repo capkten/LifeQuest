@@ -131,7 +131,7 @@ const { user, requiredExp, expPercent } = useUserStats()
 <style scoped>
 .profile-page {
   padding: var(--spacing-xl);
-  max-width: 800px;
+  width: 100%;
 }
 
 .profile-header {

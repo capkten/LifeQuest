@@ -184,7 +184,7 @@ onMounted(() => {
 <style scoped>
 .home-page {
   padding: var(--spacing-xl);
-  max-width: 1100px;
+  width: 100%;
 }
 
 .welcome-card {
