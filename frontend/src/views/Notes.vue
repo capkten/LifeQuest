@@ -605,4 +605,36 @@ onMounted(() => {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* Responsive */
+@media (max-width: 1199px) {
+  .notes-page {
+    padding: var(--spacing-lg);
+  }
+}
+
+@media (max-width: 767px) {
+  .notes-page {
+    padding: var(--spacing-md);
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+  }
+
+  .notebook-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dialog {
+    max-width: 100%;
+    margin: var(--spacing-sm);
+  }
+
+  .dialog-body {
+    padding: var(--spacing-md);
+  }
+}
 </style>

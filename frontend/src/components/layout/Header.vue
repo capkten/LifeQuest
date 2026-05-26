@@ -1,6 +1,17 @@
 <template>
   <header class="header">
     <div class="header-left">
+      <button
+        class="sidebar-toggle"
+        aria-label="Toggle sidebar"
+        @click="handleToggle"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+      </button>
       <h2 class="page-title">{{ title }}</h2>
     </div>
     <div class="header-right">
@@ -42,7 +53,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, inject, computed, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../../stores/auth'
 
 const props = defineProps({
@@ -54,6 +65,12 @@ const props = defineProps({
 
 const authStore = useAuthStore()
 const user = computed(() => authStore.user)
+
+const toggleSidebar = inject('toggleSidebar', () => {})
+
+function handleToggle() {
+  toggleSidebar()
+}
 
 const dropdownOpen = ref(false)
 const dropdownRef = ref(null)
@@ -94,6 +111,37 @@ onUnmounted(() => {
   position: sticky;
   top: 0;
   z-index: 50;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.sidebar-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.sidebar-toggle:hover {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+}
+
+.sidebar-toggle svg {
+  width: 20px;
+  height: 20px;
 }
 
 .page-title {
@@ -215,5 +263,23 @@ onUnmounted(() => {
 .dropdown-leave-to {
   opacity: 0;
   transform: translateY(-4px);
+}
+
+/* Show hamburger on mobile and tablet (<1200px) */
+@media (max-width: 1199px) {
+  .sidebar-toggle {
+    display: flex;
+  }
+}
+
+/* Reduce padding on small screens */
+@media (max-width: 767px) {
+  .header {
+    padding: 0 var(--spacing-md);
+  }
+
+  .user-name {
+    display: none;
+  }
 }
 </style>

@@ -933,4 +933,56 @@ onMounted(() => {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* Responsive */
+@media (max-width: 1199px) {
+  .shop-page {
+    padding: var(--spacing-lg);
+  }
+}
+
+@media (max-width: 767px) {
+  .shop-page {
+    padding: var(--spacing-md);
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+  }
+
+  .header-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .items-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .item-card-footer {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    align-items: stretch;
+  }
+
+  .btn-purchase {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .dialog {
+    max-width: 100%;
+    margin: var(--spacing-sm);
+  }
+
+  .dialog-body {
+    padding: var(--spacing-md);
+  }
+}
 </style>

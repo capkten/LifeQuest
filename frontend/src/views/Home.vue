@@ -511,6 +511,47 @@ onMounted(() => {
   font-weight: 600;
 }
 
+/* Responsive */
+@media (max-width: 1199px) {
+  .home-page {
+    padding: var(--spacing-lg);
+  }
+}
+
+@media (max-width: 767px) {
+  .home-page {
+    padding: var(--spacing-md);
+  }
+
+  .welcome-card {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: var(--spacing-lg);
+  }
+
+  .welcome-icon {
+    display: none;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .content-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 .goal-progress-bar {
   height: 6px;
   background: var(--color-bg-tertiary);

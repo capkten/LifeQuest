@@ -71,6 +71,9 @@
 
   /* Layout */
   --sidebar-width: 260px;
+  --sidebar-collapsed-width: 68px;
+  --bottom-nav-height: 60px;
+  --content-max-width: 1200px;
 
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);

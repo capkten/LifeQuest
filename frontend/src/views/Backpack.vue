@@ -1005,4 +1005,57 @@ onMounted(() => {
 .btn-danger:hover {
   opacity: 0.9;
 }
+
+/* Responsive */
+@media (max-width: 1199px) {
+  .backpack-page {
+    padding: var(--spacing-lg);
+  }
+}
+
+@media (max-width: 767px) {
+  .backpack-page {
+    padding: var(--spacing-md);
+  }
+
+  .filter-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: var(--spacing-xs);
+  }
+
+  .tab-btn {
+    white-space: nowrap;
+    padding: var(--spacing-xs) var(--spacing-md);
+    font-size: var(--font-size-xs);
+  }
+
+  .items-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .item-card-header {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  .item-card-badges {
+    flex-wrap: wrap;
+  }
+
+  .item-card-footer {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    align-items: stretch;
+  }
+
+  .item-card-actions {
+    justify-content: flex-end;
+  }
+
+  .dialog {
+    max-width: 100%;
+    margin: var(--spacing-sm);
+  }
+}
 </style>

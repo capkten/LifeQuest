@@ -1414,4 +1414,57 @@ onMounted(() => {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* Responsive */
+@media (max-width: 1199px) {
+  .todos-page {
+    padding: var(--spacing-lg);
+  }
+}
+
+@media (max-width: 767px) {
+  .todos-page {
+    padding: var(--spacing-md);
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+  }
+
+  .tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: var(--spacing-xs);
+  }
+
+  .tab-btn {
+    white-space: nowrap;
+    padding: var(--spacing-xs) var(--spacing-md);
+    font-size: var(--font-size-xs);
+  }
+
+  .todo-card-header {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  .todo-card-meta {
+    flex-wrap: wrap;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .dialog {
+    max-width: 100%;
+    margin: var(--spacing-sm);
+  }
+
+  .dialog-body {
+    padding: var(--spacing-md);
+  }
+}
 </style>

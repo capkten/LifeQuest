@@ -427,4 +427,34 @@ const { user, requiredExp, expPercent } = useUserStats()
   font-size: var(--font-size-sm);
   color: var(--color-text-tertiary);
 }
+
+/* Responsive */
+@media (max-width: 1199px) {
+  .profile-page {
+    padding: var(--spacing-lg);
+    max-width: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .profile-page {
+    padding: var(--spacing-md);
+  }
+
+  .profile-header {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-lg);
+  }
+
+  .profile-info {
+    align-items: center;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>
