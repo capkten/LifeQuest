@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.database import engine, Base
 from app.api import auth, users, notes, todos, shop, backpack
@@ -8,6 +9,9 @@ from app.api import auth, users, notes, todos, shop, backpack
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="LifeQuest", version="1.0.0")
+
+# Mount static files directory for uploaded files
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # CORS middleware
 app.add_middleware(
