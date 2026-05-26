@@ -5,6 +5,13 @@
         <h2 class="page-title">背包</h2>
         <span class="item-count">{{ filteredItems.length }} 件物品</span>
       </div>
+      <router-link to="/backpack/history" class="btn-history">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+        使用历史
+      </router-link>
     </div>
 
     <div class="filter-tabs">
@@ -445,6 +452,34 @@ onMounted(() => {
 .btn-create svg {
   width: 18px;
   height: 18px;
+}
+
+.btn-history {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-family: var(--font-family);
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.btn-history:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: rgba(108, 99, 255, 0.06);
+}
+
+.btn-history svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* Filter Tabs */

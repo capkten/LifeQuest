@@ -70,6 +70,11 @@ const routes = [
         component: () => import('../views/Backpack.vue')
       },
       {
+        path: 'backpack/history',
+        name: 'BackpackHistory',
+        component: () => import('../views/BackpackHistory.vue')
+      },
+      {
         path: 'profile',
         name: 'Profile',
         component: () => import('../views/Profile.vue')
