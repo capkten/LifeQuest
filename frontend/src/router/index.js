@@ -16,9 +16,15 @@ const routes = [
   },
   {
     path: '/',
-    name: 'Home',
-    component: () => import('../views/Home.vue'),
-    meta: { requiresAuth: true }
+    component: () => import('../components/layout/AppLayout.vue'),
+    meta: { requiresAuth: true },
+    children: [
+      {
+        path: '',
+        name: 'Home',
+        component: () => import('../views/Home.vue')
+      }
+    ]
   }
 ]
 
@@ -30,8 +36,10 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
 
-  // Check if route requires authentication
-  if (to.meta.requiresAuth) {
+  // Check if route requires authentication (check matched routes)
+  const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
+
+  if (requiresAuth) {
     if (!authStore.isAuthenticated) {
       next({ name: 'Login', query: { redirect: to.fullPath } })
       return
