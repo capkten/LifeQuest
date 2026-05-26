@@ -43,6 +43,11 @@ const routes = [
         path: 'backpack',
         name: 'Backpack',
         component: () => import('../views/Backpack.vue')
+      },
+      {
+        path: 'profile',
+        name: 'Profile',
+        component: () => import('../views/Profile.vue')
       }
     ]
   },

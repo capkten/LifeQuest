@@ -92,6 +92,13 @@
         </svg>
         <span>Backpack</span>
       </router-link>
+      <router-link to="/profile" class="nav-item" active-class="nav-item--active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
+        <span>Profile</span>
+      </router-link>
     </nav>
   </aside>
 </template>
