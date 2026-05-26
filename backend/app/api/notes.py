@@ -11,8 +11,10 @@ from app.database import get_db
 from app.models.user import User
 from app.schemas.note import (
     NotebookCreate,
+    NotebookUpdate,
     NotebookResponse,
     FolderCreate,
+    FolderUpdate,
     FolderResponse,
     NoteCreate,
     NoteUpdate,
@@ -80,6 +82,35 @@ def get_folders_by_notebook(
     return service.get_folders(notebook_id)
 
 
+@router.put("/notebooks/{notebook_id}", response_model=NotebookResponse)
+def update_notebook(
+    notebook_id: UUID,
+    notebook_in: NotebookUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    service = NoteService(db)
+    if not service.verify_notebook_ownership(notebook_id, current_user.id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    notebook = service.notebook_repo.get_by_id(notebook_id)
+    if not notebook:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    return service.notebook_repo.update(notebook, notebook_in.model_dump(exclude_unset=True))
+
+
+@router.delete("/notebooks/{notebook_id}")
+def delete_notebook(
+    notebook_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    service = NoteService(db)
+    if not service.verify_notebook_ownership(notebook_id, current_user.id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    service.notebook_repo.delete(notebook_id)
+    return {"message": "Notebook deleted"}
+
+
 @router.post("/folders", response_model=FolderResponse)
 def create_folder(
     folder_in: FolderCreate,
@@ -90,6 +121,35 @@ def create_folder(
     if not service.verify_notebook_ownership(folder_in.notebook_id, current_user.id):
         raise HTTPException(status_code=403, detail="Not authorized")
     return service.create_folder(folder_in)
+
+
+@router.put("/folders/{folder_id}", response_model=FolderResponse)
+def update_folder(
+    folder_id: UUID,
+    folder_in: FolderUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    service = NoteService(db)
+    if not service.verify_folder_ownership(folder_id, current_user.id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    folder = service.folder_repo.get_by_id(folder_id)
+    if not folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    return service.folder_repo.update(folder, folder_in.model_dump(exclude_unset=True))
+
+
+@router.delete("/folders/{folder_id}")
+def delete_folder(
+    folder_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    service = NoteService(db)
+    if not service.verify_folder_ownership(folder_id, current_user.id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    service.folder_repo.delete(folder_id)
+    return {"message": "Folder deleted"}
 
 
 @router.post("/", response_model=NoteResponse)
@@ -146,7 +206,28 @@ def get_note(
         raise HTTPException(status_code=404, detail="Note not found")
     if not service.verify_note_ownership(note, current_user.id):
         raise HTTPException(status_code=403, detail="Not authorized")
-    return note
+
+    # Read file content
+    content = ""
+    if note.file_path and os.path.exists(note.file_path):
+        with open(note.file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+    # Create response with content
+    note_dict = {
+        "id": note.id,
+        "folder_id": note.folder_id,
+        "title": note.title,
+        "summary": note.summary,
+        "tags": note.tags,
+        "is_pinned": note.is_pinned,
+        "file_path": note.file_path,
+        "content": content,
+        "word_count": note.word_count,
+        "created_at": note.created_at,
+        "updated_at": note.updated_at
+    }
+    return note_dict
 
 
 @router.put("/{note_id}", response_model=NoteResponse)

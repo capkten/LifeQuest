@@ -15,6 +15,12 @@ class NotebookCreate(NotebookBase):
     pass
 
 
+class NotebookUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    icon: Optional[str] = None
+
+
 class NotebookResponse(NotebookBase):
     model_config = ConfigDict(from_attributes=True)
 
@@ -30,6 +36,10 @@ class FolderBase(BaseModel):
 
 class FolderCreate(FolderBase):
     notebook_id: UUID
+
+
+class FolderUpdate(BaseModel):
+    name: Optional[str] = None
 
 
 class FolderResponse(FolderBase):
@@ -67,6 +77,7 @@ class NoteResponse(NoteBase):
     id: UUID
     folder_id: UUID
     file_path: Optional[str] = None
+    content: Optional[str] = None
     word_count: int
     created_at: datetime
     updated_at: datetime
