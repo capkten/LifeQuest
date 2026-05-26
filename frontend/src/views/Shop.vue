@@ -14,6 +14,13 @@
           <span class="balance-value">{{ user?.coins || 0 }}</span>
           <span class="balance-label">金币</span>
         </div>
+        <button class="btn-history" @click="$router.push('/shop/history')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+          兑换历史
+        </button>
         <button class="btn-create" @click="showCreateDialog = true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <line x1="12" y1="5" x2="12" y2="19" />
@@ -573,6 +580,32 @@ onMounted(() => {
 }
 
 .btn-create svg {
+  width: 18px;
+  height: 18px;
+}
+
+.btn-history {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-family: var(--font-family);
+  transition: all 0.15s ease;
+}
+
+.btn-history:hover {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+}
+
+.btn-history svg {
   width: 18px;
   height: 18px;
 }

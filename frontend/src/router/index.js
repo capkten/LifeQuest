@@ -60,6 +60,11 @@ const routes = [
         component: () => import('../views/Shop.vue')
       },
       {
+        path: 'shop/history',
+        name: 'ExchangeHistory',
+        component: () => import('../views/ExchangeHistory.vue')
+      },
+      {
         path: 'backpack',
         name: 'Backpack',
         component: () => import('../views/Backpack.vue')
