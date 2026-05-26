@@ -6,6 +6,7 @@ from app.models.backpack import (
     BackpackItem, ItemType, ItemStatus,
     UsageHistory, UsageAction,
 )
+from app.models.achievement import Achievement, UserAchievement
 
 __all__ = [
     "User",
@@ -14,4 +15,5 @@ __all__ = [
     "ShopItem", "ExchangeHistory", "ExchangeStatus",
     "BackpackItem", "ItemType", "ItemStatus",
     "UsageHistory", "UsageAction",
+    "Achievement", "UserAchievement",
 ]

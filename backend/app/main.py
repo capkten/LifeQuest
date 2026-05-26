@@ -2,13 +2,27 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.database import engine, Base
-from app.api import auth, users, notes, todos, shop, backpack
+from app.database import engine, Base, SessionLocal
+from app.api import auth, users, notes, todos, shop, backpack, achievements
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="LifeQuest", version="1.0.0")
+
+
+@app.on_event("startup")
+def startup_event():
+    """Seed default achievements on application startup."""
+    db = SessionLocal()
+    try:
+        from app.services.achievement import AchievementService
+
+        service = AchievementService(db)
+        service.seed_achievements()
+    finally:
+        db.close()
+
 
 # Mount static files directory for uploaded files
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
@@ -29,6 +43,7 @@ app.include_router(notes.router)
 app.include_router(todos.router)
 app.include_router(shop.router)
 app.include_router(backpack.router)
+app.include_router(achievements.router)
 
 
 @app.get("/")
