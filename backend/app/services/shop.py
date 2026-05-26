@@ -61,18 +61,17 @@ class ShopService:
 
     # --- Exchange (purchase) operations ---
     def purchase_item(self, user_id: UUID, exchange_in: ExchangeHistoryCreate) -> ExchangeHistory:
-        # Atomic stock decrement: only succeeds if stock >= quantity
-        if not self.item_repo.decrement_stock_atomic(exchange_in.item_id, exchange_in.quantity):
-            # Check whether item exists / is active or simply out of stock
-            item = self.item_repo.get_by_id(exchange_in.item_id)
-            if item is None:
-                raise HTTPException(status_code=404, detail="Shop item not found")
-            if not item.is_active:
-                raise HTTPException(status_code=400, detail="Item is not available")
-            raise HTTPException(status_code=400, detail="Item is out of stock")
-
-        # Item exists and is active; fetch for cost calculation
+        # Fetch item first to determine stock type
         item = self.item_repo.get_by_id(exchange_in.item_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail="Shop item not found")
+        if not item.is_active:
+            raise HTTPException(status_code=400, detail="Item is not available")
+
+        # Only decrement stock for finite-stock items (stock >= 0)
+        if item.stock >= 0:
+            if not self.item_repo.decrement_stock_atomic(exchange_in.item_id, exchange_in.quantity):
+                raise HTTPException(status_code=400, detail="Item is out of stock")
         total_cost = item.coin_price * exchange_in.quantity
 
         user = self.user_repo.get_by_id(user_id)

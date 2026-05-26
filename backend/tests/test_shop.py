@@ -187,3 +187,40 @@ def test_refund_exchange(client):
     # Verify coins restored
     user_after_refund = client.get("/api/users/me", headers=headers).json()
     assert user_after_refund["coins"] == 100
+
+
+def test_purchase_unlimited_stock(client):
+    """Unlimited stock items (stock=-1) can be purchased multiple times."""
+    headers = _register_and_login(client)
+
+    # Create an unlimited-stock item
+    item_response = _create_item(client, headers, coin_price=5, stock=-1)
+    assert item_response.status_code == 200
+    item_id = item_response.json()["id"]
+
+    # Give user coins
+    task_response = client.post(
+        "/api/todos/tasks",
+        json={"title": "Earn coins", "coins_reward": 100, "exp_reward": 0},
+        headers=headers,
+    )
+    task_id = task_response.json()["id"]
+    client.post(f"/api/todos/tasks/{task_id}/complete", headers=headers)
+
+    # Purchase twice - should succeed both times
+    for i in range(2):
+        purchase_response = client.post(
+            "/api/shop/exchange",
+            json={"item_id": item_id, "quantity": 1},
+            headers=headers,
+        )
+        assert purchase_response.status_code == 200
+        assert purchase_response.json()["status"] == "completed"
+
+    # Stock should still be -1 (unlimited, unchanged)
+    item_detail = client.get(f"/api/shop/items/{item_id}", headers=headers).json()
+    assert item_detail["stock"] == -1
+
+    # Verify user coins were deducted for both purchases
+    user = client.get("/api/users/me", headers=headers).json()
+    assert user["coins"] == 90  # 100 earned - (5 * 2) spent
