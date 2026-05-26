@@ -71,8 +71,7 @@ def delete_item(
     db: Session = Depends(get_db),
 ):
     service = ShopService(db)
-    service.get_item_for_user(item_id, current_user.id)
-    service.delete_item(item_id)
+    service.delete_item(item_id, current_user.id)
     return {"message": "Item deleted"}
 
 

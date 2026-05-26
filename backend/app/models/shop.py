@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, Uuid
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, Text, Uuid
 
 from app.database import Base
 
@@ -23,10 +23,9 @@ class ShopItem(Base):
     description = Column(Text)
     icon = Column(String(100))
     category = Column(String(50))
-    price = Column(Integer, default=0)
     coin_price = Column(Integer, default=0)
     stock = Column(Integer, default=-1)  # -1 means unlimited
-    is_active = Column(Integer, default=1)
+    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

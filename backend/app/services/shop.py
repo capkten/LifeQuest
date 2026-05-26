@@ -52,45 +52,45 @@ class ShopService:
         update_data = item_in.model_dump(exclude_unset=True)
         return self.item_repo.update(item, update_data)
 
-    def delete_item(self, item_id: UUID) -> bool:
+    def delete_item(self, item_id: UUID, user_id: UUID) -> bool:
+        """Delete a shop item, verifying ownership first."""
+        self.get_item_for_user(item_id, user_id)
         return self.item_repo.delete(item_id)
 
     # --- Exchange (purchase) operations ---
     def purchase_item(self, user_id: UUID, exchange_in: ExchangeHistoryCreate) -> ExchangeHistory:
-        item = self.item_repo.get_by_id(exchange_in.item_id)
-        if item is None:
-            raise HTTPException(status_code=404, detail="Shop item not found")
-        if not item.is_active:
-            raise HTTPException(status_code=400, detail="Item is not available")
-        if item.stock == 0:
+        # Atomic stock decrement: only succeeds if stock >= quantity
+        if not self.item_repo.decrement_stock_atomic(exchange_in.item_id, exchange_in.quantity):
+            # Check whether item exists / is active or simply out of stock
+            item = self.item_repo.get_by_id(exchange_in.item_id)
+            if item is None:
+                raise HTTPException(status_code=404, detail="Shop item not found")
+            if not item.is_active:
+                raise HTTPException(status_code=400, detail="Item is not available")
             raise HTTPException(status_code=400, detail="Item is out of stock")
 
+        # Item exists and is active; fetch for cost calculation
+        item = self.item_repo.get_by_id(exchange_in.item_id)
         total_cost = item.coin_price * exchange_in.quantity
+
         user = self.user_repo.get_by_id(user_id)
         if user is None:
             raise HTTPException(status_code=404, detail="User not found")
         if user.coins < total_cost:
             raise HTTPException(status_code=400, detail="Insufficient coins")
 
-        # Deduct stock
-        if item.stock > 0:
-            item.stock -= exchange_in.quantity
-
-        # Deduct coins
+        # Deduct coins (no commit)
         self.user_repo._update_coins_no_commit(user, -total_cost)
 
-        # Create exchange record
-        exchange = ExchangeHistory(
-            user_id=user_id,
-            item_id=item.id,
-            quantity=exchange_in.quantity,
-            total_cost=total_cost,
-            status=ExchangeStatus.COMPLETED,
-        )
-        self.exchange_repo.db.add(exchange)
-        self.exchange_repo.db.commit()
-        self.exchange_repo.db.refresh(exchange)
-        return exchange
+        # Create exchange record (single commit for everything)
+        exchange_data = {
+            "user_id": user_id,
+            "item_id": item.id,
+            "quantity": exchange_in.quantity,
+            "total_cost": total_cost,
+            "status": ExchangeStatus.COMPLETED,
+        }
+        return self.exchange_repo.create(exchange_data)
 
     def get_user_exchanges(self, user_id: UUID) -> List[ExchangeHistory]:
         return self.exchange_repo.get_by_user(user_id)
@@ -100,15 +100,13 @@ class ShopService:
             raise HTTPException(status_code=400, detail="Can only refund completed exchanges")
 
         user = self.user_repo.get_by_id(exchange.user_id)
-        item = self.item_repo.get_by_id(exchange.item_id)
 
         # Refund coins
         if user:
             self.user_repo._update_coins_no_commit(user, exchange.total_cost)
 
-        # Restore stock
-        if item and item.stock >= 0:
-            item.stock += exchange.quantity
+        # Atomically restore stock
+        self.item_repo.restore_stock_atomic(exchange.item_id, exchange.quantity)
 
         exchange.status = ExchangeStatus.REFUNDED
         self.exchange_repo.db.commit()

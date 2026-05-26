@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.shop import ExchangeStatus
 
@@ -12,7 +12,6 @@ class ShopItemCreate(BaseModel):
     description: Optional[str] = None
     icon: Optional[str] = None
     category: Optional[str] = None
-    price: int = 0
     coin_price: int = 0
     stock: int = -1
 
@@ -22,10 +21,9 @@ class ShopItemUpdate(BaseModel):
     description: Optional[str] = None
     icon: Optional[str] = None
     category: Optional[str] = None
-    price: Optional[int] = None
     coin_price: Optional[int] = None
     stock: Optional[int] = None
-    is_active: Optional[int] = None
+    is_active: Optional[bool] = None
 
 
 class ShopItemResponse(BaseModel):
@@ -37,17 +35,16 @@ class ShopItemResponse(BaseModel):
     description: Optional[str] = None
     icon: Optional[str] = None
     category: Optional[str] = None
-    price: int
     coin_price: int
     stock: int
-    is_active: int
+    is_active: bool
     created_at: datetime
     updated_at: datetime
 
 
 class ExchangeHistoryCreate(BaseModel):
     item_id: UUID
-    quantity: int = 1
+    quantity: int = Field(default=1, ge=1)
 
 
 class ExchangeHistoryResponse(BaseModel):

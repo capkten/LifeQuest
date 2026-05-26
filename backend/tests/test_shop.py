@@ -43,7 +43,7 @@ def test_create_shop_item(client):
     assert data["category"] == "consumable"
     assert data["coin_price"] == 50
     assert data["stock"] == 10
-    assert data["is_active"] == 1
+    assert data["is_active"] is True
     assert data["id"] is not None
 
     # Verify item is in the list

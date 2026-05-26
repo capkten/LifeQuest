@@ -1,6 +1,7 @@
 from typing import List, Optional
 from uuid import UUID
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.models.shop import ShopItem, ExchangeHistory, ExchangeStatus
@@ -14,7 +15,7 @@ class ShopItemRepository(BaseRepository[ShopItem]):
     def get_active_items(self, skip: int = 0, limit: int = 100) -> List[ShopItem]:
         return (
             self.db.query(ShopItem)
-            .filter(ShopItem.is_active == 1)
+            .filter(ShopItem.is_active == True)  # noqa: E712
             .offset(skip)
             .limit(limit)
             .all()
@@ -23,7 +24,7 @@ class ShopItemRepository(BaseRepository[ShopItem]):
     def get_by_category(self, category: str) -> List[ShopItem]:
         return (
             self.db.query(ShopItem)
-            .filter(ShopItem.category == category, ShopItem.is_active == 1)
+            .filter(ShopItem.category == category, ShopItem.is_active == True)  # noqa: E712
             .all()
         )
 
@@ -33,6 +34,22 @@ class ShopItemRepository(BaseRepository[ShopItem]):
             .filter(ShopItem.created_by == creator_id)
             .all()
         )
+
+    def decrement_stock_atomic(self, item_id: UUID, quantity: int) -> bool:
+        """Atomically decrement stock if sufficient. Returns True if successful."""
+        affected = (
+            self.db.query(ShopItem)
+            .filter(ShopItem.id == item_id, ShopItem.stock >= quantity)
+            .update({"stock": ShopItem.stock - quantity})
+        )
+        return affected > 0
+
+    def restore_stock_atomic(self, item_id: UUID, quantity: int) -> None:
+        """Atomically restore stock for items with finite stock."""
+        self.db.query(ShopItem).filter(
+            ShopItem.id == item_id,
+            ShopItem.stock >= 0,
+        ).update({"stock": ShopItem.stock + quantity})
 
 
 class ExchangeHistoryRepository(BaseRepository[ExchangeHistory]):
