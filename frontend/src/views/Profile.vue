@@ -85,53 +85,96 @@
         </svg>
         成就
       </h3>
-      <div class="achievements-grid">
-        <div class="achievement-card">
-          <div class="achievement-icon achievement-icon--unlocked">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <div class="achievements-grid" v-if="!achievementsLoading">
+        <div
+          v-for="ach in mergedAchievements"
+          :key="ach.id"
+          class="achievement-card"
+        >
+          <div
+            class="achievement-icon"
+            :class="ach.unlocked ? 'achievement-icon--unlocked' : 'achievement-icon--locked'"
+          >
+            <svg v-if="ach.unlocked" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
               <polyline points="22 4 12 14.01 9 11.01" />
             </svg>
-          </div>
-          <div class="achievement-info">
-            <span class="achievement-name">初出茅庐</span>
-            <span class="achievement-desc">完成你的第一个任务</span>
-          </div>
-        </div>
-        <div class="achievement-card">
-          <div class="achievement-icon achievement-icon--unlocked">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-            </svg>
-          </div>
-          <div class="achievement-info">
-            <span class="achievement-name">崭露头角</span>
-            <span class="achievement-desc">达到 5 级</span>
-          </div>
-        </div>
-        <div class="achievement-card">
-          <div class="achievement-icon achievement-icon--locked">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
           </div>
           <div class="achievement-info">
-            <span class="achievement-name">寻宝猎人</span>
-            <span class="achievement-desc">累计获得 1000 金币</span>
+            <span class="achievement-name">{{ ach.name }}</span>
+            <span class="achievement-desc">{{ ach.description || '' }}</span>
+            <span v-if="ach.unlocked && ach.unlocked_at" class="achievement-date">
+              {{ formatDate(ach.unlocked_at) }} 解锁
+            </span>
           </div>
         </div>
+        <div v-if="mergedAchievements.length === 0" class="achievements-empty">
+          暂无成就数据
+        </div>
+      </div>
+      <div v-else class="achievements-grid">
+        <div class="achievements-loading">加载中...</div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStats } from '../composables/useUserStats'
+import { achievementService } from '../services/achievement'
 
 const router = useRouter()
 const { user, requiredExp, expPercent } = useUserStats()
+
+const allAchievements = ref([])
+const unlockedIds = ref(new Set())
+const unlockDates = ref({})
+const achievementsLoading = ref(true)
+
+const mergedAchievements = computed(() => {
+  return allAchievements.value.map((ach) => ({
+    ...ach,
+    unlocked: unlockedIds.value.has(ach.id),
+    unlocked_at: unlockDates.value[ach.id] || null
+  }))
+})
+
+function formatDate(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  return d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+}
+
+onMounted(async () => {
+  try {
+    const [all, userAchs] = await Promise.all([
+      achievementService.getAchievements(),
+      achievementService.getUserAchievements()
+    ])
+    allAchievements.value = all || []
+    const ids = new Set()
+    const dates = {}
+    for (const ua of (userAchs || [])) {
+      const achId = ua.achievement_id || ua.achievement?.id
+      if (achId) {
+        ids.add(achId)
+        dates[achId] = ua.unlocked_at
+      }
+    }
+    unlockedIds.value = ids
+    unlockDates.value = dates
+  } catch (e) {
+    console.error('Failed to load achievements:', e)
+  } finally {
+    achievementsLoading.value = false
+  }
+})
 
 function goToEditProfile() {
   router.push({ name: 'EditProfile' })
@@ -469,6 +512,20 @@ function goToEditProfile() {
 .achievement-desc {
   font-size: var(--font-size-sm);
   color: var(--color-text-tertiary);
+}
+
+.achievement-date {
+  font-size: var(--font-size-xs);
+  color: var(--color-success);
+  margin-top: 2px;
+}
+
+.achievements-empty,
+.achievements-loading {
+  padding: var(--spacing-xl);
+  text-align: center;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
 }
 
 /* Responsive */
