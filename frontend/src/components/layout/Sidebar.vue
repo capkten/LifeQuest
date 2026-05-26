@@ -45,7 +45,14 @@
         <span>EXP</span>
         <span>{{ expPercent }}%</span>
       </div>
-      <div class="exp-bar">
+      <div
+        class="exp-bar"
+        role="progressbar"
+        :aria-valuenow="expPercent"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        :aria-label="`Experience progress: ${expPercent}% toward next level`"
+      >
         <div class="exp-bar-fill" :style="{ width: expPercent + '%' }"></div>
       </div>
     </div>
@@ -104,22 +111,9 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { useAuthStore } from '../../stores/auth'
+import { useUserStats } from '../../composables/useUserStats'
 
-const authStore = useAuthStore()
-
-const user = computed(() => authStore.user)
-
-const requiredExp = computed(() => {
-  const level = user.value?.level || 1
-  return Math.floor(100 * Math.pow(1.5, level - 1))
-})
-
-const expPercent = computed(() => {
-  if (!user.value) return 0
-  return Math.min(100, Math.round((user.value.experience / requiredExp.value) * 100))
-})
+const { user, expPercent } = useUserStats()
 </script>
 
 <style scoped>
