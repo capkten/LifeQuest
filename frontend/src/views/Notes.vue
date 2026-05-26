@@ -45,7 +45,15 @@
     </div>
 
     <div v-else class="notebook-grid">
-      <div v-for="notebook in notebooks" :key="notebook.id" class="notebook-card">
+      <div
+        v-for="notebook in notebooks"
+        :key="notebook.id"
+        class="notebook-card"
+        tabindex="0"
+        role="button"
+        @click="openNotebook(notebook)"
+        @keydown.enter="openNotebook(notebook)"
+      >
         <div class="notebook-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -65,9 +73,15 @@
     <!-- Create Notebook Dialog -->
     <Teleport to="body">
       <div v-if="showDialog" class="dialog-overlay" @click.self="cancelDialog">
-        <div class="dialog">
+        <div
+          class="dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="dialog-title"
+          @keydown="trapFocus"
+        >
           <div class="dialog-header">
-            <h3 class="dialog-title">New Notebook</h3>
+            <h3 id="dialog-title" class="dialog-title">New Notebook</h3>
             <button class="dialog-close" @click="cancelDialog" aria-label="Close">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -80,13 +94,14 @@
               <label class="form-label" for="notebook-name">Name</label>
               <input
                 id="notebook-name"
+                ref="dialogNameInput"
                 v-model="form.name"
                 type="text"
                 class="form-input"
                 placeholder="My Notebook"
                 required
                 maxlength="100"
-                autofocus
+                :aria-describedby="dialogError ? 'dialog-error-msg' : undefined"
               />
             </div>
             <div class="form-group">
@@ -100,7 +115,7 @@
                 maxlength="500"
               ></textarea>
             </div>
-            <div v-if="dialogError" class="dialog-error">{{ dialogError }}</div>
+            <div v-if="dialogError" id="dialog-error-msg" class="dialog-error" role="alert">{{ dialogError }}</div>
             <div class="dialog-actions">
               <button type="button" class="btn-secondary" @click="cancelDialog">Cancel</button>
               <button type="submit" class="btn-primary" :disabled="creating || !form.name.trim()">
@@ -116,7 +131,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick, watch } from 'vue'
 import { noteService } from '../services/note'
 
 const notebooks = ref([])
@@ -127,6 +142,42 @@ const showDialog = ref(false)
 const creating = ref(false)
 const dialogError = ref(null)
 const form = ref({ name: '', description: '' })
+const dialogNameInput = ref(null)
+
+// Auto-focus first input when dialog opens
+watch(showDialog, (open) => {
+  if (open) {
+    nextTick(() => {
+      dialogNameInput.value?.focus()
+    })
+  }
+})
+
+function openNotebook(notebook) {
+  // TODO: navigate to notebook contents page
+  console.log('Open notebook:', notebook.id)
+}
+
+function trapFocus(event) {
+  if (event.key !== 'Tab') return
+  const dialog = event.currentTarget
+  const focusable = dialog.querySelectorAll(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  )
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  if (event.shiftKey) {
+    if (document.activeElement === first) {
+      event.preventDefault()
+      last.focus()
+    }
+  } else {
+    if (document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
+}
 
 async function fetchNotebooks() {
   loading.value = true
