@@ -8,10 +8,12 @@ from app.models.shop import ShopItem, ExchangeHistory, ExchangeStatus
 from app.repositories.shop import ShopItemRepository, ExchangeHistoryRepository
 from app.repositories.user import UserRepository
 from app.schemas.shop import ShopItemCreate, ShopItemUpdate, ExchangeHistoryCreate
+from app.services.backpack import BackpackService
 
 
 class ShopService:
     def __init__(self, db: Session):
+        self.db = db
         self.item_repo = ShopItemRepository(db)
         self.exchange_repo = ExchangeHistoryRepository(db)
         self.user_repo = UserRepository(db)
@@ -90,7 +92,13 @@ class ShopService:
             "total_cost": total_cost,
             "status": ExchangeStatus.COMPLETED,
         }
-        return self.exchange_repo.create(exchange_data)
+        exchange = self.exchange_repo.create(exchange_data)
+
+        # Add purchased items to user's backpack
+        backpack_service = BackpackService(self.db)
+        backpack_service.add_item(user_id, item.id, quantity=exchange_in.quantity)
+
+        return exchange
 
     def get_user_exchanges(self, user_id: UUID) -> List[ExchangeHistory]:
         return self.exchange_repo.get_by_user(user_id)
