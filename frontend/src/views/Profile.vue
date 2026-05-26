@@ -77,6 +77,65 @@
       <span class="exp-percent">{{ expPercent }}% 距离下一级</span>
     </div>
 
+    <div class="stats-section">
+      <h3 class="section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M18 20V10" />
+          <path d="M12 20V4" />
+          <path d="M6 20v-6" />
+        </svg>
+        统计数据
+      </h3>
+      <div class="stats-grid">
+        <div class="stat-card stat-card--tasks">
+          <div class="stat-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M9 11l3 3L22 4" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>
+          </div>
+          <div class="stat-card-info">
+            <span class="stat-card-value">{{ stats.totalTasksCompleted }}</span>
+            <span class="stat-card-label">已完成任务</span>
+          </div>
+        </div>
+        <div class="stat-card stat-card--streak">
+          <div class="stat-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+            </svg>
+          </div>
+          <div class="stat-card-info">
+            <span class="stat-card-value">{{ stats.maxHabitStreak }}</span>
+            <span class="stat-card-label">最佳连续天数</span>
+          </div>
+        </div>
+        <div class="stat-card stat-card--coins">
+          <div class="stat-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 6v12M6 12h12" />
+            </svg>
+          </div>
+          <div class="stat-card-info">
+            <span class="stat-card-value">{{ user?.coins || 0 }}</span>
+            <span class="stat-card-label">累计金币</span>
+          </div>
+        </div>
+        <div class="stat-card stat-card--exp">
+          <div class="stat-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+          </div>
+          <div class="stat-card-info">
+            <span class="stat-card-value">{{ user?.experience || 0 }}</span>
+            <span class="stat-card-label">累计经验</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="achievements-section">
       <h3 class="section-title">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -124,13 +183,19 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStats } from '../composables/useUserStats'
 import { achievementService } from '../services/achievement'
+import { todoService } from '../services/todo'
 
 const router = useRouter()
 const { user, requiredExp, expPercent } = useUserStats()
+
+const stats = reactive({
+  totalTasksCompleted: 0,
+  maxHabitStreak: 0
+})
 
 const allAchievements = ref([])
 const unlockedIds = ref(new Set())
@@ -153,10 +218,14 @@ function formatDate(dateStr) {
 
 onMounted(async () => {
   try {
-    const [all, userAchs] = await Promise.all([
+    const [all, userAchs, tasks, habits] = await Promise.all([
       achievementService.getAchievements(),
-      achievementService.getUserAchievements()
+      achievementService.getUserAchievements(),
+      todoService.getTasks().catch(() => []),
+      todoService.getHabits().catch(() => [])
     ])
+
+    // Achievement data
     allAchievements.value = all || []
     const ids = new Set()
     const dates = {}
@@ -169,8 +238,16 @@ onMounted(async () => {
     }
     unlockedIds.value = ids
     unlockDates.value = dates
+
+    // Stats: total completed tasks
+    const taskList = Array.isArray(tasks) ? tasks : (tasks?.data || [])
+    stats.totalTasksCompleted = taskList.filter(t => t.status === 'completed').length
+
+    // Stats: max habit streak (best_streak across all habits)
+    const habitList = Array.isArray(habits) ? habits : (habits?.data || [])
+    stats.maxHabitStreak = habitList.reduce((max, h) => Math.max(max, h.best_streak || h.streak || 0), 0)
   } catch (e) {
-    console.error('Failed to load achievements:', e)
+    console.error('Failed to load profile data:', e)
   } finally {
     achievementsLoading.value = false
   }
@@ -300,9 +377,20 @@ function goToEditProfile() {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--spacing-lg);
+}
+
+.stats-section {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
   margin-bottom: var(--spacing-xl);
+}
+
+.stats-section .stats-grid {
+  margin-bottom: 0;
 }
 
 .stat-card {
@@ -328,6 +416,22 @@ function goToEditProfile() {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+.stat-card--tasks .stat-card-icon {
+  background: rgba(81, 207, 102, 0.15);
+}
+
+.stat-card--tasks .stat-card-icon svg {
+  color: var(--color-success);
+}
+
+.stat-card--streak .stat-card-icon {
+  background: rgba(255, 140, 50, 0.15);
+}
+
+.stat-card--streak .stat-card-icon svg {
+  color: #ff8c32;
 }
 
 .stat-card--level .stat-card-icon {
@@ -536,6 +640,12 @@ function goToEditProfile() {
   }
 }
 
+@media (max-width: 900px) {
+  .stats-section .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (max-width: 767px) {
   .profile-page {
     padding: var(--spacing-md);
@@ -554,6 +664,10 @@ function goToEditProfile() {
   }
 
   .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-section .stats-grid {
     grid-template-columns: 1fr;
   }
 }
