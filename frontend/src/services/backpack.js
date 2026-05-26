@@ -38,6 +38,16 @@ export const backpackService = {
   },
 
   /**
+   * Equip a backpack item
+   * @param {string} itemId - Backpack item ID
+   * @returns {Promise<Object>} Updated backpack item
+   */
+  async equipItem(itemId) {
+    const response = await api.post(`/backpack/items/${itemId}/equip`)
+    return response.data
+  },
+
+  /**
    * Get usage history
    * @returns {Promise<Array>} List of usage history records
    */

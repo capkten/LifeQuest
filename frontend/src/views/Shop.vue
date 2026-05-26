@@ -100,7 +100,7 @@
     <!-- Success Toast -->
     <Teleport to="body">
       <Transition name="toast">
-        <div v-if="successToast" class="success-toast">
+        <div v-if="successToast" class="success-toast" role="status" aria-live="polite">
           <div class="success-toast-content">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <polyline points="20 6 9 17 4 12" />
@@ -114,7 +114,7 @@
     <!-- Error Toast -->
     <Teleport to="body">
       <Transition name="toast">
-        <div v-if="errorToast" class="error-toast">
+        <div v-if="errorToast" class="error-toast" role="status" aria-live="polite">
           <div class="error-toast-content">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <circle cx="12" cy="12" r="10" />
@@ -224,21 +224,19 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { shopService } from '../services/shop'
+import { useToast } from '../composables/useToast'
 
 const authStore = useAuthStore()
 const user = computed(() => authStore.user)
+const { successToast, errorToast, showSuccess, showError } = useToast()
 
 const items = ref([])
 const loading = ref(true)
 const error = ref(null)
 const purchasingId = ref(null)
-const successToast = ref(null)
-const successToastTimeout = ref(null)
-const errorToast = ref(null)
-const errorToastTimeout = ref(null)
 
 const showCreateDialog = ref(false)
 const creating = ref(false)
@@ -270,6 +268,10 @@ watch(showCreateDialog, (open) => {
 })
 
 function trapFocus(event) {
+  if (event.key === 'Escape') {
+    cancelDialog()
+    return
+  }
   if (event.key !== 'Tab') return
   const dialog = event.currentTarget
   const focusable = dialog.querySelectorAll(
@@ -289,29 +291,6 @@ function trapFocus(event) {
     }
   }
 }
-
-function showSuccess(message) {
-  successToast.value = message
-  if (successToastTimeout.value) clearTimeout(successToastTimeout.value)
-  successToastTimeout.value = setTimeout(() => {
-    successToast.value = null
-    successToastTimeout.value = null
-  }, 3000)
-}
-
-function showError(message) {
-  errorToast.value = message
-  if (errorToastTimeout.value) clearTimeout(errorToastTimeout.value)
-  errorToastTimeout.value = setTimeout(() => {
-    errorToast.value = null
-    errorToastTimeout.value = null
-  }, 4000)
-}
-
-onUnmounted(() => {
-  if (successToastTimeout.value) clearTimeout(successToastTimeout.value)
-  if (errorToastTimeout.value) clearTimeout(errorToastTimeout.value)
-})
 
 async function fetchItems() {
   loading.value = true

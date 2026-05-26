@@ -137,7 +137,7 @@
             <button
               class="btn-action btn-action--discard"
               :disabled="actionId === item.id"
-              @click="discardItem(item)"
+              @click="requestDiscard(item)"
             >
               <span v-if="actionId === item.id" class="loading-spinner loading-spinner--sm"></span>
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -154,7 +154,7 @@
     <!-- Success Toast -->
     <Teleport to="body">
       <Transition name="toast">
-        <div v-if="successToast" class="success-toast">
+        <div v-if="successToast" class="success-toast" role="status" aria-live="polite">
           <div class="success-toast-content">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <polyline points="20 6 9 17 4 12" />
@@ -168,7 +168,7 @@
     <!-- Error Toast -->
     <Teleport to="body">
       <Transition name="toast">
-        <div v-if="errorToast" class="error-toast">
+        <div v-if="errorToast" class="error-toast" role="status" aria-live="polite">
           <div class="error-toast-content">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <circle cx="12" cy="12" r="10" />
@@ -180,16 +180,45 @@
         </div>
       </Transition>
     </Teleport>
+
+    <!-- Discard Confirmation Dialog -->
+    <Teleport to="body">
+      <Transition name="toast">
+        <div v-if="confirmDialog" class="dialog-overlay" @click.self="cancelConfirm" @keydown.escape="cancelConfirm">
+          <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" @keydown.escape="cancelConfirm">
+            <div class="dialog-header">
+              <h3 id="confirm-dialog-title" class="dialog-title">Confirm Discard</h3>
+              <button class="dialog-close" @click="cancelConfirm" aria-label="Close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div class="dialog-body">
+              <p>Are you sure you want to discard <strong>{{ confirmDialog.name }}</strong>?</p>
+              <p class="dialog-hint">This action cannot be undone.</p>
+            </div>
+            <div class="dialog-actions">
+              <button class="btn-secondary" @click="cancelConfirm">Cancel</button>
+              <button class="btn-danger" @click="confirmDiscard">Discard</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { backpackService } from '../services/backpack'
 import { shopService } from '../services/shop'
+import { useToast } from '../composables/useToast'
 
 const authStore = useAuthStore()
+const { successToast, errorToast, showSuccess, showError } = useToast()
 
 const items = ref([])
 const shopItemsMap = ref({})
@@ -197,10 +226,7 @@ const loading = ref(true)
 const error = ref(null)
 const actionId = ref(null)
 const activeFilter = ref('all')
-const successToast = ref(null)
-const successToastTimeout = ref(null)
-const errorToast = ref(null)
-const errorToastTimeout = ref(null)
+const confirmDialog = ref(null)
 
 const filterTabs = [
   { value: 'all', label: 'All' },
@@ -244,29 +270,6 @@ function formatDate(dateStr) {
   })
 }
 
-function showSuccess(message) {
-  successToast.value = message
-  if (successToastTimeout.value) clearTimeout(successToastTimeout.value)
-  successToastTimeout.value = setTimeout(() => {
-    successToast.value = null
-    successToastTimeout.value = null
-  }, 3000)
-}
-
-function showError(message) {
-  errorToast.value = message
-  if (errorToastTimeout.value) clearTimeout(errorToastTimeout.value)
-  errorToastTimeout.value = setTimeout(() => {
-    errorToast.value = null
-    errorToastTimeout.value = null
-  }, 4000)
-}
-
-onUnmounted(() => {
-  if (successToastTimeout.value) clearTimeout(successToastTimeout.value)
-  if (errorToastTimeout.value) clearTimeout(errorToastTimeout.value)
-})
-
 async function fetchShopItems() {
   try {
     const shopItems = await shopService.getItems()
@@ -277,6 +280,7 @@ async function fetchShopItems() {
     shopItemsMap.value = map
   } catch (e) {
     console.error('Failed to fetch shop items for name lookup:', e)
+    showError('Could not load item details. Item names may be unavailable.')
   }
 }
 
@@ -301,7 +305,6 @@ async function useItem(item) {
   actionId.value = item.id
   try {
     const updated = await backpackService.useItem(item.id)
-    // If item was fully consumed (deleted), remove from list
     if (updated.quantity <= 0) {
       items.value = items.value.filter(i => i.id !== item.id)
     } else {
@@ -310,7 +313,6 @@ async function useItem(item) {
         items.value[idx] = updated
       }
     }
-    // Refresh user data in case it changed
     await authStore.fetchUser()
     showSuccess('Item used successfully!')
   } catch (e) {
@@ -325,12 +327,10 @@ async function equipItem(item) {
   actionId.value = item.id
   try {
     const updated = await backpackService.equipItem(item.id)
-    // Update the equipped item
     const idx = items.value.findIndex(i => i.id === item.id)
     if (idx !== -1) {
       items.value[idx] = updated
     }
-    // Unequip other items of same type
     items.value = items.value.map(i => {
       if (i.id !== item.id && i.item_type === item.item_type && i.is_equipped) {
         return { ...i, is_equipped: false, status: 'active' }
@@ -345,16 +345,29 @@ async function equipItem(item) {
   }
 }
 
-async function discardItem(item) {
-  if (actionId.value) return
-  actionId.value = item.id
+function requestDiscard(item) {
+  const shopItem = shopItemsMap.value[item.shop_item_id]
+  confirmDialog.value = {
+    id: item.id,
+    name: shopItem?.name || 'this item'
+  }
+}
+
+function cancelConfirm() {
+  confirmDialog.value = null
+}
+
+async function confirmDiscard() {
+  if (!confirmDialog.value || actionId.value) return
+  const itemId = confirmDialog.value.id
+  confirmDialog.value = null
+  actionId.value = itemId
   try {
-    const updated = await backpackService.discardItem(item.id)
-    // If item was fully discarded (deleted), remove from list
+    const updated = await backpackService.discardItem(itemId)
     if (updated.quantity <= 0) {
-      items.value = items.value.filter(i => i.id !== item.id)
+      items.value = items.value.filter(i => i.id !== itemId)
     } else {
-      const idx = items.value.findIndex(i => i.id === item.id)
+      const idx = items.value.findIndex(i => i.id === itemId)
       if (idx !== -1) {
         items.value[idx] = updated
       }
@@ -869,5 +882,121 @@ onMounted(() => {
 .toast-leave-to {
   opacity: 0;
   transform: translateY(-20px);
+}
+
+/* Dialog */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--spacing-lg);
+}
+
+.dialog {
+  width: 100%;
+  max-width: 420px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dialog-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.dialog-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  transition: background 0.15s ease;
+}
+
+.dialog-close:hover {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+}
+
+.dialog-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.dialog-body {
+  padding: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.dialog-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-top: 1px solid var(--color-border);
+}
+
+.btn-secondary {
+  padding: var(--spacing-sm) var(--spacing-lg);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-family: var(--font-family);
+  transition: background 0.15s ease;
+}
+
+.btn-secondary:hover {
+  background: var(--color-bg-tertiary);
+}
+
+.btn-danger {
+  padding: var(--spacing-sm) var(--spacing-lg);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: #fff;
+  background: var(--color-error);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-family: var(--font-family);
+  transition: opacity 0.15s ease;
+}
+
+.btn-danger:hover {
+  opacity: 0.9;
 }
 </style>
