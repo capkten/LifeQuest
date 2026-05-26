@@ -15,3 +15,10 @@ dist/
 # IDE
 .vscode/
 .idea/
+
+# Brainstorming
+.superpowers/
+design-system/
+
+# Runtime data
+backend/notes_data/
