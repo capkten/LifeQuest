@@ -1,0 +1,61 @@
+import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
+
+const routes = [
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('../views/Login.vue'),
+    meta: { guest: true }
+  },
+  {
+    path: '/register',
+    name: 'Register',
+    component: () => import('../views/Register.vue'),
+    meta: { guest: true }
+  },
+  {
+    path: '/',
+    name: 'Home',
+    component: () => import('../views/Home.vue'),
+    meta: { requiresAuth: true }
+  }
+]
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes
+})
+
+router.beforeEach(async (to, from, next) => {
+  const authStore = useAuthStore()
+
+  // Check if route requires authentication
+  if (to.meta.requiresAuth) {
+    if (!authStore.isAuthenticated) {
+      next({ name: 'Login', query: { redirect: to.fullPath } })
+      return
+    }
+
+    // If authenticated but user data not loaded, fetch it
+    if (!authStore.user) {
+      try {
+        await authStore.fetchUser()
+      } catch (error) {
+        authStore.logout()
+        next({ name: 'Login', query: { redirect: to.fullPath } })
+        return
+      }
+    }
+  }
+
+  // If guest route and user is authenticated, redirect to home
+  if (to.meta.guest && authStore.isAuthenticated) {
+    next({ name: 'Home' })
+    return
+  }
+
+  next()
+})
+
+export default router
