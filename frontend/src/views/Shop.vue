@@ -63,6 +63,20 @@
             <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
             <line x1="7" y1="7" x2="7.01" y2="7" />
           </svg>
+          <div v-if="user && item.created_by === user.id" class="item-card-actions">
+            <button class="btn-icon btn-icon--edit" @click.stop="openEditDialog(item)" aria-label="编辑" title="编辑">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+            </button>
+            <button class="btn-icon btn-icon--delete" @click.stop="openDeleteDialog(item)" aria-label="删除" title="删除">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="item-card-body">
           <h3 class="item-card-name">{{ item.name }}</h3>
@@ -127,7 +141,7 @@
       </Transition>
     </Teleport>
 
-    <!-- Create Dialog -->
+    <!-- Create/Edit Dialog -->
     <Teleport to="body">
       <div v-if="showCreateDialog" class="dialog-overlay" @click.self="cancelDialog">
         <div
@@ -138,7 +152,7 @@
           @keydown="trapFocus"
         >
           <div class="dialog-header">
-            <h3 id="create-dialog-title" class="dialog-title">新建商品</h3>
+            <h3 id="create-dialog-title" class="dialog-title">{{ dialogMode === 'edit' ? '编辑商品' : '新建商品' }}</h3>
             <button class="dialog-close" @click="cancelDialog" aria-label="Close">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -146,7 +160,7 @@
               </svg>
             </button>
           </div>
-          <form class="dialog-body" @submit.prevent="createItem">
+          <form class="dialog-body" @submit.prevent="dialogMode === 'edit' ? updateItem() : createItem()">
             <div class="form-group">
               <label class="form-label" for="item-name">名称</label>
               <input
@@ -213,10 +227,45 @@
               <button type="button" class="btn-secondary" @click="cancelDialog">取消</button>
               <button type="submit" class="btn-primary" :disabled="creating || !form.name.trim()">
                 <span v-if="creating" class="loading-spinner loading-spinner--sm"></span>
-                {{ creating ? '创建中...' : '创建' }}
+                {{ creating ? (dialogMode === 'edit' ? '更新中...' : '创建中...') : (dialogMode === 'edit' ? '更新' : '创建') }}
               </button>
             </div>
           </form>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Delete Confirmation Dialog -->
+    <Teleport to="body">
+      <div v-if="showDeleteDialog" class="dialog-overlay" @click.self="cancelDelete">
+        <div
+          class="dialog dialog--confirm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-dialog-title"
+          @keydown="trapFocus"
+        >
+          <div class="dialog-header">
+            <h3 id="delete-dialog-title" class="dialog-title">确认删除</h3>
+            <button class="dialog-close" @click="cancelDelete" aria-label="Close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+          <div class="dialog-body">
+            <p class="confirm-text">
+              确定要删除商品「<strong>{{ deletingItem?.name }}</strong>」吗？此操作无法撤销。
+            </p>
+            <div class="dialog-actions">
+              <button type="button" class="btn-secondary" @click="cancelDelete">取消</button>
+              <button type="button" class="btn-danger" :disabled="deleting" @click="deleteItem">
+                <span v-if="deleting" class="loading-spinner loading-spinner--sm"></span>
+                {{ deleting ? '删除中...' : '删除' }}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </Teleport>
@@ -242,6 +291,12 @@ const showCreateDialog = ref(false)
 const creating = ref(false)
 const dialogError = ref(null)
 const dialogNameInput = ref(null)
+const dialogMode = ref('create')
+const editingItem = ref(null)
+
+const showDeleteDialog = ref(false)
+const deletingItem = ref(null)
+const deleting = ref(false)
 
 const form = ref({
   name: '',
@@ -328,8 +383,50 @@ async function purchaseItem(item) {
 
 function cancelDialog() {
   showCreateDialog.value = false
+  dialogMode.value = 'create'
+  editingItem.value = null
   form.value = { ...defaultForm }
   dialogError.value = null
+}
+
+function openEditDialog(item) {
+  dialogMode.value = 'edit'
+  editingItem.value = item
+  form.value = {
+    name: item.name,
+    description: item.description || '',
+    coin_price: item.coin_price,
+    category: item.category || '',
+    stock: item.stock
+  }
+  showCreateDialog.value = true
+}
+
+function openDeleteDialog(item) {
+  deletingItem.value = item
+  showDeleteDialog.value = true
+}
+
+function cancelDelete() {
+  showDeleteDialog.value = false
+  deletingItem.value = null
+}
+
+async function deleteItem() {
+  if (!deletingItem.value) return
+  deleting.value = true
+  try {
+    await shopService.deleteItem(deletingItem.value.id)
+    items.value = items.value.filter(i => i.id !== deletingItem.value.id)
+    const name = deletingItem.value.name
+    cancelDelete()
+    showSuccess(`"${name}" 已删除！`)
+  } catch (e) {
+    showError(e.response?.data?.detail || '删除失败，请重试。')
+    cancelDelete()
+  } finally {
+    deleting.value = false
+  }
 }
 
 async function createItem() {
@@ -350,6 +447,32 @@ async function createItem() {
     showSuccess(`"${newItem.name}" 已添加到商城！`)
   } catch (e) {
     dialogError.value = e.response?.data?.detail || '创建商品失败，请重试。'
+  } finally {
+    creating.value = false
+  }
+}
+
+async function updateItem() {
+  if (!form.value.name.trim() || !editingItem.value) return
+  creating.value = true
+  dialogError.value = null
+  try {
+    const payload = {
+      name: form.value.name.trim(),
+      description: form.value.description?.trim() || undefined,
+      coin_price: form.value.coin_price,
+      category: form.value.category?.trim() || undefined,
+      stock: form.value.stock
+    }
+    const updated = await shopService.updateItem(editingItem.value.id, payload)
+    const idx = items.value.findIndex(i => i.id === editingItem.value.id)
+    if (idx !== -1) {
+      items.value[idx] = updated
+    }
+    cancelDialog()
+    showSuccess(`"${updated.name}" 已更新！`)
+  } catch (e) {
+    dialogError.value = e.response?.data?.detail || '更新商品失败，请重试。'
   } finally {
     creating.value = false
   }
@@ -580,12 +703,58 @@ onMounted(() => {
   justify-content: center;
   background: var(--color-bg-tertiary);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  position: relative;
 }
 
 .item-card-icon svg {
   width: 36px;
   height: 36px;
   color: var(--color-primary);
+}
+
+.item-card-actions {
+  position: absolute;
+  top: var(--spacing-xs);
+  right: var(--spacing-xs);
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.item-card:hover .item-card-actions {
+  opacity: 1;
+}
+
+.btn-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  transition: all 0.15s ease;
+}
+
+.btn-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.btn-icon--edit:hover {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.btn-icon--delete:hover {
+  background: var(--color-error);
+  border-color: var(--color-error);
+  color: #fff;
 }
 
 .item-card-body {
@@ -930,6 +1099,45 @@ onMounted(() => {
 }
 
 .btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dialog--confirm {
+  max-width: 400px;
+}
+
+.confirm-text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.confirm-text strong {
+  color: var(--color-text);
+}
+
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: #fff;
+  background: var(--color-error);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-family: var(--font-family);
+  transition: opacity 0.15s ease;
+}
+
+.btn-danger:hover {
+  opacity: 0.9;
+}
+
+.btn-danger:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

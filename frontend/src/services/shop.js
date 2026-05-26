@@ -42,5 +42,25 @@ export const shopService = {
   async getExchangeHistory() {
     const response = await api.get('/shop/exchange/history')
     return response.data
+  },
+
+  /**
+   * Update a shop item
+   * @param {string} itemId - Shop item ID
+   * @param {Object} data - Fields to update
+   * @returns {Promise<Object>} Updated shop item
+   */
+  async updateItem(itemId, data) {
+    const response = await api.put(`/shop/items/${itemId}`, data)
+    return response.data
+  },
+
+  /**
+   * Delete a shop item
+   * @param {string} itemId - Shop item ID
+   * @returns {Promise<void>}
+   */
+  async deleteItem(itemId) {
+    await api.delete(`/shop/items/${itemId}`)
   }
 }
