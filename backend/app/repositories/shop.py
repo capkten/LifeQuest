@@ -51,10 +51,23 @@ class ShopItemRepository(BaseRepository[ShopItem]):
             ShopItem.stock >= 0,
         ).update({"stock": ShopItem.stock + quantity})
 
+    def get_by_ids(self, ids: List[UUID]) -> List[ShopItem]:
+        """Retrieve multiple shop items by a list of IDs (batch query)."""
+        if not ids:
+            return []
+        return self.db.query(ShopItem).filter(ShopItem.id.in_(ids)).all()
+
 
 class ExchangeHistoryRepository(BaseRepository[ExchangeHistory]):
     def __init__(self, db: Session):
         super().__init__(ExchangeHistory, db)
+
+    def _create_no_commit(self, obj_in: dict) -> ExchangeHistory:
+        """Create an exchange history record without committing."""
+        db_obj = ExchangeHistory(**obj_in)
+        self.db.add(db_obj)
+        self.db.flush()
+        return db_obj
 
     def get_by_user(self, user_id: UUID) -> List[ExchangeHistory]:
         return (

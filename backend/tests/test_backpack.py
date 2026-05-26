@@ -258,6 +258,60 @@ def test_discard_item_insufficient_quantity(client):
     assert response.status_code == 400
 
 
+def test_use_item_only_consumable(client):
+    """Using a non-consumable (gear) item should be rejected."""
+    headers = _register_and_login(client)
+    _earn_coins(client, headers, amount=100)
+
+    # Create and purchase a gear item (category "weapon" -> ItemType.GEAR)
+    gear_shop_id = _create_shop_item(client, headers, coin_price=10, stock=5, category="weapon")
+    _purchase_item(client, headers, gear_shop_id, quantity=1)
+
+    items = client.get("/api/backpack/items", headers=headers).json()
+    backpack_item_id = items[0]["id"]
+    assert items[0]["item_type"] == "gear"
+
+    # Attempt to use a gear item
+    use_response = client.post(
+        f"/api/backpack/items/{backpack_item_id}/use",
+        headers=headers,
+    )
+    assert use_response.status_code == 400
+    assert "consumable" in use_response.json()["detail"].lower()
+
+
+def test_discard_item_unequips_first(client):
+    """Discarding an equipped item should auto-unequip it first."""
+    headers = _register_and_login(client)
+    _earn_coins(client, headers, amount=100)
+
+    # Create and purchase a gear item with quantity 3
+    gear_shop_id = _create_shop_item(client, headers, coin_price=10, stock=5, category="weapon")
+    _purchase_item(client, headers, gear_shop_id, quantity=3)
+
+    items = client.get("/api/backpack/items", headers=headers).json()
+    backpack_item_id = items[0]["id"]
+
+    # Equip the item
+    client.post(f"/api/backpack/items/{backpack_item_id}/equip", headers=headers)
+
+    # Verify it's equipped
+    items = client.get("/api/backpack/items", headers=headers).json()
+    assert items[0]["status"] == "equipped"
+    assert items[0]["quantity"] == 3
+
+    # Discard 1 -- should auto-unequip first
+    discard_response = client.post(
+        f"/api/backpack/items/{backpack_item_id}/discard?quantity=1",
+        headers=headers,
+    )
+    assert discard_response.status_code == 200
+    data = discard_response.json()
+    assert data["quantity"] == 2
+    assert data["status"] == "active"  # unequipped
+    assert data["is_equipped"] is False
+
+
 def test_backpack_ownership_check(client):
     """Users cannot access another user's backpack items."""
     headers_owner = _register_and_login(client, "owner", "owner@example.com")

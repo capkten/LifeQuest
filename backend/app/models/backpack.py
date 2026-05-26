@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey
 from sqlalchemy import Uuid, Enum as SAEnum
 
 from app.database import Base
@@ -39,7 +39,6 @@ class BackpackItem(Base):
     item_type = Column(SAEnum(ItemType, native_enum=False), default=ItemType.CONSUMABLE)
     status = Column(SAEnum(ItemStatus, native_enum=False), default=ItemStatus.ACTIVE)
     quantity = Column(Integer, default=1)
-    is_equipped = Column(Boolean, default=False)
     obtained_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

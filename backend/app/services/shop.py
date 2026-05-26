@@ -84,7 +84,7 @@ class ShopService:
         # Deduct coins (no commit)
         self.user_repo._update_coins_no_commit(user, -total_cost)
 
-        # Create exchange record (single commit for everything)
+        # Create exchange record (no commit -- we commit everything at once below)
         exchange_data = {
             "user_id": user_id,
             "item_id": item.id,
@@ -92,12 +92,15 @@ class ShopService:
             "total_cost": total_cost,
             "status": ExchangeStatus.COMPLETED,
         }
-        exchange = self.exchange_repo.create(exchange_data)
+        exchange = self.exchange_repo._create_no_commit(exchange_data)
 
-        # Add purchased items to user's backpack
+        # Add purchased items to user's backpack (defer commit)
         backpack_service = BackpackService(self.db)
-        backpack_service.add_item(user_id, item.id, quantity=exchange_in.quantity)
+        backpack_service._add_item_no_commit(user_id, item.id, quantity=exchange_in.quantity)
 
+        # Single commit for the entire purchase-to-backpack operation
+        self.db.commit()
+        self.db.refresh(exchange)
         return exchange
 
     def get_user_exchanges(self, user_id: UUID) -> List[ExchangeHistory]:

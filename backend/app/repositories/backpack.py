@@ -33,7 +33,7 @@ class BackpackItemRepository(BaseRepository[BackpackItem]):
             .filter(
                 BackpackItem.user_id == user_id,
                 BackpackItem.item_type == item_type,
-                BackpackItem.is_equipped == True,  # noqa: E712
+                BackpackItem.status == ItemStatus.EQUIPPED,
             )
             .all()
         )

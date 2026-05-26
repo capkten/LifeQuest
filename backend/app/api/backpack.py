@@ -65,12 +65,9 @@ def get_usage_history(
     db: Session = Depends(get_db),
 ):
     service = BackpackService(db)
-    history = service.get_usage_history(current_user.id)
-    # Enrich with item names from shop items
+    enriched = service.get_usage_history_with_names(current_user.id)
     result = []
-    for entry in history:
-        shop_item = service.shop_item_repo.get_by_id(entry.shop_item_id)
-        item_name = shop_item.name if shop_item else None
+    for entry, item_name in enriched:
         response = UsageHistoryResponse(
             id=entry.id,
             user_id=entry.user_id,
