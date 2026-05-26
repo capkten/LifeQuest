@@ -35,6 +35,11 @@ const routes = [
         component: () => import('../views/NotebookDetail.vue')
       },
       {
+        path: 'notes/folder/:id',
+        name: 'FolderDetail',
+        component: () => import('../views/FolderDetail.vue')
+      },
+      {
         path: 'todos',
         name: 'Todos',
         component: () => import('../views/Todos.vue')
