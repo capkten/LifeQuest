@@ -33,6 +33,16 @@ const routes = [
         path: 'todos',
         name: 'Todos',
         component: () => import('../views/Todos.vue')
+      },
+      {
+        path: 'shop',
+        name: 'Shop',
+        component: () => import('../views/Shop.vue')
+      },
+      {
+        path: 'backpack',
+        name: 'Backpack',
+        component: () => import('../views/Backpack.vue')
       }
     ]
   },
