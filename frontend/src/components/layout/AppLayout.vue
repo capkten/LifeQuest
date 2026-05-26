@@ -118,14 +118,15 @@ provide('isMobile', isMobile)
 
 const pageTitle = computed(() => {
   const titles = {
-    Home: 'Home',
-    Todos: 'Todos',
-    Tasks: 'Tasks',
-    Goals: 'Goals',
-    Notes: 'Notes',
-    Shop: 'Shop',
-    Backpack: 'Backpack',
-    Profile: 'Profile'
+    Home: '首页',
+    Todos: '待办',
+    Tasks: '任务',
+    Goals: '目标',
+    Notes: '笔记',
+    NotebookDetail: '笔记本',
+    Shop: '商城',
+    Backpack: '背包',
+    Profile: '个人'
   }
   return titles[route.name] || 'LifeQuest'
 })
