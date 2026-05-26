@@ -132,8 +132,10 @@
 
 <script setup>
 import { ref, onMounted, nextTick, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { noteService } from '../services/note'
 
+const router = useRouter()
 const notebooks = ref([])
 const loading = ref(true)
 const error = ref(null)
@@ -154,8 +156,7 @@ watch(showDialog, (open) => {
 })
 
 function openNotebook(notebook) {
-  // TODO: navigate to notebook contents page
-  console.log('Open notebook:', notebook.id)
+  router.push(`/notes/${notebook.id}`)
 }
 
 function trapFocus(event) {

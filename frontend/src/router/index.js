@@ -30,6 +30,11 @@ const routes = [
         component: () => import('../views/Notes.vue')
       },
       {
+        path: 'notes/:id',
+        name: 'NotebookDetail',
+        component: () => import('../views/NotebookDetail.vue')
+      },
+      {
         path: 'todos',
         name: 'Todos',
         component: () => import('../views/Todos.vue')
