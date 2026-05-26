@@ -1,4 +1,3 @@
-import os
 from typing import List, Optional
 from uuid import UUID
 
@@ -26,6 +25,33 @@ class NoteService:
         self.note_repo = NoteRepository(db)
         self.attachment_repo = AttachmentRepository(db)
 
+    def verify_note_ownership(self, note: Note, user_id: UUID) -> bool:
+        """Verify that a note belongs to the given user by traversing note -> folder -> notebook -> user."""
+        folder = self.folder_repo.get_by_id(note.folder_id)
+        if not folder:
+            return False
+        notebook = self.notebook_repo.get_by_id(folder.notebook_id)
+        if not notebook:
+            return False
+        return notebook.user_id == user_id
+
+    def verify_folder_ownership(self, folder_id: UUID, user_id: UUID) -> bool:
+        """Verify that a folder belongs to the given user by traversing folder -> notebook -> user."""
+        folder = self.folder_repo.get_by_id(folder_id)
+        if not folder:
+            return False
+        notebook = self.notebook_repo.get_by_id(folder.notebook_id)
+        if not notebook:
+            return False
+        return notebook.user_id == user_id
+
+    def verify_notebook_ownership(self, notebook_id: UUID, user_id: UUID) -> bool:
+        """Verify that a notebook belongs to the given user."""
+        notebook = self.notebook_repo.get_by_id(notebook_id)
+        if not notebook:
+            return False
+        return notebook.user_id == user_id
+
     # Notebook operations
     def create_notebook(self, user_id: UUID, notebook_in: NotebookCreate) -> Notebook:
         data = notebook_in.model_dump()
@@ -47,7 +73,7 @@ class NoteService:
     def create_note(self, note_in: NoteCreate, file_path: str) -> Note:
         data = note_in.model_dump(exclude={"content"})
         data["file_path"] = file_path
-        data["word_count"] = len(note_in.content) if note_in.content else 0
+        data["word_count"] = len(note_in.content.split()) if note_in.content else 0
         return self.note_repo.create(data)
 
     def get_notes(self, folder_id: UUID) -> List[Note]:
@@ -61,7 +87,7 @@ class NoteService:
         if file_path:
             update_data["file_path"] = file_path
         if note_in.content is not None:
-            update_data["word_count"] = len(note_in.content)
+            update_data["word_count"] = len(note_in.content.split())
         return self.note_repo.update(note, update_data)
 
     def delete_note(self, note_id: UUID) -> bool:
