@@ -40,6 +40,16 @@ const routes = [
         component: () => import('../views/FolderDetail.vue')
       },
       {
+        path: 'notes/edit/:id',
+        name: 'NoteEditor',
+        component: () => import('../views/NoteEditor.vue')
+      },
+      {
+        path: 'notes/new/:folderId',
+        name: 'NewNote',
+        component: () => import('../views/NoteEditor.vue')
+      },
+      {
         path: 'todos',
         name: 'Todos',
         component: () => import('../views/Todos.vue')

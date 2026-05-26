@@ -169,8 +169,8 @@ async function createNote() {
     })
     showCreateNote.value = false
     noteForm.value = { title: '' }
-    // Navigate to the note editor (Task 6)
-    router.push(`/notes/editor/${newNote.id}`)
+    // Navigate to the note editor
+    router.push({ name: 'NoteEditor', params: { id: newNote.id } })
   } catch (e) {
     console.error(e)
   }
@@ -187,7 +187,7 @@ async function deleteNote(note) {
 }
 
 function openNote(note) {
-  router.push(`/notes/editor/${note.id}`)
+  router.push({ name: 'NoteEditor', params: { id: note.id } })
 }
 
 onMounted(fetchData)
