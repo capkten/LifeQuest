@@ -2,8 +2,8 @@
   <div class="backpack-page">
     <div class="page-header">
       <div class="header-left">
-        <h2 class="page-title">Backpack</h2>
-        <span class="item-count">{{ filteredItems.length }} items</span>
+        <h2 class="page-title">背包</h2>
+        <span class="item-count">{{ filteredItems.length }} 件物品</span>
       </div>
     </div>
 
@@ -26,7 +26,7 @@
 
     <div v-else-if="error" class="error-state">
       <p>{{ error }}</p>
-      <button class="retry-btn" @click="fetchAll">Retry</button>
+      <button class="retry-btn" @click="fetchAll">重试</button>
     </div>
 
     <div v-else-if="filteredItems.length === 0" class="empty-state">
@@ -38,15 +38,15 @@
           <line x1="10" y1="14" x2="14" y2="14" />
         </svg>
       </div>
-      <h3 class="empty-title">Your backpack is empty</h3>
-      <p class="empty-text">Visit the shop to purchase items and fill your backpack.</p>
+      <h3 class="empty-title">你的背包是空的</h3>
+      <p class="empty-text">前往商城购买物品来填满你的背包吧。</p>
       <router-link to="/shop" class="btn-create">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
           <line x1="3" y1="6" x2="21" y2="6" />
           <path d="M16 10a4 4 0 0 1-8 0" />
         </svg>
-        Go to Shop
+        前往商城
       </router-link>
     </div>
 
@@ -84,8 +84,8 @@
             <span class="type-badge" :class="'type-badge--' + item.item_type">
               {{ formatType(item.item_type) }}
             </span>
-            <span v-if="item.is_equipped" class="status-badge status-badge--equipped">Equipped</span>
-            <span v-else class="status-badge status-badge--active">Active</span>
+            <span v-if="item.is_equipped" class="status-badge status-badge--equipped">已装备</span>
+            <span v-else class="status-badge status-badge--active">可用</span>
           </div>
         </div>
         <div class="item-card-footer">
@@ -99,7 +99,7 @@
                 <line x1="3" y1="12" x2="3.01" y2="12" />
                 <line x1="3" y1="18" x2="3.01" y2="18" />
               </svg>
-              Qty: {{ item.quantity }}
+              数量: {{ item.quantity }}
             </span>
             <span class="stat-item">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -120,7 +120,7 @@
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
-              Use
+              使用
             </button>
             <button
               v-if="(item.item_type === 'gear' || item.item_type === 'collectible') && !item.is_equipped"
@@ -132,7 +132,7 @@
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
               </svg>
-              Equip
+              装备
             </button>
             <button
               class="btn-action btn-action--discard"
@@ -144,7 +144,7 @@
                 <polyline points="3 6 5 6 21 6" />
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
               </svg>
-              Discard
+              丢弃
             </button>
           </div>
         </div>
@@ -187,7 +187,7 @@
         <div v-if="confirmDialog" class="dialog-overlay" @click.self="cancelConfirm" @keydown.escape="cancelConfirm">
           <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" @keydown.escape="cancelConfirm">
             <div class="dialog-header">
-              <h3 id="confirm-dialog-title" class="dialog-title">Confirm Discard</h3>
+              <h3 id="confirm-dialog-title" class="dialog-title">确认丢弃</h3>
               <button class="dialog-close" @click="cancelConfirm" aria-label="Close">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="18" y1="6" x2="6" y2="18" />
@@ -196,12 +196,12 @@
               </button>
             </div>
             <div class="dialog-body">
-              <p>Are you sure you want to discard <strong>{{ confirmDialog.name }}</strong>?</p>
-              <p class="dialog-hint">This action cannot be undone.</p>
+              <p>确定要丢弃 <strong>{{ confirmDialog.name }}</strong> 吗？</p>
+              <p class="dialog-hint">此操作无法撤销。</p>
             </div>
             <div class="dialog-actions">
-              <button class="btn-secondary" @click="cancelConfirm">Cancel</button>
-              <button class="btn-danger" @click="confirmDiscard">Discard</button>
+              <button class="btn-secondary" @click="cancelConfirm">取消</button>
+              <button class="btn-danger" @click="confirmDiscard">丢弃</button>
             </div>
           </div>
         </div>
@@ -229,11 +229,11 @@ const activeFilter = ref('all')
 const confirmDialog = ref(null)
 
 const filterTabs = [
-  { value: 'all', label: 'All' },
-  { value: 'consumable', label: 'Consumable' },
-  { value: 'gear', label: 'Gear' },
-  { value: 'collectible', label: 'Collectible' },
-  { value: 'quest', label: 'Quest' }
+  { value: 'all', label: '全部' },
+  { value: 'consumable', label: '消耗品' },
+  { value: 'gear', label: '装备' },
+  { value: 'collectible', label: '收藏品' },
+  { value: 'quest', label: '任务' }
 ]
 
 const filteredItems = computed(() => {
@@ -257,13 +257,19 @@ function getItemDescription(item) {
 }
 
 function formatType(type) {
-  return type.replace(/_/g, ' ')
+  const typeMap = {
+    'consumable': '消耗品',
+    'gear': '装备',
+    'collectible': '收藏品',
+    'quest': '任务'
+  }
+  return typeMap[type] || type
 }
 
 function formatDate(dateStr) {
   if (!dateStr) return ''
   const date = new Date(dateStr)
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString('zh-CN', {
     month: 'short',
     day: 'numeric',
     year: 'numeric'
@@ -280,7 +286,7 @@ async function fetchShopItems() {
     shopItemsMap.value = map
   } catch (e) {
     console.error('Failed to fetch shop items for name lookup:', e)
-    showError('Could not load item details. Item names may be unavailable.')
+    showError('无法加载物品详情，物品名称可能不可用。')
   }
 }
 
@@ -294,7 +300,7 @@ async function fetchAll() {
   try {
     await Promise.all([fetchShopItems(), fetchBackpackItems()])
   } catch (e) {
-    error.value = 'Failed to load backpack items. Please try again.'
+    error.value = '加载背包物品失败，请重试。'
   } finally {
     loading.value = false
   }
@@ -314,9 +320,9 @@ async function useItem(item) {
       }
     }
     await authStore.fetchUser()
-    showSuccess('Item used successfully!')
+    showSuccess('物品使用成功！')
   } catch (e) {
-    showError(e.response?.data?.detail || 'Failed to use item. Please try again.')
+    showError(e.response?.data?.detail || '使用物品失败，请重试。')
   } finally {
     actionId.value = null
   }
@@ -337,9 +343,9 @@ async function equipItem(item) {
       }
       return i
     })
-    showSuccess('Item equipped!')
+    showSuccess('物品已装备！')
   } catch (e) {
-    showError(e.response?.data?.detail || 'Failed to equip item. Please try again.')
+    showError(e.response?.data?.detail || '装备物品失败，请重试。')
   } finally {
     actionId.value = null
   }
@@ -372,9 +378,9 @@ async function confirmDiscard() {
         items.value[idx] = updated
       }
     }
-    showSuccess('Item discarded.')
+    showSuccess('物品已丢弃。')
   } catch (e) {
-    showError(e.response?.data?.detail || 'Failed to discard item. Please try again.')
+    showError(e.response?.data?.detail || '丢弃物品失败，请重试。')
   } finally {
     actionId.value = null
   }

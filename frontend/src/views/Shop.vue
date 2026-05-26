@@ -2,8 +2,8 @@
   <div class="shop-page">
     <div class="page-header">
       <div class="header-left">
-        <h2 class="page-title">Shop</h2>
-        <span class="item-count">{{ items.length }} items</span>
+        <h2 class="page-title">商城</h2>
+        <span class="item-count">{{ items.length }} 件商品</span>
       </div>
       <div class="header-right">
         <div class="balance-display">
@@ -12,14 +12,14 @@
             <path d="M12 6v12M6 12h12" />
           </svg>
           <span class="balance-value">{{ user?.coins || 0 }}</span>
-          <span class="balance-label">coins</span>
+          <span class="balance-label">金币</span>
         </div>
         <button class="btn-create" @click="showCreateDialog = true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          New Item
+          新建商品
         </button>
       </div>
     </div>
@@ -30,7 +30,7 @@
 
     <div v-else-if="error" class="error-state">
       <p>{{ error }}</p>
-      <button class="retry-btn" @click="fetchItems">Retry</button>
+      <button class="retry-btn" @click="fetchItems">重试</button>
     </div>
 
     <div v-else-if="items.length === 0" class="empty-state">
@@ -41,14 +41,14 @@
           <path d="M16 10a4 4 0 0 1-8 0" />
         </svg>
       </div>
-      <h3 class="empty-title">No items in the shop</h3>
-      <p class="empty-text">Create the first shop item to get started.</p>
+      <h3 class="empty-title">商城暂无商品</h3>
+      <p class="empty-text">创建第一件商品来开始吧。</p>
       <button class="btn-create" @click="showCreateDialog = true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
-        Create Item
+        创建商品
       </button>
     </div>
 
@@ -69,9 +69,9 @@
           <p v-if="item.description" class="item-card-desc">{{ item.description }}</p>
           <div class="item-card-tags">
             <span v-if="item.category" class="item-tag item-tag--category">{{ item.category }}</span>
-            <span v-if="item.stock === -1" class="item-tag item-tag--stock">Unlimited</span>
+            <span v-if="item.stock === -1" class="item-tag item-tag--stock">无限</span>
             <span v-else class="item-tag item-tag--stock" :class="{ 'item-tag--low-stock': item.stock <= 5 }">
-              Stock: {{ item.stock }}
+              库存: {{ item.stock }}
             </span>
           </div>
         </div>
@@ -89,9 +89,9 @@
             @click="purchaseItem(item)"
           >
             <span v-if="purchasingId === item.id" class="loading-spinner loading-spinner--sm"></span>
-            <span v-else-if="item.stock !== -1 && item.stock <= 0">Sold Out</span>
-            <span v-else-if="(user?.coins || 0) < item.coin_price">Not Enough</span>
-            <span v-else>Purchase</span>
+            <span v-else-if="item.stock !== -1 && item.stock <= 0">已售罄</span>
+            <span v-else-if="(user?.coins || 0) < item.coin_price">金币不足</span>
+            <span v-else>购买</span>
           </button>
         </div>
       </div>
@@ -138,7 +138,7 @@
           @keydown="trapFocus"
         >
           <div class="dialog-header">
-            <h3 id="create-dialog-title" class="dialog-title">New Shop Item</h3>
+            <h3 id="create-dialog-title" class="dialog-title">新建商品</h3>
             <button class="dialog-close" @click="cancelDialog" aria-label="Close">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -148,31 +148,31 @@
           </div>
           <form class="dialog-body" @submit.prevent="createItem">
             <div class="form-group">
-              <label class="form-label" for="item-name">Name</label>
+              <label class="form-label" for="item-name">名称</label>
               <input
                 id="item-name"
                 ref="dialogNameInput"
                 v-model="form.name"
                 type="text"
                 class="form-input"
-                placeholder="Item name"
+                placeholder="商品名称"
                 required
                 maxlength="200"
               />
             </div>
             <div class="form-group">
-              <label class="form-label" for="item-description">Description</label>
+              <label class="form-label" for="item-description">描述</label>
               <textarea
                 id="item-description"
                 v-model="form.description"
                 class="form-textarea"
-                placeholder="Optional description..."
+                placeholder="可选描述..."
                 rows="2"
               ></textarea>
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label" for="item-price">Price (coins)</label>
+                <label class="form-label" for="item-price">价格（金币）</label>
                 <input
                   id="item-price"
                   v-model.number="form.coin_price"
@@ -184,19 +184,19 @@
                 />
               </div>
               <div class="form-group">
-                <label class="form-label" for="item-category">Category</label>
+                <label class="form-label" for="item-category">分类</label>
                 <input
                   id="item-category"
                   v-model="form.category"
                   type="text"
                   class="form-input"
-                  placeholder="e.g. consumable, gear"
+                  placeholder="例如：消耗品、装备"
                   maxlength="50"
                 />
               </div>
             </div>
             <div class="form-group">
-              <label class="form-label" for="item-stock">Stock</label>
+              <label class="form-label" for="item-stock">库存</label>
               <input
                 id="item-stock"
                 v-model.number="form.stock"
@@ -206,14 +206,14 @@
                 max="100000"
                 required
               />
-              <span class="form-hint">Use -1 for unlimited stock</span>
+              <span class="form-hint">使用 -1 表示无限库存</span>
             </div>
             <div v-if="dialogError" class="dialog-error" role="alert">{{ dialogError }}</div>
             <div class="dialog-actions">
-              <button type="button" class="btn-secondary" @click="cancelDialog">Cancel</button>
+              <button type="button" class="btn-secondary" @click="cancelDialog">取消</button>
               <button type="submit" class="btn-primary" :disabled="creating || !form.name.trim()">
                 <span v-if="creating" class="loading-spinner loading-spinner--sm"></span>
-                {{ creating ? 'Creating...' : 'Create' }}
+                {{ creating ? '创建中...' : '创建' }}
               </button>
             </div>
           </form>
@@ -298,7 +298,7 @@ async function fetchItems() {
   try {
     items.value = await shopService.getItems()
   } catch (e) {
-    error.value = 'Failed to load shop items. Please try again.'
+    error.value = '加载商城商品失败，请重试。'
   } finally {
     loading.value = false
   }
@@ -318,9 +318,9 @@ async function purchaseItem(item) {
     }
     // Refresh user data to update coins
     await authStore.fetchUser()
-    showSuccess(`Successfully purchased ${item.name}!`)
+    showSuccess(`成功购买 ${item.name}！`)
   } catch (e) {
-    showError(e.response?.data?.detail || 'Failed to purchase item. Please try again.')
+    showError(e.response?.data?.detail || '购买失败，请重试。')
   } finally {
     purchasingId.value = null
   }
@@ -347,9 +347,9 @@ async function createItem() {
     const newItem = await shopService.createItem(payload)
     items.value.push(newItem)
     cancelDialog()
-    showSuccess(`"${newItem.name}" added to the shop!`)
+    showSuccess(`"${newItem.name}" 已添加到商城！`)
   } catch (e) {
-    dialogError.value = e.response?.data?.detail || 'Failed to create item. Please try again.'
+    dialogError.value = e.response?.data?.detail || '创建商品失败，请重试。'
   } finally {
     creating.value = false
   }

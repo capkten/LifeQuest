@@ -2,15 +2,15 @@
   <div class="notes-page">
     <div class="page-header">
       <div class="header-left">
-        <h2 class="page-title">Notebooks</h2>
-        <span class="notebook-count">{{ notebooks.length }} notebook{{ notebooks.length !== 1 ? 's' : '' }}</span>
+        <h2 class="page-title">笔记本</h2>
+        <span class="notebook-count">{{ notebooks.length }} 个笔记本</span>
       </div>
       <button class="btn-create" @click="showDialog = true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
-        New Notebook
+        新建笔记本
       </button>
     </div>
 
@@ -20,7 +20,7 @@
 
     <div v-else-if="error" class="error-state">
       <p>{{ error }}</p>
-      <button class="retry-btn" @click="fetchNotebooks">Retry</button>
+      <button class="retry-btn" @click="fetchNotebooks">重试</button>
     </div>
 
     <div v-else-if="notebooks.length === 0" class="empty-state">
@@ -33,8 +33,8 @@
           <polyline points="10 9 9 9 8 9" />
         </svg>
       </div>
-      <h3 class="empty-title">No notebooks yet</h3>
-      <p class="empty-text">Create your first notebook to start organizing your notes.</p>
+      <h3 class="empty-title">暂无笔记本</h3>
+      <p class="empty-text">创建你的第一个笔记本，开始整理笔记吧。</p>
       <button class="btn-create" @click="showDialog = true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <line x1="12" y1="5" x2="12" y2="19" />
@@ -65,7 +65,7 @@
         </div>
         <div class="notebook-info">
           <h3 class="notebook-name">{{ notebook.name }}</h3>
-          <p class="notebook-description">{{ notebook.description || 'No description' }}</p>
+          <p class="notebook-description">{{ notebook.description || '暂无描述' }}</p>
         </div>
       </div>
     </div>
@@ -81,7 +81,7 @@
           @keydown="trapFocus"
         >
           <div class="dialog-header">
-            <h3 id="dialog-title" class="dialog-title">New Notebook</h3>
+            <h3 id="dialog-title" class="dialog-title">新建笔记本</h3>
             <button class="dialog-close" @click="cancelDialog" aria-label="Close">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -91,36 +91,36 @@
           </div>
           <form class="dialog-body" @submit.prevent="createNotebook">
             <div class="form-group">
-              <label class="form-label" for="notebook-name">Name</label>
+              <label class="form-label" for="notebook-name">名称</label>
               <input
                 id="notebook-name"
                 ref="dialogNameInput"
                 v-model="form.name"
                 type="text"
                 class="form-input"
-                placeholder="My Notebook"
+                placeholder="我的笔记本"
                 required
                 maxlength="100"
                 :aria-describedby="dialogError ? 'dialog-error-msg' : undefined"
               />
             </div>
             <div class="form-group">
-              <label class="form-label" for="notebook-description">Description</label>
+              <label class="form-label" for="notebook-description">描述</label>
               <textarea
                 id="notebook-description"
                 v-model="form.description"
                 class="form-textarea"
-                placeholder="A brief description..."
+                placeholder="简短描述..."
                 rows="3"
                 maxlength="500"
               ></textarea>
             </div>
             <div v-if="dialogError" id="dialog-error-msg" class="dialog-error" role="alert">{{ dialogError }}</div>
             <div class="dialog-actions">
-              <button type="button" class="btn-secondary" @click="cancelDialog">Cancel</button>
+              <button type="button" class="btn-secondary" @click="cancelDialog">取消</button>
               <button type="submit" class="btn-primary" :disabled="creating || !form.name.trim()">
                 <span v-if="creating" class="loading-spinner loading-spinner--sm"></span>
-                {{ creating ? 'Creating...' : 'Create' }}
+                {{ creating ? '创建中...' : '创建' }}
               </button>
             </div>
           </form>
@@ -185,7 +185,7 @@ async function fetchNotebooks() {
   try {
     notebooks.value = await noteService.getNotebooks()
   } catch (e) {
-    error.value = 'Failed to load notebooks. Please try again.'
+    error.value = '加载笔记本失败，请重试。'
   } finally {
     loading.value = false
   }
@@ -209,7 +209,7 @@ async function createNotebook() {
     notebooks.value.push(notebook)
     cancelDialog()
   } catch (e) {
-    dialogError.value = e.response?.data?.detail || 'Failed to create notebook. Please try again.'
+    dialogError.value = e.response?.data?.detail || '创建笔记本失败，请重试。'
   } finally {
     creating.value = false
   }

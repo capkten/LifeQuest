@@ -2,15 +2,15 @@
   <div class="todos-page">
     <div class="page-header">
       <div class="header-left">
-        <h2 class="page-title">Todos</h2>
-        <span class="item-count">{{ currentList.length }} {{ activeTab }}</span>
+        <h2 class="page-title">待办</h2>
+        <span class="item-count">{{ currentList.length }} {{ activeTab === 'habits' ? '个习惯' : activeTab === 'tasks' ? '个任务' : '个目标' }}</span>
       </div>
       <button class="btn-create" @click="showCreateDialog = true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
-        New {{ activeTabSingular }}
+        新建{{ activeTabSingular }}
       </button>
     </div>
 
@@ -47,7 +47,7 @@
 
     <div v-else-if="error" class="error-state">
       <p>{{ error }}</p>
-      <button class="retry-btn" @click="fetchAll">Retry</button>
+      <button class="retry-btn" @click="fetchAll">重试</button>
     </div>
 
     <div v-else-if="currentList.length === 0" class="empty-state">
@@ -57,14 +57,14 @@
           <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
         </svg>
       </div>
-      <h3 class="empty-title">No {{ activeTab }} yet</h3>
-      <p class="empty-text">Create your first {{ activeTabSingular }} to get started.</p>
+      <h3 class="empty-title">暂无{{ activeTab === 'habits' ? '习惯' : activeTab === 'tasks' ? '任务' : '目标' }}</h3>
+      <p class="empty-text">创建你的第一个{{ activeTabSingular }}，开始行动吧。</p>
       <button class="btn-create" @click="showCreateDialog = true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
-        Create {{ activeTabSingular }}
+        创建{{ activeTabSingular }}
       </button>
     </div>
 
@@ -97,10 +97,10 @@
             </div>
             <div class="todo-card-meta">
               <span class="difficulty-badge" :class="'difficulty-badge--' + habit.difficulty">
-                {{ habit.difficulty }}
+                {{ habit.difficulty === 'easy' ? '简单' : habit.difficulty === 'medium' ? '中等' : '困难' }}
               </span>
               <span class="frequency-badge" :class="'frequency-badge--' + habit.frequency">
-                {{ habit.frequency }}
+                {{ habit.frequency === 'daily' ? '每日' : habit.frequency === 'weekly' ? '每周' : '每月' }}
               </span>
             </div>
           </div>
@@ -110,7 +110,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
                 </svg>
-                Streak: {{ habit.streak }} (Best: {{ habit.best_streak }})
+                连续: {{ habit.streak }} (最佳: {{ habit.best_streak }})
               </span>
               <span class="stat-item stat-item--coins">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -158,7 +158,7 @@
             </div>
             <div class="todo-card-meta">
               <span class="difficulty-badge" :class="'difficulty-badge--' + task.difficulty">
-                {{ task.difficulty }}
+                {{ task.difficulty === 'easy' ? '简单' : task.difficulty === 'medium' ? '中等' : '困难' }}
               </span>
               <span class="status-badge" :class="'status-badge--' + task.status">
                 {{ formatStatus(task.status) }}
@@ -220,7 +220,7 @@
             </div>
             <div class="todo-card-meta">
               <span class="difficulty-badge" :class="'difficulty-badge--' + goal.difficulty">
-                {{ goal.difficulty }}
+                {{ goal.difficulty === 'easy' ? '简单' : goal.difficulty === 'medium' ? '中等' : '困难' }}
               </span>
               <span class="status-badge" :class="'status-badge--' + goal.status">
                 {{ formatStatus(goal.status) }}
@@ -229,7 +229,7 @@
           </div>
           <div class="goal-progress-section">
             <div class="goal-progress-info">
-              <span class="goal-progress-label">Progress</span>
+              <span class="goal-progress-label">进度</span>
               <span class="goal-progress-value">{{ Math.round(goal.progress || 0) }}%</span>
             </div>
             <div class="goal-progress-bar">
@@ -275,7 +275,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
             </svg>
-            <span>+{{ rewardToast.coins }} coins, +{{ rewardToast.exp }} XP earned!</span>
+            <span>+{{ rewardToast.coins }} 金币，+{{ rewardToast.exp }} 经验值！</span>
           </div>
         </div>
       </Transition>
@@ -308,7 +308,7 @@
           @keydown="trapFocus"
         >
           <div class="dialog-header">
-            <h3 id="create-dialog-title" class="dialog-title">New {{ activeTabSingular }}</h3>
+            <h3 id="create-dialog-title" class="dialog-title">新建{{ activeTabSingular }}</h3>
             <button class="dialog-close" @click="cancelDialog" aria-label="Close">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -319,49 +319,49 @@
           <form class="dialog-body" @submit.prevent="createItem">
             <!-- Common fields -->
             <div class="form-group">
-              <label class="form-label" for="item-title">Title</label>
+              <label class="form-label" for="item-title">标题</label>
               <input
                 id="item-title"
                 ref="dialogTitleInput"
                 v-model="form.title"
                 type="text"
                 class="form-input"
-                :placeholder="activeTabSingular + ' title'"
+                :placeholder="activeTabSingular + '标题'"
                 required
                 maxlength="200"
               />
             </div>
             <div class="form-group">
-              <label class="form-label" for="item-description">Description</label>
+              <label class="form-label" for="item-description">描述</label>
               <textarea
                 id="item-description"
                 v-model="form.description"
                 class="form-textarea"
-                placeholder="Optional description..."
+                placeholder="可选描述..."
                 rows="2"
               ></textarea>
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label" for="item-difficulty">Difficulty</label>
+                <label class="form-label" for="item-difficulty">难度</label>
                 <select id="item-difficulty" v-model="form.difficulty" class="form-select">
-                  <option value="easy">Easy</option>
-                  <option value="medium">Medium</option>
-                  <option value="hard">Hard</option>
+                  <option value="easy">简单</option>
+                  <option value="medium">中等</option>
+                  <option value="hard">困难</option>
                 </select>
               </div>
               <!-- Habit-specific: frequency -->
               <div v-if="activeTab === 'habits'" class="form-group">
-                <label class="form-label" for="item-frequency">Frequency</label>
+                <label class="form-label" for="item-frequency">频率</label>
                 <select id="item-frequency" v-model="form.frequency" class="form-select">
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
+                  <option value="daily">每日</option>
+                  <option value="weekly">每周</option>
+                  <option value="monthly">每月</option>
                 </select>
               </div>
               <!-- Task/Goal-specific: deadline -->
               <div v-if="activeTab === 'tasks' || activeTab === 'goals'" class="form-group">
-                <label class="form-label" for="item-deadline">Deadline</label>
+                <label class="form-label" for="item-deadline">截止日期</label>
                 <input
                   id="item-deadline"
                   v-model="form.deadline"
@@ -372,7 +372,7 @@
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label" for="item-coins">Coins Reward</label>
+                <label class="form-label" for="item-coins">金币奖励</label>
                 <input
                   id="item-coins"
                   v-model.number="form.coins_reward"
@@ -384,7 +384,7 @@
                 />
               </div>
               <div class="form-group">
-                <label class="form-label" for="item-exp">XP Reward</label>
+                <label class="form-label" for="item-exp">经验值奖励</label>
                 <input
                   id="item-exp"
                   v-model.number="form.exp_reward"
@@ -398,10 +398,10 @@
             </div>
             <div v-if="dialogError" class="dialog-error" role="alert">{{ dialogError }}</div>
             <div class="dialog-actions">
-              <button type="button" class="btn-secondary" @click="cancelDialog">Cancel</button>
+              <button type="button" class="btn-secondary" @click="cancelDialog">取消</button>
               <button type="submit" class="btn-primary" :disabled="creating || !form.title.trim()">
                 <span v-if="creating" class="loading-spinner loading-spinner--sm"></span>
-                {{ creating ? 'Creating...' : 'Create' }}
+                {{ creating ? '创建中...' : '创建' }}
               </button>
             </div>
           </form>
@@ -436,9 +436,9 @@ const dialogError = ref(null)
 const dialogTitleInput = ref(null)
 
 const tabs = [
-  { id: 'habits', label: 'Habits' },
-  { id: 'tasks', label: 'Tasks' },
-  { id: 'goals', label: 'Goals' }
+  { id: 'habits', label: '日常习惯' },
+  { id: 'tasks', label: '普通待办' },
+  { id: 'goals', label: '目标' }
 ]
 
 const defaultForms = {
@@ -471,9 +471,9 @@ const defaultForms = {
 const form = ref({ ...defaultForms.habits })
 
 const activeTabSingular = computed(() => {
-  if (activeTab.value === 'habits') return 'Habit'
-  if (activeTab.value === 'tasks') return 'Task'
-  return 'Goal'
+  if (activeTab.value === 'habits') return '习惯'
+  if (activeTab.value === 'tasks') return '任务'
+  return '目标'
 })
 
 const currentList = computed(() => {
@@ -489,13 +489,19 @@ function getCount(tab) {
 }
 
 function formatStatus(status) {
-  return status.replace(/_/g, ' ')
+  const statusMap = {
+    'pending': '待开始',
+    'in_progress': '进行中',
+    'completed': '已完成',
+    'cancelled': '已取消'
+  }
+  return statusMap[status] || status.replace(/_/g, ' ')
 }
 
 function formatDate(dateStr) {
   if (!dateStr) return ''
   const date = new Date(dateStr)
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString('zh-CN', {
     month: 'short',
     day: 'numeric',
     year: 'numeric'
@@ -578,7 +584,7 @@ async function fetchAll() {
   try {
     await Promise.all([fetchHabits(), fetchTasks(), fetchGoals()])
   } catch (e) {
-    error.value = 'Failed to load data. Please try again.'
+    error.value = '加载数据失败，请重试。'
   } finally {
     loading.value = false
   }
@@ -598,7 +604,7 @@ async function completeHabit(habit) {
     await authStore.fetchUser()
   } catch (e) {
     console.error('Failed to complete habit:', e)
-    showError(e.response?.data?.detail || 'Failed to complete habit. Please try again.')
+    showError(e.response?.data?.detail || '完成习惯失败，请重试。')
   } finally {
     completingId.value = null
   }
@@ -618,7 +624,7 @@ async function completeTask(task) {
     await authStore.fetchUser()
   } catch (e) {
     console.error('Failed to complete task:', e)
-    showError(e.response?.data?.detail || 'Failed to complete task. Please try again.')
+    showError(e.response?.data?.detail || '完成任务失败，请重试。')
   } finally {
     completingId.value = null
   }
@@ -638,7 +644,7 @@ async function completeGoal(goal) {
     await authStore.fetchUser()
   } catch (e) {
     console.error('Failed to complete goal:', e)
-    showError(e.response?.data?.detail || 'Failed to complete goal. Please try again.')
+    showError(e.response?.data?.detail || '完成目标失败，请重试。')
   } finally {
     completingId.value = null
   }
@@ -681,7 +687,7 @@ async function createItem() {
     }
     cancelDialog()
   } catch (e) {
-    dialogError.value = e.response?.data?.detail || 'Failed to create. Please try again.'
+    dialogError.value = e.response?.data?.detail || '创建失败，请重试。'
   } finally {
     creating.value = false
   }

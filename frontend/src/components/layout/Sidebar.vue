@@ -13,8 +13,8 @@
         </svg>
       </div>
       <div class="user-details">
-        <span class="user-name">{{ user?.username || 'Loading...' }}</span>
-        <span class="user-title">{{ user?.title || 'Adventurer' }}</span>
+        <span class="user-name">{{ user?.username || '加载中...' }}</span>
+        <span class="user-title">{{ user?.title || '冒险者' }}</span>
       </div>
     </div>
 
@@ -25,7 +25,7 @@
             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
           </svg>
         </span>
-        <span class="stat-label">Level</span>
+        <span class="stat-label">等级</span>
         <span class="stat-value">{{ user?.level || 1 }}</span>
       </div>
       <div class="stat-item">
@@ -35,7 +35,7 @@
             <path d="M12 6v12M6 12h12" />
           </svg>
         </span>
-        <span class="stat-label">Coins</span>
+        <span class="stat-label">金币</span>
         <span class="stat-value">{{ user?.coins || 0 }}</span>
       </div>
     </div>
@@ -63,14 +63,14 @@
           <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z" />
           <polyline points="9 22 9 12 15 12 15 22" />
         </svg>
-        <span>Home</span>
+        <span>首页</span>
       </router-link>
       <router-link to="/todos" class="nav-item" active-class="nav-item--active">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M9 11l3 3L22 4" />
           <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
         </svg>
-        <span>Todos</span>
+        <span>待办</span>
       </router-link>
       <router-link to="/notes" class="nav-item" active-class="nav-item--active">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -80,7 +80,7 @@
           <line x1="16" y1="17" x2="8" y2="17" />
           <polyline points="10 9 9 9 8 9" />
         </svg>
-        <span>Notes</span>
+        <span>笔记</span>
       </router-link>
       <router-link to="/shop" class="nav-item" active-class="nav-item--active">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -88,7 +88,7 @@
           <line x1="3" y1="6" x2="21" y2="6" />
           <path d="M16 10a4 4 0 0 1-8 0" />
         </svg>
-        <span>Shop</span>
+        <span>商城</span>
       </router-link>
       <router-link to="/backpack" class="nav-item" active-class="nav-item--active">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -97,14 +97,14 @@
           <line x1="12" y1="12" x2="12" y2="16" />
           <line x1="10" y1="14" x2="14" y2="14" />
         </svg>
-        <span>Backpack</span>
+        <span>背包</span>
       </router-link>
       <router-link to="/profile" class="nav-item" active-class="nav-item--active">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
           <circle cx="12" cy="7" r="4" />
         </svg>
-        <span>Profile</span>
+        <span>个人</span>
       </router-link>
     </nav>
   </aside>

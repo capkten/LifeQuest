@@ -8,13 +8,13 @@
         </svg>
       </div>
       <div class="profile-info">
-        <h2 class="profile-username">{{ user?.username || 'Adventurer' }}</h2>
-        <span class="profile-title">{{ user?.title || 'Adventurer' }}</span>
+        <h2 class="profile-username">{{ user?.username || '冒险者' }}</h2>
+        <span class="profile-title">{{ user?.title || '冒险者' }}</span>
         <span class="profile-email">{{ user?.email || '' }}</span>
       </div>
       <div class="profile-level-badge">
         <span class="level-badge-number">{{ user?.level || 1 }}</span>
-        <span class="level-badge-label">Level</span>
+        <span class="level-badge-label">等级</span>
       </div>
     </div>
 
@@ -27,7 +27,7 @@
         </div>
         <div class="stat-card-info">
           <span class="stat-card-value">{{ user?.level || 1 }}</span>
-          <span class="stat-card-label">Level</span>
+          <span class="stat-card-label">等级</span>
         </div>
       </div>
       <div class="stat-card stat-card--exp">
@@ -38,7 +38,7 @@
         </div>
         <div class="stat-card-info">
           <span class="stat-card-value">{{ user?.experience || 0 }}</span>
-          <span class="stat-card-label">Experience</span>
+          <span class="stat-card-label">经验值</span>
         </div>
       </div>
       <div class="stat-card stat-card--coins">
@@ -50,14 +50,14 @@
         </div>
         <div class="stat-card-info">
           <span class="stat-card-value">{{ user?.coins || 0 }}</span>
-          <span class="stat-card-label">Coins</span>
+          <span class="stat-card-label">金币</span>
         </div>
       </div>
     </div>
 
     <div class="exp-section">
       <div class="exp-header">
-        <h3 class="exp-title">Experience Progress</h3>
+        <h3 class="exp-title">经验值进度</h3>
         <span class="exp-text">{{ user?.experience || 0 }} / {{ requiredExp }} XP</span>
       </div>
       <div
@@ -70,7 +70,7 @@
       >
         <div class="exp-bar-fill" :style="{ width: expPercent + '%' }"></div>
       </div>
-      <span class="exp-percent">{{ expPercent }}% to next level</span>
+      <span class="exp-percent">{{ expPercent }}% 距离下一级</span>
     </div>
 
     <div class="achievements-section">
@@ -79,7 +79,7 @@
           <circle cx="12" cy="8" r="7" />
           <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" />
         </svg>
-        Achievements
+        成就
       </h3>
       <div class="achievements-grid">
         <div class="achievement-card">
@@ -90,8 +90,8 @@
             </svg>
           </div>
           <div class="achievement-info">
-            <span class="achievement-name">First Steps</span>
-            <span class="achievement-desc">Complete your first task</span>
+            <span class="achievement-name">初出茅庐</span>
+            <span class="achievement-desc">完成你的第一个任务</span>
           </div>
         </div>
         <div class="achievement-card">
@@ -101,8 +101,8 @@
             </svg>
           </div>
           <div class="achievement-info">
-            <span class="achievement-name">Rising Star</span>
-            <span class="achievement-desc">Reach level 5</span>
+            <span class="achievement-name">崭露头角</span>
+            <span class="achievement-desc">达到 5 级</span>
           </div>
         </div>
         <div class="achievement-card">
@@ -113,8 +113,8 @@
             </svg>
           </div>
           <div class="achievement-info">
-            <span class="achievement-name">Treasure Hunter</span>
-            <span class="achievement-desc">Accumulate 1000 coins</span>
+            <span class="achievement-name">寻宝猎人</span>
+            <span class="achievement-desc">累计获得 1000 金币</span>
           </div>
         </div>
       </div>

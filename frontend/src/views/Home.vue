@@ -2,8 +2,8 @@
   <div class="home-page">
     <div class="welcome-card">
       <div class="welcome-content">
-        <h1 class="welcome-title">Welcome back, {{ user?.username || 'Adventurer' }}!</h1>
-        <p class="welcome-subtitle">Ready for today's quest?</p>
+        <h1 class="welcome-title">欢迎回来，{{ user?.username || '冒险者' }}！</h1>
+        <p class="welcome-subtitle">准备好今天的冒险了吗？</p>
       </div>
       <div class="welcome-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
@@ -23,7 +23,7 @@
         </div>
         <div class="stat-card-info">
           <span class="stat-card-value">{{ user?.level || 1 }}</span>
-          <span class="stat-card-label">Level</span>
+          <span class="stat-card-label">等级</span>
         </div>
       </div>
       <div class="stat-card stat-card--coins">
@@ -35,7 +35,7 @@
         </div>
         <div class="stat-card-info">
           <span class="stat-card-value">{{ user?.coins || 0 }}</span>
-          <span class="stat-card-label">Coins</span>
+          <span class="stat-card-label">金币</span>
         </div>
       </div>
       <div class="stat-card stat-card--tasks">
@@ -47,7 +47,7 @@
         </div>
         <div class="stat-card-info">
           <span class="stat-card-value">{{ pendingTasksCount }}</span>
-          <span class="stat-card-label">Pending Tasks</span>
+          <span class="stat-card-label">待完成任务</span>
         </div>
       </div>
     </div>
@@ -60,9 +60,9 @@
               <path d="M9 11l3 3L22 4" />
               <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
             </svg>
-            Recent Tasks
+            最近任务
           </h3>
-          <router-link to="/todos" class="section-link">View All</router-link>
+          <router-link to="/todos" class="section-link">查看全部</router-link>
         </div>
         <div class="section-body">
           <div v-if="loadingTasks" class="loading-state">
@@ -70,10 +70,10 @@
           </div>
           <div v-else-if="errorTasks" class="error-state">
             <p>{{ errorTasks }}</p>
-            <button class="retry-btn" @click="fetchTasks">Retry</button>
+            <button class="retry-btn" @click="fetchTasks">重试</button>
           </div>
           <div v-else-if="recentTasks.length === 0" class="empty-state">
-            <p>No tasks yet. Create your first task!</p>
+            <p>暂无任务，创建你的第一个任务吧！</p>
           </div>
           <div v-else class="task-list">
             <div v-for="task in recentTasks" :key="task.id" class="task-item">
@@ -95,9 +95,9 @@
               <circle cx="12" cy="12" r="6" />
               <circle cx="12" cy="12" r="2" />
             </svg>
-            Recent Goals
+            最近目标
           </h3>
-          <router-link to="/todos" class="section-link">View All</router-link>
+          <router-link to="/todos" class="section-link">查看全部</router-link>
         </div>
         <div class="section-body">
           <div v-if="loadingGoals" class="loading-state">
@@ -105,10 +105,10 @@
           </div>
           <div v-else-if="errorGoals" class="error-state">
             <p>{{ errorGoals }}</p>
-            <button class="retry-btn" @click="fetchGoals">Retry</button>
+            <button class="retry-btn" @click="fetchGoals">重试</button>
           </div>
           <div v-else-if="recentGoals.length === 0" class="empty-state">
-            <p>No goals yet. Set your first goal!</p>
+            <p>暂无目标，设定你的第一个目标吧！</p>
           </div>
           <div v-else class="goal-list">
             <div v-for="goal in recentGoals" :key="goal.id" class="goal-item">
@@ -157,7 +157,7 @@ async function fetchTasks() {
   try {
     tasks.value = await todoService.getTasks()
   } catch (e) {
-    errorTasks.value = 'Failed to load tasks. Please try again.'
+    errorTasks.value = '加载任务失败，请重试。'
   } finally {
     loadingTasks.value = false
   }
@@ -169,7 +169,7 @@ async function fetchGoals() {
   try {
     goals.value = await todoService.getGoals()
   } catch (e) {
-    errorGoals.value = 'Failed to load goals. Please try again.'
+    errorGoals.value = '加载目标失败，请重试。'
   } finally {
     loadingGoals.value = false
   }
