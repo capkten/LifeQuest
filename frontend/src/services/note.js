@@ -1,112 +1,83 @@
 import api from './api'
 
 export const noteService = {
-  /**
-   * Get all notebooks for current user
-   * @returns {Promise<Array>} List of notebooks
-   */
+  // --- Notebooks ---
   async getNotebooks() {
     const response = await api.get('/notes/notebooks')
     return response.data
   },
 
-  /**
-   * Get a single notebook by ID
-   * @param {string} notebookId - Notebook ID
-   * @returns {Promise<Object>} Notebook data
-   */
   async getNotebook(notebookId) {
     const response = await api.get(`/notes/notebooks/${notebookId}`)
     return response.data
   },
 
-  /**
-   * Create a new notebook
-   * @param {Object} data - Notebook data (name, description)
-   * @returns {Promise<Object>} Created notebook
-   */
   async createNotebook(data) {
     const response = await api.post('/notes/notebooks', data)
     return response.data
   },
 
-  /**
-   * Get folders in a notebook
-   * @param {string} notebookId - Notebook ID
-   * @returns {Promise<Array>} List of folders
-   */
-  async getFolders(notebookId) {
-    const response = await api.get(`/notes/notebooks/${notebookId}/folders`)
+  async updateNotebook(notebookId, data) {
+    const response = await api.put(`/notes/notebooks/${notebookId}`, data)
     return response.data
   },
 
-  /**
-   * Create a new folder
-   * @param {Object} data - Folder data (notebook_id, name, parent_id?)
-   * @returns {Promise<Object>} Created folder
-   */
-  async createFolder(data) {
-    const response = await api.post('/notes/folders', data)
+  async deleteNotebook(notebookId) {
+    await api.delete(`/notes/notebooks/${notebookId}`)
+  },
+
+  // --- Node tree ---
+  async getTree(notebookId) {
+    const response = await api.get(`/notes/notebooks/${notebookId}/tree`)
     return response.data
   },
 
-  /**
-   * Get notes in a folder
-   * @param {string} folderId - Folder ID
-   * @returns {Promise<Array>} List of notes
-   */
-  async getNotesByFolder(folderId) {
-    const response = await api.get(`/notes/folder/${folderId}`)
+  async getChildren(notebookId, parentId = null) {
+    const params = parentId ? { parent_id: parentId } : {}
+    const response = await api.get(`/notes/notebooks/${notebookId}/children`, { params })
     return response.data
   },
 
-  /**
-   * Get a single note by ID
-   * @param {string} noteId - Note ID
-   * @returns {Promise<Object>} Note data
-   */
+  // --- Folders ---
+  async createFolder(notebookId, data) {
+    const response = await api.post(`/notes/notebooks/${notebookId}/folders`, data)
+    return response.data
+  },
+
+  // --- Notes ---
+  async createNote(notebookId, data) {
+    const response = await api.post(`/notes/notebooks/${notebookId}/notes`, data)
+    return response.data
+  },
+
   async getNote(noteId) {
     const response = await api.get(`/notes/${noteId}`)
     return response.data
   },
 
-  /**
-   * Create a new note
-   * @param {Object} data - Note data (folder_id, title, content?, summary?, tags?)
-   * @returns {Promise<Object>} Created note
-   */
-  async createNote(data) {
-    const response = await api.post('/notes/', data)
-    return response.data
-  },
-
-  /**
-   * Update a note
-   * @param {string} noteId - Note ID
-   * @param {Object} data - Note data to update
-   * @returns {Promise<Object>} Updated note
-   */
   async updateNote(noteId, data) {
     const response = await api.put(`/notes/${noteId}`, data)
     return response.data
   },
 
-  /**
-   * Delete a note
-   * @param {string} noteId - Note ID
-   * @returns {Promise<void>}
-   */
-  async deleteNote(noteId) {
-    await api.delete(`/notes/${noteId}`)
+  // --- Node operations ---
+  async renameNode(nodeId, name) {
+    const response = await api.patch(`/notes/nodes/${nodeId}`, { name })
+    return response.data
   },
 
-  /**
-   * Search notes
-   * @param {string} query - Search query
-   * @returns {Promise<Array>} List of matching notes
-   */
+  async moveNode(nodeId, parentId) {
+    const response = await api.patch(`/notes/nodes/${nodeId}`, { parent_id: parentId })
+    return response.data
+  },
+
+  async deleteNode(nodeId) {
+    await api.delete(`/notes/nodes/${nodeId}`)
+  },
+
+  // --- Search ---
   async searchNotes(query) {
     const response = await api.get('/notes/search', { params: { query } })
     return response.data
-  }
+  },
 }
