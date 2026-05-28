@@ -138,11 +138,7 @@ async function saveNote() {
 }
 
 function goBack() {
-  if (folderId.value) {
-    router.push(`/notes/folder/${folderId.value}`)
-  } else {
-    router.back()
-  }
+  router.push('/notes')
 }
 
 onMounted(() => {
