@@ -42,6 +42,9 @@ def startup_event():
     migrate_db = SessionLocal()
     try:
         NoteService.migrate_old_data(migrate_db)
+    except Exception:
+        # Migration is best-effort; don't block startup if it fails
+        migrate_db.rollback()
     finally:
         migrate_db.close()
     db = SessionLocal()

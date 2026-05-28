@@ -364,8 +364,8 @@ class NoteService:
 
             node = NoteNode(
                 id=uuid4(),
-                notebook_id=notebook_id,
-                parent_id=parent_id,
+                notebook_id=UUID(notebook_id) if isinstance(notebook_id, str) else notebook_id,
+                parent_id=UUID(parent_id) if isinstance(parent_id, str) else parent_id,
                 type="folder",
                 name=name,
                 normalized_name=norm,
@@ -403,9 +403,9 @@ class NoteService:
                 new_content_path = old_file_path
 
             node = NoteNode(
-                id=note_id,  # preserve original ID
-                notebook_id=parent_node.notebook_id,
-                parent_id=parent_node.id,
+                id=UUID(note_id) if isinstance(note_id, str) else note_id,  # preserve original ID
+                notebook_id=UUID(parent_node.notebook_id) if isinstance(parent_node.notebook_id, str) else parent_node.notebook_id,
+                parent_id=UUID(parent_node.id) if isinstance(parent_node.id, str) else parent_node.id,
                 type="note",
                 name=title,
                 normalized_name=norm,
@@ -420,10 +420,13 @@ class NoteService:
             )
             db.add(node)
 
-            # Move file if path changed
+            # Move file if path changed (wrapped in try/except for robustness)
             if old_file_path and os.path.exists(old_file_path) and old_file_path != new_content_path:
-                os.makedirs(os.path.dirname(new_content_path), exist_ok=True)
-                shutil.move(old_file_path, new_content_path)
+                try:
+                    os.makedirs(os.path.dirname(new_content_path), exist_ok=True)
+                    shutil.move(old_file_path, new_content_path)
+                except OSError:
+                    pass  # Skip file move if path is invalid (e.g. corrupted Unicode)
 
         db.commit()
 

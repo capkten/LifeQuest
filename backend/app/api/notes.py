@@ -240,11 +240,11 @@ def get_note(
     db: Session = Depends(get_db),
 ):
     service = NoteService(db)
-    if not service.verify_node_ownership(note_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
     node = service.node_repo.get_by_id(note_id)
     if not node or node.type != "note":
         raise HTTPException(status_code=404, detail="Note not found")
+    if not service.verify_node_ownership(note_id, current_user.id):
+        raise HTTPException(status_code=403, detail="Not authorized")
     content = service.get_note_content(note_id)
     return NoteDetailResponse(
         id=node.id,
