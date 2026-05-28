@@ -1,10 +1,8 @@
-import os
-import pathlib
-import re
+# backend/app/api/notes.py
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -14,33 +12,26 @@ from app.schemas.note import (
     NotebookUpdate,
     NotebookResponse,
     FolderCreate,
-    FolderUpdate,
-    FolderResponse,
     NoteCreate,
     NoteUpdate,
-    NoteResponse,
+    NodeUpdate,
+    NodeResponse,
+    NoteDetailResponse,
+    TreeResponse,
 )
 from app.services.note import NoteService
 from app.api.auth import get_current_user
 
 router = APIRouter(prefix="/api/notes", tags=["notes"])
 
-# Create notes directory if it doesn't exist (absolute path)
-BACKEND_DIR = pathlib.Path(__file__).resolve().parent.parent.parent
-NOTES_DIR = BACKEND_DIR / "notes_data"
-NOTES_DIR.mkdir(exist_ok=True)
 
-
-def sanitize_filename(name: str) -> str:
-    """Remove path separators and other dangerous characters from a filename."""
-    return re.sub(r'[/\\:*?"<>|]', '_', name)
-
+# --- Notebook endpoints ---
 
 @router.post("/notebooks", response_model=NotebookResponse)
 def create_notebook(
     notebook_in: NotebookCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     service = NoteService(db)
     return service.create_notebook(current_user.id, notebook_in)
@@ -49,7 +40,7 @@ def create_notebook(
 @router.get("/notebooks", response_model=List[NotebookResponse])
 def get_notebooks(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     service = NoteService(db)
     return service.get_notebooks(current_user.id)
@@ -59,7 +50,7 @@ def get_notebooks(
 def get_notebook(
     notebook_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     service = NoteService(db)
     if not service.verify_notebook_ownership(notebook_id, current_user.id):
@@ -70,24 +61,12 @@ def get_notebook(
     return notebook
 
 
-@router.get("/notebooks/{notebook_id}/folders", response_model=List[FolderResponse])
-def get_folders_by_notebook(
-    notebook_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    service = NoteService(db)
-    if not service.verify_notebook_ownership(notebook_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
-    return service.get_folders(notebook_id)
-
-
 @router.put("/notebooks/{notebook_id}", response_model=NotebookResponse)
 def update_notebook(
     notebook_id: UUID,
     notebook_in: NotebookUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     service = NoteService(db)
     if not service.verify_notebook_ownership(notebook_id, current_user.id):
@@ -102,7 +81,7 @@ def update_notebook(
 def delete_notebook(
     notebook_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     service = NoteService(db)
     if not service.verify_notebook_ownership(notebook_id, current_user.id):
@@ -111,166 +90,194 @@ def delete_notebook(
     return {"message": "Notebook deleted"}
 
 
-@router.post("/folders", response_model=FolderResponse)
+# --- Node tree endpoints ---
+
+@router.get("/notebooks/{notebook_id}/tree", response_model=List[TreeResponse])
+def get_tree(
+    notebook_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = NoteService(db)
+    if not service.verify_notebook_ownership(notebook_id, current_user.id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    nodes = service.get_tree(notebook_id)
+    return _build_tree(nodes, parent_id=None)
+
+
+def _build_tree(nodes: list, parent_id) -> list:
+    """Build a nested tree structure from a flat list of nodes."""
+    children_map: dict = {}
+    for n in nodes:
+        key = n.parent_id  # None for root
+        if key not in children_map:
+            children_map[key] = []
+        children_map[key].append(n)
+
+    def build(pid):
+        result = []
+        for n in children_map.get(pid, []):
+            result.append(TreeResponse(
+                id=n.id,
+                name=n.name,
+                type=n.type,
+                parent_id=n.parent_id,
+                children=build(n.id),
+            ))
+        return result
+
+    return build(parent_id)
+
+
+@router.get("/notebooks/{notebook_id}/children", response_model=List[NodeResponse])
+def get_children(
+    notebook_id: UUID,
+    parent_id: Optional[UUID] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = NoteService(db)
+    if not service.verify_notebook_ownership(notebook_id, current_user.id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return service.get_children(notebook_id, parent_id)
+
+
+@router.post("/notebooks/{notebook_id}/folders", response_model=NodeResponse)
 def create_folder(
+    notebook_id: UUID,
     folder_in: FolderCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     service = NoteService(db)
-    if not service.verify_notebook_ownership(folder_in.notebook_id, current_user.id):
+    if not service.verify_notebook_ownership(notebook_id, current_user.id):
         raise HTTPException(status_code=403, detail="Not authorized")
-    return service.create_folder(folder_in)
+    try:
+        return service.create_folder(notebook_id, current_user.id, folder_in)
+    except ValueError as e:
+        detail = str(e)
+        if "同名冲突" in detail:
+            raise HTTPException(status_code=409, detail=detail)
+        raise HTTPException(status_code=400, detail=detail)
 
 
-@router.put("/folders/{folder_id}", response_model=FolderResponse)
-def update_folder(
-    folder_id: UUID,
-    folder_in: FolderUpdate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    service = NoteService(db)
-    if not service.verify_folder_ownership(folder_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
-    folder = service.folder_repo.get_by_id(folder_id)
-    if not folder:
-        raise HTTPException(status_code=404, detail="Folder not found")
-    return service.folder_repo.update(folder, folder_in.model_dump(exclude_unset=True))
-
-
-@router.delete("/folders/{folder_id}")
-def delete_folder(
-    folder_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    service = NoteService(db)
-    if not service.verify_folder_ownership(folder_id, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
-    service.folder_repo.delete(folder_id)
-    return {"message": "Folder deleted"}
-
-
-@router.post("/", response_model=NoteResponse)
+@router.post("/notebooks/{notebook_id}/notes", response_model=NodeResponse)
 def create_note(
+    notebook_id: UUID,
     note_in: NoteCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     service = NoteService(db)
-    if not service.verify_folder_ownership(note_in.folder_id, current_user.id):
+    if not service.verify_notebook_ownership(notebook_id, current_user.id):
         raise HTTPException(status_code=403, detail="Not authorized")
-    # Create markdown file (sanitize title to prevent path traversal)
-    file_name = f"{note_in.folder_id}/{sanitize_filename(note_in.title)}.md"
-    file_path = str(NOTES_DIR / file_name)
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.write(note_in.content or "")
-
-    return service.create_note(note_in, file_path)
+    try:
+        return service.create_note(notebook_id, current_user.id, note_in)
+    except ValueError as e:
+        detail = str(e)
+        if "同名冲突" in detail:
+            raise HTTPException(status_code=409, detail=detail)
+        raise HTTPException(status_code=400, detail=detail)
 
 
-@router.get("/folder/{folder_id}", response_model=List[NoteResponse])
-def get_notes_by_folder(
-    folder_id: UUID,
+# --- Node operations ---
+
+@router.patch("/nodes/{node_id}", response_model=NodeResponse)
+def update_node(
+    node_id: UUID,
+    node_in: NodeUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     service = NoteService(db)
-    if not service.verify_folder_ownership(folder_id, current_user.id):
+    if not service.verify_node_ownership(node_id, current_user.id):
         raise HTTPException(status_code=403, detail="Not authorized")
-    return service.get_notes(folder_id)
+    try:
+        if node_in.name is not None:
+            service.rename_node(node_id, node_in.name)
+        if node_in.parent_id is not None:
+            service.move_node(node_id, node_in.parent_id)
+        return service.node_repo.get_by_id(node_id)
+    except ValueError as e:
+        detail = str(e)
+        if "同名冲突" in detail:
+            raise HTTPException(status_code=409, detail=detail)
+        raise HTTPException(status_code=400, detail=detail)
 
 
-@router.get("/search", response_model=List[NoteResponse])
+@router.delete("/nodes/{node_id}")
+def delete_node(
+    node_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = NoteService(db)
+    if not service.verify_node_ownership(node_id, current_user.id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    try:
+        service.delete_node(node_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return {"message": "Node deleted"}
+
+
+# --- Note content ---
+
+@router.get("/search", response_model=List[NodeResponse])
 def search_notes(
-    query: str,
+    query: str = Query(..., min_length=1),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     service = NoteService(db)
     return service.search_notes(current_user.id, query)
 
 
-@router.get("/{note_id}", response_model=NoteResponse)
+@router.get("/{note_id}", response_model=NoteDetailResponse)
 def get_note(
     note_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     service = NoteService(db)
-    note = service.get_note(note_id)
-    if not note:
-        raise HTTPException(status_code=404, detail="Note not found")
-    if not service.verify_note_ownership(note, current_user.id):
+    if not service.verify_node_ownership(note_id, current_user.id):
         raise HTTPException(status_code=403, detail="Not authorized")
-
-    # Read file content
-    content = ""
-    if note.file_path and os.path.exists(note.file_path):
-        with open(note.file_path, "r", encoding="utf-8") as f:
-            content = f.read()
-
-    # Create response with content
-    note_dict = {
-        "id": note.id,
-        "folder_id": note.folder_id,
-        "title": note.title,
-        "summary": note.summary,
-        "tags": note.tags,
-        "is_pinned": note.is_pinned,
-        "file_path": note.file_path,
-        "content": content,
-        "word_count": note.word_count,
-        "created_at": note.created_at,
-        "updated_at": note.updated_at
-    }
-    return note_dict
+    node = service.node_repo.get_by_id(note_id)
+    if not node or node.type != "note":
+        raise HTTPException(status_code=404, detail="Note not found")
+    content = service.get_note_content(note_id)
+    return NoteDetailResponse(
+        id=node.id,
+        notebook_id=node.notebook_id,
+        parent_id=node.parent_id,
+        type=node.type,
+        name=node.name,
+        path=node.path,
+        content_path=node.content_path,
+        summary=node.summary,
+        tags=node.tags,
+        is_pinned=node.is_pinned,
+        word_count=node.word_count,
+        created_at=node.created_at,
+        updated_at=node.updated_at,
+        content=content,
+    )
 
 
-@router.put("/{note_id}", response_model=NoteResponse)
+@router.put("/{note_id}", response_model=NodeResponse)
 def update_note(
     note_id: UUID,
     note_in: NoteUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     service = NoteService(db)
-    note = service.get_note(note_id)
-    if not note:
-        raise HTTPException(status_code=404, detail="Note not found")
-    if not service.verify_note_ownership(note, current_user.id):
+    if not service.verify_node_ownership(note_id, current_user.id):
         raise HTTPException(status_code=403, detail="Not authorized")
-
-    file_path = note.file_path
-    if note_in.content is not None and file_path:
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(note_in.content)
-
-    return service.update_note(note, note_in, file_path)
-
-
-@router.delete("/{note_id}")
-def delete_note(
-    note_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    service = NoteService(db)
-    note = service.get_note(note_id)
-    if not note:
-        raise HTTPException(status_code=404, detail="Note not found")
-    if not service.verify_note_ownership(note, current_user.id):
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    # Delete file first; only proceed with DB deletion if file operation succeeds
-    if note.file_path and os.path.exists(note.file_path):
-        try:
-            os.remove(note.file_path)
-        except OSError:
-            raise HTTPException(status_code=500, detail="Failed to delete note file")
-
-    service.delete_note(note_id)
-    return {"message": "Note deleted"}
+    try:
+        return service.update_note(note_id, note_in)
+    except ValueError as e:
+        detail = str(e)
+        if "同名冲突" in detail:
+            raise HTTPException(status_code=409, detail=detail)
+        raise HTTPException(status_code=400, detail=detail)
