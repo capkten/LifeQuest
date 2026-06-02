@@ -91,10 +91,12 @@ class AchievementService:
                             "achievement_id": achievement.id,
                         }
                     )
-                    # Award rewards
+                    # Award rewards in the same transaction
                     user = self.user_repo.get_by_id(user_id)
                     if user:
-                        self.user_repo.update_coins(user, achievement.coin_reward)
-                        self.user_repo.update_experience(user, achievement.exp_reward)
+                        self.user_repo._update_coins_no_commit(user, achievement.coin_reward)
+                        self.user_repo._update_experience_no_commit(user, achievement.exp_reward)
                     unlocked.append(achievement)
+        if unlocked:
+            self.db.commit()
         return unlocked

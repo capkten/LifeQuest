@@ -146,23 +146,23 @@ export const todoService = {
   },
 
   /**
-   * Get subtasks for a goal
-   * @param {string} goalId - Goal ID
+   * Get subtasks for a task
+   * @param {string} taskId - Task ID
    * @returns {Promise<Array>} List of subtasks
    */
-  async getSubtasks(goalId) {
-    const response = await api.get(`/todos/goals/${goalId}/subtasks`)
+  async getSubtasks(taskId) {
+    const response = await api.get(`/todos/subtasks/task/${taskId}`)
     return response.data
   },
 
   /**
-   * Create a subtask for a goal
-   * @param {string} goalId - Goal ID
+   * Create a subtask for a task
+   * @param {string} taskId - Task ID
    * @param {Object} data - Subtask data
    * @returns {Promise<Object>} Created subtask
    */
-  async createSubtask(goalId, data) {
-    const response = await api.post(`/todos/goals/${goalId}/subtasks`, data)
+  async createSubtask(taskId, data) {
+    const response = await api.post('/todos/subtasks', { ...data, task_id: taskId })
     return response.data
   },
 
@@ -172,7 +172,7 @@ export const todoService = {
    * @returns {Promise<Object>} Updated subtask
    */
   async completeSubtask(subtaskId) {
-    const response = await api.post(`/todos/subtasks/${subtaskId}/complete`)
+    const response = await api.put(`/todos/subtasks/${subtaskId}`, { is_completed: true })
     return response.data
   },
 

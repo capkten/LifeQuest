@@ -18,6 +18,7 @@ class User(Base):
     level = Column(Integer, default=1)
     experience = Column(Integer, default=0)
     coins = Column(Integer, default=0)
+    total_coins_earned = Column(Integer, default=0)
     title = Column(String(50), default="初学者")
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

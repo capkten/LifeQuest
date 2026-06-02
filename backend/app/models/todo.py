@@ -43,6 +43,7 @@ class Habit(Base):
     is_active = Column(Boolean, default=True)
     streak = Column(Integer, default=0)
     best_streak = Column(Integer, default=0)
+    last_completed_at = Column(DateTime)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

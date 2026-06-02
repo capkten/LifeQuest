@@ -41,6 +41,17 @@ class UserService:
 
     def update_user(self, user: User, user_in: UserUpdate) -> User:
         update_data = user_in.model_dump(exclude_unset=True)
+
+        # Check username uniqueness
+        if "username" in update_data and update_data["username"] != user.username:
+            if self.repository.get_by_username(update_data["username"]):
+                raise ValueError("Username already exists")
+
+        # Check email uniqueness
+        if "email" in update_data and update_data["email"] != user.email:
+            if self.repository.get_by_email(update_data["email"]):
+                raise ValueError("Email already exists")
+
         return self.repository.update(user, update_data)
 
     def add_experience(self, user: User, exp: int) -> User:

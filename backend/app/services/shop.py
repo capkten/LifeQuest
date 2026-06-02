@@ -111,9 +111,9 @@ class ShopService:
 
         user = self.user_repo.get_by_id(exchange.user_id)
 
-        # Refund coins
+        # Refund coins (do not count as earned)
         if user:
-            self.user_repo._update_coins_no_commit(user, exchange.total_cost)
+            self.user_repo._refund_coins_no_commit(user, exchange.total_cost)
 
         # Atomically restore stock
         self.item_repo.restore_stock_atomic(exchange.item_id, exchange.quantity)

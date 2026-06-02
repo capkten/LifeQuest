@@ -35,6 +35,12 @@ class UserRepository(BaseRepository[User]):
 
     def _update_coins_no_commit(self, user: User, amount: int) -> None:
         user.coins += amount
+        if amount > 0:
+            user.total_coins_earned += amount
+
+    def _refund_coins_no_commit(self, user: User, amount: int) -> None:
+        """Restore coins without counting as earned (used for refunds)."""
+        user.coins += amount
 
     def _update_experience_no_commit(self, user: User, exp: int) -> None:
         user.experience += exp

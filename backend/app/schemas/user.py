@@ -26,6 +26,7 @@ class UserResponse(UserBase):
     level: int
     experience: int
     coins: int
+    total_coins_earned: int
     title: str
     created_at: datetime
     updated_at: datetime

@@ -27,8 +27,11 @@ def update_current_user(
     db: Session = Depends(get_db)
 ):
     service = UserService(db)
-    user = service.update_user(current_user, user_in)
-    return user
+    try:
+        user = service.update_user(current_user, user_in)
+        return user
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/me/avatar")

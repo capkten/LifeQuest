@@ -197,6 +197,98 @@
               </div>
             </div>
           </div>
+          <!-- Subtask Section for Tasks -->
+          <div class="subtask-section">
+            <button
+              class="subtask-toggle-btn"
+              @click="toggleTaskExpand(task)"
+              :aria-expanded="expandedTaskId === task.id"
+            >
+              <svg
+                class="subtask-toggle-icon"
+                :class="{ 'subtask-toggle-icon--expanded': expandedTaskId === task.id }"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+              <span>子任务</span>
+              <span v-if="taskSubtasks[task.id]" class="subtask-count-badge">
+                {{ taskSubtasks[task.id].filter(s => s.is_completed).length }}/{{ taskSubtasks[task.id].length }}
+              </span>
+            </button>
+
+            <div v-if="expandedTaskId === task.id" class="subtask-content">
+              <div v-if="loadingSubtasks && !taskSubtasks[task.id]" class="subtask-loading">
+                <span class="loading-spinner loading-spinner--sm"></span>
+              </div>
+
+              <template v-else>
+                <div v-if="taskSubtasks[task.id] && taskSubtasks[task.id].length > 0" class="subtask-list">
+                  <div
+                    v-for="subtask in taskSubtasks[task.id]"
+                    :key="subtask.id"
+                    class="subtask-item"
+                    :class="{ 'subtask-item--done': subtask.is_completed }"
+                  >
+                    <button
+                      class="subtask-complete-btn"
+                      :class="{ 'subtask-complete-btn--done': subtask.is_completed }"
+                      :disabled="subtask.is_completed || completingSubtaskId === subtask.id"
+                      @click="completeSubtask(subtask, task.id)"
+                    >
+                      <span v-if="completingSubtaskId === subtask.id" class="loading-spinner loading-spinner--sm"></span>
+                      <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </button>
+                    <span class="subtask-title" :class="{ 'subtask-title--done': subtask.is_completed }">
+                      {{ subtask.title }}
+                    </span>
+                    <button
+                      class="subtask-delete-btn"
+                      :disabled="deletingSubtaskId === subtask.id"
+                      @click="deleteSubtask(subtask, task.id)"
+                      aria-label="删除子任务"
+                    >
+                      <span v-if="deletingSubtaskId === subtask.id" class="loading-spinner loading-spinner--sm"></span>
+                      <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div v-else class="subtask-empty">
+                  暂无子任务
+                </div>
+
+                <form class="subtask-add-form" @submit.prevent="addSubtask(task.id)">
+                  <input
+                    v-model="newSubtaskTitle"
+                    type="text"
+                    class="subtask-input"
+                    placeholder="添加子任务..."
+                    maxlength="200"
+                  />
+                  <button
+                    type="submit"
+                    class="subtask-add-btn"
+                    :disabled="!newSubtaskTitle.trim() || creatingSubtask"
+                  >
+                    <span v-if="creatingSubtask" class="loading-spinner loading-spinner--sm"></span>
+                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                  </button>
+                </form>
+              </template>
+            </div>
+          </div>
           <div class="todo-card-footer">
             <div class="todo-card-stats">
               <span v-if="task.deadline" class="stat-item">
@@ -278,108 +370,13 @@
           <div class="goal-progress-section">
             <div class="goal-progress-info">
               <span class="goal-progress-label">进度</span>
-              <span class="goal-progress-value">{{ getSubtaskProgress(goal.id) !== null ? getSubtaskProgress(goal.id) : Math.round(goal.progress || 0) }}%</span>
+              <span class="goal-progress-value">{{ Math.round(goal.progress || 0) }}%</span>
             </div>
             <div class="goal-progress-bar">
               <div
                 class="goal-progress-fill"
-                :style="{ width: (getSubtaskProgress(goal.id) !== null ? getSubtaskProgress(goal.id) : Math.round(goal.progress || 0)) + '%' }"
+                :style="{ width: Math.round(goal.progress || 0) + '%' }"
               ></div>
-            </div>
-          </div>
-
-          <!-- Subtask Section -->
-          <div class="subtask-section">
-            <button
-              class="subtask-toggle-btn"
-              @click="toggleGoalExpand(goal)"
-              :aria-expanded="expandedGoalId === goal.id"
-            >
-              <svg
-                class="subtask-toggle-icon"
-                :class="{ 'subtask-toggle-icon--expanded': expandedGoalId === goal.id }"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-              <span>子任务</span>
-              <span v-if="goalSubtasks[goal.id]" class="subtask-count-badge">
-                {{ goalSubtasks[goal.id].filter(s => s.status === 'completed').length }}/{{ goalSubtasks[goal.id].length }}
-              </span>
-            </button>
-
-            <div v-if="expandedGoalId === goal.id" class="subtask-content">
-              <div v-if="loadingSubtasks && !goalSubtasks[goal.id]" class="subtask-loading">
-                <span class="loading-spinner loading-spinner--sm"></span>
-              </div>
-
-              <template v-else>
-                <!-- Subtask list -->
-                <div v-if="goalSubtasks[goal.id] && goalSubtasks[goal.id].length > 0" class="subtask-list">
-                  <div
-                    v-for="subtask in goalSubtasks[goal.id]"
-                    :key="subtask.id"
-                    class="subtask-item"
-                    :class="{ 'subtask-item--done': subtask.status === 'completed' }"
-                  >
-                    <button
-                      class="subtask-complete-btn"
-                      :class="{ 'subtask-complete-btn--done': subtask.status === 'completed' }"
-                      :disabled="subtask.status === 'completed' || completingSubtaskId === subtask.id"
-                      @click="completeSubtask(subtask, goal.id)"
-                    >
-                      <span v-if="completingSubtaskId === subtask.id" class="loading-spinner loading-spinner--sm"></span>
-                      <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    </button>
-                    <span class="subtask-title" :class="{ 'subtask-title--done': subtask.status === 'completed' }">
-                      {{ subtask.title }}
-                    </span>
-                    <button
-                      class="subtask-delete-btn"
-                      :disabled="deletingSubtaskId === subtask.id"
-                      @click="deleteSubtask(subtask, goal.id)"
-                      aria-label="删除子任务"
-                    >
-                      <span v-if="deletingSubtaskId === subtask.id" class="loading-spinner loading-spinner--sm"></span>
-                      <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18" />
-                        <line x1="6" y1="6" x2="18" y2="18" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-
-                <div v-else class="subtask-empty">
-                  暂无子任务
-                </div>
-
-                <!-- Add subtask input -->
-                <form class="subtask-add-form" @submit.prevent="addSubtask(goal.id)">
-                  <input
-                    v-model="newSubtaskTitle"
-                    type="text"
-                    class="subtask-input"
-                    placeholder="添加子任务..."
-                    maxlength="200"
-                  />
-                  <button
-                    type="submit"
-                    class="subtask-add-btn"
-                    :disabled="!newSubtaskTitle.trim() || creatingSubtask"
-                  >
-                    <span v-if="creatingSubtask" class="loading-spinner loading-spinner--sm"></span>
-                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <line x1="12" y1="5" x2="12" y2="19" />
-                      <line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                  </button>
-                </form>
-              </template>
             </div>
           </div>
 
@@ -622,8 +619,8 @@ const deletingType = ref(null)
 const deleting = ref(false)
 
 // Subtask state
-const expandedGoalId = ref(null)
-const goalSubtasks = ref({})
+const expandedTaskId = ref(null)
+const taskSubtasks = ref({})
 const loadingSubtasks = ref(false)
 const newSubtaskTitle = ref('')
 const creatingSubtask = ref(false)
@@ -847,29 +844,29 @@ async function completeGoal(goal) {
   }
 }
 
-function getSubtaskProgress(goalId) {
-  const subtasks = goalSubtasks.value[goalId]
+function getSubtaskProgress(taskId) {
+  const subtasks = taskSubtasks.value[taskId]
   if (!subtasks || subtasks.length === 0) return null
-  const completed = subtasks.filter(s => s.status === 'completed').length
+  const completed = subtasks.filter(s => s.is_completed).length
   return Math.round((completed / subtasks.length) * 100)
 }
 
-async function toggleGoalExpand(goal) {
-  if (expandedGoalId.value === goal.id) {
-    expandedGoalId.value = null
+async function toggleTaskExpand(task) {
+  if (expandedTaskId.value === task.id) {
+    expandedTaskId.value = null
     return
   }
-  expandedGoalId.value = goal.id
-  if (!goalSubtasks.value[goal.id]) {
-    await fetchSubtasks(goal.id)
+  expandedTaskId.value = task.id
+  if (!taskSubtasks.value[task.id]) {
+    await fetchSubtasks(task.id)
   }
 }
 
-async function fetchSubtasks(goalId) {
+async function fetchSubtasks(taskId) {
   loadingSubtasks.value = true
   try {
-    const subtasks = await todoService.getSubtasks(goalId)
-    goalSubtasks.value[goalId] = subtasks
+    const subtasks = await todoService.getSubtasks(taskId)
+    taskSubtasks.value[taskId] = subtasks
   } catch (e) {
     console.error('Failed to fetch subtasks:', e)
     showError('加载子任务失败')
@@ -878,16 +875,16 @@ async function fetchSubtasks(goalId) {
   }
 }
 
-async function addSubtask(goalId) {
+async function addSubtask(taskId) {
   const title = newSubtaskTitle.value.trim()
   if (!title) return
   creatingSubtask.value = true
   try {
-    const subtask = await todoService.createSubtask(goalId, { title })
-    if (!goalSubtasks.value[goalId]) {
-      goalSubtasks.value[goalId] = []
+    const subtask = await todoService.createSubtask(taskId, { title })
+    if (!taskSubtasks.value[taskId]) {
+      taskSubtasks.value[taskId] = []
     }
-    goalSubtasks.value[goalId].push(subtask)
+    taskSubtasks.value[taskId].push(subtask)
     newSubtaskTitle.value = ''
   } catch (e) {
     console.error('Failed to create subtask:', e)
@@ -897,21 +894,17 @@ async function addSubtask(goalId) {
   }
 }
 
-async function completeSubtask(subtask, goalId) {
-  if (subtask.status === 'completed' || completingSubtaskId.value) return
+async function completeSubtask(subtask, taskId) {
+  if (subtask.is_completed || completingSubtaskId.value) return
   completingSubtaskId.value = subtask.id
   try {
     const updated = await todoService.completeSubtask(subtask.id)
-    const subtasks = goalSubtasks.value[goalId]
+    const subtasks = taskSubtasks.value[taskId]
     if (subtasks) {
       const idx = subtasks.findIndex(s => s.id === subtask.id)
       if (idx !== -1) {
         subtasks[idx] = updated
       }
-    }
-    if (updated.coins_reward || updated.exp_reward) {
-      showReward(updated.coins_reward || 0, updated.exp_reward || 0)
-      await authStore.fetchUser()
     }
   } catch (e) {
     console.error('Failed to complete subtask:', e)
@@ -921,13 +914,13 @@ async function completeSubtask(subtask, goalId) {
   }
 }
 
-async function deleteSubtask(subtask, goalId) {
+async function deleteSubtask(subtask, taskId) {
   deletingSubtaskId.value = subtask.id
   try {
     await todoService.deleteSubtask(subtask.id)
-    const subtasks = goalSubtasks.value[goalId]
+    const subtasks = taskSubtasks.value[taskId]
     if (subtasks) {
-      goalSubtasks.value[goalId] = subtasks.filter(s => s.id !== subtask.id)
+      taskSubtasks.value[taskId] = subtasks.filter(s => s.id !== subtask.id)
     }
   } catch (e) {
     console.error('Failed to delete subtask:', e)

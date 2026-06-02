@@ -99,6 +99,10 @@ def test_purchase_success(client):
     task_id = task_response.json()["id"]
     client.post(f"/api/todos/tasks/{task_id}/complete", headers=headers)
 
+    # Record coins after earning (includes achievement bonus)
+    user_earned = client.get("/api/users/me", headers=headers).json()
+    coins_after_earn = user_earned["coins"]
+
     # Purchase the item
     purchase_response = client.post(
         "/api/shop/exchange",
@@ -116,7 +120,7 @@ def test_purchase_success(client):
 
     # Verify user coins were deducted
     user = client.get("/api/users/me", headers=headers).json()
-    assert user["coins"] == 80  # 100 earned - 20 spent
+    assert user["coins"] == coins_after_earn - 20
 
     # Verify stock was decremented
     item_detail = client.get(f"/api/shop/items/{item_id}", headers=headers).json()
@@ -164,6 +168,10 @@ def test_refund_exchange(client):
     task_id = task_response.json()["id"]
     client.post(f"/api/todos/tasks/{task_id}/complete", headers=headers)
 
+    # Record coins after earning (includes achievement bonus)
+    user_earned = client.get("/api/users/me", headers=headers).json()
+    coins_after_earn = user_earned["coins"]
+
     # Purchase
     purchase_response = client.post(
         "/api/shop/exchange",
@@ -174,7 +182,7 @@ def test_refund_exchange(client):
 
     # Verify coins deducted
     user_before_refund = client.get("/api/users/me", headers=headers).json()
-    assert user_before_refund["coins"] == 90  # 100 - 10
+    assert user_before_refund["coins"] == coins_after_earn - 10
 
     # Refund
     refund_response = client.post(
@@ -186,7 +194,10 @@ def test_refund_exchange(client):
 
     # Verify coins restored
     user_after_refund = client.get("/api/users/me", headers=headers).json()
-    assert user_after_refund["coins"] == 100
+    assert user_after_refund["coins"] == coins_after_earn
+
+    # Verify total_coins_earned was NOT inflated by the refund
+    assert user_after_refund["total_coins_earned"] == user_before_refund["total_coins_earned"]
 
 
 def test_purchase_unlimited_stock(client):
@@ -207,6 +218,10 @@ def test_purchase_unlimited_stock(client):
     task_id = task_response.json()["id"]
     client.post(f"/api/todos/tasks/{task_id}/complete", headers=headers)
 
+    # Record coins after earning (includes achievement bonus)
+    user_earned = client.get("/api/users/me", headers=headers).json()
+    coins_after_earn = user_earned["coins"]
+
     # Purchase twice - should succeed both times
     for i in range(2):
         purchase_response = client.post(
@@ -223,4 +238,4 @@ def test_purchase_unlimited_stock(client):
 
     # Verify user coins were deducted for both purchases
     user = client.get("/api/users/me", headers=headers).json()
-    assert user["coins"] == 90  # 100 earned - (5 * 2) spent
+    assert user["coins"] == coins_after_earn - 10  # 5 * 2 spent

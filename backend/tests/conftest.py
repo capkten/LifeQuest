@@ -10,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.main import app
+from app.services.achievement import AchievementService
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
@@ -35,6 +36,13 @@ app.dependency_overrides[get_db] = override_get_db
 @pytest.fixture
 def client():
     Base.metadata.create_all(bind=engine)
+    # Seed achievements in the test database
+    db = TestingSessionLocal()
+    try:
+        service = AchievementService(db)
+        service.seed_achievements()
+    finally:
+        db.close()
     with TestClient(app) as c:
         yield c
     Base.metadata.drop_all(bind=engine)

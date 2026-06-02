@@ -41,6 +41,7 @@ class HabitResponse(BaseModel):
     is_active: bool
     streak: int
     best_streak: int
+    last_completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 

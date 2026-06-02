@@ -23,6 +23,7 @@ from app.schemas.todo import (
     SubtaskCreate,
     SubtaskUpdate,
 )
+from app.services.achievement import AchievementService
 
 
 class TodoService:
@@ -32,6 +33,7 @@ class TodoService:
         self.goal_repo = GoalRepository(db)
         self.subtask_repo = SubtaskRepository(db)
         self.user_repo = UserRepository(db)
+        self.achievement_service = AchievementService(db)
 
     # --- Ownership verification (returns object or raises HTTPException) ---
     def get_habit_for_user(self, habit_id: UUID, user_id: UUID) -> Habit:
@@ -85,13 +87,20 @@ class TodoService:
 
     def complete_habit(self, habit: Habit, user_id: UUID) -> Habit:
         """Mark habit as completed for today, incrementing streak and awarding rewards."""
+        # Idempotency: block repeated completion on the same UTC day
+        now = datetime.now(timezone.utc)
+        if habit.last_completed_at and habit.last_completed_at.date() == now.date():
+            return habit
+
         habit.streak += 1
         if habit.streak > habit.best_streak:
             habit.best_streak = habit.streak
+        habit.last_completed_at = now
 
         user = self.user_repo.get_by_id(user_id)
         if user:
             self._update_rewards(user, habit.coins_reward, habit.exp_reward)
+            self._check_achievements(user)
 
         self.habit_repo.db.refresh(habit)
         return habit
@@ -114,12 +123,15 @@ class TodoService:
 
     def complete_task(self, task: Task, user_id: UUID) -> Task:
         """Complete a task and award coins and experience to the user."""
+        if task.status == TaskStatus.COMPLETED:
+            return task
         task.status = TaskStatus.COMPLETED
         task.completed_at = datetime.now(timezone.utc)
 
         user = self.user_repo.get_by_id(user_id)
         if user:
             self._update_rewards(user, task.coins_reward, task.exp_reward)
+            self._check_achievements(user)
 
         self.task_repo.db.refresh(task)
         return task
@@ -142,12 +154,15 @@ class TodoService:
 
     def complete_goal(self, goal: Goal, user_id: UUID) -> Goal:
         """Complete a goal and award coins and experience to the user."""
+        if goal.status == TaskStatus.COMPLETED:
+            return goal
         goal.status = TaskStatus.COMPLETED
         goal.progress = GOAL_COMPLETED_PROGRESS
 
         user = self.user_repo.get_by_id(user_id)
         if user:
             self._update_rewards(user, goal.coins_reward, goal.exp_reward)
+            self._check_achievements(user)
 
         self.goal_repo.db.refresh(goal)
         return goal
@@ -157,6 +172,29 @@ class TodoService:
         self.user_repo._update_coins_no_commit(user, coins)
         self.user_repo._update_experience_no_commit(user, exp)
         self.task_repo.db.commit()
+
+    def _check_achievements(self, user) -> None:
+        """Check and unlock achievements based on current user state."""
+        from sqlalchemy import func
+
+        uid = user.id
+        # task_count: count completed tasks
+        completed_tasks = self.task_repo.db.query(Task).filter(
+            Task.user_id == uid, Task.status == TaskStatus.COMPLETED
+        ).count()
+        self.achievement_service.check_and_unlock(uid, "task_count", completed_tasks)
+
+        # habit_streak: best streak across all habits
+        max_streak = self.habit_repo.db.query(func.max(Habit.best_streak)).filter(
+            Habit.user_id == uid
+        ).scalar() or 0
+        self.achievement_service.check_and_unlock(uid, "habit_streak", max_streak)
+
+        # level
+        self.achievement_service.check_and_unlock(uid, "level", user.level)
+
+        # coins_earned: use persisted cumulative counter
+        self.achievement_service.check_and_unlock(uid, "coins_earned", user.total_coins_earned)
 
     # --- Subtask operations ---
     def create_subtask(self, subtask_in: SubtaskCreate) -> Subtask:
