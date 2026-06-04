@@ -42,6 +42,7 @@
           v-model="noteContent"
           height="100%"
           placeholder="请输入笔记内容（支持 Markdown）..."
+          :disabled-menus="[]"
           @upload-image="handleUploadImage"
         />
       </div>
