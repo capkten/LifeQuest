@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import Column, String, Integer, DateTime
 from sqlalchemy import Uuid
+from sqlalchemy.orm import relationship
 
 from app.database import Base
 
@@ -22,3 +23,8 @@ class User(Base):
     title = Column(String(50), default="初学者")
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    checkins = relationship("DailyCheckin", back_populates="user")
+    accounts = relationship("Account", back_populates="user")
+    finance_categories = relationship("FinanceCategory", back_populates="user")
+    projects = relationship("Project", back_populates="user")

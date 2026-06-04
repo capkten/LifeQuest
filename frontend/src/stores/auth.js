@@ -5,26 +5,44 @@ import router from '../router'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('token') || null)
+  const refreshTokenValue = ref(localStorage.getItem('refreshToken') || null)
   const user = ref(null)
   const loading = ref(false)
 
   const isAuthenticated = computed(() => !!token.value)
 
-  /**
-   * Login user
-   * @param {Object} credentials - { username, password }
-   */
+  function setTokens(accessToken, refreshToken) {
+    token.value = accessToken
+    refreshTokenValue.value = refreshToken
+    localStorage.setItem('token', accessToken)
+    localStorage.setItem('refreshToken', refreshToken)
+  }
+
+  function clearTokens() {
+    token.value = null
+    refreshTokenValue.value = null
+    localStorage.removeItem('token')
+    localStorage.removeItem('refreshToken')
+  }
+
+  async function refreshAccessToken() {
+    if (!refreshTokenValue.value) return false
+    try {
+      const response = await authService.refreshToken(refreshTokenValue.value)
+      setTokens(response.access_token, response.refresh_token)
+      return true
+    } catch {
+      clearTokens()
+      return false
+    }
+  }
+
   async function login(credentials) {
     loading.value = true
     try {
       const response = await authService.login(credentials.username, credentials.password)
-      token.value = response.access_token
-      localStorage.setItem('token', response.access_token)
-
-      // Fetch user data after login
+      setTokens(response.access_token, response.refresh_token)
       await fetchUser()
-
-      // Redirect to intended route or home
       const redirect = router.currentRoute.value.query.redirect || '/'
       router.push(redirect)
     } finally {
@@ -32,42 +50,32 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  /**
-   * Register new user
-   * @param {Object} userData - { username, email, password }
-   */
   async function register(userData) {
     loading.value = true
     try {
       await authService.register(userData)
-      // Redirect to login page after successful registration
       router.push({ name: 'Login' })
     } finally {
       loading.value = false
     }
   }
 
-  /**
-   * Fetch current user data
-   */
   async function fetchUser() {
     try {
       const userData = await authService.getCurrentUser()
       user.value = userData
     } catch (error) {
-      // If fetching user fails, clear auth state
       logout()
       throw error
     }
   }
 
-  /**
-   * Logout user
-   */
   function logout() {
     token.value = null
+    refreshTokenValue.value = null
     user.value = null
     localStorage.removeItem('token')
+    localStorage.removeItem('refreshToken')
     router.push({ name: 'Login' })
   }
 
@@ -78,6 +86,7 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     register,
     fetchUser,
-    logout
+    logout,
+    refreshAccessToken,
   }
 })

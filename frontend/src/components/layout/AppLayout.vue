@@ -123,6 +123,7 @@ const pageTitle = computed(() => {
     Tasks: '任务',
     Goals: '目标',
     Notes: '笔记',
+    Calendar: '日历',
     NotebookFileManage: '笔记本',
     Shop: '商城',
     Backpack: '背包',

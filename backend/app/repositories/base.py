@@ -34,6 +34,11 @@ class BaseRepository(Generic[ModelType]):
         self.db.refresh(db_obj)
         return db_obj
 
+    def _create_no_commit(self, obj_in: dict) -> ModelType:
+        db_obj = self.model(**obj_in)
+        self.db.add(db_obj)
+        return db_obj
+
     def delete(self, id: UUID) -> bool:
         obj = self.db.query(self.model).filter(self.model.id == id).first()
         if obj:

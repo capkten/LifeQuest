@@ -8,6 +8,7 @@ from app.models.shop import ShopItem, ExchangeHistory, ExchangeStatus
 from app.repositories.shop import ShopItemRepository, ExchangeHistoryRepository
 from app.repositories.user import UserRepository
 from app.schemas.shop import ShopItemCreate, ShopItemUpdate, ExchangeHistoryCreate
+from app.services.achievement import AchievementService
 from app.services.backpack import BackpackService
 
 
@@ -17,6 +18,7 @@ class ShopService:
         self.item_repo = ShopItemRepository(db)
         self.exchange_repo = ExchangeHistoryRepository(db)
         self.user_repo = UserRepository(db)
+        self.achievement_service = AchievementService(db)
 
     # --- Ownership checks ---
     def get_item_for_user(self, item_id: UUID, user_id: UUID) -> ShopItem:
@@ -100,6 +102,14 @@ class ShopService:
         # Single commit for the entire purchase-to-backpack operation
         self.db.commit()
         self.db.refresh(exchange)
+
+        # Check coins_spent and transaction_count achievements
+        try:
+            self.achievement_service.check_coins_spent(user_id)
+            self.achievement_service.check_transactions(user_id)
+        except Exception:
+            pass  # Don't fail purchase if achievement check fails
+
         return exchange
 
     def get_user_exchanges(self, user_id: UUID) -> List[ExchangeHistory]:

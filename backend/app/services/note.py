@@ -19,6 +19,7 @@ from app.schemas.note import (
     NoteUpdate,
     NodeUpdate,
 )
+from app.services.achievement import AchievementService
 
 BACKEND_DIR = pathlib.Path(__file__).resolve().parent.parent.parent
 NOTES_DIR = BACKEND_DIR / "notes_data"
@@ -48,6 +49,7 @@ class NoteService:
         self.notebook_repo = NotebookRepository(db)
         self.node_repo = NoteNodeRepository(db)
         self.attachment_repo = AttachmentRepository(db)
+        self.achievement_service = AchievementService(db)
 
     # --- Ownership verification ---
 
@@ -145,6 +147,12 @@ class NoteService:
         os.makedirs(os.path.dirname(content_path), exist_ok=True)
         with open(content_path, "w", encoding="utf-8") as f:
             f.write(note_in.content or "")
+
+        # Check note_count achievements
+        try:
+            self.achievement_service.check_notes(user_id)
+        except Exception:
+            pass  # Don't fail note creation if achievement check fails
 
         return node
 

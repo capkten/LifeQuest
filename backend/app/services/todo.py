@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import List
 from uuid import UUID
 
@@ -23,17 +23,23 @@ from app.schemas.todo import (
     SubtaskCreate,
     SubtaskUpdate,
 )
+from app.models.coin_transaction import CoinSource, CoinType
+from app.repositories.coin_transaction import CoinTransactionRepository
 from app.services.achievement import AchievementService
+from app.services.title import TitleService
 
 
 class TodoService:
     def __init__(self, db: Session):
+        self.db = db
         self.habit_repo = HabitRepository(db)
         self.task_repo = TaskRepository(db)
         self.goal_repo = GoalRepository(db)
         self.subtask_repo = SubtaskRepository(db)
         self.user_repo = UserRepository(db)
+        self.coin_repo = CoinTransactionRepository(db)
         self.achievement_service = AchievementService(db)
+        self.title_service = TitleService(db)
 
     # --- Ownership verification (returns object or raises HTTPException) ---
     def get_habit_for_user(self, habit_id: UUID, user_id: UUID) -> Habit:
@@ -99,7 +105,7 @@ class TodoService:
 
         user = self.user_repo.get_by_id(user_id)
         if user:
-            self._update_rewards(user, habit.coins_reward, habit.exp_reward)
+            self._update_rewards(user, habit.coins_reward, habit.exp_reward, CoinSource.HABIT)
             self._check_achievements(user)
 
         self.habit_repo.db.refresh(habit)
@@ -113,6 +119,11 @@ class TodoService:
 
     def get_tasks(self, user_id: UUID) -> List[Task]:
         return self.task_repo.get_by_user(user_id)
+
+    def get_tasks_by_project(self, project_id: UUID, user_id: UUID) -> List[Task]:
+        return self.db.query(Task).filter(
+            Task.user_id == user_id, Task.project_id == project_id
+        ).all()
 
     def update_task(self, task: Task, task_in: TaskUpdate) -> Task:
         update_data = task_in.model_dump(exclude_unset=True)
@@ -130,7 +141,7 @@ class TodoService:
 
         user = self.user_repo.get_by_id(user_id)
         if user:
-            self._update_rewards(user, task.coins_reward, task.exp_reward)
+            self._update_rewards(user, task.coins_reward, task.exp_reward, CoinSource.TASK)
             self._check_achievements(user)
 
         self.task_repo.db.refresh(task)
@@ -161,17 +172,25 @@ class TodoService:
 
         user = self.user_repo.get_by_id(user_id)
         if user:
-            self._update_rewards(user, goal.coins_reward, goal.exp_reward)
+            self._update_rewards(user, goal.coins_reward, goal.exp_reward, CoinSource.GOAL)
             self._check_achievements(user)
 
         self.goal_repo.db.refresh(goal)
         return goal
 
-    def _update_rewards(self, user, coins: int, exp: int) -> None:
+    def _update_rewards(self, user, coins: int, exp: int, source: str) -> None:
         """Update user coins and experience in a single transaction."""
         self.user_repo._update_coins_no_commit(user, coins)
         self.user_repo._update_experience_no_commit(user, exp)
         self.task_repo.db.commit()
+        # Record coin transaction
+        self.coin_repo.create_transaction(
+            user_id=user.id,
+            amount=coins,
+            coin_type=CoinType.EARN,
+            source=source,
+            description=f"Reward from {source}",
+        )
 
     def _check_achievements(self, user) -> None:
         """Check and unlock achievements based on current user state."""
@@ -195,6 +214,93 @@ class TodoService:
 
         # coins_earned: use persisted cumulative counter
         self.achievement_service.check_and_unlock(uid, "coins_earned", user.total_coins_earned)
+
+        # goal_count: count completed goals
+        completed_goals = self.goal_repo.db.query(Goal).filter(
+            Goal.user_id == uid, Goal.status == TaskStatus.COMPLETED
+        ).count()
+        self.achievement_service.check_and_unlock(uid, "goal_count", completed_goals)
+
+        # Check titles based on level
+        self.title_service.check_and_unlock(uid, "level", user.level)
+
+    # --- Daily summary ---
+    def get_daily_summary(self, user_id: UUID) -> dict:
+        """Get today's tasks overview: habits due today, tasks due today, active goals."""
+        today = date.today()
+
+        # 1. Active habits due today
+        habits = self.habit_repo.get_active_by_user(user_id)
+        daily_habits = []
+        for h in habits:
+            if h.frequency == "daily":
+                daily_habits.append(h)
+            elif h.frequency == "weekly" and today.weekday() == 0:  # Monday
+                daily_habits.append(h)
+            elif h.frequency == "monthly" and today.day == 1:
+                daily_habits.append(h)
+
+        # 2. Tasks with deadline today (or overdue and still pending)
+        pending_tasks = self.task_repo.get_by_status(user_id, "pending")
+        in_progress_tasks = self.task_repo.get_by_status(user_id, "in_progress")
+        due_tasks = [
+            t
+            for t in (pending_tasks + in_progress_tasks)
+            if t.deadline and t.deadline.date() <= today
+        ]
+
+        # 3. Active goals (in_progress)
+        active_goals = self.goal_repo.get_by_status(user_id, "in_progress")
+
+        return {
+            "habits": [
+                {
+                    "id": h.id,
+                    "title": h.title,
+                    "difficulty": h.difficulty,
+                    "completed_today": h.last_completed_at
+                    and h.last_completed_at.date() == today,
+                    "streak": h.streak,
+                    "coins_reward": h.coins_reward,
+                    "exp_reward": h.exp_reward,
+                }
+                for h in daily_habits
+            ],
+            "tasks": [
+                {
+                    "id": t.id,
+                    "title": t.title,
+                    "difficulty": t.difficulty,
+                    "status": t.status,
+                    "deadline": t.deadline.isoformat() if t.deadline else None,
+                    "coins_reward": t.coins_reward,
+                    "exp_reward": t.exp_reward,
+                }
+                for t in due_tasks
+            ],
+            "goals": [
+                {
+                    "id": g.id,
+                    "title": g.title,
+                    "difficulty": g.difficulty,
+                    "progress": g.progress,
+                    "deadline": g.deadline.isoformat() if g.deadline else None,
+                    "coins_reward": g.coins_reward,
+                    "exp_reward": g.exp_reward,
+                }
+                for g in active_goals
+            ],
+            "summary": {
+                "total_habits": len(daily_habits),
+                "completed_habits": sum(
+                    1
+                    for h in daily_habits
+                    if h.last_completed_at and h.last_completed_at.date() == today
+                ),
+                "due_tasks": len(due_tasks),
+                "active_goals": len(active_goals),
+            },
+        }
 
     # --- Subtask operations ---
     def create_subtask(self, subtask_in: SubtaskCreate) -> Subtask:

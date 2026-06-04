@@ -1,5 +1,48 @@
 <template>
   <div class="home-page">
+    <div class="checkin-card" :class="{ 'checkin-card--done': checkinStatus?.checked_in }">
+      <div class="checkin-content">
+        <div class="checkin-left">
+          <div class="checkin-icon-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+              <polyline points="22 4 12 14.01 9 11.01" />
+            </svg>
+          </div>
+          <div class="checkin-info">
+            <h2 class="checkin-title">每日签到</h2>
+            <p v-if="checkinStatus?.checked_in" class="checkin-streak">
+              已签到 {{ checkinStatus.streak || 0 }} 天
+              <span v-if="checkinStatus.streak > 1" class="checkin-badge">
+                {{ checkinStatus.streak }} 连签
+              </span>
+            </p>
+            <p v-else class="checkin-streak">
+              当前连续签到 {{ checkinStatus?.streak || 0 }} 天
+            </p>
+          </div>
+        </div>
+        <button
+          v-if="!checkinStatus?.checked_in"
+          class="checkin-btn"
+          :disabled="checkinLoading"
+          @click="doCheckin"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+            <polyline points="22 4 12 14.01 9 11.01" />
+          </svg>
+          {{ checkinLoading ? '签到中...' : '签到' }}
+        </button>
+        <div v-else class="checkin-done-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+          已签到
+        </div>
+      </div>
+    </div>
+
     <div class="welcome-card">
       <div class="welcome-content">
         <h1 class="welcome-title">欢迎回来，{{ user?.username || '冒险者' }}！</h1>
@@ -127,6 +170,133 @@
         </div>
       </div>
     </div>
+
+    <div class="daily-card">
+      <div class="daily-header">
+        <div class="daily-header-left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
+          <h3 class="daily-title">今日任务</h3>
+        </div>
+        <span v-if="dailySummary" class="daily-overview">
+          今日: {{ dailySummary.summary.completed_habits }}/{{ dailySummary.summary.total_habits }} 习惯已完成,
+          {{ dailySummary.summary.due_tasks }} 个任务到期,
+          {{ dailySummary.summary.active_goals }} 个目标进行中
+        </span>
+      </div>
+
+      <div class="daily-body">
+        <div v-if="loadingDaily" class="loading-state">
+          <span class="loading-spinner"></span>
+        </div>
+        <div v-else-if="!dailySummary || (dailySummary.habits.length === 0 && dailySummary.tasks.length === 0 && dailySummary.goals.length === 0)" class="empty-state">
+          <p>今天没有待办事项，去创建一些吧！</p>
+        </div>
+        <div v-else class="daily-groups">
+          <!-- Habits -->
+          <div v-if="dailySummary.habits.length > 0" class="daily-group">
+            <h4 class="daily-group-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                <polyline points="17 6 23 6 23 12" />
+              </svg>
+              今日习惯
+            </h4>
+            <div class="daily-list">
+              <div v-for="habit in dailySummary.habits" :key="habit.id" class="daily-item" :class="{ 'daily-item--done': habit.completed_today }">
+                <button
+                  class="daily-check-btn"
+                  :class="{ 'daily-check-btn--done': habit.completed_today }"
+                  :disabled="habit.completed_today || completingHabitId === habit.id"
+                  @click="completeDailyHabit(habit.id)"
+                >
+                  <svg v-if="habit.completed_today" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10" />
+                  </svg>
+                </button>
+                <span class="daily-item-title" :class="{ 'daily-item-title--done': habit.completed_today }">{{ habit.title }}</span>
+                <span class="daily-streak">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                  </svg>
+                  {{ habit.streak }}
+                </span>
+                <span class="task-difficulty" :class="'task-difficulty--' + habit.difficulty">{{ habit.difficulty }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Due Tasks -->
+          <div v-if="dailySummary.tasks.length > 0" class="daily-group">
+            <h4 class="daily-group-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 8v4l3 3" />
+              </svg>
+              今日到期任务
+            </h4>
+            <div class="daily-list">
+              <router-link v-for="task in dailySummary.tasks" :key="task.id" to="/todos" class="daily-item daily-item--link">
+                <span class="task-status" :class="'task-status--' + task.status"></span>
+                <span class="daily-item-title">{{ task.title }}</span>
+                <span v-if="isOverdue(task.deadline)" class="daily-overdue">逾期</span>
+                <span class="task-difficulty" :class="'task-difficulty--' + task.difficulty">{{ task.difficulty }}</span>
+              </router-link>
+            </div>
+          </div>
+
+          <!-- Active Goals -->
+          <div v-if="dailySummary.goals.length > 0" class="daily-group">
+            <h4 class="daily-group-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="12" cy="12" r="6" />
+                <circle cx="12" cy="12" r="2" />
+              </svg>
+              进行中目标
+            </h4>
+            <div class="daily-list">
+              <router-link v-for="goal in dailySummary.goals" :key="goal.id" to="/todos" class="daily-item daily-item--link">
+                <span class="daily-item-title">{{ goal.title }}</span>
+                <div class="daily-goal-progress">
+                  <div class="daily-goal-bar">
+                    <div class="daily-goal-fill" :style="{ width: Math.round(goal.progress || 0) + '%' }"></div>
+                  </div>
+                  <span class="daily-goal-pct">{{ Math.round(goal.progress || 0) }}%</span>
+                </div>
+              </router-link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast notifications -->
+    <Transition name="toast">
+      <div v-if="successToast" class="toast toast--success">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M20 6L9 17l-5-5" />
+        </svg>
+        {{ successToast }}
+      </div>
+    </Transition>
+    <Transition name="toast">
+      <div v-if="errorToast" class="toast toast--error">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="15" y1="9" x2="9" y2="15" />
+          <line x1="9" y1="9" x2="15" y2="15" />
+        </svg>
+        {{ errorToast }}
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -134,9 +304,15 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { todoService } from '../services/todo'
+import { checkinService } from '../services/checkin'
+import { useToast } from '../composables/useToast'
 
 const authStore = useAuthStore()
 const user = computed(() => authStore.user)
+const { successToast, errorToast, showSuccess, showError } = useToast()
+
+const checkinStatus = ref(null)
+const checkinLoading = ref(false)
 
 const tasks = ref([])
 const goals = ref([])
@@ -144,6 +320,10 @@ const loadingTasks = ref(true)
 const loadingGoals = ref(true)
 const errorTasks = ref(null)
 const errorGoals = ref(null)
+
+const dailySummary = ref(null)
+const loadingDaily = ref(true)
+const completingHabitId = ref(null)
 
 const recentTasks = computed(() => tasks.value.slice(0, 5))
 const recentGoals = computed(() => goals.value.slice(0, 5))
@@ -163,6 +343,30 @@ async function fetchTasks() {
   }
 }
 
+async function fetchCheckinStatus() {
+  try {
+    checkinStatus.value = await checkinService.getStatus()
+  } catch (e) {
+    // Non-critical: silently ignore
+  }
+}
+
+async function doCheckin() {
+  checkinLoading.value = true
+  try {
+    const result = await checkinService.checkin()
+    checkinStatus.value = { checked_in: true, streak: result.streak || 0 }
+    await authStore.fetchUser()
+    const coins = result.coins_earned || 0
+    const exp = result.exp_earned || 0
+    showSuccess(`签到成功！获得 ${coins} 金币、${exp} 经验值`)
+  } catch (e) {
+    showError(e.response?.data?.detail || '签到失败，请重试。')
+  } finally {
+    checkinLoading.value = false
+  }
+}
+
 async function fetchGoals() {
   loadingGoals.value = true
   errorGoals.value = null
@@ -175,9 +379,41 @@ async function fetchGoals() {
   }
 }
 
+async function fetchDailySummary() {
+  loadingDaily.value = true
+  try {
+    dailySummary.value = await todoService.getDailySummary()
+  } catch (e) {
+    // Non-critical: silently ignore
+  } finally {
+    loadingDaily.value = false
+  }
+}
+
+async function completeDailyHabit(habitId) {
+  completingHabitId.value = habitId
+  try {
+    await todoService.completeHabit(habitId)
+    showSuccess('习惯完成！')
+    await fetchDailySummary()
+    await authStore.fetchUser()
+  } catch (e) {
+    showError(e.response?.data?.detail || '操作失败，请重试。')
+  } finally {
+    completingHabitId.value = null
+  }
+}
+
+function isOverdue(deadline) {
+  if (!deadline) return false
+  return new Date(deadline) < new Date(new Date().toDateString())
+}
+
 onMounted(() => {
+  fetchCheckinStatus()
   fetchTasks()
   fetchGoals()
+  fetchDailySummary()
 })
 </script>
 
@@ -185,6 +421,134 @@ onMounted(() => {
 .home-page {
   padding: var(--spacing-xl);
   width: 100%;
+}
+
+/* Check-in Card */
+.checkin-card {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-lg) var(--spacing-xl);
+  margin-bottom: var(--spacing-xl);
+  box-shadow: var(--shadow-lg);
+  transition: all 0.3s ease;
+}
+
+.checkin-card--done {
+  background: linear-gradient(135deg, var(--color-success), #1a9a4a);
+}
+
+.checkin-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.checkin-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-lg);
+}
+
+.checkin-icon-wrap {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.checkin-icon-wrap svg {
+  width: 28px;
+  height: 28px;
+  color: #fff;
+}
+
+.checkin-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.checkin-title {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+}
+
+.checkin-streak {
+  font-size: var(--font-size-sm);
+  color: rgba(255, 255, 255, 0.85);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.checkin-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: #fff;
+}
+
+.checkin-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-xl);
+  font-size: var(--font-size-base);
+  font-weight: 700;
+  color: var(--color-primary);
+  background: #fff;
+  border: none;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  font-family: var(--font-family);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: var(--shadow-md);
+}
+
+.checkin-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-lg);
+}
+
+.checkin-btn:active {
+  transform: scale(0.95);
+}
+
+.checkin-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.checkin-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.checkin-done-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-xl);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-lg);
+}
+
+.checkin-done-badge svg {
+  width: 20px;
+  height: 20px;
 }
 
 .welcome-card {
@@ -511,6 +875,205 @@ onMounted(() => {
   font-weight: 600;
 }
 
+/* Daily Task Card */
+.daily-card {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: var(--spacing-xl);
+}
+
+.daily-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.daily-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.daily-header-left svg {
+  width: 18px;
+  height: 18px;
+  color: var(--color-primary);
+}
+
+.daily-title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.daily-overview {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+.daily-body {
+  padding: var(--spacing-md) var(--spacing-lg);
+}
+
+.daily-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.daily-group-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.daily-group-title svg {
+  width: 16px;
+  height: 16px;
+  color: var(--color-primary);
+}
+
+.daily-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.daily-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-md);
+  transition: background 0.15s ease;
+}
+
+.daily-item:hover {
+  background: var(--color-bg-tertiary);
+}
+
+.daily-item--done {
+  opacity: 0.6;
+}
+
+.daily-item--link {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.daily-check-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+  transition: color 0.15s ease;
+}
+
+.daily-check-btn:hover:not(:disabled) {
+  color: var(--color-primary);
+}
+
+.daily-check-btn--done {
+  color: var(--color-success);
+  cursor: default;
+}
+
+.daily-check-btn:disabled {
+  opacity: 0.5;
+}
+
+.daily-check-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.daily-item-title {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.daily-item-title--done {
+  text-decoration: line-through;
+  color: var(--color-text-tertiary);
+}
+
+.daily-streak {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--font-size-xs);
+  color: var(--color-warning);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.daily-streak svg {
+  width: 14px;
+  height: 14px;
+}
+
+.daily-overdue {
+  font-size: var(--font-size-xs);
+  padding: 1px 6px;
+  background: rgba(255, 107, 107, 0.15);
+  color: var(--color-error);
+  border-radius: var(--radius-full);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.daily-goal-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 120px;
+  flex-shrink: 0;
+}
+
+.daily-goal-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.daily-goal-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+  border-radius: var(--radius-full);
+  transition: width 0.5s ease;
+}
+
+.daily-goal-pct {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  font-weight: 600;
+  min-width: 32px;
+  text-align: right;
+}
+
 /* Responsive */
 @media (max-width: 1199px) {
   .home-page {
@@ -564,5 +1127,48 @@ onMounted(() => {
   background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
   border-radius: var(--radius-full);
   transition: width 0.5s ease;
+}
+
+/* Toast notifications */
+.toast {
+  position: fixed;
+  top: var(--spacing-lg);
+  right: var(--spacing-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  box-shadow: var(--shadow-xl);
+  z-index: 2000;
+}
+
+.toast svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.toast--success {
+  background: var(--color-success);
+  color: #fff;
+}
+
+.toast--error {
+  background: var(--color-error);
+  color: #fff;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(30px);
 }
 </style>

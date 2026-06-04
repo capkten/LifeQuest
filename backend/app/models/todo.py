@@ -64,7 +64,17 @@ class Task(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
+    project_id = Column(Uuid, ForeignKey("projects.id"), nullable=True, index=True)
+    phase_id = Column(Uuid, ForeignKey("project_phases.id"), nullable=True, index=True)
+    milestone_id = Column(Uuid, ForeignKey("project_milestones.id"), nullable=True, index=True)
+    start_date = Column(DateTime, nullable=True)
+    priority = Column(String(10), default="medium")
+    sort_order = Column(Integer, default=0)
+
     subtasks = relationship("Subtask", back_populates="task", cascade="all, delete-orphan")
+    project = relationship("Project", back_populates="tasks")
+    phase = relationship("ProjectPhase", back_populates="tasks")
+    milestone = relationship("ProjectMilestone", back_populates="tasks")
 
 
 class Goal(Base):

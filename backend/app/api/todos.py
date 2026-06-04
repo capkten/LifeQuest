@@ -1,7 +1,7 @@
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -24,6 +24,17 @@ from app.services.todo import TodoService
 from app.api.auth import get_current_user
 
 router = APIRouter(prefix="/api/todos", tags=["todos"])
+
+
+# --- Daily summary endpoint ---
+
+@router.get("/daily", response_model=dict)
+def get_daily_summary(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = TodoService(db)
+    return service.get_daily_summary(current_user.id)
 
 
 # --- Habit endpoints ---
@@ -106,11 +117,24 @@ def create_task(
 
 @router.get("/tasks", response_model=List[TaskResponse])
 def get_tasks(
+    project_id: Optional[UUID] = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
-    return service.get_tasks(current_user.id)
+    if project_id:
+        tasks = service.get_tasks_by_project(project_id, current_user.id)
+    else:
+        tasks = service.get_tasks(current_user.id)
+    # Populate project_name and project_color from relationship
+    result = []
+    for t in tasks:
+        resp = TaskResponse.model_validate(t)
+        if t.project:
+            resp.project_name = t.project.name
+            resp.project_color = t.project.color
+        result.append(resp)
+    return result
 
 
 @router.get("/tasks/{task_id}", response_model=TaskResponse)

@@ -75,6 +75,21 @@
         </svg>
         <span v-if="!isCollapsed">待办</span>
       </router-link>
+      <router-link to="/projects" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '项目' : ''">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        </svg>
+        <span v-if="!isCollapsed">项目</span>
+      </router-link>
+      <router-link to="/calendar" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '日历' : ''">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+        <span v-if="!isCollapsed">日历</span>
+      </router-link>
       <router-link to="/notes" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '笔记' : ''">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -101,6 +116,22 @@
           <line x1="10" y1="14" x2="14" y2="14" />
         </svg>
         <span v-if="!isCollapsed">背包</span>
+      </router-link>
+      <router-link to="/finance" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '记账' : ''">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="2" y="4" width="20" height="16" rx="2" />
+          <path d="M2 10h20" />
+          <circle cx="12" cy="15" r="2" />
+        </svg>
+        <span v-if="!isCollapsed">记账</span>
+      </router-link>
+      <router-link to="/stats" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '统计' : ''">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M18 20V10" />
+          <path d="M12 20V4" />
+          <path d="M6 20v-6" />
+        </svg>
+        <span v-if="!isCollapsed">统计</span>
       </router-link>
       <router-link to="/profile" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '个人' : ''">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -140,7 +171,7 @@ const isHomeActive = computed(() => route.path === '/')
 <style scoped>
 .sidebar {
   width: var(--sidebar-width);
-  min-height: 100vh;
+  height: 100vh;
   background: var(--color-bg-secondary);
   border-right: 1px solid var(--color-border);
   display: flex;
@@ -306,6 +337,14 @@ const isHomeActive = computed(() => route.path === '/')
   flex-direction: column;
   gap: var(--spacing-xs);
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .nav-item {

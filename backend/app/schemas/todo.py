@@ -54,6 +54,11 @@ class TaskCreate(BaseModel):
     coins_reward: int = 10
     exp_reward: int = 5
     deadline: Optional[datetime] = None
+    project_id: Optional[UUID] = None
+    phase_id: Optional[UUID] = None
+    milestone_id: Optional[UUID] = None
+    start_date: Optional[datetime] = None
+    priority: str = "medium"
 
 
 class TaskUpdate(BaseModel):
@@ -64,6 +69,11 @@ class TaskUpdate(BaseModel):
     coins_reward: Optional[int] = None
     exp_reward: Optional[int] = None
     deadline: Optional[datetime] = None
+    project_id: Optional[UUID] = None
+    phase_id: Optional[UUID] = None
+    milestone_id: Optional[UUID] = None
+    start_date: Optional[datetime] = None
+    priority: Optional[str] = None
 
 
 class TaskResponse(BaseModel):
@@ -81,6 +91,14 @@ class TaskResponse(BaseModel):
     completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+    project_id: Optional[UUID] = None
+    phase_id: Optional[UUID] = None
+    milestone_id: Optional[UUID] = None
+    start_date: Optional[datetime] = None
+    priority: str = "medium"
+    sort_order: int = 0
+    project_name: Optional[str] = None
+    project_color: Optional[str] = None
 
 
 # Goal schemas

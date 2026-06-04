@@ -295,14 +295,24 @@ async def upload_image(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
 ):
+    ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
+    MAX_SIZE = 10 * 1024 * 1024  # 10MB
+
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
 
-    file_ext = file.filename.split(".")[-1] if file.filename and "." in file.filename else "png"
+    file_ext = file.filename.split(".")[-1].lower() if file.filename and "." in file.filename else "png"
+    if file_ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Allowed formats: {', '.join(ALLOWED_EXTENSIONS)}")
+
+    content = await file.read()
+    if len(content) > MAX_SIZE:
+        raise HTTPException(status_code=400, detail="File size must be under 10MB")
+
     filename = f"{uuid.uuid4()}.{file_ext}"
     file_path = UPLOAD_DIR / filename
 
     with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        buffer.write(content)
 
     return {"url": f"/uploads/notes/{filename}"}

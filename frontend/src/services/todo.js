@@ -2,11 +2,21 @@ import api from './api'
 
 export const todoService = {
   /**
+   * Get daily summary (habits due today, due tasks, active goals)
+   * @returns {Promise<Object>} Daily summary
+   */
+  async getDailySummary() {
+    const response = await api.get('/todos/daily')
+    return response.data
+  },
+
+  /**
    * Get all tasks for current user
+   * @param {Object} [params] - Optional query params (e.g. { project_id })
    * @returns {Promise<Array>} List of tasks
    */
-  async getTasks() {
-    const response = await api.get('/todos/tasks')
+  async getTasks(params) {
+    const response = await api.get('/todos/tasks', { params })
     return response.data
   },
 

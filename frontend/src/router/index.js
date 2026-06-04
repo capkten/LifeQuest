@@ -78,6 +78,56 @@ const routes = [
         path: 'profile/edit',
         name: 'EditProfile',
         component: () => import('../views/EditProfile.vue')
+      },
+      {
+        path: 'coins/history',
+        name: 'CoinHistory',
+        component: () => import('../views/CoinHistory.vue')
+      },
+      {
+        path: 'projects',
+        name: 'Projects',
+        component: () => import('../views/Projects.vue')
+      },
+      {
+        path: 'projects/:id',
+        name: 'ProjectDetail',
+        component: () => import('../views/ProjectDetail.vue')
+      },
+      {
+        path: 'calendar',
+        name: 'Calendar',
+        component: () => import('../views/Calendar.vue')
+      },
+      {
+        path: 'stats',
+        name: 'Stats',
+        component: () => import('../views/Stats.vue')
+      },
+      {
+        path: 'finance',
+        name: 'Finance',
+        component: () => import('../views/Finance.vue')
+      },
+      {
+        path: 'finance/accounts',
+        name: 'FinanceAccounts',
+        component: () => import('../views/FinanceAccounts.vue')
+      },
+      {
+        path: 'finance/transactions',
+        name: 'FinanceTransactions',
+        component: () => import('../views/FinanceTransactions.vue')
+      },
+      {
+        path: 'finance/budgets',
+        name: 'FinanceBudgets',
+        component: () => import('../views/FinanceBudgets.vue')
+      },
+      {
+        path: 'finance/debts',
+        name: 'FinanceDebts',
+        component: () => import('../views/FinanceDebts.vue')
       }
     ]
   },

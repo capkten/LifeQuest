@@ -5,7 +5,7 @@ export const authService = {
    * Login user with username and password
    * @param {string} username
    * @param {string} password
-   * @returns {Promise<Object>} Response with access_token
+   * @returns {Promise<Object>} Response with access_token and refresh_token
    */
   async login(username, password) {
     const formData = new FormData()
@@ -17,6 +17,16 @@ export const authService = {
         'Content-Type': 'multipart/form-data'
       }
     })
+    return response.data
+  },
+
+  /**
+   * Refresh access token using refresh token
+   * @param {string} refreshToken
+   * @returns {Promise<Object>} Response with new access_token and refresh_token
+   */
+  async refreshToken(refreshToken) {
+    const response = await api.post('/auth/refresh', { refresh_token: refreshToken })
     return response.data
   },
 

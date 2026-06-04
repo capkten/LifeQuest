@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -5,7 +7,7 @@ from sqlalchemy import inspect, text
 
 from app.database import engine, Base, SessionLocal
 from app.services.note import NoteService
-from app.api import auth, users, notes, todos, shop, backpack, achievements
+from app.api import auth, users, notes, todos, shop, backpack, achievements, checkin, titles, coins, calendar, stats, finance, projects
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -33,6 +35,20 @@ def _migrate_columns():
                 "UPDATE users SET total_coins_earned = coins WHERE total_coins_earned = 0"
             ))
 
+        # project management columns on tasks table
+        task_cols = {c["name"] for c in inspector.get_columns("tasks")}
+        new_task_cols = {
+            "project_id": "VARCHAR(36)",
+            "phase_id": "VARCHAR(36)",
+            "milestone_id": "VARCHAR(36)",
+            "start_date": "DATETIME",
+            "priority": "VARCHAR(10) NOT NULL DEFAULT 'medium'",
+            "sort_order": "INTEGER NOT NULL DEFAULT 0",
+        }
+        for col_name, col_def in new_task_cols.items():
+            if col_name not in task_cols:
+                conn.execute(text(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_def}"))
+
 
 @app.on_event("startup")
 def startup_event():
@@ -53,6 +69,13 @@ def startup_event():
 
         service = AchievementService(db)
         service.seed_achievements()
+        # Seed default titles
+        from app.services.title import TitleService
+        title_service = TitleService(db)
+        title_service.seed_titles()
+        # Seed default finance categories
+        from app.services.finance import FinanceService
+        FinanceService.seed_categories(db)
     finally:
         db.close()
 
@@ -61,9 +84,10 @@ def startup_event():
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # CORS middleware
+cors_origins = os.environ.get("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[o.strip() for o in cors_origins],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -77,6 +101,13 @@ app.include_router(todos.router)
 app.include_router(shop.router)
 app.include_router(backpack.router)
 app.include_router(achievements.router)
+app.include_router(checkin.router)
+app.include_router(titles.router)
+app.include_router(coins.router)
+app.include_router(calendar.router)
+app.include_router(stats.router)
+app.include_router(finance.router)
+app.include_router(projects.router)
 
 
 @app.get("/")

@@ -40,18 +40,30 @@ async def upload_avatar(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
+    MAX_SIZE = 5 * 1024 * 1024  # 5MB
+
     # Validate file type
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
 
+    # Validate extension
+    file_ext = file.filename.split(".")[-1].lower() if "." in file.filename else ""
+    if file_ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Allowed formats: {', '.join(ALLOWED_EXTENSIONS)}")
+
+    # Validate file size
+    content = await file.read()
+    if len(content) > MAX_SIZE:
+        raise HTTPException(status_code=400, detail="File size must be under 5MB")
+
     # Generate unique filename
-    file_ext = file.filename.split(".")[-1]
     filename = f"{current_user.id}.{file_ext}"
     file_path = UPLOAD_DIR / filename
 
     # Save file
     with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        buffer.write(content)
 
     # Update user avatar URL
     service = UserService(db)

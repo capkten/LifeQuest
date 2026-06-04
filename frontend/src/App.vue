@@ -4,48 +4,49 @@
 
 <style>
 :root {
-  /* Primary Colors */
-  --color-primary: #6C63FF;
-  --color-primary-light: #8B85FF;
-  --color-primary-dark: #4A42E6;
+  /* Primary Colors — Sky Blue (adventure, open sky) */
+  --color-primary: #0EA5E9;
+  --color-primary-light: #38BDF8;
+  --color-primary-dark: #0284C7;
 
-  /* Secondary Colors */
-  --color-secondary: #00D9FF;
-  --color-secondary-light: #33E1FF;
-  --color-secondary-dark: #00B8D9;
+  /* Secondary Colors — Deep Blue (depth, trust) */
+  --color-secondary: #6366F1;
+  --color-secondary-light: #818CF8;
+  --color-secondary-dark: #4F46E5;
 
-  /* Accent Colors */
-  --color-accent: #FF6B6B;
-  --color-accent-light: #FF8E8E;
-  --color-accent-dark: #E64D4D;
+  /* Accent Colors — Emerald (life, growth, reward) */
+  --color-accent: #059669;
+  --color-accent-light: #34D399;
+  --color-accent-dark: #047857;
 
   /* Success Colors */
-  --color-success: #51CF66;
-  --color-success-light: #8CE99A;
-  --color-success-dark: #40C057;
+  --color-success: #22C55E;
+  --color-success-light: #86EFAC;
+  --color-success-dark: #16A34A;
 
-  /* Warning Colors */
-  --color-warning: #FFD93D;
-  --color-warning-light: #FFE066;
-  --color-warning-dark: #FCC419;
+  /* Warning Colors — Gold (coins, treasure) */
+  --color-warning: #F59E0B;
+  --color-warning-light: #FCD34D;
+  --color-warning-dark: #D97706;
 
   /* Error Colors */
-  --color-error: #FF6B6B;
-  --color-error-light: #FF8E8E;
-  --color-error-dark: #E64D4D;
+  --color-error: #EF4444;
+  --color-error-light: #FCA5A5;
+  --color-error-dark: #DC2626;
 
-  /* Neutral Colors */
-  --color-bg: #0F0E17;
-  --color-bg-secondary: #1A1932;
-  --color-bg-tertiary: #232136;
-  --color-text: #FFFFFE;
-  --color-text-secondary: #A7A9BE;
-  --color-text-tertiary: #6B6D7B;
-  --color-border: #2E2F3E;
-  --color-card: #1A1932;
+  /* Neutral Colors — Light theme */
+  --color-bg: #F0F9FF;
+  --color-bg-secondary: #FFFFFF;
+  --color-bg-tertiary: #E0F2FE;
+  --color-text: #0C4A6E;
+  --color-text-secondary: #64748B;
+  --color-text-tertiary: #94A3B8;
+  --color-border: #BAE6FD;
+  --color-card: #FFFFFF;
 
   /* Typography */
   --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-family-display: 'Cinzel', 'Cormorant Garamond', serif;
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
   --font-size-base: 1rem;
@@ -75,11 +76,11 @@
   --bottom-nav-height: 60px;
   --content-max-width: 1200px;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.3);
-  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.3);
+  /* Shadows — lighter for light theme */
+  --shadow-sm: 0 1px 3px rgba(14, 165, 233, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 6px rgba(14, 165, 233, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px rgba(14, 165, 233, 0.08), 0 4px 6px rgba(0, 0, 0, 0.04);
+  --shadow-xl: 0 20px 25px rgba(14, 165, 233, 0.1), 0 8px 10px rgba(0, 0, 0, 0.04);
 }
 
 * {
@@ -107,7 +108,7 @@ a:hover {
   color: var(--color-primary-light);
 }
 
-/* Element Plus Dark Theme Overrides */
+/* Element Plus Light Theme Overrides */
 .el-button--primary {
   --el-button-bg-color: var(--color-primary);
   --el-button-border-color: var(--color-primary);

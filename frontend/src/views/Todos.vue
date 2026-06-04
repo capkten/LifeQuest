@@ -41,6 +41,15 @@
       </button>
     </div>
 
+    <!-- Project filter (only for tasks tab) -->
+    <div v-if="activeTab === 'tasks' && projects.length > 0" class="project-filter">
+      <label class="project-filter-label" for="project-filter-select">按项目筛选</label>
+      <select id="project-filter-select" v-model="selectedProjectId" class="form-select project-filter-select">
+        <option value="">全部项目</option>
+        <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+      </select>
+    </div>
+
     <div v-if="loading" class="loading-state">
       <span class="loading-spinner"></span>
     </div>
@@ -170,6 +179,9 @@
               <div class="todo-card-info">
                 <h3 class="todo-card-title" :class="{ 'todo-card-title--done': task.status === 'completed' }">{{ task.title }}</h3>
                 <p v-if="task.description" class="todo-card-desc">{{ task.description }}</p>
+                <span v-if="task.project_name" class="task-project-tag" :style="{ borderColor: task.project_color || '#0EA5E9' }">
+                  {{ task.project_name }}
+                </span>
               </div>
             </div>
             <div class="todo-card-actions">
@@ -590,6 +602,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { todoService } from '../services/todo'
+import { projectService } from '../services/project'
 import { useAuthStore } from '../stores/auth'
 
 const authStore = useAuthStore()
@@ -626,6 +639,10 @@ const newSubtaskTitle = ref('')
 const creatingSubtask = ref(false)
 const completingSubtaskId = ref(null)
 const deletingSubtaskId = ref(null)
+
+// Project filter state
+const projects = ref([])
+const selectedProjectId = ref('')
 
 const tabs = [
   { id: 'habits', label: '日常习惯' },
@@ -705,6 +722,11 @@ watch(activeTab, () => {
   form.value = { ...defaultForms[activeTab.value] }
 })
 
+// Refetch tasks when project filter changes
+watch(selectedProjectId, () => {
+  fetchTasks()
+})
+
 // Auto-focus title input when dialog opens
 watch(showCreateDialog, (open) => {
   if (open) {
@@ -765,7 +787,8 @@ async function fetchHabits() {
 }
 
 async function fetchTasks() {
-  tasks.value = await todoService.getTasks()
+  const params = selectedProjectId.value ? { project_id: selectedProjectId.value } : undefined
+  tasks.value = await todoService.getTasks(params)
 }
 
 async function fetchGoals() {
@@ -776,11 +799,20 @@ async function fetchAll() {
   loading.value = true
   error.value = null
   try {
-    await Promise.all([fetchHabits(), fetchTasks(), fetchGoals()])
+    await Promise.all([fetchHabits(), fetchTasks(), fetchGoals(), fetchProjects()])
   } catch (e) {
     error.value = '加载数据失败，请重试。'
   } finally {
     loading.value = false
+  }
+}
+
+async function fetchProjects() {
+  try {
+    projects.value = await projectService.getProjects()
+  } catch (e) {
+    // Silently fail - project filter is optional
+    projects.value = []
   }
 }
 
@@ -2115,6 +2147,38 @@ onMounted(() => {
 .btn-danger:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Project Filter */
+.project-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.project-filter-label {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.project-filter-select {
+  max-width: 240px;
+}
+
+/* Project Tag */
+.task-project-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-tertiary);
+  margin-top: var(--spacing-xs);
 }
 
 /* Responsive */

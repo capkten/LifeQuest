@@ -9,11 +9,15 @@
         </svg>
       </div>
       <div class="profile-info">
-        <h2 class="profile-username">{{ user?.username || '冒险者' }}</h2>
+        <h2 class="profile-username">
+          {{ user?.username || '冒险者' }}
+          <span v-if="activeTitle" class="profile-active-title">{{ activeTitle.name }}</span>
+        </h2>
         <span class="profile-title">{{ user?.title || '冒险者' }}</span>
         <span class="profile-email">{{ user?.email || '' }}</span>
       </div>
       <div class="profile-actions">
+        <button class="edit-profile-btn" @click="showTitleModal = true">更换称号</button>
         <button class="edit-profile-btn" @click="goToEditProfile">编辑资料</button>
         <div class="profile-level-badge">
           <span class="level-badge-number">{{ user?.level || 1 }}</span>
@@ -179,6 +183,81 @@
         <div class="achievements-loading">加载中...</div>
       </div>
     </div>
+
+    <!-- Title Change Modal -->
+    <Teleport to="body">
+      <div v-if="showTitleModal" class="dialog-overlay" @click.self="showTitleModal = false">
+        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="title-dialog-title">
+          <div class="dialog-header">
+            <h3 id="title-dialog-title" class="dialog-title">更换称号</h3>
+            <button class="dialog-close" @click="showTitleModal = false" aria-label="Close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+          <div class="dialog-body">
+            <div v-if="titlesLoading" class="titles-loading">加载中...</div>
+            <div v-else class="titles-list">
+              <div
+                v-for="title in allTitles"
+                :key="title.id"
+                class="title-item"
+                :class="{
+                  'title-item--active': activeTitle?.id === title.id,
+                  'title-item--locked': !isUnlocked(title.id)
+                }"
+                @click="isUnlocked(title.id) && activateTitle(title)"
+              >
+                <div class="title-item-icon">
+                  <svg v-if="isUnlocked(title.id)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="12" cy="8" r="7" />
+                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" />
+                  </svg>
+                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </div>
+                <div class="title-item-info">
+                  <span class="title-item-name">{{ title.name }}</span>
+                  <span class="title-item-desc">
+                    {{ isUnlocked(title.id) ? (title.description || '') : (title.unlock_condition || '未解锁') }}
+                  </span>
+                </div>
+                <div v-if="activeTitle?.id === title.id" class="title-item-active-mark">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                </div>
+              </div>
+              <div v-if="allTitles.length === 0" class="titles-empty">暂无称号数据</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Toast notifications -->
+    <Transition name="toast">
+      <div v-if="successToast" class="toast toast--success">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M20 6L9 17l-5-5" />
+        </svg>
+        {{ successToast }}
+      </div>
+    </Transition>
+    <Transition name="toast">
+      <div v-if="errorToast" class="toast toast--error">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="15" y1="9" x2="9" y2="15" />
+          <line x1="9" y1="9" x2="15" y2="15" />
+        </svg>
+        {{ errorToast }}
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -188,14 +267,25 @@ import { useRouter } from 'vue-router'
 import { useUserStats } from '../composables/useUserStats'
 import { achievementService } from '../services/achievement'
 import { todoService } from '../services/todo'
+import { titleService } from '../services/title'
+import { useToast } from '../composables/useToast'
+import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const { user, requiredExp, expPercent } = useUserStats()
+const { successToast, errorToast, showSuccess, showError } = useToast()
 
 const stats = reactive({
   totalTasksCompleted: 0,
   maxHabitStreak: 0
 })
+
+const allTitles = ref([])
+const unlockedTitleIds = ref(new Set())
+const activeTitle = ref(null)
+const titlesLoading = ref(false)
+const showTitleModal = ref(false)
 
 const allAchievements = ref([])
 const unlockedIds = ref(new Set())
@@ -217,6 +307,7 @@ function formatDate(dateStr) {
 }
 
 onMounted(async () => {
+  fetchTitles()
   try {
     const [all, userAchs, tasks, habits] = await Promise.all([
       achievementService.getAchievements(),
@@ -252,6 +343,49 @@ onMounted(async () => {
     achievementsLoading.value = false
   }
 })
+
+function isUnlocked(titleId) {
+  return unlockedTitleIds.value.has(titleId)
+}
+
+async function activateTitle(title) {
+  try {
+    await titleService.activateTitle(title.id)
+    activeTitle.value = title
+    await authStore.fetchUser()
+    showSuccess(`称号已更换为「${title.name}」`)
+    showTitleModal.value = false
+  } catch (e) {
+    showError(e.response?.data?.detail || '更换称号失败，请重试。')
+  }
+}
+
+async function fetchTitles() {
+  titlesLoading.value = true
+  try {
+    const [all, my] = await Promise.all([
+      titleService.getAllTitles(),
+      titleService.getMyTitles()
+    ])
+    allTitles.value = all || []
+    const ids = new Set()
+    for (const t of (my || [])) {
+      const tid = t.title_id || t.title?.id || t.id
+      if (tid) ids.add(tid)
+      if (t.is_active || t.active) {
+        activeTitle.value = allTitles.value.find(at => at.id === tid) || t
+      }
+    }
+    unlockedTitleIds.value = ids
+    if (!activeTitle.value && user.value?.title) {
+      activeTitle.value = allTitles.value.find(t => t.name === user.value.title) || null
+    }
+  } catch (e) {
+    // Non-critical: silently ignore
+  } finally {
+    titlesLoading.value = false
+  }
+}
 
 function goToEditProfile() {
   router.push({ name: 'EditProfile' })
@@ -669,6 +803,233 @@ function goToEditProfile() {
 
   .stats-section .stats-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Title display */
+.profile-active-title {
+  display: inline-block;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  vertical-align: middle;
+  margin-left: var(--spacing-sm);
+}
+
+/* Title Modal */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--spacing-lg);
+}
+
+.dialog {
+  width: 100%;
+  max-width: 500px;
+  max-height: 80vh;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.dialog-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.dialog-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  transition: background 0.15s ease;
+}
+
+.dialog-close:hover {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+}
+
+.dialog-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.dialog-body {
+  padding: var(--spacing-lg);
+  overflow-y: auto;
+}
+
+.titles-loading {
+  text-align: center;
+  padding: var(--spacing-xl);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+.titles-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.titles-empty {
+  text-align: center;
+  padding: var(--spacing-xl);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+.title-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.title-item:hover:not(.title-item--locked) {
+  background: var(--color-bg-tertiary);
+}
+
+.title-item--locked {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.title-item--active {
+  background: rgba(108, 99, 255, 0.1);
+  border: 1px solid var(--color-primary);
+}
+
+.title-item-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--color-bg-tertiary);
+}
+
+.title-item-icon svg {
+  width: 20px;
+  height: 20px;
+  color: var(--color-primary);
+}
+
+.title-item--locked .title-item-icon svg {
+  color: var(--color-text-tertiary);
+}
+
+.title-item-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.title-item-name {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.title-item-desc {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+}
+
+.title-item-active-mark {
+  flex-shrink: 0;
+}
+
+.title-item-active-mark svg {
+  width: 22px;
+  height: 22px;
+  color: var(--color-primary);
+}
+
+/* Toast notifications */
+.toast {
+  position: fixed;
+  top: var(--spacing-lg);
+  right: var(--spacing-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  box-shadow: var(--shadow-xl);
+  z-index: 2000;
+}
+
+.toast svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.toast--success {
+  background: var(--color-success);
+  color: #fff;
+}
+
+.toast--error {
+  background: var(--color-error);
+  color: #fff;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(30px);
+}
+
+/* Responsive for profile-actions */
+@media (max-width: 767px) {
+  .profile-actions {
+    flex-direction: row;
+    gap: var(--spacing-sm);
   }
 }
 </style>
