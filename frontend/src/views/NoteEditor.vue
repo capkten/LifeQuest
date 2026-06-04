@@ -91,10 +91,10 @@ async function loadNote() {
   loading.value = true
   try {
     const note = await noteService.getNote(noteId.value)
-    noteTitle.value = note.title || ''
+    noteTitle.value = note.name || ''
     noteContent.value = note.content || ''
-    if (note.folder_id) {
-      folderId.value = note.folder_id
+    if (note.parent_id) {
+      folderId.value = note.parent_id
     }
   } catch (e) {
     console.error('Failed to load note:', e)
@@ -155,7 +155,7 @@ onMounted(() => {
 .note-editor-page {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: calc(100vh - 64px);
   width: 100%;
 }
 
@@ -273,6 +273,84 @@ onMounted(() => {
   box-shadow: none;
   border: none;
   border-radius: 0;
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text);
+}
+
+.editor-wrapper :deep(.v-md-editor__toolbar) {
+  background-color: var(--color-bg-tertiary);
+  border-bottom-color: var(--color-border);
+}
+
+.editor-wrapper :deep(.v-md-editor__toolbar-item) {
+  color: var(--color-text-secondary);
+}
+
+.editor-wrapper :deep(.v-md-editor__toolbar-item:hover) {
+  background-color: var(--color-bg-secondary);
+}
+
+.editor-wrapper :deep(.v-md-textarea-editor textarea) {
+  color: var(--color-text);
+  background-color: var(--color-bg-secondary);
+}
+
+.editor-wrapper :deep(.v-md-editor__preview-wrapper) {
+  border-left-color: var(--color-border);
+}
+
+.editor-wrapper :deep(.github-markdown-body) {
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text);
+}
+
+.editor-wrapper :deep(.github-markdown-body a) {
+  color: var(--color-primary);
+}
+
+.editor-wrapper :deep(.github-markdown-body code) {
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text);
+}
+
+.editor-wrapper :deep(.github-markdown-body pre) {
+  background-color: var(--color-bg-tertiary);
+}
+
+.editor-wrapper :deep(.github-markdown-body pre code) {
+  color: var(--color-text);
+}
+
+.editor-wrapper :deep(.github-markdown-body blockquote) {
+  color: var(--color-text-secondary);
+  border-left-color: var(--color-border);
+}
+
+.editor-wrapper :deep(.github-markdown-body h1),
+.editor-wrapper :deep(.github-markdown-body h2) {
+  border-bottom-color: var(--color-border);
+}
+
+.editor-wrapper :deep(.github-markdown-body hr) {
+  background-color: var(--color-border);
+}
+
+.editor-wrapper :deep(.github-markdown-body table th),
+.editor-wrapper :deep(.github-markdown-body table td) {
+  border-color: var(--color-border);
+}
+
+.editor-wrapper :deep(.github-markdown-body table tr) {
+  background-color: var(--color-bg-secondary);
+  border-top-color: var(--color-border);
+}
+
+.editor-wrapper :deep(.github-markdown-body table tr:nth-child(2n)) {
+  background-color: var(--color-bg-tertiary);
+}
+
+.editor-wrapper :deep(.v-md-editor--editable .v-md-editor__editor-wrapper) {
+  border-right-color: var(--color-border);
 }
 
 .loading-state {
@@ -335,6 +413,10 @@ onMounted(() => {
 }
 
 @media (max-width: 767px) {
+  .note-editor-page {
+    height: calc(100vh - 64px - 60px);
+  }
+
   .editor-header {
     padding: var(--spacing-sm) var(--spacing-md);
   }
