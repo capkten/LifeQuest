@@ -23,3 +23,4 @@ design-system/
 # Runtime data
 backend/notes_data/
 backend/uploads/
+data/
