@@ -42,6 +42,7 @@
           v-model="noteContent"
           height="100%"
           placeholder="请输入笔记内容（支持 Markdown）..."
+          @upload-image="handleUploadImage"
         />
       </div>
     </div>
@@ -78,6 +79,18 @@ const toast = ref({ show: false, message: '', type: 'success' })
 const isEditing = computed(() => !!noteId.value)
 
 let toastTimer = null
+
+async function handleUploadImage(event, insertCallback, files) {
+  const file = files[0]
+  if (!file) return
+  try {
+    const url = await noteService.uploadImage(file)
+    insertCallback({ src: url })
+  } catch (e) {
+    console.error('Failed to upload image:', e)
+    showToast('图片上传失败', 'error')
+  }
+}
 
 function showToast(message, type = 'success') {
   if (toastTimer) clearTimeout(toastTimer)
