@@ -358,6 +358,27 @@ onMounted(() => {
   border-right-color: var(--color-border);
 }
 
+.editor-wrapper :deep(.v-md-editor__left-area) {
+  border-right-color: var(--color-border);
+}
+
+.editor-wrapper :deep(.v-md-editor__left-area-title) {
+  color: var(--color-text);
+  border-bottom-color: var(--color-border);
+}
+
+.editor-wrapper :deep(.v-md-editor__left-area-title)::after {
+  border-bottom-color: var(--color-border);
+}
+
+.editor-wrapper :deep(.v-md-editor__toc-nav-item) {
+  color: var(--color-text-secondary);
+}
+
+.editor-wrapper :deep(.v-md-editor__toc-nav-item:hover) {
+  color: var(--color-primary);
+}
+
 .loading-state {
   display: flex;
   flex-direction: column;
