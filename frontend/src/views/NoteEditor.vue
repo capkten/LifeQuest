@@ -86,7 +86,7 @@ async function handleUploadImage(event, insertCallback, files) {
   if (!file) return
   try {
     const url = await noteService.uploadImage(file)
-    insertCallback({ src: url })
+    insertCallback({ url })
   } catch (e) {
     console.error('Failed to upload image:', e)
     showToast('图片上传失败', 'error')
