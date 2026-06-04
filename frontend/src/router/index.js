@@ -35,6 +35,11 @@ const routes = [
         component: () => import('../views/NotebookFileManage.vue')
       },
       {
+        path: 'notes/new/:notebookId',
+        name: 'NewNote',
+        component: () => import('../views/NoteEditor.vue')
+      },
+      {
         path: 'notes/edit/:id',
         name: 'NoteEditor',
         component: () => import('../views/NoteEditor.vue')

@@ -71,6 +71,7 @@ const loading = ref(false)
 const saving = ref(false)
 const noteId = ref(null)
 const folderId = ref(null)
+const notebookId = ref(null)
 
 const toast = ref({ show: false, message: '', type: 'success' })
 
@@ -93,6 +94,7 @@ async function loadNote() {
     const note = await noteService.getNote(noteId.value)
     noteTitle.value = note.name || ''
     noteContent.value = note.content || ''
+    notebookId.value = note.notebook_id
     if (note.parent_id) {
       folderId.value = note.parent_id
     }
@@ -119,8 +121,8 @@ async function saveNote() {
       })
       showToast('保存成功')
     } else {
-      const newNote = await noteService.createNote({
-        folder_id: folderId.value,
+      const newNote = await noteService.createNote(notebookId.value, {
+        parent_id: folderId.value,
         title: noteTitle.value.trim(),
         content: noteContent.value
       })
@@ -145,8 +147,11 @@ onMounted(() => {
   if (route.name === 'NoteEditor' && route.params.id) {
     noteId.value = route.params.id
     loadNote()
-  } else if (route.name === 'NewNote' && route.params.folderId) {
-    folderId.value = route.params.folderId
+  } else if (route.name === 'NewNote' && route.params.notebookId) {
+    notebookId.value = route.params.notebookId
+    if (route.query.parent_id) {
+      folderId.value = route.query.parent_id
+    }
   }
 })
 </script>
