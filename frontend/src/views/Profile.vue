@@ -396,7 +396,7 @@ function goToEditProfile() {
 
 <style scoped>
 .profile-page {
-  padding: var(--spacing-xl);
+  padding: var(--page-padding-y) var(--page-padding-x);
   width: 100%;
 }
 
@@ -406,9 +406,9 @@ function goToEditProfile() {
   gap: var(--spacing-xl);
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  padding: var(--spacing-xl);
-  margin-bottom: var(--spacing-xl);
+  border-radius: var(--surface-radius);
+  padding: var(--surface-padding);
+  margin-bottom: var(--spacing-md);
 }
 
 .profile-avatar {
@@ -516,16 +516,16 @@ function goToEditProfile() {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--spacing-lg);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .stats-section {
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-lg);
-  margin-bottom: var(--spacing-xl);
+  border-radius: var(--surface-radius);
+  padding: var(--surface-padding);
+  margin-bottom: var(--spacing-md);
 }
 
 .stats-section .stats-grid {
@@ -538,8 +538,8 @@ function goToEditProfile() {
   gap: var(--spacing-lg);
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-lg);
+  border-radius: var(--surface-radius-sm);
+  padding: 14px;
   transition: border-color 0.2s ease;
 }
 
@@ -621,9 +621,9 @@ function goToEditProfile() {
 .exp-section {
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-lg);
-  margin-bottom: var(--spacing-xl);
+  border-radius: var(--surface-radius);
+  padding: var(--surface-padding);
+  margin-bottom: var(--spacing-md);
 }
 
 .exp-header {
@@ -669,8 +669,8 @@ function goToEditProfile() {
 .achievements-section {
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-lg);
+  border-radius: var(--surface-radius);
+  padding: var(--surface-padding);
 }
 
 .section-title {
@@ -692,16 +692,16 @@ function goToEditProfile() {
 .achievements-grid {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-md);
+  gap: 10px;
 }
 
 .achievement-card {
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
-  padding: var(--spacing-md);
+  padding: 12px;
   background: var(--color-bg-tertiary);
-  border-radius: var(--radius-lg);
+  border-radius: var(--surface-radius-sm);
   transition: background 0.15s ease;
 }
 
@@ -775,14 +775,20 @@ function goToEditProfile() {
 /* Responsive */
 @media (max-width: 1199px) {
   .profile-page {
-    padding: var(--spacing-lg);
+    padding: var(--page-padding-y) var(--page-padding-x);
     max-width: none;
+  }
+}
+
+@media (min-width: 1200px) {
+  .stats-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 900px) {
   .stats-section .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -796,7 +802,7 @@ function goToEditProfile() {
     align-items: center;
     text-align: center;
     gap: var(--spacing-md);
-    padding: var(--spacing-lg);
+    padding: var(--surface-padding);
   }
 
   .profile-info {
@@ -809,11 +815,11 @@ function goToEditProfile() {
   }
 
   .stats-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .stats-section .stats-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .dialog {
@@ -858,9 +864,8 @@ function goToEditProfile() {
 }
 
 .dialog {
-  width: 100%;
-  max-width: 500px;
-  max-height: 80vh;
+  width: min(100% - 24px, 640px);
+  max-height: min(80vh, 720px);
   background: var(--color-card);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
@@ -924,7 +929,7 @@ function goToEditProfile() {
 .titles-list {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  gap: 10px;
 }
 
 .titles-empty {
