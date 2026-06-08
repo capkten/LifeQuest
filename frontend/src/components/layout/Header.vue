@@ -104,11 +104,11 @@ onUnmounted(() => {
 
 <style scoped>
 .header {
-  height: 64px;
+  height: var(--header-height);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--spacing-xl);
+  padding: 0 var(--page-padding-x);
   background: var(--color-bg-secondary);
   border-bottom: 1px solid var(--color-border);
   position: sticky;
@@ -148,9 +148,10 @@ onUnmounted(() => {
 }
 
 .page-title {
-  font-size: var(--font-size-xl);
+  font-size: var(--font-size-lg);
   font-weight: 600;
   color: var(--color-text);
+  line-height: 1.2;
 }
 
 .header-right {
@@ -162,7 +163,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: 6px 10px;
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: background 0.2s ease;
@@ -284,12 +285,19 @@ onUnmounted(() => {
 
 /* Reduce padding on small screens */
 @media (max-width: 767px) {
-  .header {
-    padding: 0 var(--spacing-md);
+  .header-left {
+    gap: var(--spacing-sm);
   }
 
-  .user-name {
+  .user-name,
+  .chevron {
     display: none;
+  }
+
+  .sidebar-toggle {
+    display: inline-flex;
+    width: 40px;
+    height: 40px;
   }
 }
 </style>

@@ -137,11 +137,13 @@ const pageTitle = computed(() => {
 .app-layout {
   display: flex;
   min-height: 100vh;
+  background: var(--color-bg);
 }
 
 .app-main {
   flex: 1;
   margin-left: var(--sidebar-width);
+  min-width: 0;
   display: flex;
   flex-direction: column;
   transition: margin-left 0.3s ease;
@@ -151,6 +153,7 @@ const pageTitle = computed(() => {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
 }
 
 /* Tablet: sidebar collapsed */
@@ -170,8 +173,13 @@ const pageTitle = computed(() => {
 
 /* Mobile (<768px) */
 @media (max-width: 767px) {
+  .app-layout {
+    display: block;
+  }
+
   .app-main {
     margin-left: 0;
+    min-height: 100vh;
   }
 
   .sidebar-overlay {
@@ -185,20 +193,21 @@ const pageTitle = computed(() => {
   .bottom-nav {
     display: flex;
     position: fixed;
-    bottom: 0;
     left: 0;
     right: 0;
-    height: var(--bottom-nav-height);
-    background: var(--color-bg-secondary);
+    bottom: 0;
+    height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(12px);
     border-top: 1px solid var(--color-border);
     z-index: 80;
     justify-content: space-around;
     align-items: center;
-    padding: 0 var(--spacing-xs);
   }
 
   .app-content {
-    padding-bottom: var(--bottom-nav-height);
+    padding-bottom: calc(var(--bottom-nav-height) + 12px + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -207,14 +216,15 @@ const pageTitle = computed(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  min-width: 44px;
+  min-height: 44px;
+  gap: 4px;
   padding: var(--spacing-xs) var(--spacing-sm);
   color: var(--color-text-tertiary);
   text-decoration: none;
   font-size: 11px;
   font-weight: 500;
   transition: color 0.15s ease;
-  min-width: 48px;
   border-radius: var(--radius-md);
 }
 

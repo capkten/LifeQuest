@@ -49,19 +49,20 @@
   --font-family-display: 'Cinzel', 'Cormorant Garamond', serif;
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
-  --font-size-base: 1rem;
-  --font-size-lg: 1.125rem;
-  --font-size-xl: 1.25rem;
-  --font-size-2xl: 1.5rem;
-  --font-size-3xl: 2rem;
+  --font-size-base: 0.9375rem;
+  --font-size-lg: 1rem;
+  --font-size-xl: 1.125rem;
+  --font-size-2xl: 1.375rem;
+  --font-size-3xl: 1.75rem;
 
   /* Spacing */
-  --spacing-xs: 0.25rem;
-  --spacing-sm: 0.5rem;
+  --spacing-2xs: 0.25rem;
+  --spacing-xs: 0.5rem;
+  --spacing-sm: 0.75rem;
   --spacing-md: 1rem;
-  --spacing-lg: 1.5rem;
-  --spacing-xl: 2rem;
-  --spacing-2xl: 3rem;
+  --spacing-lg: 1.25rem;
+  --spacing-xl: 1.5rem;
+  --spacing-2xl: 2rem;
 
   /* Border Radius */
   --radius-sm: 0.375rem;
@@ -73,8 +74,14 @@
   /* Layout */
   --sidebar-width: 260px;
   --sidebar-collapsed-width: 68px;
-  --bottom-nav-height: 60px;
+  --page-padding-x: 16px;
+  --page-padding-y: 16px;
   --content-max-width: 1200px;
+  --header-height: 56px;
+  --bottom-nav-height: 64px;
+  --surface-radius: 18px;
+  --surface-radius-sm: 14px;
+  --surface-padding: 16px;
 
   /* Shadows — lighter for light theme */
   --shadow-sm: 0 1px 3px rgba(14, 165, 233, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
@@ -99,14 +106,54 @@ body {
   overflow-x: hidden;
 }
 
+#app {
+  min-height: 100vh;
+}
+
+.page-shell {
+  width: min(100%, var(--content-max-width));
+  margin: 0 auto;
+  padding: var(--page-padding-y) var(--page-padding-x);
+}
+
+.surface-card {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--surface-radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.compact-section {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
 /* Mobile font & layout scaling */
 @media (max-width: 767px) {
   :root {
-    --font-size-2xl: 1.25rem;
+    --font-size-2xl: 1.125rem;
   }
 
   .el-button {
     white-space: nowrap;
+  }
+}
+
+@media (min-width: 768px) {
+  :root {
+    --page-padding-x: 24px;
+    --page-padding-y: 20px;
+    --header-height: 60px;
+    --surface-padding: 20px;
+  }
+}
+
+@media (min-width: 1200px) {
+  :root {
+    --page-padding-x: 32px;
+    --page-padding-y: 24px;
+    --header-height: 64px;
+    --surface-padding: 24px;
   }
 }
 
