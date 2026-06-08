@@ -545,6 +545,8 @@ onMounted(() => {
   display: flex;
   align-items: baseline;
   gap: var(--spacing-md);
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .page-title {
@@ -572,6 +574,7 @@ onMounted(() => {
   cursor: pointer;
   font-family: var(--font-family);
   transition: background 0.15s ease;
+  white-space: nowrap;
 }
 
 .btn-create:hover {
@@ -1000,23 +1003,54 @@ onMounted(() => {
     padding: var(--spacing-md);
   }
 
+  .search-input,
+  .form-input,
+  .form-textarea {
+    font-size: 16px;
+  }
+
   .page-header {
     flex-direction: column;
     align-items: flex-start;
     gap: var(--spacing-md);
   }
 
+  .btn-create {
+    width: 100%;
+    justify-content: center;
+  }
+
   .notebook-grid {
     grid-template-columns: 1fr;
+  }
+
+  .notebook-card {
+    padding: var(--spacing-md);
+  }
+
+  .notebook-delete-btn {
+    opacity: 1;
   }
 
   .dialog {
     max-width: 100%;
     margin: var(--spacing-sm);
+    max-height: calc(100vh - (var(--spacing-sm) * 2));
   }
 
   .dialog-body {
     padding: var(--spacing-md);
+  }
+
+  .dialog-actions {
+    flex-direction: column-reverse;
+  }
+
+  .btn-secondary,
+  .btn-primary,
+  .btn-danger {
+    width: 100%;
+    justify-content: center;
   }
 }
 </style>

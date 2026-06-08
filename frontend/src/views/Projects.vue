@@ -358,6 +358,8 @@ onMounted(() => {
   display: flex;
   align-items: baseline;
   gap: var(--spacing-md);
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .page-title {
@@ -385,6 +387,7 @@ onMounted(() => {
   cursor: pointer;
   font-family: var(--font-family);
   transition: background 0.15s ease;
+  white-space: nowrap;
 }
 
 .btn-create:hover {
@@ -934,29 +937,90 @@ onMounted(() => {
     gap: var(--spacing-md);
   }
 
+  .btn-create {
+    width: 100%;
+    justify-content: center;
+  }
+
   .filter-tabs {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     padding-bottom: var(--spacing-xs);
+    gap: 0;
+    overflow: hidden;
   }
 
   .tab-btn {
-    white-space: nowrap;
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
     padding: var(--spacing-xs) var(--spacing-md);
     font-size: var(--font-size-xs);
+    gap: 4px;
+  }
+
+  .tab-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .projects-grid {
     grid-template-columns: 1fr;
   }
 
+  .project-card-body {
+    padding: var(--spacing-md);
+  }
+
+  .project-card-top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+  }
+
+  .status-badge {
+    align-self: flex-start;
+  }
+
   .form-row {
     grid-template-columns: 1fr;
+  }
+
+  .form-input,
+  .form-textarea {
+    font-size: 16px;
   }
 
   .dialog {
     max-width: 100%;
     margin: var(--spacing-sm);
+    max-height: calc(100vh - (var(--spacing-sm) * 2));
+  }
+
+  .dialog-body {
+    padding: var(--spacing-md);
+  }
+
+  .dialog-actions {
+    flex-direction: column-reverse;
+  }
+
+  .btn-secondary,
+  .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .error-toast {
+    top: var(--spacing-md);
+    left: var(--spacing-md);
+    right: var(--spacing-md);
+  }
+
+  .error-toast-content {
+    width: 100%;
+    justify-content: center;
   }
 }
 </style>

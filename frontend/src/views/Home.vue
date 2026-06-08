@@ -441,12 +441,14 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--spacing-md);
 }
 
 .checkin-left {
   display: flex;
   align-items: center;
   gap: var(--spacing-lg);
+  min-width: 0;
 }
 
 .checkin-icon-wrap {
@@ -485,6 +487,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  flex-wrap: wrap;
 }
 
 .checkin-badge {
@@ -676,6 +679,7 @@ onMounted(() => {
   justify-content: space-between;
   padding: var(--spacing-md) var(--spacing-lg);
   border-bottom: 1px solid var(--color-border);
+  gap: var(--spacing-sm);
 }
 
 .section-title {
@@ -955,6 +959,7 @@ onMounted(() => {
   padding: var(--spacing-sm);
   border-radius: var(--radius-md);
   transition: background 0.15s ease;
+  min-width: 0;
 }
 
 .daily-item:hover {
@@ -1083,13 +1088,75 @@ onMounted(() => {
 
 @media (max-width: 767px) {
   .home-page {
-    padding: var(--spacing-md);
+    padding: 12px;
+  }
+
+  .checkin-content {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .checkin-left {
+    width: auto;
+    flex: 1;
+  }
+
+  .checkin-btn,
+  .checkin-done-badge {
+    width: auto;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .checkin-card {
+    padding: 12px 14px;
+    margin-bottom: 12px;
+  }
+
+  .checkin-left {
+    gap: 10px;
+  }
+
+  .checkin-icon-wrap {
+    width: 38px;
+    height: 38px;
+  }
+
+  .checkin-icon-wrap svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .checkin-title {
+    font-size: 15px;
+  }
+
+  .checkin-streak {
+    font-size: 11px;
+  }
+
+  .checkin-btn,
+  .checkin-done-badge {
+    padding: 8px 14px;
+    font-size: 13px;
+    border-radius: var(--radius-md);
+    min-width: 88px;
+  }
+
+  .checkin-btn svg,
+  .checkin-done-badge svg {
+    width: 16px;
+    height: 16px;
   }
 
   .welcome-card {
     flex-direction: column;
     align-items: flex-start;
-    padding: var(--spacing-lg);
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    border-radius: var(--radius-lg);
+    min-height: 0;
   }
 
   .welcome-icon {
@@ -1097,7 +1164,13 @@ onMounted(() => {
   }
 
   .stats-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    margin-bottom: var(--spacing-lg);
   }
 
   .content-grid {
@@ -1105,7 +1178,26 @@ onMounted(() => {
   }
 
   .welcome-title {
-    font-size: var(--font-size-lg);
+    font-size: 18px;
+    line-height: 1.2;
+    margin-bottom: 0;
+  }
+
+  .welcome-subtitle {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .welcome-content {
+    width: 100%;
+  }
+
+  .section-header {
+    flex-wrap: wrap;
+  }
+
+  .section-link {
+    width: 100%;
   }
 
   .daily-header {
@@ -1118,8 +1210,76 @@ onMounted(() => {
     font-size: 10px;
   }
 
+  .stat-card {
+    gap: 8px;
+    padding: 10px 8px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    min-width: 0;
+  }
+
+  .stat-card-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+  }
+
+  .stat-card-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .daily-item {
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .daily-streak,
+  .daily-overdue,
+  .task-difficulty {
+    margin-left: 32px;
+  }
+
+  .daily-goal-progress {
+    min-width: 100%;
+    margin-left: 0;
+  }
+
   .stat-card-value {
-    font-size: var(--font-size-xl);
+    font-size: 16px;
+  }
+
+  .stat-card-label {
+    font-size: 11px;
+  }
+
+  .stat-card-info {
+    min-width: 0;
+  }
+
+  .stat-card-label,
+  .stat-card-value {
+    line-height: 1.2;
+  }
+
+  .section-body {
+    padding: var(--spacing-md);
+    min-height: 160px;
+  }
+
+  .daily-card {
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .daily-body {
+    padding: var(--spacing-md);
+  }
+
+  .toast {
+    top: var(--spacing-md);
+    left: var(--spacing-md);
+    right: var(--spacing-md);
   }
 }
 

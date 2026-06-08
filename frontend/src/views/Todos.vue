@@ -1131,6 +1131,8 @@ onMounted(() => {
   display: flex;
   align-items: baseline;
   gap: var(--spacing-md);
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .page-title {
@@ -1182,6 +1184,7 @@ onMounted(() => {
   margin-bottom: var(--spacing-xl);
   border-bottom: 1px solid var(--color-border);
   padding-bottom: 0;
+  min-width: 0;
 }
 
 .tab-btn {
@@ -1730,6 +1733,7 @@ onMounted(() => {
 
 .subtask-input {
   flex: 1;
+  min-width: 0;
   padding: var(--spacing-xs) var(--spacing-md);
   font-size: var(--font-size-sm);
   font-family: var(--font-family);
@@ -2069,6 +2073,7 @@ onMounted(() => {
   align-items: flex-end;
   gap: var(--spacing-sm);
   flex-shrink: 0;
+  min-width: 0;
 }
 
 .action-buttons {
@@ -2156,6 +2161,7 @@ onMounted(() => {
   align-items: center;
   gap: var(--spacing-md);
   margin-bottom: var(--spacing-lg);
+  min-width: 0;
 }
 
 .project-filter-label {
@@ -2192,6 +2198,7 @@ onMounted(() => {
 @media (max-width: 767px) {
   .todos-page {
     padding: var(--spacing-md);
+    overflow-x: clip;
   }
 
   .page-header {
@@ -2200,16 +2207,53 @@ onMounted(() => {
     gap: var(--spacing-md);
   }
 
+  .header-left,
+  .header-left > * {
+    min-width: 0;
+  }
+
+  .item-count {
+    word-break: break-word;
+  }
+
+  .btn-create {
+    width: 100%;
+    justify-content: center;
+  }
+
   .tabs {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     padding-bottom: var(--spacing-xs);
+    gap: 0;
+    overflow: hidden;
   }
 
   .tab-btn {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+    padding: 6px 4px;
+    font-size: 11px;
+    gap: 2px;
     white-space: nowrap;
-    padding: var(--spacing-xs) var(--spacing-md);
-    font-size: var(--font-size-xs);
+  }
+
+  .tab-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tab-icon :deep(svg) {
+    width: 14px;
+    height: 14px;
+  }
+
+  .tab-count {
+    padding: 1px 5px;
+    font-size: 10px;
   }
 
   .todo-card-header {
@@ -2217,8 +2261,57 @@ onMounted(() => {
     gap: var(--spacing-sm);
   }
 
+  .todo-card {
+    padding: var(--spacing-md);
+  }
+
+  .todo-card-actions {
+    width: 100%;
+    align-items: flex-start;
+  }
+
   .todo-card-meta {
     flex-wrap: wrap;
+  }
+
+  .action-buttons {
+    opacity: 1;
+    flex-wrap: wrap;
+  }
+
+  .project-filter {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--spacing-sm);
+  }
+
+  .project-filter-select {
+    max-width: 100%;
+  }
+
+  .subtask-item {
+    align-items: flex-start;
+    padding: var(--spacing-sm);
+  }
+
+  .subtask-delete-btn {
+    opacity: 1;
+  }
+
+  .subtask-add-form {
+    flex-wrap: wrap;
+  }
+
+  .subtask-input,
+  .form-input,
+  .form-textarea,
+  .form-select {
+    font-size: 16px;
+  }
+
+  .subtask-add-btn {
+    width: 100%;
+    height: 40px;
   }
 
   .form-row {
@@ -2232,6 +2325,30 @@ onMounted(() => {
 
   .dialog-body {
     padding: var(--spacing-md);
+  }
+
+  .dialog-actions {
+    flex-direction: column-reverse;
+  }
+
+  .btn-secondary,
+  .btn-primary,
+  .btn-danger {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .reward-toast,
+  .error-toast {
+    top: var(--spacing-md);
+    left: var(--spacing-md);
+    right: var(--spacing-md);
+  }
+
+  .reward-toast-content,
+  .error-toast-content {
+    width: 100%;
+    justify-content: center;
   }
 }
 </style>

@@ -438,6 +438,7 @@ function goToEditProfile() {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
+  min-width: 0;
 }
 
 .profile-username {
@@ -445,6 +446,7 @@ function goToEditProfile() {
   font-weight: 700;
   color: var(--color-text);
   margin: 0;
+  word-break: break-word;
 }
 
 .profile-title {
@@ -740,6 +742,7 @@ function goToEditProfile() {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .achievement-name {
@@ -798,12 +801,32 @@ function goToEditProfile() {
     align-items: center;
   }
 
+  .profile-username,
+  .profile-email {
+    text-align: center;
+  }
+
   .stats-grid {
     grid-template-columns: 1fr;
   }
 
   .stats-section .stats-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dialog {
+    max-width: 100%;
+    max-height: calc(100vh - (var(--spacing-sm) * 2));
+  }
+
+  .dialog-body {
+    padding: var(--spacing-md);
+  }
+
+  .toast {
+    top: var(--spacing-md);
+    left: var(--spacing-md);
+    right: var(--spacing-md);
   }
 }
 
@@ -1029,16 +1052,16 @@ function goToEditProfile() {
 /* Responsive for profile-actions */
 @media (max-width: 767px) {
   .profile-actions {
-    flex-direction: row;
+    flex-direction: column;
     gap: var(--spacing-sm);
-    align-items: center;
-    flex-wrap: wrap;
-    justify-content: center;
+    align-items: stretch;
+    width: 100%;
   }
 
   .profile-level-badge {
     width: 56px;
     height: 56px;
+    align-self: center;
   }
 
   .level-badge-number {
@@ -1046,8 +1069,9 @@ function goToEditProfile() {
   }
 
   .edit-profile-btn {
-    padding: var(--spacing-xs) var(--spacing-md);
-    font-size: var(--font-size-xs);
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-sm);
   }
 }
 </style>
