@@ -17,7 +17,8 @@
     <div class="header-right">
       <div class="user-dropdown" @click="toggleDropdown" @keydown.escape="dropdownOpen = false" @keydown.enter.prevent="toggleDropdown" @keydown.space.prevent="toggleDropdown" ref="dropdownRef" role="button" tabindex="0" :aria-expanded="dropdownOpen" aria-haspopup="true" aria-label="User menu">
         <div class="user-avatar-sm">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <img v-if="user?.avatar" :src="resolveUrl(user.avatar)" alt="头像" class="user-avatar-sm-img" />
+          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="12" cy="8" r="4" />
             <path d="M20 21a8 8 0 1 0-16 0" />
           </svg>
@@ -55,6 +56,7 @@
 <script setup>
 import { ref, inject, computed, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../../stores/auth'
+import { resolveUrl } from '../../services/api'
 
 const props = defineProps({
   title: {
@@ -184,6 +186,13 @@ onUnmounted(() => {
   width: 18px;
   height: 18px;
   color: #fff;
+}
+
+.user-avatar-sm-img {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-full);
+  object-fit: cover;
 }
 
 .user-name {

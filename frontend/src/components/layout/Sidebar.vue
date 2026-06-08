@@ -10,7 +10,8 @@
 
     <div v-if="!isCollapsed" class="user-card">
       <div class="user-avatar">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <img v-if="user?.avatar" :src="resolveUrl(user.avatar)" alt="头像" class="user-avatar-img" />
+        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <circle cx="12" cy="8" r="4" />
           <path d="M20 21a8 8 0 1 0-16 0" />
         </svg>
@@ -148,6 +149,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStats } from '../../composables/useUserStats'
+import { resolveUrl } from '../../services/api'
 
 const route = useRoute()
 
@@ -244,6 +246,13 @@ const isHomeActive = computed(() => route.path === '/')
   width: 24px;
   height: 24px;
   color: #fff;
+}
+
+.user-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-full);
+  object-fit: cover;
 }
 
 .user-details {
