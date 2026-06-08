@@ -23,10 +23,7 @@ echo "  done"
 echo "[2/5] 配置后端..."
 cd "$APP_DIR/backend"
 
-python3 -m venv venv
-source venv/bin/activate
-pip install --upgrade pip -q
-pip install -r requirements.txt -q
+pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ -q
 
 mkdir -p uploads/avatars uploads/notes notes_data
 
