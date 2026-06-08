@@ -10,7 +10,7 @@
 
     <div v-if="!isCollapsed" class="user-card">
       <div class="user-avatar">
-        <img v-if="user?.avatar" :src="resolveUrl(user.avatar)" alt="头像" class="user-avatar-img" />
+        <img v-if="avatarSrc" :src="avatarSrc" alt="头像" class="user-avatar-img" />
         <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <circle cx="12" cy="8" r="4" />
           <path d="M20 21a8 8 0 1 0-16 0" />
@@ -149,7 +149,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStats } from '../../composables/useUserStats'
-import { resolveUrl } from '../../services/api'
+import { useResolvedImage } from '../../composables/useResolvedImage'
 
 const route = useRoute()
 
@@ -165,6 +165,7 @@ defineProps({
 })
 
 const { user, expPercent } = useUserStats()
+const avatarSrc = useResolvedImage(computed(() => user.value?.avatar))
 
 // Check if current route is exactly home
 const isHomeActive = computed(() => route.path === '/')

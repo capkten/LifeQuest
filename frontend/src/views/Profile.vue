@@ -2,7 +2,7 @@
   <div class="profile-page">
     <div class="profile-header">
       <div class="profile-avatar">
-        <img v-if="user?.avatar" :src="resolveUrl(user.avatar)" alt="用户头像" class="profile-avatar-img" />
+        <img v-if="avatarSrc" :src="avatarSrc" alt="用户头像" class="profile-avatar-img" />
         <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <circle cx="12" cy="8" r="4" />
           <path d="M20 21a8 8 0 1 0-16 0" />
@@ -270,12 +270,13 @@ import { todoService } from '../services/todo'
 import { titleService } from '../services/title'
 import { useToast } from '../composables/useToast'
 import { useAuthStore } from '../stores/auth'
-import { resolveUrl } from '../services/api'
+import { useResolvedImage } from '../composables/useResolvedImage'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const { user, requiredExp, expPercent } = useUserStats()
 const { successToast, errorToast, showSuccess, showError } = useToast()
+const avatarSrc = useResolvedImage(computed(() => user.value?.avatar))
 
 const stats = reactive({
   totalTasksCompleted: 0,
