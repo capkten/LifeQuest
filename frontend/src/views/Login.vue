@@ -95,7 +95,11 @@ async function handleLogin() {
     await authStore.login(form)
     ElMessage.success('登录成功')
   } catch (error) {
-    ElMessage.error(error.response?.data?.detail || '登录失败，请检查用户名和密码')
+    ElMessage.error(
+      error.response
+        ? `[${error.response.status}] ${error.response.data?.detail || JSON.stringify(error.response.data)}`
+        : `[Network] ${error.message} | API: ${import.meta.env.VITE_API_BASE_URL || '/api'}`
+    )
   } finally {
     loading.value = false
   }
