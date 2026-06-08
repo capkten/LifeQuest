@@ -48,7 +48,6 @@ Base.metadata.create_all(bind=engine)
 " 2>/dev/null
 echo "  数据库已初始化"
 
-deactivate
 
 # 3. 前端
 echo "[3/5] 构建前端..."
