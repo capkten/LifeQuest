@@ -66,9 +66,8 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$APP_DIR/backend
-Environment="PATH=$APP_DIR/backend/venv/bin"
 EnvironmentFile=$APP_DIR/backend/.env
-ExecStart=$APP_DIR/backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port $APP_PORT --workers 2
+ExecStart=$(command -v uvicorn) app.main:app --host 0.0.0.0 --port $APP_PORT --workers 2
 Restart=always
 RestartSec=5
 
