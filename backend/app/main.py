@@ -113,3 +113,19 @@ app.include_router(projects.router)
 @app.get("/")
 def root():
     return {"message": "Welcome to LifeQuest API"}
+
+
+# Serve frontend static files (production mode)
+_frontend_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "frontend", "dist")
+_frontend_dist = os.path.abspath(_frontend_dist)
+if os.path.isdir(_frontend_dist):
+    app.mount("/assets", StaticFiles(directory=os.path.join(_frontend_dist, "assets")), name="frontend-assets")
+
+    from fastapi.responses import FileResponse
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        file_path = os.path.join(_frontend_dist, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(_frontend_dist, "index.html"))
