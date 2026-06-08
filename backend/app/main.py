@@ -110,11 +110,6 @@ app.include_router(finance.router)
 app.include_router(projects.router)
 
 
-@app.get("/")
-def root():
-    return {"message": "Welcome to LifeQuest API"}
-
-
 # Serve frontend static files (production mode)
 _frontend_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "frontend", "dist")
 _frontend_dist = os.path.abspath(_frontend_dist)
