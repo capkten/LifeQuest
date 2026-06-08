@@ -443,6 +443,7 @@ onMounted(() => {
   font-family: var(--font-family);
   text-decoration: none;
   transition: background 0.15s ease;
+  white-space: nowrap;
 }
 
 .btn-create:hover {
@@ -469,6 +470,7 @@ onMounted(() => {
   font-family: var(--font-family);
   text-decoration: none;
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
 .btn-history:hover {

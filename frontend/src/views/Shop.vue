@@ -568,6 +568,7 @@ onMounted(() => {
   cursor: pointer;
   font-family: var(--font-family);
   transition: background 0.15s ease;
+  white-space: nowrap;
 }
 
 .btn-create:hover {
@@ -598,6 +599,7 @@ onMounted(() => {
   cursor: pointer;
   font-family: var(--font-family);
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
 .btn-history:hover {
@@ -1196,6 +1198,8 @@ onMounted(() => {
   .header-right {
     width: 100%;
     justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
   }
 
   .items-grid {

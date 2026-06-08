@@ -1103,6 +1103,24 @@ onMounted(() => {
   .content-grid {
     grid-template-columns: 1fr;
   }
+
+  .welcome-title {
+    font-size: var(--font-size-lg);
+  }
+
+  .daily-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-xs);
+  }
+
+  .daily-overview {
+    font-size: 10px;
+  }
+
+  .stat-card-value {
+    font-size: var(--font-size-xl);
+  }
 }
 
 @media (min-width: 768px) and (max-width: 1199px) {

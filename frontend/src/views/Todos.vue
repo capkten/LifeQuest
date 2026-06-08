@@ -1158,6 +1158,7 @@ onMounted(() => {
   cursor: pointer;
   font-family: var(--font-family);
   transition: background 0.15s ease;
+  white-space: nowrap;
 }
 
 .btn-create:hover {

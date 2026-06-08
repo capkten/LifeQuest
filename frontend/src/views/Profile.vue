@@ -488,6 +488,7 @@ function goToEditProfile() {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
 .edit-profile-btn:hover {
@@ -1030,6 +1031,23 @@ function goToEditProfile() {
   .profile-actions {
     flex-direction: row;
     gap: var(--spacing-sm);
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .profile-level-badge {
+    width: 56px;
+    height: 56px;
+  }
+
+  .level-badge-number {
+    font-size: var(--font-size-lg);
+  }
+
+  .edit-profile-btn {
+    padding: var(--spacing-xs) var(--spacing-md);
+    font-size: var(--font-size-xs);
   }
 }
 </style>

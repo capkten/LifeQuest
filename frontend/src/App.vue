@@ -96,6 +96,18 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* Mobile font & layout scaling */
+@media (max-width: 767px) {
+  :root {
+    --font-size-2xl: 1.25rem;
+  }
+
+  .el-button {
+    white-space: nowrap;
+  }
 }
 
 a {
