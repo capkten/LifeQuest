@@ -149,6 +149,7 @@ const pageTitle = computed(() => {
 
 .app-content {
   flex: 1;
+  min-width: 0;
   overflow-y: auto;
 }
 
