@@ -1116,7 +1116,7 @@ onMounted(() => {
 
 <style scoped>
 .todos-page {
-  padding: var(--spacing-xl);
+  padding: var(--page-padding-y) var(--page-padding-x);
   width: 100%;
 }
 
@@ -1181,7 +1181,7 @@ onMounted(() => {
 .tabs {
   display: flex;
   gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
   border-bottom: 1px solid var(--color-border);
   padding-bottom: 0;
   min-width: 0;
@@ -1202,6 +1202,7 @@ onMounted(() => {
   font-family: var(--font-family);
   transition: color 0.15s ease, border-color 0.15s ease;
   margin-bottom: -1px;
+  min-height: 44px;
 }
 
 .tab-btn:hover {
@@ -1354,8 +1355,8 @@ onMounted(() => {
 .todo-card {
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-lg);
+  border-radius: var(--surface-radius-sm);
+  padding: 14px;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -1792,7 +1793,7 @@ onMounted(() => {
 .todo-card-stats {
   display: flex;
   align-items: center;
-  gap: var(--spacing-lg);
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -1902,11 +1903,10 @@ onMounted(() => {
 }
 
 .dialog {
-  width: 100%;
-  max-width: 480px;
+  width: min(100% - 24px, 560px);
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
+  border-radius: 20px;
   box-shadow: var(--shadow-xl);
   overflow: hidden;
 }
@@ -2078,7 +2078,7 @@ onMounted(() => {
 
 .action-buttons {
   display: flex;
-  gap: var(--spacing-xs);
+  gap: 6px;
   opacity: 0;
   transition: opacity 0.15s ease;
 }
@@ -2224,19 +2224,33 @@ onMounted(() => {
   .tabs {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    padding-bottom: var(--spacing-xs);
-    gap: 0;
-    overflow: hidden;
+    gap: 8px;
+    padding: 6px;
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid var(--color-border);
+    border-radius: 16px;
+    border-bottom: 1px solid var(--color-border);
+    overflow: visible;
   }
 
   .tab-btn {
     width: 100%;
     min-width: 0;
     justify-content: center;
-    padding: 6px 4px;
+    padding: 10px 8px;
     font-size: 11px;
     gap: 2px;
     white-space: nowrap;
+    min-height: 44px;
+    border-radius: 12px;
+    border-bottom: none;
+    margin-bottom: 0;
+  }
+
+  .tab-btn--active {
+    background: var(--color-primary);
+    color: #fff;
+    border-bottom-color: transparent;
   }
 
   .tab-label {
@@ -2282,7 +2296,7 @@ onMounted(() => {
   .project-filter {
     flex-direction: column;
     align-items: stretch;
-    gap: var(--spacing-sm);
+    gap: 12px;
   }
 
   .project-filter-select {
@@ -2321,10 +2335,12 @@ onMounted(() => {
   .dialog {
     max-width: 100%;
     margin: var(--spacing-sm);
+    width: auto;
   }
 
   .dialog-body {
     padding: var(--spacing-md);
+    gap: 12px;
   }
 
   .dialog-actions {
