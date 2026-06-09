@@ -937,7 +937,7 @@ onMounted(() => {
 
   .daily-item {
     grid-template-columns: auto minmax(0, 1fr);
-    align-items: start;
+    align-items: center;
   }
 
   .daily-item--goal {
