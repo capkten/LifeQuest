@@ -198,10 +198,20 @@ class ProjectService:
         project_id: Optional[UUID] = None,
         phase_id: Optional[UUID] = None,
         milestone_id: Optional[UUID] = None,
+        status: Optional[TaskStatus] = None,
     ) -> Task:
-        task.project_id = project_id
-        task.phase_id = phase_id
-        task.milestone_id = milestone_id
+        if project_id is not None:
+            task.project_id = project_id
+        if phase_id is not None:
+            task.phase_id = phase_id
+        if milestone_id is not None:
+            task.milestone_id = milestone_id
+        if status is not None:
+            task.status = status
+            if status == TaskStatus.COMPLETED:
+                task.completed_at = datetime.now(timezone.utc)
+            elif task.completed_at is not None:
+                task.completed_at = None
         self.db.commit()
         self.db.refresh(task)
         return task

@@ -126,6 +126,26 @@ class FinanceService:
         self.db.refresh(txn)
         return {"transaction": txn, "from_balance": from_acc.balance, "to_balance": to_acc.balance}
 
+    def _apply_transaction_balance_effect(self, transaction: FinanceTransaction, reverse: bool = False) -> None:
+        multiplier = -1 if reverse else 1
+        amount = transaction.amount * multiplier
+
+        if transaction.type == FinanceTransactionType.INCOME:
+            account = self.account_repo.get_by_id(transaction.account_id)
+            if account:
+                account.balance += amount
+        elif transaction.type == FinanceTransactionType.EXPENSE:
+            account = self.account_repo.get_by_id(transaction.account_id)
+            if account:
+                account.balance -= amount
+        elif transaction.type == FinanceTransactionType.TRANSFER:
+            from_acc = self.account_repo.get_by_id(transaction.account_id)
+            to_acc = self.account_repo.get_by_id(transaction.to_account_id) if transaction.to_account_id else None
+            if from_acc:
+                from_acc.balance -= amount
+            if to_acc:
+                to_acc.balance += amount
+
     # --- Category CRUD ---
 
     def get_categories(self, user_id: UUID) -> List[FinanceCategory]:
@@ -198,24 +218,16 @@ class FinanceService:
     def update_transaction(
         self, transaction: FinanceTransaction, data: TransactionUpdate
     ) -> FinanceTransaction:
-        # Reverse old balance effect
-        account = self.account_repo.get_by_id(transaction.account_id)
-        if account:
-            if transaction.type == FinanceTransactionType.INCOME:
-                account.balance -= transaction.amount
-            elif transaction.type == FinanceTransactionType.EXPENSE:
-                account.balance += transaction.amount
-
         update_data = data.model_dump(exclude_unset=True)
+        new_type = update_data.get("type", transaction.type)
+        new_to_account_id = update_data.get("to_account_id", transaction.to_account_id)
+        if new_type == FinanceTransactionType.TRANSFER and not new_to_account_id:
+            raise HTTPException(status_code=400, detail="Transfer requires target account")
+
+        self._apply_transaction_balance_effect(transaction, reverse=True)
         for key, value in update_data.items():
             setattr(transaction, key, value)
-
-        # Apply new balance effect
-        if account:
-            if transaction.type == FinanceTransactionType.INCOME:
-                account.balance += transaction.amount
-            elif transaction.type == FinanceTransactionType.EXPENSE:
-                account.balance -= transaction.amount
+        self._apply_transaction_balance_effect(transaction, reverse=False)
 
         self.db.commit()
         self.db.refresh(transaction)
@@ -223,12 +235,7 @@ class FinanceService:
 
     def delete_transaction(self, transaction: FinanceTransaction) -> bool:
         # Reverse the balance change
-        account = self.account_repo.get_by_id(transaction.account_id)
-        if account:
-            if transaction.type == FinanceTransactionType.INCOME:
-                account.balance -= transaction.amount
-            elif transaction.type == FinanceTransactionType.EXPENSE:
-                account.balance += transaction.amount
+        self._apply_transaction_balance_effect(transaction, reverse=True)
         self.db.delete(transaction)
         self.db.commit()
         return True

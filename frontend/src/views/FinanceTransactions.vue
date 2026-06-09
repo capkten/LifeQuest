@@ -413,19 +413,21 @@ async function saveTransaction() {
   savingTx.value = true
   txDialogError.value = null
   try {
-    if (txForm.value.type === 'transfer') {
+    if (editingTx.value) {
+      await financeService.updateTransaction(editingTx.value.id, {
+        type: txForm.value.type,
+        amount: txForm.value.amount,
+        account_id: txForm.value.account_id,
+        to_account_id: txForm.value.type === 'transfer' ? txForm.value.to_account_id : null,
+        category_id: txForm.value.type === 'transfer' ? null : (txForm.value.category_id || null),
+        description: txForm.value.description || undefined,
+        date: txForm.value.date
+      })
+    } else if (txForm.value.type === 'transfer') {
       await financeService.transfer({
         from_account_id: txForm.value.account_id,
         to_account_id: txForm.value.to_account_id,
         amount: txForm.value.amount,
-        description: txForm.value.description || undefined,
-        date: txForm.value.date
-      })
-    } else if (editingTx.value) {
-      await financeService.updateTransaction(editingTx.value.id, {
-        type: txForm.value.type, amount: txForm.value.amount,
-        account_id: txForm.value.account_id,
-        category_id: txForm.value.category_id || undefined,
         description: txForm.value.description || undefined,
         date: txForm.value.date
       })

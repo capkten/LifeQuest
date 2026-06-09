@@ -20,6 +20,7 @@ from app.schemas.project import (
     MilestoneResponse,
 )
 from app.schemas.todo import TaskCreate, TaskResponse
+from app.models.todo import TaskStatus
 from app.services.project import ProjectService
 from app.api.auth import get_current_user
 
@@ -286,6 +287,7 @@ class MoveTaskRequest(BaseModel):
     project_id: Optional[UUID] = None
     phase_id: Optional[UUID] = None
     milestone_id: Optional[UUID] = None
+    status: Optional[TaskStatus] = None
 
 
 @router.put("/tasks/{task_id}/move", response_model=TaskResponse)
@@ -299,4 +301,10 @@ def move_task(
     from app.services.todo import TodoService
     todo_service = TodoService(db)
     task = todo_service.get_task_for_user(task_id, current_user.id)
-    return service.move_task(task, body.project_id, body.phase_id, body.milestone_id)
+    return service.move_task(
+        task,
+        project_id=body.project_id,
+        phase_id=body.phase_id,
+        milestone_id=body.milestone_id,
+        status=body.status,
+    )

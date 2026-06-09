@@ -1,4 +1,4 @@
-from datetime import datetime, date
+from datetime import datetime, date as Date
 from typing import Optional, List
 from uuid import UUID
 
@@ -90,7 +90,7 @@ class TransactionCreate(BaseModel):
     type: FinanceTransactionType
     amount: float
     description: str = ""
-    date: date
+    date: Date
     to_account_id: Optional[UUID] = None
 
 
@@ -100,7 +100,7 @@ class TransactionUpdate(BaseModel):
     type: Optional[FinanceTransactionType] = None
     amount: Optional[float] = None
     description: Optional[str] = None
-    date: Optional[date] = None
+    date: Optional[Date] = None
     to_account_id: Optional[UUID] = None
 
 
@@ -114,7 +114,7 @@ class TransactionResponse(BaseModel):
     type: str
     amount: float
     description: str
-    date: date
+    date: Date
     to_account_id: Optional[UUID] = None
     created_at: datetime
 
@@ -124,14 +124,14 @@ class BudgetCreate(BaseModel):
     category_id: Optional[UUID] = None
     amount: float
     period: BudgetPeriod = BudgetPeriod.MONTHLY
-    start_date: Optional[date] = None
+    start_date: Optional[Date] = None
 
 
 class BudgetUpdate(BaseModel):
     category_id: Optional[UUID] = None
     amount: Optional[float] = None
     period: Optional[BudgetPeriod] = None
-    start_date: Optional[date] = None
+    start_date: Optional[Date] = None
 
 
 class BudgetResponse(BaseModel):
@@ -142,7 +142,7 @@ class BudgetResponse(BaseModel):
     category_id: Optional[UUID] = None
     amount: float
     period: str
-    start_date: Optional[date] = None
+    start_date: Optional[Date] = None
     created_at: datetime
     updated_at: datetime
 
@@ -155,7 +155,7 @@ class RecurringCreate(BaseModel):
     amount: float
     description: str = ""
     frequency: RecurFrequency
-    next_date: date
+    next_date: Date
 
 
 class RecurringUpdate(BaseModel):
@@ -165,7 +165,7 @@ class RecurringUpdate(BaseModel):
     amount: Optional[float] = None
     description: Optional[str] = None
     frequency: Optional[RecurFrequency] = None
-    next_date: Optional[date] = None
+    next_date: Optional[Date] = None
     is_active: Optional[bool] = None
 
 
@@ -180,7 +180,7 @@ class RecurringResponse(BaseModel):
     amount: float
     description: str
     frequency: str
-    next_date: date
+    next_date: Date
     is_active: bool
     created_at: datetime
 
@@ -193,7 +193,7 @@ class DebtCreate(BaseModel):
     remaining: float
     interest_rate: float = 0.0
     description: str = ""
-    due_date: Optional[date] = None
+    due_date: Optional[Date] = None
 
 
 class DebtUpdate(BaseModel):
@@ -203,7 +203,7 @@ class DebtUpdate(BaseModel):
     remaining: Optional[float] = None
     interest_rate: Optional[float] = None
     description: Optional[str] = None
-    due_date: Optional[date] = None
+    due_date: Optional[Date] = None
     status: Optional[DebtStatus] = None
 
 
@@ -218,7 +218,7 @@ class DebtResponse(BaseModel):
     remaining: float
     interest_rate: float
     description: str
-    due_date: Optional[date] = None
+    due_date: Optional[Date] = None
     status: str
     created_at: datetime
     updated_at: datetime
@@ -227,7 +227,7 @@ class DebtResponse(BaseModel):
 class DebtPaymentCreate(BaseModel):
     amount: float
     description: str = ""
-    date: date
+    date: Date
 
 
 class DebtPaymentResponse(BaseModel):
@@ -237,7 +237,7 @@ class DebtPaymentResponse(BaseModel):
     debt_id: UUID
     amount: float
     description: str
-    date: date
+    date: Date
     created_at: datetime
 
 
