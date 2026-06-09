@@ -1,9 +1,9 @@
-from datetime import date
+from datetime import date as Date
 from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, AliasChoices
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -24,10 +24,13 @@ router = APIRouter(prefix="/api/finance", tags=["finance"])
 
 
 class TransferRequest(BaseModel):
-    from_id: UUID
-    to_id: UUID
+    model_config = ConfigDict(populate_by_name=True)
+
+    from_id: UUID = Field(validation_alias=AliasChoices("from_id", "from_account_id"))
+    to_id: UUID = Field(validation_alias=AliasChoices("to_id", "to_account_id"))
     amount: float
     description: str = ""
+    date: Date | None = None
 
 
 # --- Dashboard ---
@@ -99,7 +102,14 @@ def transfer(
     db: Session = Depends(get_db),
 ):
     service = FinanceService(db)
-    return service.transfer(current_user.id, body.from_id, body.to_id, body.amount, body.description)
+    return service.transfer(
+        current_user.id,
+        body.from_id,
+        body.to_id,
+        body.amount,
+        body.description,
+        body.date,
+    )
 
 
 # --- Categories ---
@@ -145,8 +155,8 @@ def get_transactions(
     account_id: Optional[UUID] = None,
     category_id: Optional[UUID] = None,
     type: Optional[str] = None,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
+    start_date: Optional[Date] = None,
+    end_date: Optional[Date] = None,
     skip: int = 0,
     limit: int = 50,
     current_user: User = Depends(get_current_user),

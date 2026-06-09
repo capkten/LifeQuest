@@ -98,7 +98,7 @@ class FinanceService:
 
     def transfer(
         self, user_id: UUID, from_id: UUID, to_id: UUID,
-        amount: float, description: str = "",
+        amount: float, description: str = "", transfer_date: date | None = None,
     ) -> dict:
         from_acc = self.account_repo.get_by_id(from_id)
         to_acc = self.account_repo.get_by_id(to_id)
@@ -116,7 +116,7 @@ class FinanceService:
             type=FinanceTransactionType.TRANSFER,
             amount=amount,
             description=description or f"Transfer: {from_acc.name} -> {to_acc.name}",
-            date=date.today(),
+            date=transfer_date or date.today(),
             to_account_id=to_id,
         )
         self.db.add(txn)
