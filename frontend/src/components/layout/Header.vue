@@ -2,6 +2,7 @@
   <header class="header">
     <div class="header-left">
       <button
+        type="button"
         class="sidebar-toggle"
         aria-label="Toggle sidebar"
         @click="handleToggle"
@@ -38,7 +39,7 @@
               <span>个人资料</span>
             </router-link>
             <div class="dropdown-divider" role="separator"></div>
-            <button class="dropdown-item dropdown-item--danger" role="menuitem" @click="handleLogout">
+            <button type="button" class="dropdown-item dropdown-item--danger" role="menuitem" @click="handleLogout">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                 <polyline points="16 17 21 12 16 7" />
@@ -105,10 +106,12 @@ onUnmounted(() => {
 <style scoped>
 .header {
   height: var(--header-height);
+  padding-top: var(--safe-area-top);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 var(--page-padding-x);
+  padding-top: var(--safe-area-top);
   background: var(--color-bg-secondary);
   border-bottom: 1px solid var(--color-border);
   position: sticky;
@@ -126,8 +129,8 @@ onUnmounted(() => {
   display: none;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
   background: transparent;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -152,6 +155,9 @@ onUnmounted(() => {
   font-weight: 600;
   color: var(--color-text);
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .header-right {
@@ -163,6 +169,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  min-height: var(--touch-target-min);
   padding: 6px 10px;
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -285,8 +292,15 @@ onUnmounted(() => {
 
 /* Reduce padding on small screens */
 @media (max-width: 767px) {
+  .header {
+    height: calc(var(--header-height) + var(--safe-area-top));
+    padding-left: var(--page-padding-x);
+    padding-right: var(--page-padding-x);
+  }
+
   .header-left {
     gap: var(--spacing-sm);
+    min-width: 0;
   }
 
   .user-name,
@@ -296,8 +310,12 @@ onUnmounted(() => {
 
   .sidebar-toggle {
     display: inline-flex;
-    width: 40px;
-    height: 40px;
+    width: var(--touch-target-min);
+    height: var(--touch-target-min);
+  }
+
+  .page-title {
+    font-size: var(--font-size-base);
   }
 }
 </style>

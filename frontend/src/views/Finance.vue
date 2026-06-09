@@ -73,7 +73,7 @@
             </svg>
             <div class="summary-item-info">
               <span class="summary-item-label">收入</span>
-              <span class="summary-item-value summary-item-value--income">+{{ formatMoney(dashboard.monthly_income || 0) }}</span>
+              <span class="summary-item-value summary-item-value--income">+{{ formatMoney(dashboard.month_income || 0) }}</span>
             </div>
           </div>
           <div class="summary-item summary-item--expense">
@@ -83,7 +83,7 @@
             </svg>
             <div class="summary-item-info">
               <span class="summary-item-label">支出</span>
-              <span class="summary-item-value summary-item-value--expense">-{{ formatMoney(dashboard.monthly_expense || 0) }}</span>
+              <span class="summary-item-value summary-item-value--expense">-{{ formatMoney(dashboard.month_expense || 0) }}</span>
             </div>
           </div>
           <div class="summary-item summary-item--net">
@@ -93,7 +93,7 @@
             </svg>
             <div class="summary-item-info">
               <span class="summary-item-label">结余</span>
-              <span class="summary-item-value summary-item-value--net">{{ formatNet((dashboard.monthly_income || 0) - (dashboard.monthly_expense || 0)) }}</span>
+              <span class="summary-item-value summary-item-value--net">{{ formatNet((dashboard.month_income || 0) - (dashboard.month_expense || 0)) }}</span>
             </div>
           </div>
         </div>

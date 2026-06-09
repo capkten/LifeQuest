@@ -4,7 +4,9 @@
     <div class="app-main">
       <Header :title="pageTitle" />
       <main class="app-content">
-        <router-view />
+        <div class="app-content-shell">
+          <router-view />
+        </div>
       </main>
     </div>
 
@@ -137,7 +139,9 @@ const pageTitle = computed(() => {
 .app-layout {
   display: flex;
   min-height: 100vh;
-  background: var(--color-bg);
+  background:
+    radial-gradient(circle at top, rgba(20, 184, 166, 0.12), transparent 28%),
+    var(--color-bg);
 }
 
 .app-main {
@@ -152,8 +156,18 @@ const pageTitle = computed(() => {
 .app-content {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   overflow-y: auto;
-  padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(var(--page-padding-y) + var(--safe-area-bottom));
+}
+
+.app-content-shell {
+  width: 100%;
+  max-width: none;
+  padding: var(--page-padding-y) var(--page-padding-x);
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
 }
 
 /* Tablet: sidebar collapsed */
@@ -197,7 +211,7 @@ const pageTitle = computed(() => {
     right: 0;
     bottom: 0;
     height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
-    padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+    padding: 8px 10px calc(8px + var(--safe-area-bottom));
     background: rgba(255, 255, 255, 0.94);
     backdrop-filter: blur(12px);
     border-top: 1px solid var(--color-border);
@@ -207,7 +221,12 @@ const pageTitle = computed(() => {
   }
 
   .app-content {
-    padding-bottom: calc(var(--bottom-nav-height) + 12px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(var(--bottom-nav-height) + 12px + var(--safe-area-bottom));
+  }
+
+  .app-content-shell {
+    width: 100%;
+    padding-bottom: 0;
   }
 }
 

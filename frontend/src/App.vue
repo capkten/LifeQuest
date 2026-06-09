@@ -4,47 +4,34 @@
 
 <style>
 :root {
-  /* Primary Colors — Sky Blue (adventure, open sky) */
   --color-primary: #0EA5E9;
   --color-primary-light: #38BDF8;
   --color-primary-dark: #0284C7;
-
-  /* Secondary Colors — Deep Blue (depth, trust) */
   --color-secondary: #6366F1;
   --color-secondary-light: #818CF8;
   --color-secondary-dark: #4F46E5;
-
-  /* Accent Colors — Emerald (life, growth, reward) */
   --color-accent: #059669;
   --color-accent-light: #34D399;
   --color-accent-dark: #047857;
-
-  /* Success Colors */
   --color-success: #22C55E;
   --color-success-light: #86EFAC;
   --color-success-dark: #16A34A;
-
-  /* Warning Colors — Gold (coins, treasure) */
   --color-warning: #F59E0B;
   --color-warning-light: #FCD34D;
   --color-warning-dark: #D97706;
-
-  /* Error Colors */
   --color-error: #EF4444;
   --color-error-light: #FCA5A5;
   --color-error-dark: #DC2626;
-
-  /* Neutral Colors — Light theme */
   --color-bg: #F0F9FF;
   --color-bg-secondary: #FFFFFF;
   --color-bg-tertiary: #E0F2FE;
+  --color-bg-elevated: #F8FDFF;
   --color-text: #0C4A6E;
   --color-text-secondary: #64748B;
   --color-text-tertiary: #94A3B8;
   --color-border: #BAE6FD;
+  --color-border-strong: #7DD3FC;
   --color-card: #FFFFFF;
-
-  /* Typography */
   --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-family-display: 'Cinzel', 'Cormorant Garamond', serif;
   --font-size-xs: 0.75rem;
@@ -54,8 +41,6 @@
   --font-size-xl: 1.125rem;
   --font-size-2xl: 1.375rem;
   --font-size-3xl: 1.75rem;
-
-  /* Spacing */
   --spacing-2xs: 0.25rem;
   --spacing-xs: 0.5rem;
   --spacing-sm: 0.75rem;
@@ -63,31 +48,33 @@
   --spacing-lg: 1.25rem;
   --spacing-xl: 1.5rem;
   --spacing-2xl: 2rem;
-
-  /* Border Radius */
+  --spacing-3xl: 3rem;
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
   --radius-full: 9999px;
-
-  /* Layout */
   --sidebar-width: 260px;
   --sidebar-collapsed-width: 68px;
   --page-padding-x: 16px;
   --page-padding-y: 16px;
+  --page-gap: 16px;
   --content-max-width: 1200px;
+  --content-max-width-wide: 1320px;
   --header-height: 56px;
   --bottom-nav-height: 64px;
   --surface-radius: 18px;
   --surface-radius-sm: 14px;
   --surface-padding: 16px;
-
-  /* Shadows — lighter for light theme */
-  --shadow-sm: 0 1px 3px rgba(14, 165, 233, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 6px rgba(14, 165, 233, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 10px 15px rgba(14, 165, 233, 0.08), 0 4px 6px rgba(0, 0, 0, 0.04);
-  --shadow-xl: 0 20px 25px rgba(14, 165, 233, 0.1), 0 8px 10px rgba(0, 0, 0, 0.04);
+  --touch-target-min: 44px;
+  --touch-target-gap: 8px;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --shadow-sm: 0 1px 2px rgba(14, 165, 233, 0.06);
+  --shadow-md: 0 10px 30px rgba(14, 165, 233, 0.08);
+  --shadow-lg: 0 16px 40px rgba(14, 165, 233, 0.12);
+  --shadow-xl: 0 24px 48px rgba(14, 165, 233, 0.14);
 }
 
 * {
@@ -97,6 +84,7 @@
 }
 
 body {
+  min-height: 100vh;
   font-family: var(--font-family);
   background-color: var(--color-bg);
   color: var(--color-text);
@@ -128,7 +116,24 @@ body {
   gap: var(--spacing-md);
 }
 
-/* Mobile font & layout scaling */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.el-button,
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner {
+  border-radius: var(--radius-lg);
+}
+
+.el-button {
+  min-height: var(--touch-target-min);
+  padding: 0.625rem 1rem;
+  font-weight: 600;
+}
+
 @media (max-width: 767px) {
   :root {
     --font-size-2xl: 1.125rem;
@@ -143,6 +148,7 @@ body {
   :root {
     --page-padding-x: 24px;
     --page-padding-y: 20px;
+    --page-gap: 20px;
     --header-height: 60px;
     --surface-padding: 20px;
   }
@@ -152,6 +158,7 @@ body {
   :root {
     --page-padding-x: 32px;
     --page-padding-y: 24px;
+    --page-gap: 24px;
     --header-height: 64px;
     --surface-padding: 24px;
   }
@@ -197,6 +204,8 @@ a:hover {
 .el-card {
   background-color: var(--color-card) !important;
   border-color: var(--color-border) !important;
+  border-radius: var(--radius-xl) !important;
+  box-shadow: var(--shadow-sm) !important;
 }
 
 .el-message-box {
@@ -210,5 +219,16 @@ a:hover {
 
 .el-message-box__message {
   color: var(--color-text-secondary) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 </style>

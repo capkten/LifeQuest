@@ -1,11 +1,11 @@
 <template>
   <div class="shop-page">
     <div class="page-header">
-      <div class="header-left">
-        <h2 class="page-title">商城</h2>
-        <span class="item-count">{{ items.length }} 件商品</span>
-      </div>
-      <div class="header-right">
+      <div class="page-header-main">
+        <div class="header-left">
+          <h2 class="page-title">商城</h2>
+          <span class="item-count">{{ items.length }} 件商品</span>
+        </div>
         <div class="balance-display">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="12" cy="12" r="10" />
@@ -14,6 +14,8 @@
           <span class="balance-value">{{ user?.coins || 0 }}</span>
           <span class="balance-label">金币</span>
         </div>
+      </div>
+      <div class="shop-actions">
         <button class="btn-history" @click="$router.push('/shop/history')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="12" cy="12" r="10" />
@@ -65,24 +67,30 @@
         :key="item.id"
         class="item-card"
       >
-        <div class="item-card-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-            <line x1="7" y1="7" x2="7.01" y2="7" />
-          </svg>
-          <div v-if="user && item.created_by === user.id" class="item-card-actions">
-            <button class="btn-icon btn-icon--edit" @click.stop="openEditDialog(item)" aria-label="编辑" title="编辑">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
-            </button>
-            <button class="btn-icon btn-icon--delete" @click.stop="openDeleteDialog(item)" aria-label="删除" title="删除">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-              </svg>
-            </button>
+        <div v-if="user && item.created_by === user.id" class="item-card-admin">
+          <button class="btn-icon btn-icon--edit" @click.stop="openEditDialog(item)" aria-label="编辑" title="编辑">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+          </button>
+          <button class="btn-icon btn-icon--delete" @click.stop="openDeleteDialog(item)" aria-label="删除" title="删除">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
+          </button>
+        </div>
+        <div class="item-card-header">
+          <div class="item-card-icon">
+            <component :is="resolveShopIcon(item.icon)" />
+          </div>
+          <div class="item-price">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 6v12M6 12h12" />
+            </svg>
+            <span>{{ item.coin_price }}</span>
           </div>
         </div>
         <div class="item-card-body">
@@ -97,13 +105,6 @@
           </div>
         </div>
         <div class="item-card-footer">
-          <div class="item-price">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 6v12M6 12h12" />
-            </svg>
-            <span>{{ item.coin_price }}</span>
-          </div>
           <button
             class="btn-purchase"
             :disabled="purchasingId === item.id || (user?.coins || 0) < item.coin_price || (item.stock !== -1 && item.stock <= 0)"
@@ -217,6 +218,21 @@
               </div>
             </div>
             <div class="form-group">
+              <label class="form-label">图标</label>
+              <div class="icon-grid">
+                <button
+                  v-for="option in iconOptions"
+                  :key="option.value"
+                  type="button"
+                  class="icon-option"
+                  :class="{ 'icon-option--active': form.icon === option.value }"
+                  @click="form.icon = option.value"
+                >
+                  <component :is="option.component" />
+                </button>
+              </div>
+            </div>
+            <div class="form-group">
               <label class="form-label" for="item-stock">库存</label>
               <input
                 id="item-stock"
@@ -284,6 +300,24 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { shopService } from '../services/shop'
 import { useToast } from '../composables/useToast'
+import {
+  Apple,
+  Box,
+  Coffee,
+  Coin,
+  Goblet,
+  Goods,
+  Handbag,
+  MagicStick,
+  Medal,
+  Moon,
+  Present,
+  Shop,
+  Star,
+  SwitchButton,
+  Ticket,
+  Trophy
+} from '@element-plus/icons-vue'
 
 const authStore = useAuthStore()
 const user = computed(() => authStore.user)
@@ -305,9 +339,31 @@ const showDeleteDialog = ref(false)
 const deletingItem = ref(null)
 const deleting = ref(false)
 
+const iconOptions = [
+  { value: 'Box', component: Box },
+  { value: 'Present', component: Present },
+  { value: 'Goods', component: Goods },
+  { value: 'Handbag', component: Handbag },
+  { value: 'Shop', component: Shop },
+  { value: 'Ticket', component: Ticket },
+  { value: 'Coin', component: Coin },
+  { value: 'Trophy', component: Trophy },
+  { value: 'Medal', component: Medal },
+  { value: 'Star', component: Star },
+  { value: 'MagicStick', component: MagicStick },
+  { value: 'Goblet', component: Goblet },
+  { value: 'Coffee', component: Coffee },
+  { value: 'Apple', component: Apple },
+  { value: 'Moon', component: Moon },
+  { value: 'SwitchButton', component: SwitchButton }
+]
+
+const iconMap = Object.fromEntries(iconOptions.map((option) => [option.value, option.component]))
+
 const form = ref({
   name: '',
   description: '',
+  icon: 'Box',
   coin_price: 10,
   category: '',
   stock: -1
@@ -316,6 +372,7 @@ const form = ref({
 const defaultForm = {
   name: '',
   description: '',
+  icon: 'Box',
   coin_price: 10,
   category: '',
   stock: -1
@@ -352,6 +409,10 @@ function trapFocus(event) {
       first.focus()
     }
   }
+}
+
+function resolveShopIcon(icon) {
+  return iconMap[icon] || Box
 }
 
 async function fetchItems() {
@@ -402,6 +463,7 @@ function openEditDialog(item) {
   form.value = {
     name: item.name,
     description: item.description || '',
+    icon: item.icon || 'Box',
     coin_price: item.coin_price,
     category: item.category || '',
     stock: item.stock
@@ -444,6 +506,7 @@ async function createItem() {
     const payload = {
       name: form.value.name.trim(),
       description: form.value.description?.trim() || undefined,
+      icon: form.value.icon || 'Box',
       coin_price: form.value.coin_price,
       category: form.value.category?.trim() || undefined,
       stock: form.value.stock
@@ -467,6 +530,7 @@ async function updateItem() {
     const payload = {
       name: form.value.name.trim(),
       description: form.value.description?.trim() || undefined,
+      icon: form.value.icon || 'Box',
       coin_price: form.value.coin_price,
       category: form.value.category?.trim() || undefined,
       stock: form.value.stock
@@ -498,19 +562,29 @@ onMounted(() => {
 
 .page-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: var(--spacing-lg);
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.page-header-main {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .header-left {
   display: flex;
-  align-items: baseline;
-  gap: var(--spacing-md);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
 }
 
 .page-title {
-  font-size: var(--font-size-2xl);
+  font-size: var(--font-size-xl);
   font-weight: 700;
   color: var(--color-text);
 }
@@ -520,20 +594,21 @@ onMounted(() => {
   color: var(--color-text-tertiary);
 }
 
-.header-right {
+.shop-actions {
   display: flex;
   align-items: center;
-  gap: var(--spacing-lg);
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .balance-display {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-lg);
+  padding: 10px 14px;
   background: rgba(255, 217, 61, 0.12);
   border: 1px solid rgba(255, 217, 61, 0.3);
-  border-radius: var(--radius-md);
+  border-radius: 14px;
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-warning);
@@ -557,14 +632,16 @@ onMounted(() => {
 .btn-create {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-lg);
+  min-height: 44px;
+  padding: 10px 14px;
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: #fff;
   background: var(--color-primary);
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: 12px;
   cursor: pointer;
   font-family: var(--font-family);
   transition: background 0.15s ease;
@@ -588,14 +665,16 @@ onMounted(() => {
 .btn-history {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-lg);
+  min-height: 44px;
+  padding: 10px 14px;
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-text-secondary);
   background: transparent;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: 12px;
   cursor: pointer;
   font-family: var(--font-family);
   transition: all 0.15s ease;
@@ -712,7 +791,7 @@ onMounted(() => {
 /* Items Grid */
 .items-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
 }
 
@@ -723,7 +802,8 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  padding: 14px;
+  padding: 12px;
+  position: relative;
 }
 
 .item-card:hover {
@@ -731,36 +811,40 @@ onMounted(() => {
   box-shadow: var(--shadow-md);
 }
 
+.item-card-header,
+.item-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.item-card-header {
+  margin-bottom: 10px;
+  padding-right: 68px;
+}
+
 .item-card-icon {
-  width: 100%;
-  height: 64px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--color-bg-tertiary);
-  border-radius: var(--surface-radius-sm) var(--surface-radius-sm) 0 0;
-  position: relative;
-  margin-bottom: 12px;
+  border-radius: 12px;
+  flex-shrink: 0;
 }
 
 .item-card-icon svg {
-  width: 36px;
-  height: 36px;
+  width: 20px;
+  height: 20px;
   color: var(--color-primary);
 }
 
-.item-card-actions {
-  position: absolute;
-  top: var(--spacing-xs);
-  right: var(--spacing-xs);
-  display: flex;
-  gap: 4px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.item-card:hover .item-card-actions {
-  opacity: 1;
+.item-card-icon :deep(svg) {
+  width: 20px;
+  height: 20px;
+  color: var(--color-primary);
 }
 
 .btn-icon {
@@ -800,20 +884,21 @@ onMounted(() => {
 }
 
 .item-card-name {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-text);
-  margin-bottom: var(--spacing-xs);
+  margin-bottom: 4px;
+  line-height: 1.3;
 }
 
 .item-card-desc {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   color: var(--color-text-tertiary);
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  margin-bottom: var(--spacing-sm);
+  margin-bottom: 6px;
 }
 
 .item-card-tags {
@@ -823,11 +908,12 @@ onMounted(() => {
 }
 
 .item-tag {
-  font-size: var(--font-size-xs);
-  padding: 2px 8px;
+  font-size: 10px;
+  padding: 1px 6px;
   border-radius: var(--radius-full);
   font-weight: 500;
   text-transform: capitalize;
+  line-height: 18px;
 }
 
 .item-tag--category {
@@ -846,33 +932,29 @@ onMounted(() => {
 }
 
 .item-card-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 0 0;
+  padding: 10px 0 0;
   border-top: 1px solid var(--color-border);
-  gap: 10px;
 }
 
 .item-price {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-sm);
   font-weight: 700;
   color: var(--color-warning);
 }
 
 .item-price svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
 .btn-purchase {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 100px;
+  min-width: 0;
   padding: var(--spacing-xs) var(--spacing-lg);
   font-size: var(--font-size-sm);
   font-weight: 600;
@@ -885,6 +967,15 @@ onMounted(() => {
   transition: background 0.15s ease;
   width: 100%;
   min-height: 44px;
+}
+
+.item-card-admin {
+  display: flex;
+  gap: 6px;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
 }
 
 .btn-purchase:hover:not(:disabled) {
@@ -982,11 +1073,14 @@ onMounted(() => {
 
 .dialog {
   width: min(100% - 24px, 480px);
+  max-height: min(88vh, 760px);
   background: var(--color-card);
   border: 1px solid var(--color-border);
   border-radius: 20px;
   box-shadow: var(--shadow-xl);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .dialog-header {
@@ -1032,6 +1126,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
+  overflow-y: auto;
 }
 
 .form-group {
@@ -1085,6 +1180,42 @@ onMounted(() => {
 .form-hint {
   font-size: var(--font-size-xs);
   color: var(--color-text-tertiary);
+}
+
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.icon-option {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.icon-option :deep(svg) {
+  width: 18px;
+  height: 18px;
+}
+
+.icon-option:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(14, 165, 233, 0.06);
+}
+
+.icon-option--active {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(14, 165, 233, 0.1);
 }
 
 .dialog-error {
@@ -1202,43 +1333,101 @@ onMounted(() => {
 
   .page-header {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     gap: var(--spacing-md);
   }
 
-  .header-right {
+  .page-header-main {
+    flex-direction: column;
     width: 100%;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: var(--spacing-sm);
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .shop-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
   }
 
   .items-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .btn-history,
+  .btn-create {
+    width: 100%;
+  }
+
+  .item-card {
+    padding: 10px;
+  }
+
+  .item-card-header {
+    margin-bottom: 8px;
+  }
+
+  .item-card-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .item-card-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .item-card-icon :deep(svg) {
+    width: 18px;
+    height: 18px;
   }
 
   .item-card-footer {
-    flex-direction: column;
-    gap: var(--spacing-sm);
-    align-items: stretch;
+    padding-top: 8px;
   }
 
-  .item-card-actions {
-    opacity: 1;
+  .btn-purchase {
+    min-height: 40px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .btn-icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  .btn-icon svg {
+    width: 12px;
+    height: 12px;
   }
 
   .form-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
 
   .dialog {
     max-width: 100%;
+    width: calc(100% - 16px);
+    max-height: calc(100vh - 16px);
     margin: var(--spacing-sm);
   }
 
   .dialog-body {
-    padding: var(--spacing-md);
+    padding: 12px;
     gap: 12px;
+  }
+
+  .icon-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .icon-option {
+    height: 40px;
   }
 }
 </style>

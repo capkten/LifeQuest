@@ -1,32 +1,39 @@
 <template>
   <div class="profile-page">
-    <div class="profile-header">
-      <div class="profile-avatar">
-        <img v-if="avatarSrc" :src="avatarSrc" alt="用户头像" class="profile-avatar-img" />
-        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <circle cx="12" cy="8" r="4" />
-          <path d="M20 21a8 8 0 1 0-16 0" />
-        </svg>
-      </div>
-      <div class="profile-info">
-        <h2 class="profile-username">
-          {{ user?.username || '冒险者' }}
-          <span v-if="activeTitle" class="profile-active-title">{{ activeTitle.name }}</span>
-        </h2>
-        <span class="profile-title">{{ user?.title || '冒险者' }}</span>
-        <span class="profile-email">{{ user?.email || '' }}</span>
-      </div>
-      <div class="profile-actions">
-        <button class="edit-profile-btn" @click="showTitleModal = true">更换称号</button>
-        <button class="edit-profile-btn" @click="goToEditProfile">编辑资料</button>
+    <section class="profile-hero">
+      <div class="profile-hero-main">
+        <div class="profile-avatar">
+          <img v-if="avatarSrc" :src="avatarSrc" alt="用户头像" class="profile-avatar-img" />
+          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="8" r="4" />
+            <path d="M20 21a8 8 0 1 0-16 0" />
+          </svg>
+        </div>
+        <div class="profile-info">
+          <div class="profile-name-row">
+            <h2 class="profile-username">{{ user?.username || '冒险者' }}</h2>
+            <span v-if="activeTitle" class="profile-active-title">{{ activeTitle.name }}</span>
+          </div>
+          <span class="profile-title">{{ user?.title || '冒险者' }}</span>
+          <span v-if="user?.email" class="profile-email">{{ user.email }}</span>
+          <div class="profile-meta">
+            <span class="profile-meta-item">Lv. {{ user?.level || 1 }}</span>
+            <span class="profile-meta-item">{{ user?.coins || 0 }} 金币</span>
+            <span class="profile-meta-item">{{ user?.experience || 0 }} XP</span>
+          </div>
+        </div>
         <div class="profile-level-badge">
           <span class="level-badge-number">{{ user?.level || 1 }}</span>
           <span class="level-badge-label">等级</span>
         </div>
       </div>
-    </div>
+      <div class="profile-actions">
+        <button class="edit-profile-btn" @click="showTitleModal = true">更换称号</button>
+        <button class="edit-profile-btn edit-profile-btn--primary" @click="goToEditProfile">编辑资料</button>
+      </div>
+    </section>
 
-    <div class="stats-grid">
+    <div class="stats-grid stats-grid--hero">
       <div class="stat-card stat-card--level">
         <div class="stat-card-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -90,7 +97,7 @@
         </svg>
         统计数据
       </h3>
-      <div class="stats-grid">
+      <div class="stats-grid stats-grid--detail">
         <div class="stat-card stat-card--tasks">
           <div class="stat-card-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -400,10 +407,9 @@ function goToEditProfile() {
   width: 100%;
 }
 
-.profile-header {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xl);
+.profile-hero {
+  display: grid;
+  gap: 12px;
   background: var(--color-card);
   border: 1px solid var(--color-border);
   border-radius: var(--surface-radius);
@@ -411,9 +417,15 @@ function goToEditProfile() {
   margin-bottom: var(--spacing-md);
 }
 
+.profile-hero-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
 .profile-avatar {
-  width: 80px;
-  height: 80px;
+  width: 68px;
+  height: 68px;
   border-radius: var(--radius-full);
   background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
   display: flex;
@@ -430,8 +442,8 @@ function goToEditProfile() {
 }
 
 .profile-avatar svg {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   color: #fff;
 }
 
@@ -439,12 +451,19 @@ function goToEditProfile() {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: 4px;
   min-width: 0;
 }
 
+.profile-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .profile-username {
-  font-size: var(--font-size-2xl);
+  font-size: 1.25rem;
   font-weight: 700;
   color: var(--color-text);
   margin: 0;
@@ -452,19 +471,19 @@ function goToEditProfile() {
 }
 
 .profile-title {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-sm);
   color: var(--color-primary);
   font-weight: 500;
 }
 
 .profile-email {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   color: var(--color-text-tertiary);
 }
 
 .profile-level-badge {
-  width: 72px;
-  height: 72px;
+  width: 60px;
+  height: 60px;
   border-radius: var(--radius-full);
   background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
   display: flex;
@@ -474,16 +493,34 @@ function goToEditProfile() {
   flex-shrink: 0;
 }
 
+.profile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.profile-meta-item {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(108, 99, 255, 0.08);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+}
+
 .profile-actions {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--spacing-md);
-  flex-shrink: 0;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .edit-profile-btn {
-  padding: var(--spacing-sm) var(--spacing-lg);
+  min-height: 38px;
+  padding: 0 14px;
   background: var(--color-bg-tertiary);
   color: var(--color-text);
   border: 1px solid var(--color-border);
@@ -495,6 +532,12 @@ function goToEditProfile() {
   white-space: nowrap;
 }
 
+.edit-profile-btn--primary {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
 .edit-profile-btn:hover {
   background: var(--color-primary);
   color: #fff;
@@ -502,7 +545,7 @@ function goToEditProfile() {
 }
 
 .level-badge-number {
-  font-size: var(--font-size-2xl);
+  font-size: 1.375rem;
   font-weight: 700;
   color: #fff;
   line-height: 1;
@@ -520,6 +563,10 @@ function goToEditProfile() {
   gap: 10px;
 }
 
+.stats-grid--hero {
+  margin-bottom: var(--spacing-md);
+}
+
 .stats-section {
   background: var(--color-card);
   border: 1px solid var(--color-border);
@@ -535,11 +582,11 @@ function goToEditProfile() {
 .stat-card {
   display: flex;
   align-items: center;
-  gap: var(--spacing-lg);
+  gap: 10px;
   background: var(--color-card);
   border: 1px solid var(--color-border);
   border-radius: var(--surface-radius-sm);
-  padding: 14px;
+  padding: 12px;
   transition: border-color 0.2s ease;
 }
 
@@ -548,8 +595,8 @@ function goToEditProfile() {
 }
 
 .stat-card-icon {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
@@ -598,8 +645,8 @@ function goToEditProfile() {
 }
 
 .stat-card-icon svg {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
 }
 
 .stat-card-info {
@@ -608,13 +655,13 @@ function goToEditProfile() {
 }
 
 .stat-card-value {
-  font-size: var(--font-size-2xl);
+  font-size: 1.125rem;
   font-weight: 700;
   color: var(--color-text);
 }
 
 .stat-card-label {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   color: var(--color-text-tertiary);
 }
 
@@ -630,7 +677,9 @@ function goToEditProfile() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--spacing-md);
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
 }
 
 .exp-title {
@@ -647,7 +696,7 @@ function goToEditProfile() {
 }
 
 .exp-bar {
-  height: 10px;
+  height: 8px;
   background: var(--color-bg-tertiary);
   border-radius: var(--radius-full);
   overflow: hidden;
@@ -677,15 +726,15 @@ function goToEditProfile() {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-base);
   font-weight: 600;
   color: var(--color-text);
-  margin: 0 0 var(--spacing-lg) 0;
+  margin: 0 0 12px 0;
 }
 
 .section-title svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   color: var(--color-primary);
 }
 
@@ -697,8 +746,8 @@ function goToEditProfile() {
 
 .achievement-card {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
+  align-items: flex-start;
+  gap: 10px;
   padding: 12px;
   background: var(--color-bg-tertiary);
   border-radius: var(--surface-radius-sm);
@@ -710,8 +759,8 @@ function goToEditProfile() {
 }
 
 .achievement-icon {
-  width: 44px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
@@ -720,8 +769,8 @@ function goToEditProfile() {
 }
 
 .achievement-icon svg {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
 }
 
 .achievement-icon--unlocked {
@@ -748,13 +797,13 @@ function goToEditProfile() {
 }
 
 .achievement-name {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-text);
 }
 
 .achievement-desc {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   color: var(--color-text-tertiary);
 }
 
@@ -797,38 +846,41 @@ function goToEditProfile() {
     padding: var(--spacing-md);
   }
 
-  .profile-header {
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: var(--spacing-md);
-    padding: var(--surface-padding);
+  .profile-hero {
+    gap: 10px;
   }
 
-  .profile-info {
-    align-items: center;
+  .profile-hero-main {
+    align-items: flex-start;
+    gap: 12px;
   }
 
-  .profile-username,
-  .profile-email {
-    text-align: center;
+  .profile-name-row {
+    gap: 6px;
   }
 
-  .stats-grid {
+  .profile-username {
+    font-size: 1.125rem;
+  }
+
+  .profile-level-badge {
+    width: 52px;
+    height: 52px;
+  }
+
+  .profile-actions {
+    display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .stats-section .stats-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
   }
 
   .dialog {
-    max-width: 100%;
-    max-height: calc(100vh - (var(--spacing-sm) * 2));
+    width: min(100% - 16px, 640px);
+    max-height: calc(100vh - 16px);
   }
 
   .dialog-body {
-    padding: var(--spacing-md);
+    padding: 12px;
   }
 
   .toast {
@@ -865,7 +917,7 @@ function goToEditProfile() {
 
 .dialog {
   width: min(100% - 24px, 640px);
-  max-height: min(80vh, 720px);
+  max-height: min(78vh, 720px);
   background: var(--color-card);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
@@ -879,7 +931,7 @@ function goToEditProfile() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-lg);
+  padding: 14px 16px;
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
 }
@@ -915,7 +967,7 @@ function goToEditProfile() {
 }
 
 .dialog-body {
-  padding: var(--spacing-lg);
+  padding: 14px 16px 16px;
   overflow-y: auto;
 }
 
@@ -941,9 +993,9 @@ function goToEditProfile() {
 
 .title-item {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  padding: var(--spacing-md);
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
   border-radius: var(--radius-lg);
   cursor: pointer;
   transition: background 0.15s ease;
@@ -964,8 +1016,8 @@ function goToEditProfile() {
 }
 
 .title-item-icon {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
@@ -975,8 +1027,8 @@ function goToEditProfile() {
 }
 
 .title-item-icon svg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   color: var(--color-primary);
 }
 
@@ -993,13 +1045,13 @@ function goToEditProfile() {
 }
 
 .title-item-name {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-text);
 }
 
 .title-item-desc {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   color: var(--color-text-tertiary);
 }
 
@@ -1058,26 +1110,14 @@ function goToEditProfile() {
 
 /* Responsive for profile-actions */
 @media (max-width: 767px) {
-  .profile-actions {
-    flex-direction: column;
-    gap: var(--spacing-sm);
-    align-items: stretch;
-    width: 100%;
-  }
-
-  .profile-level-badge {
-    width: 56px;
-    height: 56px;
-    align-self: center;
-  }
-
   .level-badge-number {
     font-size: var(--font-size-lg);
   }
 
   .edit-profile-btn {
     width: 100%;
-    padding: var(--spacing-sm) var(--spacing-md);
+    justify-content: center;
+    padding: 0 12px;
     font-size: var(--font-size-sm);
   }
 }

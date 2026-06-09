@@ -102,17 +102,17 @@
               <div class="todo-card-info">
                 <h3 class="todo-card-title" :class="{ 'todo-card-title--done': !habit.is_active }">{{ habit.title }}</h3>
                 <p v-if="habit.description" class="todo-card-desc">{{ habit.description }}</p>
+                <div class="todo-card-meta todo-card-meta--inline">
+                  <span class="difficulty-badge" :class="'difficulty-badge--' + habit.difficulty">
+                    {{ habit.difficulty === 'easy' ? '简单' : habit.difficulty === 'medium' ? '中等' : '困难' }}
+                  </span>
+                  <span class="frequency-badge" :class="'frequency-badge--' + habit.frequency">
+                    {{ habit.frequency === 'daily' ? '每日' : habit.frequency === 'weekly' ? '每周' : '每月' }}
+                  </span>
+                </div>
               </div>
             </div>
             <div class="todo-card-actions">
-              <div class="todo-card-meta">
-                <span class="difficulty-badge" :class="'difficulty-badge--' + habit.difficulty">
-                  {{ habit.difficulty === 'easy' ? '简单' : habit.difficulty === 'medium' ? '中等' : '困难' }}
-                </span>
-                <span class="frequency-badge" :class="'frequency-badge--' + habit.frequency">
-                  {{ habit.frequency === 'daily' ? '每日' : habit.frequency === 'weekly' ? '每周' : '每月' }}
-                </span>
-              </div>
               <div class="action-buttons">
                 <button class="action-btn action-btn--edit" @click="openEditDialog(habit, 'habits')" aria-label="编辑">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -182,17 +182,17 @@
                 <span v-if="task.project_name" class="task-project-tag" :style="{ borderColor: task.project_color || '#0EA5E9' }">
                   {{ task.project_name }}
                 </span>
+                <div class="todo-card-meta todo-card-meta--inline">
+                  <span class="difficulty-badge" :class="'difficulty-badge--' + task.difficulty">
+                    {{ task.difficulty === 'easy' ? '简单' : task.difficulty === 'medium' ? '中等' : '困难' }}
+                  </span>
+                  <span class="status-badge" :class="'status-badge--' + task.status">
+                    {{ formatStatus(task.status) }}
+                  </span>
+                </div>
               </div>
             </div>
             <div class="todo-card-actions">
-              <div class="todo-card-meta">
-                <span class="difficulty-badge" :class="'difficulty-badge--' + task.difficulty">
-                  {{ task.difficulty === 'easy' ? '简单' : task.difficulty === 'medium' ? '中等' : '困难' }}
-                </span>
-                <span class="status-badge" :class="'status-badge--' + task.status">
-                  {{ formatStatus(task.status) }}
-                </span>
-              </div>
               <div class="action-buttons">
                 <button class="action-btn action-btn--edit" @click="openEditDialog(task, 'tasks')" aria-label="编辑">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -352,17 +352,17 @@
               <div class="todo-card-info">
                 <h3 class="todo-card-title" :class="{ 'todo-card-title--done': goal.status === 'completed' }">{{ goal.title }}</h3>
                 <p v-if="goal.description" class="todo-card-desc">{{ goal.description }}</p>
+                <div class="todo-card-meta todo-card-meta--inline">
+                  <span class="difficulty-badge" :class="'difficulty-badge--' + goal.difficulty">
+                    {{ goal.difficulty === 'easy' ? '简单' : goal.difficulty === 'medium' ? '中等' : '困难' }}
+                  </span>
+                  <span class="status-badge" :class="'status-badge--' + goal.status">
+                    {{ formatStatus(goal.status) }}
+                  </span>
+                </div>
               </div>
             </div>
             <div class="todo-card-actions">
-              <div class="todo-card-meta">
-                <span class="difficulty-badge" :class="'difficulty-badge--' + goal.difficulty">
-                  {{ goal.difficulty === 'easy' ? '简单' : goal.difficulty === 'medium' ? '中等' : '困难' }}
-                </span>
-                <span class="status-badge" :class="'status-badge--' + goal.status">
-                  {{ formatStatus(goal.status) }}
-                </span>
-              </div>
               <div class="action-buttons">
                 <button class="action-btn action-btn--edit" @click="openEditDialog(goal, 'goals')" aria-label="编辑">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1122,23 +1122,25 @@ onMounted(() => {
 
 .page-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: var(--spacing-lg);
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
 }
 
 .header-left {
   display: flex;
-  align-items: baseline;
-  gap: var(--spacing-md);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   min-width: 0;
-  flex-wrap: wrap;
 }
 
 .page-title {
-  font-size: var(--font-size-2xl);
+  font-size: var(--font-size-xl);
   font-weight: 700;
   color: var(--color-text);
+  line-height: 1.2;
 }
 
 .item-count {
@@ -1149,22 +1151,25 @@ onMounted(() => {
 .btn-create {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-lg);
+  min-height: 44px;
+  padding: 10px 14px;
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: #fff;
   background: var(--color-primary);
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: 12px;
   cursor: pointer;
   font-family: var(--font-family);
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, transform 0.15s ease;
   white-space: nowrap;
 }
 
 .btn-create:hover {
   background: var(--color-primary-dark);
+  transform: translateY(-1px);
 }
 
 .btn-create:disabled {
@@ -1179,39 +1184,46 @@ onMounted(() => {
 
 /* Tabs */
 .tabs {
-  display: flex;
-  gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-lg);
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: var(--spacing-md);
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
   min-width: 0;
 }
 
 .tab-btn {
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-lg);
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 8px;
   font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--color-text-secondary);
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-radius: 12px;
   cursor: pointer;
   font-family: var(--font-family);
-  transition: color 0.15s ease, border-color 0.15s ease;
-  margin-bottom: -1px;
-  min-height: 44px;
+  transition: color 0.15s ease, background 0.15s ease;
 }
 
 .tab-btn:hover {
   color: var(--color-text);
+  background: rgba(14, 165, 233, 0.08);
 }
 
 .tab-btn--active {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
+  color: #fff;
+  background: var(--color-primary);
 }
 
 .tab-icon {
@@ -1349,14 +1361,14 @@ onMounted(() => {
 .todo-list {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-md);
+  gap: 10px;
 }
 
 .todo-card {
   background: var(--color-card);
   border: 1px solid var(--color-border);
   border-radius: var(--surface-radius-sm);
-  padding: 14px;
+  padding: 10px;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -1366,23 +1378,23 @@ onMounted(() => {
 }
 
 .todo-card-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--spacing-md);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
 }
 
 .todo-card-main {
   display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-md);
+  align-items: start;
+  gap: 8px;
   flex: 1;
   min-width: 0;
 }
 
 .complete-btn {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -1414,20 +1426,24 @@ onMounted(() => {
 }
 
 .complete-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
 }
 
 .todo-card-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .todo-card-title {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-text);
-  margin-bottom: var(--spacing-xs);
+  margin-bottom: 0;
+  line-height: 1.2;
   word-break: break-word;
 }
 
@@ -1437,29 +1453,38 @@ onMounted(() => {
 }
 
 .todo-card-desc {
-  font-size: var(--font-size-sm);
+  font-size: 11px;
   color: var(--color-text-tertiary);
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  line-height: 1.3;
+  opacity: 0.8;
 }
 
 .todo-card-meta {
   display: flex;
-  gap: var(--spacing-xs);
+  gap: 4px;
   flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.todo-card-meta--inline {
+  justify-content: flex-start;
 }
 
 .difficulty-badge,
 .frequency-badge,
 .status-badge {
-  font-size: var(--font-size-xs);
-  padding: 2px 10px;
+  font-size: 10px;
+  padding: 0 6px;
   border-radius: var(--radius-full);
   font-weight: 500;
   text-transform: capitalize;
   white-space: nowrap;
+  line-height: 18px;
 }
 
 .difficulty-badge--easy {
@@ -1514,16 +1539,18 @@ onMounted(() => {
 
 /* Goal Progress */
 .goal-progress-section {
-  margin-top: var(--spacing-md);
-  padding-top: var(--spacing-md);
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px solid var(--color-border);
+  display: grid;
+  gap: 6px;
 }
 
 .goal-progress-info {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--spacing-xs);
+  margin-bottom: 0;
 }
 
 .goal-progress-label {
@@ -1539,7 +1566,7 @@ onMounted(() => {
 }
 
 .goal-progress-bar {
-  height: 8px;
+  height: 4px;
   background: var(--color-bg-tertiary);
   border-radius: var(--radius-full);
   overflow: hidden;
@@ -1554,8 +1581,8 @@ onMounted(() => {
 
 /* Subtask Section */
 .subtask-section {
-  margin-top: var(--spacing-md);
-  padding-top: var(--spacing-md);
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px solid var(--color-border);
 }
 
@@ -1563,6 +1590,7 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
+  min-height: 28px;
   background: none;
   border: none;
   cursor: pointer;
@@ -1589,16 +1617,17 @@ onMounted(() => {
 }
 
 .subtask-count-badge {
-  font-size: var(--font-size-xs);
+  font-size: 10px;
   font-weight: 600;
-  padding: 1px 8px;
+  padding: 0 6px;
   border-radius: var(--radius-full);
   background: rgba(108, 99, 255, 0.12);
   color: var(--color-primary);
+  line-height: 18px;
 }
 
 .subtask-content {
-  margin-top: var(--spacing-sm);
+  margin-top: 8px;
   animation: fadeIn 0.2s ease;
 }
 
@@ -1616,15 +1645,16 @@ onMounted(() => {
 .subtask-list {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: 4px;
 }
 
 .subtask-item {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
+  gap: 8px;
+  padding: 6px 10px;
   background: var(--color-bg-secondary);
+  border: 1px solid rgba(186, 230, 253, 0.7);
   border-radius: var(--radius-md);
   transition: opacity 0.2s ease;
 }
@@ -1673,7 +1703,7 @@ onMounted(() => {
 
 .subtask-title {
   flex: 1;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   color: var(--color-text);
   min-width: 0;
   word-break: break-word;
@@ -1697,11 +1727,7 @@ onMounted(() => {
   cursor: pointer;
   color: var(--color-text-tertiary);
   transition: all 0.15s ease;
-  opacity: 0;
-}
-
-.subtask-item:hover .subtask-delete-btn {
-  opacity: 1;
+  opacity: 0.72;
 }
 
 .subtask-delete-btn:hover {
@@ -1728,15 +1754,16 @@ onMounted(() => {
 
 .subtask-add-form {
   display: flex;
-  gap: var(--spacing-xs);
-  margin-top: var(--spacing-sm);
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .subtask-input {
   flex: 1;
   min-width: 0;
-  padding: var(--spacing-xs) var(--spacing-md);
-  font-size: var(--font-size-sm);
+  padding: 6px 10px;
+  font-size: var(--font-size-xs);
   font-family: var(--font-family);
   color: var(--color-text);
   background: var(--color-bg-secondary);
@@ -1755,8 +1782,8 @@ onMounted(() => {
 }
 
 .subtask-add-btn {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -1779,36 +1806,37 @@ onMounted(() => {
 }
 
 .subtask-add-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 /* Footer Stats */
 .todo-card-footer {
-  margin-top: var(--spacing-md);
-  padding-top: var(--spacing-md);
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px solid var(--color-border);
 }
 
 .todo-card-stats {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .stat-item {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  font-size: var(--font-size-xs);
+  gap: 4px;
+  font-size: 11px;
   color: var(--color-text-tertiary);
   font-weight: 500;
+  line-height: 1.2;
 }
 
 .stat-item svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
 }
 
 .stat-item--coins {
@@ -1904,11 +1932,14 @@ onMounted(() => {
 
 .dialog {
   width: min(100% - 24px, 560px);
+  max-height: min(88vh, 760px);
   background: var(--color-card);
   border: 1px solid var(--color-border);
   border-radius: 20px;
   box-shadow: var(--shadow-xl);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .dialog-header {
@@ -1954,6 +1985,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
+  overflow-y: auto;
 }
 
 .form-group {
@@ -2071,25 +2103,21 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: var(--spacing-sm);
+  gap: 3px;
   flex-shrink: 0;
   min-width: 0;
 }
 
 .action-buttons {
   display: flex;
-  gap: 6px;
-  opacity: 0;
+  gap: 4px;
+  opacity: 1;
   transition: opacity 0.15s ease;
 }
 
-.todo-card:hover .action-buttons {
-  opacity: 1;
-}
-
 .action-btn {
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2102,8 +2130,8 @@ onMounted(() => {
 }
 
 .action-btn svg {
-  width: 14px;
-  height: 14px;
+  width: 11px;
+  height: 11px;
 }
 
 .action-btn--edit:hover {
@@ -2159,9 +2187,13 @@ onMounted(() => {
 .project-filter {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
-  margin-bottom: var(--spacing-lg);
+  gap: 12px;
+  margin-bottom: var(--spacing-md);
   min-width: 0;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
 }
 
 .project-filter-label {
@@ -2179,19 +2211,20 @@ onMounted(() => {
 .task-project-tag {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
+  padding: 1px 6px;
   border-radius: var(--radius-full);
   border: 1px solid;
-  font-size: var(--font-size-xs);
+  font-size: 10px;
   color: var(--color-text-secondary);
   background: var(--color-bg-tertiary);
-  margin-top: var(--spacing-xs);
+  margin-top: 2px;
+  line-height: 18px;
 }
 
 /* Responsive */
 @media (max-width: 1199px) {
   .todos-page {
-    padding: var(--spacing-lg);
+    padding: var(--spacing-md);
   }
 }
 
@@ -2204,7 +2237,7 @@ onMounted(() => {
   .page-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: var(--spacing-md);
+    gap: 12px;
   }
 
   .header-left,
@@ -2221,36 +2254,14 @@ onMounted(() => {
     justify-content: center;
   }
 
-  .tabs {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-    padding: 6px;
-    background: rgba(255, 255, 255, 0.72);
-    border: 1px solid var(--color-border);
-    border-radius: 16px;
-    border-bottom: 1px solid var(--color-border);
-    overflow: visible;
-  }
-
   .tab-btn {
-    width: 100%;
-    min-width: 0;
-    justify-content: center;
     padding: 10px 8px;
     font-size: 11px;
     gap: 2px;
-    white-space: nowrap;
-    min-height: 44px;
-    border-radius: 12px;
-    border-bottom: none;
-    margin-bottom: 0;
   }
 
   .tab-btn--active {
     background: var(--color-primary);
-    color: #fff;
-    border-bottom-color: transparent;
   }
 
   .tab-label {
@@ -2271,26 +2282,45 @@ onMounted(() => {
   }
 
   .todo-card-header {
-    flex-direction: column;
-    gap: var(--spacing-sm);
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
   }
 
   .todo-card {
-    padding: var(--spacing-md);
+    padding: 8px;
   }
 
   .todo-card-actions {
-    width: 100%;
-    align-items: flex-start;
+    width: auto;
+    align-items: flex-end;
+  }
+
+  .todo-card-main {
+    gap: 6px;
   }
 
   .todo-card-meta {
-    flex-wrap: wrap;
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .todo-card-meta--inline {
+    align-items: flex-start;
+    gap: 4px;
   }
 
   .action-buttons {
-    opacity: 1;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+  }
+
+  .action-btn {
+    width: 22px;
+    height: 22px;
+  }
+
+  .goal-progress-info {
+    margin-bottom: 0;
   }
 
   .project-filter {
@@ -2304,8 +2334,8 @@ onMounted(() => {
   }
 
   .subtask-item {
-    align-items: flex-start;
-    padding: var(--spacing-sm);
+    align-items: center;
+    padding: 6px 8px;
   }
 
   .subtask-delete-btn {
@@ -2313,7 +2343,7 @@ onMounted(() => {
   }
 
   .subtask-add-form {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
   .subtask-input,
@@ -2324,33 +2354,37 @@ onMounted(() => {
   }
 
   .subtask-add-btn {
-    width: 100%;
-    height: 40px;
-  }
-
-  .form-row {
-    grid-template-columns: 1fr;
+    width: 28px;
+    height: 28px;
   }
 
   .dialog {
     max-width: 100%;
     margin: var(--spacing-sm);
-    width: auto;
+    width: calc(100% - 16px);
+    max-height: calc(100vh - 16px);
   }
 
   .dialog-body {
-    padding: var(--spacing-md);
+    padding: 12px;
     gap: 12px;
   }
 
+  .form-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
   .dialog-actions {
-    flex-direction: column-reverse;
+    flex-direction: row;
+    justify-content: flex-end;
   }
 
   .btn-secondary,
   .btn-primary,
   .btn-danger {
-    width: 100%;
+    width: auto;
+    min-width: 96px;
     justify-content: center;
   }
 
