@@ -67,30 +67,32 @@
         :key="item.id"
         class="item-card"
       >
-        <div v-if="user && item.created_by === user.id" class="item-card-admin">
-          <button class="btn-icon btn-icon--edit" @click.stop="openEditDialog(item)" aria-label="编辑" title="编辑">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-          </button>
-          <button class="btn-icon btn-icon--delete" @click.stop="openDeleteDialog(item)" aria-label="删除" title="删除">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            </svg>
-          </button>
-        </div>
-        <div class="item-card-header">
+        <div class="item-card-top">
           <div class="item-card-icon">
             <component :is="resolveShopIcon(item.icon)" />
           </div>
-          <div class="item-price">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 6v12M6 12h12" />
-            </svg>
-            <span>{{ item.coin_price }}</span>
+          <div class="item-card-meta">
+            <div v-if="user && item.created_by === user.id" class="item-card-admin">
+              <button class="btn-icon btn-icon--edit" @click.stop="openEditDialog(item)" aria-label="编辑" title="编辑">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+              </button>
+              <button class="btn-icon btn-icon--delete" @click.stop="openDeleteDialog(item)" aria-label="删除" title="删除">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+              </button>
+            </div>
+            <div class="item-price">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 6v12M6 12h12" />
+              </svg>
+              <span>{{ item.coin_price }}</span>
+            </div>
           </div>
         </div>
         <div class="item-card-body">
@@ -811,17 +813,17 @@ onMounted(() => {
   box-shadow: var(--shadow-md);
 }
 
-.item-card-header,
+.item-card-top,
 .item-card-footer {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
   gap: 10px;
 }
 
-.item-card-header {
-  margin-bottom: 10px;
-  padding-right: 68px;
+.item-card-top {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .item-card-icon {
@@ -845,6 +847,24 @@ onMounted(() => {
   width: 20px;
   height: 20px;
   color: var(--color-primary);
+}
+
+.item-card-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.item-card-admin {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: nowrap;
 }
 
 .btn-icon {
@@ -879,7 +899,7 @@ onMounted(() => {
 }
 
 .item-card-body {
-  padding: 0;
+  padding: 10px 0 0;
   flex: 1;
 }
 
@@ -934,6 +954,7 @@ onMounted(() => {
 .item-card-footer {
   padding: 10px 0 0;
   border-top: 1px solid var(--color-border);
+  margin-top: 10px;
 }
 
 .item-price {
@@ -943,6 +964,8 @@ onMounted(() => {
   font-size: var(--font-size-sm);
   font-weight: 700;
   color: var(--color-warning);
+  justify-content: flex-end;
+  text-align: right;
 }
 
 .item-price svg {
@@ -967,15 +990,6 @@ onMounted(() => {
   transition: background 0.15s ease;
   width: 100%;
   min-height: 44px;
-}
-
-.item-card-admin {
-  display: flex;
-  gap: 6px;
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 1;
 }
 
 .btn-purchase:hover:not(:disabled) {
@@ -1365,8 +1379,16 @@ onMounted(() => {
     padding: 10px;
   }
 
-  .item-card-header {
-    margin-bottom: 8px;
+  .item-card-top {
+    padding-bottom: 8px;
+  }
+
+  .item-card-meta {
+    gap: 4px;
+  }
+
+  .item-card-body {
+    padding-top: 8px;
   }
 
   .item-card-icon {
@@ -1384,8 +1406,13 @@ onMounted(() => {
     height: 18px;
   }
 
+  .item-price {
+    font-size: 12px;
+  }
+
   .item-card-footer {
     padding-top: 8px;
+    margin-top: 8px;
   }
 
   .btn-purchase {
