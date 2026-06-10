@@ -130,7 +130,7 @@
               <div class="milestone-diamond">
                 <svg viewBox="0 0 16 16" fill="currentColor"><polygon points="8,1 15,8 8,15 1,8" /></svg>
               </div>
-              <span class="milestone-label">{{ ms.title }}</span>
+              <span class="milestone-label">{{ ms.name }}</span>
               <span v-if="ms.due_date" class="milestone-date">{{ formatDateShort(ms.due_date) }}</span>
             </div>
           </div>
@@ -429,8 +429,8 @@
           </div>
           <form class="dialog-body" @submit.prevent="saveMilestone">
             <div class="form-group">
-              <label class="form-label" for="ms-title">标题</label>
-              <input id="ms-title" v-model="msForm.title" type="text" class="form-input" placeholder="里程碑标题" required maxlength="200" />
+              <label class="form-label" for="ms-name">名称</label>
+              <input id="ms-name" v-model="msForm.name" type="text" class="form-input" placeholder="里程碑名称" required maxlength="200" />
             </div>
             <div class="form-group">
               <label class="form-label" for="ms-date">截止日期</label>
@@ -439,7 +439,7 @@
             <div v-if="msDialogError" class="dialog-error">{{ msDialogError }}</div>
             <div class="dialog-actions">
               <button type="button" class="btn-secondary" @click="cancelMilestoneDialog">取消</button>
-              <button type="submit" class="btn-primary" :disabled="!msForm.title.trim()">保存</button>
+              <button type="submit" class="btn-primary" :disabled="!msForm.name.trim()">保存</button>
             </div>
           </form>
         </div>
@@ -597,7 +597,7 @@ const phaseDialogError = ref(null)
 
 const showMilestoneDialog = ref(false)
 const editingMilestone = ref(null)
-const msForm = ref({ title: '', due_date: '' })
+const msForm = ref({ name: '', due_date: '' })
 const msDialogError = ref(null)
 
 const showEditProjectDialog = ref(false)
@@ -810,7 +810,7 @@ async function deletePhase(phase) {
 function openMilestoneDialog(ms) {
   editingMilestone.value = ms || null
   msForm.value = {
-    title: ms?.title || '',
+    name: ms?.name || '',
     due_date: ms?.due_date ? new Date(ms.due_date).toISOString().slice(0, 10) : ''
   }
   msDialogError.value = null
@@ -820,13 +820,13 @@ function openMilestoneDialog(ms) {
 function cancelMilestoneDialog() {
   showMilestoneDialog.value = false
   editingMilestone.value = null
-  msForm.value = { title: '', due_date: '' }
+  msForm.value = { name: '', due_date: '' }
 }
 
 async function saveMilestone() {
-  if (!msForm.value.title.trim()) return
+  if (!msForm.value.name.trim()) return
   try {
-    const data = { title: msForm.value.title.trim() }
+    const data = { name: msForm.value.name.trim() }
     if (msForm.value.due_date) data.due_date = msForm.value.due_date
     if (editingMilestone.value) {
       const updated = await projectService.updateMilestone(editingMilestone.value.id, data)
