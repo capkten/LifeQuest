@@ -1,7 +1,7 @@
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -164,7 +164,6 @@ def update_phase(
     service = ProjectService(db)
     phase = service.phase_repo.get_by_id(phase_id)
     if phase is None:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Phase not found")
     service.get_project_for_user(phase.project_id, current_user.id)
     return service.update_phase(phase, data)
@@ -179,7 +178,6 @@ def delete_phase(
     service = ProjectService(db)
     phase = service.phase_repo.get_by_id(phase_id)
     if phase is None:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Phase not found")
     service.get_project_for_user(phase.project_id, current_user.id)
     service.delete_phase(phase)
@@ -210,7 +208,6 @@ def update_milestone(
     service = ProjectService(db)
     milestone = service.milestone_repo.get_by_id(milestone_id)
     if milestone is None:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Milestone not found")
     service.get_project_for_user(milestone.project_id, current_user.id)
     return service.update_milestone(milestone, data)
@@ -225,7 +222,6 @@ def delete_milestone(
     service = ProjectService(db)
     milestone = service.milestone_repo.get_by_id(milestone_id)
     if milestone is None:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Milestone not found")
     service.get_project_for_user(milestone.project_id, current_user.id)
     service.delete_milestone(milestone)
@@ -241,7 +237,6 @@ def reach_milestone(
     service = ProjectService(db)
     milestone = service.milestone_repo.get_by_id(milestone_id)
     if milestone is None:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Milestone not found")
     service.get_project_for_user(milestone.project_id, current_user.id)
     return service.reach_milestone(milestone)

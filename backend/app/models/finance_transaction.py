@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone, date
 from enum import Enum
 
-from sqlalchemy import Column, String, Float, DateTime, Date, ForeignKey, Uuid
+from sqlalchemy import Column, String, Numeric, DateTime, Date, ForeignKey, Uuid
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -22,10 +22,11 @@ class FinanceTransaction(Base):
     account_id = Column(Uuid, ForeignKey("accounts.id"), nullable=False)
     category_id = Column(Uuid, ForeignKey("finance_categories.id"), nullable=True)
     type = Column(String(10), nullable=False)
-    amount = Column(Float, nullable=False)
+    amount = Column(Numeric(12, 2), nullable=False)
     description = Column(String(200), default="")
     date = Column(Date, nullable=False, index=True)
     to_account_id = Column(Uuid, ForeignKey("accounts.id"), nullable=True)
+    recurring_id = Column(Uuid, ForeignKey("recurring_transactions.id"), nullable=True, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     account = relationship("Account", back_populates="transactions", foreign_keys=[account_id])

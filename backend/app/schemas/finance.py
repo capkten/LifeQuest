@@ -1,8 +1,9 @@
 from datetime import datetime, date as Date
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, List
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.models.account import AccountType
 from app.models.finance_category import CategoryType
@@ -10,6 +11,13 @@ from app.models.finance_transaction import FinanceTransactionType
 from app.models.budget import BudgetPeriod
 from app.models.recurring_transaction import RecurFrequency
 from app.models.debt import DebtType, DebtStatus
+
+
+def _round_money(v: float | Decimal | None) -> float | None:
+    """Round monetary value to 2 decimal places."""
+    if v is None:
+        return None
+    return float(Decimal(str(v)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 # Account schemas
@@ -25,6 +33,8 @@ class AccountCreate(BaseModel):
     currency: str = "CNY"
     sort_order: int = 0
 
+    _round_balance = field_validator("balance", "credit_limit", mode="before")(_round_money)
+
 
 class AccountUpdate(BaseModel):
     name: Optional[str] = None
@@ -38,6 +48,8 @@ class AccountUpdate(BaseModel):
     currency: Optional[str] = None
     is_active: Optional[bool] = None
     sort_order: Optional[int] = None
+
+    _round_balance = field_validator("balance", "credit_limit", mode="before")(_round_money)
 
 
 class AccountResponse(BaseModel):
@@ -93,6 +105,8 @@ class TransactionCreate(BaseModel):
     date: Date
     to_account_id: Optional[UUID] = None
 
+    _round_amount = field_validator("amount", mode="before")(_round_money)
+
 
 class TransactionUpdate(BaseModel):
     account_id: Optional[UUID] = None
@@ -102,6 +116,8 @@ class TransactionUpdate(BaseModel):
     description: Optional[str] = None
     date: Optional[Date] = None
     to_account_id: Optional[UUID] = None
+
+    _round_amount = field_validator("amount", mode="before")(_round_money)
 
 
 class TransactionResponse(BaseModel):
@@ -126,12 +142,16 @@ class BudgetCreate(BaseModel):
     period: BudgetPeriod = BudgetPeriod.MONTHLY
     start_date: Optional[Date] = None
 
+    _round_amount = field_validator("amount", mode="before")(_round_money)
+
 
 class BudgetUpdate(BaseModel):
     category_id: Optional[UUID] = None
     amount: Optional[float] = None
     period: Optional[BudgetPeriod] = None
     start_date: Optional[Date] = None
+
+    _round_amount = field_validator("amount", mode="before")(_round_money)
 
 
 class BudgetResponse(BaseModel):
@@ -157,6 +177,8 @@ class RecurringCreate(BaseModel):
     frequency: RecurFrequency
     next_date: Date
 
+    _round_amount = field_validator("amount", mode="before")(_round_money)
+
 
 class RecurringUpdate(BaseModel):
     account_id: Optional[UUID] = None
@@ -167,6 +189,8 @@ class RecurringUpdate(BaseModel):
     frequency: Optional[RecurFrequency] = None
     next_date: Optional[Date] = None
     is_active: Optional[bool] = None
+
+    _round_amount = field_validator("amount", mode="before")(_round_money)
 
 
 class RecurringResponse(BaseModel):
@@ -195,6 +219,8 @@ class DebtCreate(BaseModel):
     description: str = ""
     due_date: Optional[Date] = None
 
+    _round_amounts = field_validator("amount", "remaining", mode="before")(_round_money)
+
 
 class DebtUpdate(BaseModel):
     creditor: Optional[str] = None
@@ -205,6 +231,8 @@ class DebtUpdate(BaseModel):
     description: Optional[str] = None
     due_date: Optional[Date] = None
     status: Optional[DebtStatus] = None
+
+    _round_amounts = field_validator("amount", "remaining", mode="before")(_round_money)
 
 
 class DebtResponse(BaseModel):
@@ -228,6 +256,8 @@ class DebtPaymentCreate(BaseModel):
     amount: float
     description: str = ""
     date: Date
+
+    _round_amount = field_validator("amount", mode="before")(_round_money)
 
 
 class DebtPaymentResponse(BaseModel):

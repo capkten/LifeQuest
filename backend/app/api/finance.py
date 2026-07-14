@@ -2,8 +2,8 @@ from datetime import date as Date
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, ConfigDict, Field, AliasChoices
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, ConfigDict, Field, AliasChoices, field_validator
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -31,6 +31,14 @@ class TransferRequest(BaseModel):
     amount: float
     description: str = ""
     date: Date | None = None
+
+    @field_validator("amount", mode="before")
+    @classmethod
+    def _round_amount(cls, v):
+        from decimal import Decimal, ROUND_HALF_UP
+        if v is None:
+            return v
+        return float(Decimal(str(v)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 # --- Dashboard ---
@@ -75,7 +83,6 @@ def update_account(
     service = FinanceService(db)
     account = service.account_repo.get_by_id(account_id)
     if not account or account.user_id != current_user.id:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Account not found")
     return service.update_account(account, data)
 
@@ -89,7 +96,6 @@ def delete_account(
     service = FinanceService(db)
     account = service.account_repo.get_by_id(account_id)
     if not account or account.user_id != current_user.id:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Account not found")
     service.delete_account(account)
     return {"message": "Account deleted"}
@@ -142,7 +148,6 @@ def delete_category(
     service = FinanceService(db)
     cat = service.category_repo.get_by_id(category_id)
     if not cat:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Category not found")
     service.delete_category(cat)
     return {"message": "Category deleted"}
@@ -191,7 +196,6 @@ def update_transaction(
     service = FinanceService(db)
     txn = service.transaction_repo.get_by_id(transaction_id)
     if not txn or txn.user_id != current_user.id:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Transaction not found")
     return service.update_transaction(txn, data)
 
@@ -205,7 +209,6 @@ def delete_transaction(
     service = FinanceService(db)
     txn = service.transaction_repo.get_by_id(transaction_id)
     if not txn or txn.user_id != current_user.id:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Transaction not found")
     service.delete_transaction(txn)
     return {"message": "Transaction deleted"}
@@ -242,7 +245,6 @@ def update_budget(
     service = FinanceService(db)
     budget = service.budget_repo.get_by_id(budget_id)
     if not budget or budget.user_id != current_user.id:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Budget not found")
     return service.update_budget(budget, data)
 
@@ -256,7 +258,6 @@ def delete_budget(
     service = FinanceService(db)
     budget = service.budget_repo.get_by_id(budget_id)
     if not budget or budget.user_id != current_user.id:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Budget not found")
     service.delete_budget(budget)
     return {"message": "Budget deleted"}
@@ -292,7 +293,6 @@ def trigger_recurring(
     service = FinanceService(db)
     rec = service.recurring_repo.get_by_id(recurring_id)
     if not rec or rec.user_id != current_user.id:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Recurring transaction not found")
     return service.trigger_recurring(rec)
 
@@ -306,7 +306,6 @@ def delete_recurring(
     service = FinanceService(db)
     rec = service.recurring_repo.get_by_id(recurring_id)
     if not rec or rec.user_id != current_user.id:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Recurring transaction not found")
     service.delete_recurring(rec)
     return {"message": "Recurring transaction deleted"}
@@ -344,7 +343,6 @@ def update_debt(
     service = FinanceService(db)
     debt = service.debt_repo.get_by_id(debt_id)
     if not debt or debt.user_id != current_user.id:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Debt not found")
     return service.update_debt(debt, data)
 
@@ -358,7 +356,6 @@ def delete_debt(
     service = FinanceService(db)
     debt = service.debt_repo.get_by_id(debt_id)
     if not debt or debt.user_id != current_user.id:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Debt not found")
     service.delete_debt(debt)
     return {"message": "Debt deleted"}

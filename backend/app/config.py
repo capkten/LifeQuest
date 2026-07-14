@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "LifeQuest"
     DATABASE_URL: str = "sqlite:///./lifequest.db"
     SECRET_KEY: str = Field(...)
+    CORS_ORIGINS: str = "*"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30

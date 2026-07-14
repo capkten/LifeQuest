@@ -106,7 +106,7 @@ class FinanceService:
             raise HTTPException(status_code=404, detail="Source account not found")
         if not to_acc or to_acc.user_id != user_id:
             raise HTTPException(status_code=404, detail="Target account not found")
-        if from_acc.balance < amount:
+        if float(from_acc.balance) < amount:
             raise HTTPException(status_code=400, detail="Insufficient balance")
 
         # Create transfer transaction + update both balances atomically
@@ -120,31 +120,31 @@ class FinanceService:
             to_account_id=to_id,
         )
         self.db.add(txn)
-        from_acc.balance -= amount
-        to_acc.balance += amount
+        from_acc.balance = float(from_acc.balance) - amount
+        to_acc.balance = float(to_acc.balance) + amount
         self.db.commit()
         self.db.refresh(txn)
         return {"transaction": txn, "from_balance": from_acc.balance, "to_balance": to_acc.balance}
 
     def _apply_transaction_balance_effect(self, transaction: FinanceTransaction, reverse: bool = False) -> None:
         multiplier = -1 if reverse else 1
-        amount = transaction.amount * multiplier
+        amount = float(transaction.amount) * multiplier
 
         if transaction.type == FinanceTransactionType.INCOME:
             account = self.account_repo.get_by_id(transaction.account_id)
             if account:
-                account.balance += amount
+                account.balance = float(account.balance) + amount
         elif transaction.type == FinanceTransactionType.EXPENSE:
             account = self.account_repo.get_by_id(transaction.account_id)
             if account:
-                account.balance -= amount
+                account.balance = float(account.balance) - amount
         elif transaction.type == FinanceTransactionType.TRANSFER:
             from_acc = self.account_repo.get_by_id(transaction.account_id)
             to_acc = self.account_repo.get_by_id(transaction.to_account_id) if transaction.to_account_id else None
             if from_acc:
-                from_acc.balance -= amount
+                from_acc.balance = float(from_acc.balance) - amount
             if to_acc:
-                to_acc.balance += amount
+                to_acc.balance = float(to_acc.balance) + amount
 
     # --- Category CRUD ---
 
@@ -191,9 +191,9 @@ class FinanceService:
         txn = FinanceTransaction(**d)
         self.db.add(txn)
         if data.type == FinanceTransactionType.INCOME:
-            account.balance += data.amount
+            account.balance = float(account.balance) + data.amount
         elif data.type == FinanceTransactionType.EXPENSE:
-            account.balance -= data.amount
+            account.balance = float(account.balance) - data.amount
         self.db.commit()
         self.db.refresh(txn)
 
@@ -253,12 +253,13 @@ class FinanceService:
         result = []
         for b in budgets:
             spent = self.budget_repo.get_spent_amount(b, today.year, today.month)
-            remaining = b.amount - spent
+            budget_amount = float(b.amount)
+            remaining = budget_amount - spent
             result.append({
                 "id": b.id,
                 "user_id": b.user_id,
                 "category_id": b.category_id,
-                "amount": b.amount,
+                "amount": budget_amount,
                 "period": b.period,
                 "start_date": b.start_date,
                 "created_at": b.created_at,
@@ -294,6 +295,18 @@ class FinanceService:
         return self.recurring_repo.delete(rec.id)
 
     def trigger_recurring(self, recurring: RecurringTransaction) -> FinanceTransaction:
+        # Idempotency: check if already triggered for this date
+        existing = (
+            self.db.query(FinanceTransaction)
+            .filter(
+                FinanceTransaction.recurring_id == recurring.id,
+                FinanceTransaction.date == recurring.next_date,
+            )
+            .first()
+        )
+        if existing:
+            return existing
+
         # Create the actual transaction
         txn = FinanceTransaction(
             user_id=recurring.user_id,
@@ -303,6 +316,7 @@ class FinanceService:
             amount=recurring.amount,
             description=recurring.description,
             date=recurring.next_date,
+            recurring_id=recurring.id,
         )
         self.db.add(txn)
 
@@ -310,9 +324,9 @@ class FinanceService:
         account = self.account_repo.get_by_id(recurring.account_id)
         if account:
             if recurring.type == FinanceTransactionType.INCOME:
-                account.balance += recurring.amount
+                account.balance = float(account.balance) + float(recurring.amount)
             elif recurring.type == FinanceTransactionType.EXPENSE:
-                account.balance -= recurring.amount
+                account.balance = float(account.balance) - float(recurring.amount)
 
         # Advance next_date based on frequency
         from datetime import timedelta
@@ -380,7 +394,7 @@ class FinanceService:
         )
         self.db.add(payment)
 
-        debt.remaining -= data.amount
+        debt.remaining = float(debt.remaining) - data.amount
         if debt.remaining <= 0:
             debt.remaining = 0
             debt.status = DebtStatus.SETTLED
@@ -406,7 +420,7 @@ class FinanceService:
             "month_expense": month_summary["expense"],
             "month_net": month_summary["income"] - month_summary["expense"],
             "account_balances": [
-                {"id": a.id, "name": a.name, "type": a.type, "icon": a.icon, "balance": a.balance}
+                {"id": a.id, "name": a.name, "type": a.type, "icon": a.icon, "balance": float(a.balance)}
                 for a in self.account_repo.get_by_user(user_id)
             ],
             "budgets": budgets,

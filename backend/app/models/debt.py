@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import Column, String, Float, Date, DateTime, ForeignKey, Uuid
+from sqlalchemy import Column, String, Numeric, Date, DateTime, ForeignKey, Uuid
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -25,9 +25,9 @@ class Debt(Base):
     user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
     creditor = Column(String(100), nullable=False)
     type = Column(String(10), nullable=False)
-    amount = Column(Float, nullable=False)
-    remaining = Column(Float, nullable=False)
-    interest_rate = Column(Float, default=0.0)
+    amount = Column(Numeric(12, 2), nullable=False)
+    remaining = Column(Numeric(12, 2), nullable=False)
+    interest_rate = Column(Numeric(6, 2), default=0)
     description = Column(String(200), default="")
     due_date = Column(Date, nullable=True)
     status = Column(String(10), default=DebtStatus.ACTIVE)
@@ -43,7 +43,7 @@ class DebtPayment(Base):
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     debt_id = Column(Uuid, ForeignKey("debts.id"), nullable=False, index=True)
-    amount = Column(Float, nullable=False)
+    amount = Column(Numeric(12, 2), nullable=False)
     description = Column(String(200), default="")
     date = Column(Date, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

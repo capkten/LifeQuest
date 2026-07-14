@@ -1,3 +1,4 @@
+import logging
 import os
 
 from fastapi import FastAPI
@@ -5,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 
+from app.config import settings
 from app.database import engine, Base, SessionLocal
 from app.services.note import NoteService
 from app.api import auth, users, notes, todos, shop, backpack, achievements, checkin, titles, coins, calendar, stats, finance, projects
@@ -15,6 +17,9 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title="LifeQuest", version="1.0.0")
 
 
+logger = logging.getLogger(__name__)
+
+
 def _migrate_columns():
     """Add missing columns to existing tables without a full migration tool."""
     inspector = inspect(engine)
@@ -23,6 +28,7 @@ def _migrate_columns():
         habit_cols = {c["name"] for c in inspector.get_columns("habits")}
         if "last_completed_at" not in habit_cols:
             conn.execute(text("ALTER TABLE habits ADD COLUMN last_completed_at DATETIME"))
+            logger.info("Migration: added habits.last_completed_at")
 
         # users.total_coins_earned
         user_cols = {c["name"] for c in inspector.get_columns("users")}
@@ -34,6 +40,7 @@ def _migrate_columns():
             conn.execute(text(
                 "UPDATE users SET total_coins_earned = coins WHERE total_coins_earned = 0"
             ))
+            logger.info("Migration: added users.total_coins_earned")
 
         # project management columns on tasks table
         task_cols = {c["name"] for c in inspector.get_columns("tasks")}
@@ -48,18 +55,30 @@ def _migrate_columns():
         for col_name, col_def in new_task_cols.items():
             if col_name not in task_cols:
                 conn.execute(text(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_def}"))
+                logger.info("Migration: added tasks.%s", col_name)
+
+        # finance_transactions.recurring_id
+        txn_cols = {c["name"] for c in inspector.get_columns("finance_transactions")}
+        if "recurring_id" not in txn_cols:
+            conn.execute(text(
+                "ALTER TABLE finance_transactions ADD COLUMN recurring_id VARCHAR(36)"
+            ))
+            logger.info("Migration: added finance_transactions.recurring_id")
 
 
 @app.on_event("startup")
 def startup_event():
     """Seed default achievements on application startup."""
-    _migrate_columns()
+    try:
+        _migrate_columns()
+    except Exception:
+        logger.exception("Column migration failed")
     # Migrate old notes/folders tables to note_nodes
     migrate_db = SessionLocal()
     try:
         NoteService.migrate_old_data(migrate_db)
     except Exception:
-        # Migration is best-effort; don't block startup if it fails
+        logger.exception("Note data migration failed")
         migrate_db.rollback()
     finally:
         migrate_db.close()
@@ -76,6 +95,8 @@ def startup_event():
         # Seed default finance categories
         from app.services.finance import FinanceService
         FinanceService.seed_categories(db)
+    except Exception:
+        logger.exception("Seed data failed")
     finally:
         db.close()
 
@@ -84,9 +105,10 @@ def startup_event():
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # CORS middleware
+_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",")]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

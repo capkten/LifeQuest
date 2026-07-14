@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Uuid
+from sqlalchemy import Column, String, Integer, Numeric, Boolean, DateTime, ForeignKey, Uuid
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -26,11 +26,11 @@ class Account(Base):
     name = Column(String(50), nullable=False)
     type = Column(String(20), default=AccountType.CASH)
     icon = Column(String(50), default="💰")
-    balance = Column(Float, default=0.0)
-    credit_limit = Column(Float, nullable=True)
+    balance = Column(Numeric(12, 2), default=0)
+    credit_limit = Column(Numeric(12, 2), nullable=True)
     billing_day = Column(Integer, nullable=True)
     repayment_day = Column(Integer, nullable=True)
-    interest_rate = Column(Float, nullable=True)
+    interest_rate = Column(Numeric(6, 2), nullable=True)
     currency = Column(String(10), default="CNY")
     is_active = Column(Boolean, default=True)
     sort_order = Column(Integer, default=0)
