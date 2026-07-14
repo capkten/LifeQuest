@@ -25,6 +25,7 @@ from uuid import UUID
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.server import TransportSecuritySettings
 
 from app.database import SessionLocal, engine, Base
 from app.models.user import User
@@ -151,6 +152,11 @@ mcp = FastMCP(
     instructions=(
         "LifeQuest 是一个个人成长 gamification 系统。"
         "你可以通过这些工具管理待办事项、记账、打卡、查看项目和统计数据。"
+    ),
+    # Disable DNS rebinding protection for remote access.
+    # The MCP server sits behind the same FastAPI app that already has CORS configured.
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=False,
     ),
 )
 

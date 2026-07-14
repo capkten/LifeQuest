@@ -130,6 +130,9 @@ app.include_router(stats.router)
 app.include_router(finance.router)
 app.include_router(projects.router)
 
+# MCP server runs as a separate process (see mcp_server.py).
+# Start both with: python start_all.py
+
 
 # Serve frontend static files (production mode)
 _frontend_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "frontend", "dist")
@@ -141,6 +144,7 @@ if os.path.isdir(_frontend_dist):
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
+        """SPA fallback — serves index.html for client-side routes."""
         file_path = os.path.join(_frontend_dist, full_path)
         if os.path.isfile(file_path):
             return FileResponse(file_path)
