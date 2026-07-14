@@ -1,8 +1,9 @@
 import logging
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 
@@ -130,18 +131,17 @@ app.include_router(stats.router)
 app.include_router(finance.router)
 app.include_router(projects.router)
 
-# Mount MCP SSE server at /mcp (endpoint: /mcp/sse)
-# Auto-start MCP as a subprocess on port 3001 alongside the API server.
+# MCP SSE server — subprocess on internal port, proxied through explicit routes.
 _mcp_process = None
 
 @app.on_event("startup")
 def start_mcp_server():
-    """Start the MCP SSE server as a subprocess."""
+    """Start the MCP SSE server as a subprocess on an internal port."""
     global _mcp_process
     import subprocess, sys
     mcp_port = int(os.environ.get("MCP_PORT", "3001"))
     cmd = [sys.executable, os.path.join(os.path.dirname(__file__), "..", "mcp_server.py"),
-           "--transport", "sse", "--host", "0.0.0.0", "--port", str(mcp_port)]
+           "--transport", "sse", "--host", "127.0.0.1", "--port", str(mcp_port)]
     try:
         _mcp_process = subprocess.Popen(cmd)
         logger.info("MCP server started on port %d (pid=%d)", mcp_port, _mcp_process.pid)
@@ -150,10 +150,49 @@ def start_mcp_server():
 
 @app.on_event("shutdown")
 def stop_mcp_server():
-    """Stop the MCP subprocess on shutdown."""
     if _mcp_process and _mcp_process.poll() is None:
         _mcp_process.terminate()
         logger.info("MCP server stopped")
+
+
+# MCP proxy routes — explicit paths that match before SPA catch-all
+import httpx
+
+@app.api_route("/mcp/sse", methods=["GET"])
+async def mcp_sse_proxy(request: Request):
+    """Proxy SSE stream to MCP subprocess."""
+    mcp_port = int(os.environ.get("MCP_PORT", "3001"))
+    url = f"http://127.0.0.1:{mcp_port}/sse"
+    client = httpx.AsyncClient()
+    req = client.build_request("GET", url, headers=dict(request.headers))
+    response = await client.send(req, stream=True)
+
+    async def stream():
+        async for chunk in response.aiter_bytes():
+            yield chunk
+        await response.aclose()
+        await client.aclose()
+
+    return StreamingResponse(
+        stream(),
+        status_code=response.status_code,
+        media_type="text/event-stream",
+        headers=dict(response.headers),
+    )
+
+@app.api_route("/mcp/messages", methods=["POST"])
+@app.api_route("/mcp/messages/", methods=["POST"])
+async def mcp_messages_proxy(request: Request):
+    """Proxy JSON-RPC messages to MCP subprocess."""
+    mcp_port = int(os.environ.get("MCP_PORT", "3001"))
+    path = "/messages/" if request.url.path.endswith("/") else "/messages"
+    url = f"http://127.0.0.1:{mcp_port}{path}"
+    body = await request.body()
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, content=body, headers=dict(request.headers))
+    return Response(content=resp.content, status_code=resp.status_code, headers=dict(resp.headers))
+
+logger.info("MCP proxy registered at /mcp/sse and /mcp/messages")
 
 
 # Serve frontend static files (production mode)
@@ -162,7 +201,6 @@ _frontend_dist = os.path.abspath(_frontend_dist)
 if os.path.isdir(_frontend_dist):
     app.mount("/assets", StaticFiles(directory=os.path.join(_frontend_dist, "assets")), name="frontend-assets")
 
-    from fastapi import Request
     from fastapi.responses import FileResponse, JSONResponse
 
     @app.exception_handler(404)

@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "lifequest": {
-      "url": "http://localhost:3001/sse",
-      "comment": "Change URL to your deployed server address. MCP auto-starts with the API server."
+      "url": "http://localhost:8000/mcp/sse",
+      "comment": "MCP runs on the same port as the API. Change URL to your deployed server."
     }
   }
 }
