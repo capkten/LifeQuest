@@ -186,7 +186,8 @@ async def mcp_messages_proxy(request: Request):
     """Proxy JSON-RPC messages to MCP subprocess."""
     mcp_port = int(os.environ.get("MCP_PORT", "3001"))
     path = "/messages/" if request.url.path.endswith("/") else "/messages"
-    url = f"http://127.0.0.1:{mcp_port}{path}"
+    qs = f"?{request.url.query}" if request.url.query else ""
+    url = f"http://127.0.0.1:{mcp_port}{path}{qs}"
     body = await request.body()
     async with httpx.AsyncClient() as client:
         resp = await client.post(url, content=body, headers=dict(request.headers))
