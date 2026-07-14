@@ -84,6 +84,7 @@
           v-for="habit in habits"
           :key="habit.id"
           class="todo-card"
+          :class="{ 'todo-card--completed': !habit.is_active }"
         >
           <div class="todo-card-header">
             <div class="todo-card-main">
@@ -161,6 +162,7 @@
           v-for="task in tasks"
           :key="task.id"
           class="todo-card"
+          :class="{ 'todo-card--completed': task.status === 'completed' }"
         >
           <div class="todo-card-header">
             <div class="todo-card-main">
@@ -334,6 +336,7 @@
           v-for="goal in goals"
           :key="goal.id"
           class="todo-card"
+          :class="{ 'todo-card--completed': goal.status === 'completed' }"
         >
           <div class="todo-card-header">
             <div class="todo-card-main">
@@ -1238,11 +1241,17 @@ onMounted(() => {
 
 .tab-count {
   font-size: var(--font-size-xs);
-  font-weight: 600;
-  padding: 1px 8px;
+  font-weight: 700;
+  padding: 2px 8px;
   border-radius: var(--radius-full);
   background: var(--color-bg-tertiary);
   color: var(--color-text-tertiary);
+  line-height: 1.4;
+}
+
+.tab-btn--active .tab-count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
 }
 
 .tab-count--habits {
@@ -1250,14 +1259,29 @@ onMounted(() => {
   color: var(--color-error);
 }
 
+.tab-btn--active .tab-count--habits {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
 .tab-count--tasks {
   background: rgba(0, 217, 255, 0.12);
   color: var(--color-secondary);
 }
 
+.tab-btn--active .tab-count--tasks {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
 .tab-count--goals {
   background: rgba(108, 99, 255, 0.12);
   color: var(--color-primary);
+}
+
+.tab-btn--active .tab-count--goals {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
 }
 
 /* Loading State */
@@ -1361,40 +1385,51 @@ onMounted(() => {
 .todo-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .todo-card {
   background: var(--color-card);
   border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border);
   border-radius: var(--surface-radius-sm);
-  padding: 10px;
+  padding: 12px 14px;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .todo-card:hover {
   border-color: var(--color-primary);
+  border-left-color: var(--color-primary);
   box-shadow: var(--shadow-md);
+}
+
+.todo-card--completed {
+  border-left-color: var(--color-success);
+  opacity: 0.75;
+}
+
+.todo-card--completed:hover {
+  opacity: 1;
 }
 
 .todo-card-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
-  gap: 8px;
+  gap: 10px;
 }
 
 .todo-card-main {
   display: flex;
   align-items: start;
-  gap: 8px;
+  gap: 10px;
   flex: 1;
   min-width: 0;
 }
 
 .complete-btn {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -1404,7 +1439,8 @@ onMounted(() => {
   border-radius: var(--radius-full);
   cursor: pointer;
   color: var(--color-text-tertiary);
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
+  margin-top: 1px;
 }
 
 .complete-btn:hover:not(:disabled) {
@@ -1426,8 +1462,8 @@ onMounted(() => {
 }
 
 .complete-btn svg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 }
 
 .todo-card-info {
@@ -1435,7 +1471,7 @@ onMounted(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .todo-card-title {
@@ -1443,7 +1479,7 @@ onMounted(() => {
   font-weight: 600;
   color: var(--color-text);
   margin-bottom: 0;
-  line-height: 1.2;
+  line-height: 1.35;
   word-break: break-word;
 }
 
@@ -1453,14 +1489,13 @@ onMounted(() => {
 }
 
 .todo-card-desc {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-text-tertiary);
   display: -webkit-box;
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  line-height: 1.3;
-  opacity: 0.8;
+  line-height: 1.4;
 }
 
 .todo-card-meta {
@@ -1478,13 +1513,13 @@ onMounted(() => {
 .difficulty-badge,
 .frequency-badge,
 .status-badge {
-  font-size: 10px;
-  padding: 0 6px;
+  font-size: 11px;
+  padding: 2px 8px;
   border-radius: var(--radius-full);
   font-weight: 500;
   text-transform: capitalize;
   white-space: nowrap;
-  line-height: 18px;
+  line-height: 20px;
 }
 
 .difficulty-badge--easy {
@@ -1566,7 +1601,7 @@ onMounted(() => {
 }
 
 .goal-progress-bar {
-  height: 4px;
+  height: 6px;
   background: var(--color-bg-tertiary);
   border-radius: var(--radius-full);
   overflow: hidden;
@@ -1581,29 +1616,31 @@ onMounted(() => {
 
 /* Subtask Section */
 .subtask-section {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--color-border);
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--color-border);
 }
 
 .subtask-toggle-btn {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
-  min-height: 28px;
+  min-height: 36px;
+  padding: var(--spacing-xs) var(--spacing-sm);
   background: none;
   border: none;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--color-text-secondary);
   font-family: var(--font-family);
-  padding: var(--spacing-xs) 0;
-  transition: color 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease;
 }
 
 .subtask-toggle-btn:hover {
   color: var(--color-text);
+  background: var(--color-bg-tertiary);
 }
 
 .subtask-toggle-icon {
@@ -1617,9 +1654,9 @@ onMounted(() => {
 }
 
 .subtask-count-badge {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  padding: 0 6px;
+  padding: 2px 8px;
   border-radius: var(--radius-full);
   background: rgba(108, 99, 255, 0.12);
   color: var(--color-primary);
@@ -1652,9 +1689,9 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 8px 10px;
   background: var(--color-bg-secondary);
-  border: 1px solid rgba(186, 230, 253, 0.7);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   transition: opacity 0.2s ease;
 }
@@ -1664,8 +1701,8 @@ onMounted(() => {
 }
 
 .subtask-complete-btn {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -1675,7 +1712,7 @@ onMounted(() => {
   border-radius: var(--radius-full);
   cursor: pointer;
   color: var(--color-text-tertiary);
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 }
 
 .subtask-complete-btn:hover:not(:disabled) {
@@ -1697,8 +1734,8 @@ onMounted(() => {
 }
 
 .subtask-complete-btn svg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 }
 
 .subtask-title {
@@ -1715,8 +1752,8 @@ onMounted(() => {
 }
 
 .subtask-delete-btn {
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -1733,6 +1770,7 @@ onMounted(() => {
 .subtask-delete-btn:hover {
   color: var(--color-error);
   background: rgba(255, 107, 107, 0.08);
+  opacity: 1;
 }
 
 .subtask-delete-btn:disabled {
@@ -1762,8 +1800,8 @@ onMounted(() => {
 .subtask-input {
   flex: 1;
   min-width: 0;
-  padding: 6px 10px;
-  font-size: var(--font-size-xs);
+  padding: 8px 12px;
+  font-size: var(--font-size-sm);
   font-family: var(--font-family);
   color: var(--color-text);
   background: var(--color-bg-secondary);
@@ -1782,8 +1820,8 @@ onMounted(() => {
 }
 
 .subtask-add-btn {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -1793,11 +1831,12 @@ onMounted(() => {
   border-radius: var(--radius-md);
   cursor: pointer;
   color: #fff;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, transform 0.15s ease;
 }
 
 .subtask-add-btn:hover:not(:disabled) {
   background: var(--color-primary-dark);
+  transform: translateY(-1px);
 }
 
 .subtask-add-btn:disabled {
@@ -1812,15 +1851,15 @@ onMounted(() => {
 
 /* Footer Stats */
 .todo-card-footer {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--color-border);
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--color-border);
 }
 
 .todo-card-stats {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -1828,15 +1867,15 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-text-tertiary);
   font-weight: 500;
-  line-height: 1.2;
+  line-height: 1.4;
 }
 
 .stat-item svg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 }
 
 .stat-item--coins {
@@ -1957,8 +1996,8 @@ onMounted(() => {
 }
 
 .dialog-close {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1967,7 +2006,7 @@ onMounted(() => {
   border-radius: var(--radius-md);
   cursor: pointer;
   color: var(--color-text-tertiary);
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .dialog-close:hover {
@@ -2103,26 +2142,26 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 3px;
+  gap: 4px;
   flex-shrink: 0;
   min-width: 0;
 }
 
 .action-buttons {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   opacity: 1;
   transition: opacity 0.15s ease;
 }
 
 .action-btn {
-  width: 22px;
-  height: 22px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
-  border: 1px solid var(--color-border);
+  background: var(--color-bg-tertiary);
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
   cursor: pointer;
   color: var(--color-text-tertiary);
@@ -2130,8 +2169,8 @@ onMounted(() => {
 }
 
 .action-btn svg {
-  width: 11px;
-  height: 11px;
+  width: 14px;
+  height: 14px;
 }
 
 .action-btn--edit:hover {
@@ -2211,14 +2250,14 @@ onMounted(() => {
 .task-project-tag {
   display: inline-flex;
   align-items: center;
-  padding: 1px 6px;
+  padding: 2px 8px;
   border-radius: var(--radius-full);
   border: 1px solid;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--color-text-secondary);
   background: var(--color-bg-tertiary);
   margin-top: 2px;
-  line-height: 18px;
+  line-height: 20px;
 }
 
 /* Responsive */
@@ -2287,7 +2326,7 @@ onMounted(() => {
   }
 
   .todo-card {
-    padding: 8px;
+    padding: 10px 12px;
   }
 
   .todo-card-actions {
@@ -2314,11 +2353,6 @@ onMounted(() => {
     flex-wrap: nowrap;
   }
 
-  .action-btn {
-    width: 22px;
-    height: 22px;
-  }
-
   .goal-progress-info {
     margin-bottom: 0;
   }
@@ -2335,7 +2369,7 @@ onMounted(() => {
 
   .subtask-item {
     align-items: center;
-    padding: 6px 8px;
+    padding: 8px;
   }
 
   .subtask-delete-btn {
@@ -2354,8 +2388,8 @@ onMounted(() => {
   }
 
   .subtask-add-btn {
-    width: 28px;
-    height: 28px;
+    width: 36px;
+    height: 36px;
   }
 
   .dialog {

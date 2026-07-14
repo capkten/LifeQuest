@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { ElMessage } from 'element-plus'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
 const serverBaseUrl = apiBaseUrl.replace(/\/api\/?$/, '')
@@ -89,6 +90,22 @@ api.interceptors.response.use(
         window.location.href = '/login'
         return Promise.reject(refreshError)
       }
+    }
+
+    // Unified error display for non-401 errors
+    const status = error.response?.status
+    const detail = error.response?.data?.detail
+    if (status && status !== 401) {
+      const messages = {
+        400: detail || '请求参数错误',
+        403: '没有权限执行此操作',
+        404: detail || '资源不存在',
+        422: '请求数据格式错误',
+        500: '服务器内部错误，请稍后重试',
+      }
+      ElMessage.error(messages[status] || `请求失败 (${status})`)
+    } else if (!error.response) {
+      ElMessage.error('网络连接失败，请检查网络')
     }
 
     return Promise.reject(error)
