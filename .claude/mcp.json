@@ -4,7 +4,7 @@
       "command": "python",
       "args": ["backend/mcp_server.py"],
       "env": {
-        "LIFEQUEST_USER_ID": ""
+        "SECRET_KEY": "your-secret-key-here"
       }
     }
   }
