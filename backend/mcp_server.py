@@ -8,11 +8,13 @@ Usage:
     # SSE (remote / HTTP)
     python backend/mcp_server.py --transport sse --port 3001
 
-Environment:
-    LIFEQUEST_USER_ID  — default user UUID (optional; falls back to first user)
+Authentication:
+    Call the `login` tool with username + password before using other tools.
+    Falls back to LIFEQUEST_USER_ID env var or first user if no login call.
 """
 
 import argparse
+import contextvars
 import os
 import sys
 from datetime import date, datetime
@@ -44,6 +46,14 @@ from app.services.project import ProjectService
 from app.services.stats import StatsService
 from app.services.todo import TodoService
 from app.services.user import UserService
+
+# ---------------------------------------------------------------------------
+# Auth context — set by `login` tool, read by all other tools
+# ---------------------------------------------------------------------------
+
+_auth_user_id: contextvars.ContextVar[Optional[UUID]] = contextvars.ContextVar(
+    "_auth_user_id", default=None
+)
 
 # ---------------------------------------------------------------------------
 # DB init — run migrations on first use
@@ -92,14 +102,22 @@ def _ensure_db():
 # ---------------------------------------------------------------------------
 
 def _resolve_user_id(db) -> UUID:
-    """Resolve the active user ID from env or first user in DB."""
+    """Resolve user ID: login session > env var > first user in DB."""
     _ensure_db()
+    # 1. Check login session
+    uid = _auth_user_id.get()
+    if uid:
+        return uid
+    # 2. Check env var
     env_id = os.environ.get("LIFEQUEST_USER_ID")
     if env_id:
         return UUID(env_id)
+    # 3. Fall back to first user
     user = db.query(User).first()
     if not user:
-        raise RuntimeError("No users found in database. Register a user first.")
+        raise RuntimeError(
+            "未找到用户。请先调用 login 工具登录，或在数据库中注册用户。"
+        )
     return user.id
 
 
@@ -135,6 +153,29 @@ mcp = FastMCP(
         "你可以通过这些工具管理待办事项、记账、打卡、查看项目和统计数据。"
     ),
 )
+
+
+# ===================== 认证 =====================
+
+
+@mcp.tool()
+def login(username: str, password: str) -> Any:
+    """登录 LifeQuest 账户。必须先调用此工具才能操作其他功能。返回用户信息。"""
+    db = SessionLocal()
+    try:
+        _ensure_db()
+        svc = UserService(db)
+        user = svc.authenticate(username, password)
+        if not user:
+            return {"error": "用户名或密码错误"}
+        _auth_user_id.set(user.id)
+        return {
+            "status": "ok",
+            "message": f"已登录为 {user.username}",
+            "user": _serialize(user),
+        }
+    finally:
+        db.close()
 
 
 # ===================== 待办 =====================
