@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "lifequest": {
-      "url": "http://YOUR_SERVER:3001/sse",
-      "comment": "Remote MCP server — change URL to your deployed server address"
+      "url": "http://localhost:3001/sse",
+      "comment": "Change URL to your deployed server address. MCP auto-starts with the API server."
     }
   }
 }

@@ -130,8 +130,30 @@ app.include_router(stats.router)
 app.include_router(finance.router)
 app.include_router(projects.router)
 
-# MCP server runs as a separate process (see mcp_server.py).
-# Start both with: python start_all.py
+# Mount MCP SSE server at /mcp (endpoint: /mcp/sse)
+# Auto-start MCP as a subprocess on port 3001 alongside the API server.
+_mcp_process = None
+
+@app.on_event("startup")
+def start_mcp_server():
+    """Start the MCP SSE server as a subprocess."""
+    global _mcp_process
+    import subprocess, sys
+    mcp_port = int(os.environ.get("MCP_PORT", "3001"))
+    cmd = [sys.executable, os.path.join(os.path.dirname(__file__), "..", "mcp_server.py"),
+           "--transport", "sse", "--host", "0.0.0.0", "--port", str(mcp_port)]
+    try:
+        _mcp_process = subprocess.Popen(cmd)
+        logger.info("MCP server started on port %d (pid=%d)", mcp_port, _mcp_process.pid)
+    except Exception:
+        logger.exception("Failed to start MCP server")
+
+@app.on_event("shutdown")
+def stop_mcp_server():
+    """Stop the MCP subprocess on shutdown."""
+    if _mcp_process and _mcp_process.poll() is None:
+        _mcp_process.terminate()
+        logger.info("MCP server stopped")
 
 
 # Serve frontend static files (production mode)
@@ -140,12 +162,13 @@ _frontend_dist = os.path.abspath(_frontend_dist)
 if os.path.isdir(_frontend_dist):
     app.mount("/assets", StaticFiles(directory=os.path.join(_frontend_dist, "assets")), name="frontend-assets")
 
-    from fastapi.responses import FileResponse
+    from fastapi import Request
+    from fastapi.responses import FileResponse, JSONResponse
 
-    @app.get("/{full_path:path}")
-    async def serve_spa(full_path: str):
-        """SPA fallback — serves index.html for client-side routes."""
-        file_path = os.path.join(_frontend_dist, full_path)
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
-        return FileResponse(os.path.join(_frontend_dist, "index.html"))
+    @app.exception_handler(404)
+    async def spa_fallback(request: Request, exc):
+        """Serve index.html for unmatched GET requests (SPA client-side routing)."""
+        path = request.url.path
+        if request.method == "GET" and not path.startswith(("/api/", "/mcp/", "/uploads/")):
+            return FileResponse(os.path.join(_frontend_dist, "index.html"))
+        return JSONResponse(status_code=404, content={"detail": "Not Found"})
