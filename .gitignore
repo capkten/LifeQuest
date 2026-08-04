@@ -24,3 +24,4 @@ design-system/
 backend/notes_data/
 backend/uploads/
 data/
+.worktrees/
