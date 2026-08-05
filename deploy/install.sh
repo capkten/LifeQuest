@@ -180,7 +180,9 @@ User=root
 WorkingDirectory=/opt/lifequest/backend
 Environment="PATH=/opt/lifequest/backend/venv/bin"
 EnvironmentFile=/opt/lifequest/backend/.env
-ExecStart=/opt/lifequest/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 2
+Environment="MCP_AUTOSTART=true"
+Environment="MCP_PORT=3001"
+ExecStart=/opt/lifequest/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
 Restart=always
 RestartSec=5
 
