@@ -112,8 +112,9 @@ onUnmounted(() => {
   justify-content: space-between;
   padding: 0 var(--page-padding-x);
   padding-top: var(--safe-area-top);
-  background: var(--color-bg-secondary);
+  background: rgba(255, 255, 255, 0.88);
   border-bottom: 1px solid var(--color-border);
+  backdrop-filter: blur(14px);
   position: sticky;
   top: 0;
   z-index: 50;
@@ -151,6 +152,7 @@ onUnmounted(() => {
 }
 
 .page-title {
+  font-family: var(--font-family-display);
   font-size: var(--font-size-lg);
   font-weight: 600;
   color: var(--color-text);
@@ -227,7 +229,7 @@ onUnmounted(() => {
   right: 0;
   margin-top: var(--spacing-xs);
   min-width: 160px;
-  background: var(--color-bg-tertiary);
+  background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);

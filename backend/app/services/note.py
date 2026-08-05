@@ -3,6 +3,8 @@ import os
 import pathlib
 import re
 import shutil
+import logging
+from datetime import date, datetime, time, timezone
 from typing import List, Optional
 from uuid import UUID, uuid4
 
@@ -23,6 +25,7 @@ from app.services.achievement import AchievementService
 
 BACKEND_DIR = pathlib.Path(__file__).resolve().parent.parent.parent
 NOTES_DIR = BACKEND_DIR / "notes_data"
+logger = logging.getLogger(__name__)
 
 
 def sanitize_filename(name: str) -> str:
@@ -41,6 +44,19 @@ def _compute_path(parent_path: Optional[str], name: str, is_note: bool) -> str:
 def _compute_content_path(user_id: UUID, notebook_id: UUID, path: str) -> str:
     """Compute the filesystem content_path for a note."""
     return str(NOTES_DIR / str(user_id) / str(notebook_id) / path.lstrip("/"))
+
+
+def _write_content_atomically(content_path: str, content: str) -> None:
+    target = pathlib.Path(content_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = target.with_name(f".{target.name}.{uuid4().hex}.tmp")
+    try:
+        temp_path.write_text(content, encoding="utf-8")
+        os.replace(temp_path, target)
+    except Exception:
+        if temp_path.exists():
+            temp_path.unlink()
+        raise
 
 
 class NoteService:
@@ -140,23 +156,25 @@ class NoteService:
             word_count=len(note_in.content.split()) if note_in.content else 0,
         )
         self.db.add(node)
-        self.db.commit()
-        self.db.refresh(node)
-
-        # Write markdown file
-        os.makedirs(os.path.dirname(content_path), exist_ok=True)
-        with open(content_path, "w", encoding="utf-8") as f:
-            f.write(note_in.content or "")
+        try:
+            _write_content_atomically(content_path, note_in.content or "")
+            self.db.commit()
+            self.db.refresh(node)
+        except Exception:
+            self.db.rollback()
+            if os.path.exists(content_path):
+                os.remove(content_path)
+            raise
 
         # Check note_count achievements
         try:
             self.achievement_service.check_notes(user_id)
         except Exception:
-            pass  # Don't fail note creation if achievement check fails
+            logger.exception("Note achievement processing failed for user %s", user_id)
 
         return node
 
-    def rename_node(self, node_id: UUID, new_name: str) -> NoteNode:
+    def rename_node(self, node_id: UUID, new_name: str, commit: bool = True) -> NoteNode:
         node = self.node_repo.get_by_id(node_id)
         if not node:
             raise ValueError("Node not found")
@@ -210,8 +228,9 @@ class NoteService:
                     old_path.lstrip("/") + "/", new_path.lstrip("/") + "/", 1
                 )
 
-        self.db.commit()
-        self.db.refresh(node)
+        if commit:
+            self.db.commit()
+            self.db.refresh(node)
         return node
 
     def move_node(self, node_id: UUID, new_parent_id: Optional[UUID]) -> NoteNode:
@@ -236,7 +255,11 @@ class NoteService:
 
         if new_parent_id:
             new_parent = self.node_repo.get_by_id(new_parent_id)
-            if not new_parent or new_parent.type != "folder":
+            if (
+                not new_parent
+                or new_parent.notebook_id != node.notebook_id
+                or new_parent.type != "folder"
+            ):
                 raise ValueError("Target must be a folder")
             new_parent_path = new_parent.path
         else:
@@ -282,7 +305,7 @@ class NoteService:
             raise ValueError("Note not found")
 
         if note_in.title is not None:
-            self.rename_node(node_id, note_in.title)
+            self.rename_node(node_id, note_in.title, commit=False)
 
         if note_in.summary is not None:
             node.summary = note_in.summary
@@ -291,15 +314,25 @@ class NoteService:
         if note_in.is_pinned is not None:
             node.is_pinned = note_in.is_pinned
 
+        previous_content = None
+        content_path = node.content_path
+        if note_in.content is not None and content_path and os.path.exists(content_path):
+            with open(content_path, "r", encoding="utf-8") as content_file:
+                previous_content = content_file.read()
+
         if note_in.content is not None:
             node.word_count = len(note_in.content.split())
-            if node.content_path:
-                os.makedirs(os.path.dirname(node.content_path), exist_ok=True)
-                with open(node.content_path, "w", encoding="utf-8") as f:
-                    f.write(note_in.content)
+            if content_path:
+                _write_content_atomically(content_path, note_in.content)
 
-        self.db.commit()
-        self.db.refresh(node)
+        try:
+            self.db.commit()
+            self.db.refresh(node)
+        except Exception:
+            self.db.rollback()
+            if note_in.content is not None and content_path and previous_content is not None:
+                _write_content_atomically(content_path, previous_content)
+            raise
         return node
 
     def get_note_content(self, node_id: UUID) -> str:
@@ -336,6 +369,24 @@ class NoteService:
     # --- Migration from old tables ---
 
     @staticmethod
+    def _parse_legacy_datetime(value):
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, date):
+            return datetime.combine(value, time.min)
+        if isinstance(value, str):
+            normalized = value.strip()
+            if not normalized:
+                return None
+            try:
+                return datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+        return None
+
+    @staticmethod
     def migrate_old_data(db: Session) -> None:
         """Migrate data from old folders/notes tables to note_nodes.
 
@@ -361,84 +412,92 @@ class NoteService:
         if existing_nodes > 0:
             return
 
-        # Build folder mapping: old_folder_id -> note_node
-        folder_id_map = {}
-        for f in old_folders:
-            folder_id, notebook_id, parent_id, name, old_path = f
-            norm = name.strip().lower()
-            nn_parent = folder_id_map.get(parent_id) if parent_id else None
-            parent_path = nn_parent.path if nn_parent else ""
-            node_path = f"{parent_path}/{name}" if parent_path else f"/{name}"
+        moved_files = []
 
-            node = NoteNode(
-                id=uuid4(),
-                notebook_id=UUID(notebook_id) if isinstance(notebook_id, str) else notebook_id,
-                parent_id=UUID(parent_id) if isinstance(parent_id, str) else parent_id,
-                type="folder",
-                name=name,
-                normalized_name=norm,
-                path=node_path,
-            )
-            db.add(node)
-            db.flush()
-            folder_id_map[folder_id] = node
+        try:
+            # Build folder mapping: old_folder_id -> note_node
+            folder_id_map = {}
+            for f in old_folders:
+                folder_id, notebook_id, parent_id, name, old_path = f
+                safe_name = sanitize_filename(name).strip() or "Untitled"
+                norm = safe_name.lower()
+                nn_parent = folder_id_map.get(parent_id) if parent_id else None
+                parent_path = nn_parent.path if nn_parent else ""
+                node_path = f"{parent_path}/{safe_name}" if parent_path else f"/{safe_name}"
 
-        # Migrate notes
-        for n in old_notes:
-            (note_id, old_folder_id, title, old_file_path,
-             summary, tags, is_pinned, word_count, created_at, updated_at) = n
-
-            parent_node = folder_id_map.get(old_folder_id)
-            if not parent_node:
-                continue
-
-            norm = title.strip().lower()
-            node_path = f"{parent_node.path}/{title}.md"
-
-            # Compute new content path
-            parts = pathlib.Path(old_file_path).parts if old_file_path else ()
-            user_id_str = None
-            for i, p in enumerate(parts):
-                if p == "notes_data" and i + 1 < len(parts):
-                    user_id_str = parts[i + 1]
-                    break
-
-            if user_id_str:
-                new_content_path = str(
-                    NOTES_DIR / user_id_str / str(parent_node.notebook_id) / node_path.lstrip("/")
+                node = NoteNode(
+                    id=uuid4(),
+                    notebook_id=UUID(notebook_id) if isinstance(notebook_id, str) else notebook_id,
+                    parent_id=nn_parent.id if nn_parent else None,
+                    type="folder",
+                    name=safe_name,
+                    normalized_name=norm,
+                    path=node_path,
                 )
-            else:
-                new_content_path = old_file_path
+                db.add(node)
+                db.flush()
+                folder_id_map[folder_id] = node
 
-            node = NoteNode(
-                id=UUID(note_id) if isinstance(note_id, str) else note_id,  # preserve original ID
-                notebook_id=UUID(parent_node.notebook_id) if isinstance(parent_node.notebook_id, str) else parent_node.notebook_id,
-                parent_id=UUID(parent_node.id) if isinstance(parent_node.id, str) else parent_node.id,
-                type="note",
-                name=title,
-                normalized_name=norm,
-                path=node_path,
-                content_path=new_content_path,
-                summary=summary,
-                tags=tags,
-                is_pinned=bool(is_pinned),
-                word_count=word_count or 0,
-                created_at=created_at,
-                updated_at=updated_at,
-            )
-            db.add(node)
+            # Migrate notes
+            for n in old_notes:
+                (note_id, old_folder_id, title, old_file_path,
+                 summary, tags, is_pinned, word_count, created_at, updated_at) = n
 
-            # Move file if path changed (wrapped in try/except for robustness)
-            if old_file_path and os.path.exists(old_file_path) and old_file_path != new_content_path:
-                try:
+                parent_node = folder_id_map.get(old_folder_id)
+                if not parent_node:
+                    continue
+
+                safe_title = sanitize_filename(title).strip() or "Untitled"
+                norm = safe_title.lower()
+                node_path = f"{parent_node.path}/{safe_title}.md"
+
+                # Compute new content path
+                parts = pathlib.Path(old_file_path).parts if old_file_path else ()
+                user_id_str = None
+                for i, p in enumerate(parts):
+                    if p == "notes_data" and i + 1 < len(parts):
+                        user_id_str = parts[i + 1]
+                        break
+
+                if user_id_str:
+                    new_content_path = str(
+                        NOTES_DIR / user_id_str / str(parent_node.notebook_id) / node_path.lstrip("/")
+                    )
+                else:
+                    new_content_path = old_file_path
+
+                node = NoteNode(
+                    id=UUID(note_id) if isinstance(note_id, str) else note_id,
+                    notebook_id=UUID(parent_node.notebook_id) if isinstance(parent_node.notebook_id, str) else parent_node.notebook_id,
+                    parent_id=parent_node.id,
+                    type="note",
+                    name=safe_title,
+                    normalized_name=norm,
+                    path=node_path,
+                    content_path=new_content_path,
+                    summary=summary,
+                    tags=tags,
+                    is_pinned=bool(is_pinned),
+                    word_count=word_count or 0,
+                    created_at=NoteService._parse_legacy_datetime(created_at) or datetime.now(timezone.utc),
+                    updated_at=NoteService._parse_legacy_datetime(updated_at) or datetime.now(timezone.utc),
+                )
+                db.add(node)
+
+                # Move file if path changed
+                if old_file_path and os.path.exists(old_file_path) and old_file_path != new_content_path:
                     os.makedirs(os.path.dirname(new_content_path), exist_ok=True)
                     shutil.move(old_file_path, new_content_path)
-                except OSError:
-                    pass  # Skip file move if path is invalid (e.g. corrupted Unicode)
+                    moved_files.append((old_file_path, new_content_path))
 
-        db.commit()
-
-        # Drop old tables
-        db.execute(text("DROP TABLE IF EXISTS notes"))
-        db.execute(text("DROP TABLE IF EXISTS folders"))
-        db.commit()
+            db.flush()
+            db.execute(text("DROP TABLE IF EXISTS notes"))
+            db.execute(text("DROP TABLE IF EXISTS folders"))
+            db.commit()
+        except Exception:
+            for moved_old_path, moved_new_path in reversed(moved_files):
+                if os.path.exists(moved_new_path):
+                    os.makedirs(os.path.dirname(moved_old_path), exist_ok=True)
+                    shutil.move(moved_new_path, moved_old_path)
+            db.rollback()
+            raise

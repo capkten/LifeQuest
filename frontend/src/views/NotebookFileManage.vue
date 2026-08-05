@@ -416,7 +416,7 @@ onMounted(async () => {
 .node-card { display: flex; align-items: center; gap: var(--spacing-md); padding: var(--spacing-md) var(--spacing-lg); background: var(--color-card); border: 1px solid var(--color-border); border-radius: var(--radius-lg); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
 .node-card:hover { border-color: var(--color-primary); box-shadow: var(--shadow-sm); }
 .node-icon { width: 40px; height: 40px; border-radius: var(--radius-md); background: var(--color-bg-tertiary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.node-icon--folder { background: rgba(108, 99, 255, 0.12); }
+.node-icon--folder { background: rgba(14, 165, 233, 0.12); }
 .node-icon svg { width: 22px; height: 22px; color: var(--color-primary); }
 .node-info { flex: 1; min-width: 0; }
 .node-name { font-size: var(--font-size-base); font-weight: 600; color: var(--color-text); margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

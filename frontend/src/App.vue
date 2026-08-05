@@ -3,15 +3,17 @@
 </template>
 
 <style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
 :root {
   --color-primary: #0EA5E9;
   --color-primary-light: #38BDF8;
   --color-primary-dark: #0284C7;
-  --color-secondary: #6366F1;
-  --color-secondary-light: #818CF8;
-  --color-secondary-dark: #4F46E5;
-  --color-accent: #059669;
-  --color-accent-light: #34D399;
+  --color-secondary: #1D4ED8;
+  --color-secondary-light: #60A5FA;
+  --color-secondary-dark: #1E3A8A;
+  --color-accent: #10B981;
+  --color-accent-light: #6EE7B7;
   --color-accent-dark: #047857;
   --color-success: #22C55E;
   --color-success-light: #86EFAC;
@@ -22,18 +24,18 @@
   --color-error: #EF4444;
   --color-error-light: #FCA5A5;
   --color-error-dark: #DC2626;
-  --color-bg: #F0F9FF;
+  --color-bg: #F4F8FB;
   --color-bg-secondary: #FFFFFF;
-  --color-bg-tertiary: #E0F2FE;
-  --color-bg-elevated: #F8FDFF;
-  --color-text: #0C4A6E;
-  --color-text-secondary: #64748B;
-  --color-text-tertiary: #94A3B8;
-  --color-border: #BAE6FD;
-  --color-border-strong: #7DD3FC;
+  --color-bg-tertiary: #E8F5FA;
+  --color-bg-elevated: #FFFFFF;
+  --color-text: #16324F;
+  --color-text-secondary: #5B7185;
+  --color-text-tertiary: #8AA0B2;
+  --color-border: #D9E7EF;
+  --color-border-strong: #A8D7E8;
   --color-card: #FFFFFF;
-  --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-family-display: 'Cinzel', 'Cormorant Garamond', serif;
+  --font-family: 'DM Sans', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family-display: 'Space Grotesk', 'DM Sans', sans-serif;
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
   --font-size-base: 0.9375rem;
@@ -55,11 +57,11 @@
   --radius-xl: 1rem;
   --radius-2xl: 1.25rem;
   --radius-full: 9999px;
-  --sidebar-width: 260px;
+  --sidebar-width: 232px;
   --sidebar-collapsed-width: 68px;
   --page-padding-x: 16px;
   --page-padding-y: 16px;
-  --page-gap: 16px;
+  --page-gap: 14px;
   --content-max-width: 1200px;
   --content-max-width-wide: 1320px;
   --header-height: 56px;
@@ -71,10 +73,10 @@
   --touch-target-gap: 8px;
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
-  --shadow-sm: 0 1px 2px rgba(14, 165, 233, 0.06);
-  --shadow-md: 0 10px 30px rgba(14, 165, 233, 0.08);
-  --shadow-lg: 0 16px 40px rgba(14, 165, 233, 0.12);
-  --shadow-xl: 0 24px 48px rgba(14, 165, 233, 0.14);
+  --shadow-sm: 0 1px 2px rgba(22, 50, 79, 0.04);
+  --shadow-md: 0 8px 24px rgba(22, 50, 79, 0.08);
+  --shadow-lg: 0 14px 34px rgba(22, 50, 79, 0.1);
+  --shadow-xl: 0 22px 48px rgba(22, 50, 79, 0.14);
 }
 
 * {
@@ -88,7 +90,7 @@ body {
   font-family: var(--font-family);
   background-color: var(--color-bg);
   color: var(--color-text);
-  line-height: 1.6;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
@@ -111,9 +113,137 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
+button,
+a,
+[role='button'] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  font-family: var(--font-family);
+}
+
 .compact-section {
   display: grid;
   gap: var(--spacing-md);
+}
+
+@media (min-width: 768px) {
+  :where(
+    .todos-page,
+    .shop-page,
+    .projects-page,
+    .profile-page,
+    .notes-page,
+    .calendar-page,
+    .finance-page,
+    .stats-page,
+    .backpack-page,
+    .history-page,
+    .coin-history-page,
+    .project-detail-page,
+    .edit-profile-page,
+    .note-editor-page,
+    .file-manager
+  ) {
+    width: 100%;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}
+
+h1,
+h2,
+h3,
+.page-title,
+.section-title {
+  font-family: var(--font-family-display);
+  letter-spacing: -0.02em;
+}
+
+@media (min-width: 768px) {
+  :where(.page-header) {
+    min-height: 46px;
+    margin-bottom: 16px !important;
+  }
+
+  :where(.page-title) {
+    font-size: clamp(1.2rem, 1.1rem + 0.25vw, 1.5rem);
+    line-height: 1.15;
+  }
+}
+
+:where(
+  .project-card,
+  .todo-card,
+  .item-card,
+  .stat-card,
+  .achievement-card,
+  .title-item,
+  .node-card,
+  .summary-card,
+  .account-card,
+  .budget-card,
+  .debt-card,
+  .overview-card,
+  .chart-section,
+  .notebook-card,
+  .search-result-card,
+  .calendar-body,
+  .budgets-card,
+  .transactions-card
+) {
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+:where(.project-card, .todo-card, .item-card, .notebook-card) {
+  min-width: 0;
+}
+
+:where(.project-card-name, .todo-card-title, .item-card-name, .notebook-name) {
+  overflow-wrap: anywhere;
+}
+
+:where(.project-card, .todo-card, .item-card, .node-card) {
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+:where(.project-card, .todo-card, .item-card, .node-card):hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+:where(
+  .tab-count--tasks,
+  .tab-count--goals,
+  .tab-count--gear,
+  .tab-count--collectible,
+  .frequency-badge--daily,
+  .frequency-badge--weekly,
+  .status-badge--active,
+  .task-status-badge--in_progress,
+  .item-tag--category,
+  .category-chip--active,
+  .node-icon--folder,
+  .overview-card--tasks .overview-icon,
+  .overview-card--active .overview-icon,
+  .stat-card--level .stat-card-icon,
+  .stat-card--exp .stat-card-icon,
+  .title-item--active
+) {
+  background: rgba(14, 165, 233, 0.12) !important;
+}
+
+:where(
+  .tab-count--tasks,
+  .tab-count--gear,
+  .frequency-badge--daily,
+  .status-badge--active,
+  .task-status-badge--in_progress
+) {
+  color: var(--color-primary-dark) !important;
 }
 
 :focus-visible {
@@ -158,9 +288,13 @@ body {
   :root {
     --page-padding-x: 32px;
     --page-padding-y: 24px;
-    --page-gap: 24px;
+    --page-gap: 18px;
     --header-height: 64px;
     --surface-padding: 24px;
+  }
+
+  :where(.projects-grid, .notebook-grid, .backpack-page .items-grid) {
+    gap: 14px;
   }
 }
 

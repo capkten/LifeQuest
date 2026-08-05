@@ -508,8 +508,8 @@ onMounted(() => {
 .calendar-page {
   padding: var(--spacing-xl);
   width: 100%;
-  max-width: 1400px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
 }
 
 /* Header */
@@ -652,7 +652,7 @@ onMounted(() => {
 
 .day-cell--selected {
   background: var(--color-primary);
-  background: rgba(108, 99, 255, 0.08);
+  background: rgba(14, 165, 233, 0.08);
   border-radius: var(--radius-md);
 }
 

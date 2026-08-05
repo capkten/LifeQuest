@@ -476,7 +476,7 @@ onMounted(() => {
 .btn-history:hover {
   color: var(--color-primary);
   border-color: var(--color-primary);
-  background: rgba(108, 99, 255, 0.06);
+  background: rgba(14, 165, 233, 0.06);
 }
 
 .btn-history svg {
@@ -540,12 +540,12 @@ onMounted(() => {
 }
 
 .tab-count--gear {
-  background: rgba(0, 217, 255, 0.12);
+  background: rgba(14, 165, 233, 0.12);
   color: var(--color-secondary);
 }
 
 .tab-count--collectible {
-  background: rgba(108, 99, 255, 0.12);
+  background: rgba(14, 165, 233, 0.12);
   color: var(--color-primary);
 }
 
@@ -747,12 +747,12 @@ onMounted(() => {
 }
 
 .type-badge--gear {
-  background: rgba(0, 217, 255, 0.12);
+  background: rgba(14, 165, 233, 0.12);
   color: var(--color-secondary);
 }
 
 .type-badge--collectible {
-  background: rgba(108, 99, 255, 0.12);
+  background: rgba(14, 165, 233, 0.12);
   color: var(--color-primary);
 }
 
@@ -841,11 +841,11 @@ onMounted(() => {
 
 .btn-action--equip {
   color: var(--color-secondary);
-  border-color: rgba(0, 217, 255, 0.3);
+  border-color: rgba(14, 165, 233, 0.3);
 }
 
 .btn-action--equip:hover:not(:disabled) {
-  background: rgba(0, 217, 255, 0.1);
+  background: rgba(14, 165, 233, 0.1);
 }
 
 .btn-action--discard {

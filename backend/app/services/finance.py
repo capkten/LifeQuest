@@ -1,4 +1,5 @@
 from datetime import date, timezone
+import logging
 from typing import List, Optional
 from uuid import UUID
 
@@ -31,6 +32,7 @@ from app.services.achievement import AchievementService
 
 
 class FinanceService:
+    logger = logging.getLogger(__name__)
     SEED_EXPENSE_CATEGORIES = [
         ("餐饮", "🍜"), ("交通", "🚌"), ("购物", "🛒"), ("住房", "🏠"),
         ("娱乐", "🎮"), ("医疗", "💊"), ("教育", "📚"), ("通讯", "📱"), ("其他", "📦"),
@@ -52,6 +54,19 @@ class FinanceService:
         self.user_repo = UserRepository(db)
         self.coin_repo = CoinTransactionRepository(db)
         self.achievement_service = AchievementService(db)
+
+    def _get_account_for_user(self, account_id: UUID, user_id: UUID) -> Account:
+        account = self.account_repo.get_by_id(account_id)
+        if not account or account.user_id != user_id:
+            raise HTTPException(status_code=404, detail="Account not found")
+        return account
+
+    def _validate_category_for_user(self, category_id: UUID | None, user_id: UUID) -> None:
+        if category_id is None:
+            return
+        category = self.category_repo.get_by_id(category_id)
+        if not category or (not category.is_system and category.user_id != user_id):
+            raise HTTPException(status_code=404, detail="Category not found")
 
     # --- Seed categories ---
 
@@ -100,6 +115,8 @@ class FinanceService:
         self, user_id: UUID, from_id: UUID, to_id: UUID,
         amount: float, description: str = "", transfer_date: date | None = None,
     ) -> dict:
+        if amount <= 0:
+            raise HTTPException(status_code=422, detail="Amount must be greater than zero")
         from_acc = self.account_repo.get_by_id(from_id)
         to_acc = self.account_repo.get_by_id(to_id)
         if not from_acc or from_acc.user_id != user_id:
@@ -163,9 +180,11 @@ class FinanceService:
         d["user_id"] = user_id
         return self.category_repo.create(d)
 
-    def delete_category(self, cat: FinanceCategory) -> bool:
+    def delete_category(self, cat: FinanceCategory, user_id: UUID) -> bool:
         if cat.is_system:
             raise HTTPException(status_code=400, detail="Cannot delete system category")
+        if cat.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
         self.db.delete(cat)
         self.db.commit()
         return True
@@ -178,9 +197,8 @@ class FinanceService:
                 status_code=400, detail="Use /accounts/transfer for transfers"
             )
 
-        account = self.account_repo.get_by_id(data.account_id)
-        if not account or account.user_id != user_id:
-            raise HTTPException(status_code=404, detail="Account not found")
+        account = self._get_account_for_user(data.account_id, user_id)
+        self._validate_category_for_user(data.category_id, user_id)
 
         d = data.model_dump()
         d["user_id"] = user_id
@@ -194,19 +212,19 @@ class FinanceService:
             account.balance = float(account.balance) + data.amount
         elif data.type == FinanceTransactionType.EXPENSE:
             account.balance = float(account.balance) - data.amount
-        self.db.commit()
-        self.db.refresh(txn)
-
-        # Gamification: award exp, check achievements (best-effort)
         try:
             self._award_transaction_exp(user_id)
-        except Exception:
-            pass
-        try:
+            self.db.flush()
             count = self.transaction_repo.count_by_user(user_id)
-            self.achievement_service.check_and_unlock(user_id, "transaction_count", count)
+            self.achievement_service.check_and_unlock(
+                user_id, "transaction_count", count, commit=False
+            )
+            self.db.commit()
+            self.db.refresh(txn)
         except Exception:
-            pass
+            self.db.rollback()
+            self.logger.exception("Finance transaction commit failed for user %s", user_id)
+            raise
 
         return txn
 
@@ -216,13 +234,19 @@ class FinanceService:
         return {"items": txns, "total": total}
 
     def update_transaction(
-        self, transaction: FinanceTransaction, data: TransactionUpdate
+        self, transaction: FinanceTransaction, data: TransactionUpdate, user_id: UUID
     ) -> FinanceTransaction:
         update_data = data.model_dump(exclude_unset=True)
+        new_account_id = update_data.get("account_id", transaction.account_id)
+        new_category_id = update_data.get("category_id", transaction.category_id)
         new_type = update_data.get("type", transaction.type)
         new_to_account_id = update_data.get("to_account_id", transaction.to_account_id)
+        self._get_account_for_user(new_account_id, user_id)
+        self._validate_category_for_user(new_category_id, user_id)
         if new_type == FinanceTransactionType.TRANSFER and not new_to_account_id:
             raise HTTPException(status_code=400, detail="Transfer requires target account")
+        if new_to_account_id:
+            self._get_account_for_user(new_to_account_id, user_id)
 
         self._apply_transaction_balance_effect(transaction, reverse=True)
         for key, value in update_data.items():
@@ -243,6 +267,7 @@ class FinanceService:
     # --- Budget CRUD ---
 
     def create_budget(self, user_id: UUID, data: BudgetCreate) -> Budget:
+        self._validate_category_for_user(data.category_id, user_id)
         d = data.model_dump()
         d["user_id"] = user_id
         return self.budget_repo.create(d)
@@ -279,6 +304,8 @@ class FinanceService:
     # --- Recurring ---
 
     def create_recurring(self, user_id: UUID, data: RecurringCreate) -> RecurringTransaction:
+        self._get_account_for_user(data.account_id, user_id)
+        self._validate_category_for_user(data.category_id, user_id)
         d = data.model_dump()
         d["user_id"] = user_id
         return self.recurring_repo.create(d)
@@ -368,6 +395,10 @@ class FinanceService:
 
     def update_debt(self, debt: Debt, data: DebtUpdate) -> Debt:
         update_data = data.model_dump(exclude_unset=True)
+        new_amount = update_data.get("amount", debt.amount)
+        new_remaining = update_data.get("remaining", debt.remaining)
+        if new_remaining < 0 or new_remaining > new_amount:
+            raise HTTPException(status_code=422, detail="remaining must be between zero and amount")
         for key, value in update_data.items():
             setattr(debt, key, value)
         self.db.commit()
@@ -385,6 +416,8 @@ class FinanceService:
             raise HTTPException(status_code=404, detail="Debt not found")
         if debt.status == DebtStatus.SETTLED:
             raise HTTPException(status_code=400, detail="Debt already settled")
+        if data.amount > debt.remaining:
+            raise HTTPException(status_code=400, detail="Payment exceeds remaining debt")
 
         payment = DebtPayment(
             debt_id=debt_id,
@@ -447,4 +480,3 @@ class FinanceService:
         if existing_today <= 1:  # the one we just created
             exp += 5
         self.user_repo._update_experience_no_commit(user, exp)
-        self.db.commit()

@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import logging
 from typing import List, Optional
 from uuid import UUID
 
@@ -32,6 +33,7 @@ from app.repositories.coin_transaction import CoinTransactionRepository
 
 
 class ProjectService:
+    logger = logging.getLogger(__name__)
     def __init__(self, db: Session):
         self.db = db
         self.project_repo = ProjectRepository(db)
@@ -127,7 +129,7 @@ class ProjectService:
             ).count()
             self.achievement_service.check_and_unlock(project.user_id, "project_completed", completed_count)
         except Exception:
-            pass
+            self.logger.exception("Project achievement processing failed for project %s", project.id)
 
         return project
 
@@ -174,6 +176,11 @@ class ProjectService:
 
     # --- Tasks within project ---
     def create_project_task(self, user_id: UUID, project_id: UUID, data: TaskCreate) -> Task:
+        self.get_project_for_user(project_id, user_id)
+        if data.phase_id is not None:
+            self.get_phase_for_project(data.phase_id, project_id)
+        if data.milestone_id is not None:
+            self.get_milestone_for_project(data.milestone_id, project_id)
         obj_data = data.model_dump()
         obj_data["user_id"] = user_id
         obj_data["project_id"] = project_id
@@ -195,11 +202,23 @@ class ProjectService:
     def move_task(
         self,
         task: Task,
+        user_id: UUID,
         project_id: Optional[UUID] = None,
         phase_id: Optional[UUID] = None,
         milestone_id: Optional[UUID] = None,
         status: Optional[TaskStatus] = None,
     ) -> Task:
+        if project_id is not None:
+            self.get_project_for_user(project_id, user_id)
+        target_project_id = project_id or task.project_id
+        if phase_id is not None:
+            if target_project_id is None:
+                raise HTTPException(status_code=400, detail="Phase requires a project")
+            self.get_phase_for_project(phase_id, target_project_id)
+        if milestone_id is not None:
+            if target_project_id is None:
+                raise HTTPException(status_code=400, detail="Milestone requires a project")
+            self.get_milestone_for_project(milestone_id, target_project_id)
         if project_id is not None:
             task.project_id = project_id
         if phase_id is not None:

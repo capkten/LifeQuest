@@ -10,11 +10,12 @@ Usage:
 
 Authentication:
     Call the `login` tool with username + password before using other tools.
-    Falls back to LIFEQUEST_USER_ID env var or first user if no login call.
+    A service account may be explicitly configured with LIFEQUEST_MCP_SERVICE_USER_ID.
 """
 
 import argparse
 import contextvars
+import logging
 import os
 import sys
 from datetime import date, datetime
@@ -47,6 +48,8 @@ from app.services.project import ProjectService
 from app.services.stats import StatsService
 from app.services.todo import TodoService
 from app.services.user import UserService
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Auth context — set by `login` tool, read by all other tools
@@ -94,7 +97,8 @@ def _ensure_db():
             if "recurring_id" not in txn_cols:
                 conn.execute(text("ALTER TABLE finance_transactions ADD COLUMN recurring_id VARCHAR(36)"))
     except Exception:
-        pass  # best-effort; tables may not exist yet
+        logger.exception("MCP database column migration failed")
+        raise
     _db_initialized = True
 
 
@@ -103,23 +107,23 @@ def _ensure_db():
 # ---------------------------------------------------------------------------
 
 def _resolve_user_id(db) -> UUID:
-    """Resolve user ID: login session > env var > first user in DB."""
+    """Resolve user ID from the authenticated session or explicit service account."""
     _ensure_db()
     # 1. Check login session
     uid = _auth_user_id.get()
     if uid:
         return uid
-    # 2. Check env var
-    env_id = os.environ.get("LIFEQUEST_USER_ID")
+    # 2. Check explicitly configured service account
+    env_id = os.environ.get("LIFEQUEST_MCP_SERVICE_USER_ID")
     if env_id:
-        return UUID(env_id)
-    # 3. Fall back to first user
-    user = db.query(User).first()
-    if not user:
-        raise RuntimeError(
-            "未找到用户。请先调用 login 工具登录，或在数据库中注册用户。"
-        )
-    return user.id
+        try:
+            service_user_id = UUID(env_id)
+        except ValueError as exc:
+            raise RuntimeError("LIFEQUEST_MCP_SERVICE_USER_ID 无效") from exc
+        if db.query(User).filter(User.id == service_user_id).first():
+            return service_user_id
+        raise RuntimeError("MCP service account 不存在")
+    raise RuntimeError("请先调用 login 工具登录")
 
 
 def _serialize(obj):

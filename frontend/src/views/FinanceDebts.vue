@@ -536,7 +536,7 @@ onMounted(() => { fetchDebts() })
   font-size: var(--font-size-xs); font-weight: 500;
   padding: 2px 10px; border-radius: var(--radius-full);
 }
-.debt-status--active { background: rgba(0, 217, 255, 0.12); color: var(--color-secondary); }
+.debt-status--active { background: rgba(14, 165, 233, 0.12); color: var(--color-primary-dark); }
 .debt-status--settled { background: rgba(81, 207, 102, 0.12); color: var(--color-success); }
 
 .debt-actions { display: flex; gap: 4px; }

@@ -31,7 +31,7 @@ defineEmits(['navigate'])
 .tree-node { margin-bottom: 2px; }
 .tree-node-btn { display: flex; align-items: center; gap: var(--spacing-xs); width: 100%; padding: 6px 8px; background: transparent; border: none; border-radius: var(--radius-md); cursor: pointer; color: var(--color-text); font-size: var(--font-size-sm); font-family: var(--font-family); text-align: left; transition: background 0.15s; }
 .tree-node-btn:hover { background: var(--color-bg-tertiary); }
-.tree-node--active > .tree-node-btn { background: rgba(108, 99, 255, 0.1); color: var(--color-primary); font-weight: 600; }
+.tree-node--active > .tree-node-btn { background: rgba(14, 165, 233, 0.1); color: var(--color-primary); font-weight: 600; }
 .tree-node-icon { width: 16px; height: 16px; flex-shrink: 0; }
 .tree-node-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tree-children { list-style: none; padding-left: 16px; margin: 0; }

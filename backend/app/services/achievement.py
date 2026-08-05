@@ -287,7 +287,7 @@ class AchievementService:
         return self.user_achievement_repo.get_by_user(user_id)
 
     def check_and_unlock(
-        self, user_id: UUID, condition_type: str, current_value: int
+        self, user_id: UUID, condition_type: str, current_value: int, commit: bool = True
     ) -> List[Achievement]:
         """Check all achievements of the given condition_type and unlock any
         that the user qualifies for but hasn't earned yet.
@@ -305,7 +305,8 @@ class AchievementService:
                     user_id, achievement.id
                 )
                 if not existing:
-                    self.user_achievement_repo.create(
+                    create = self.user_achievement_repo.create if commit else self.user_achievement_repo._create_no_commit
+                    create(
                         {
                             "user_id": user_id,
                             "achievement_id": achievement.id,
@@ -317,18 +318,23 @@ class AchievementService:
                         self.user_repo._update_coins_no_commit(user, achievement.coin_reward)
                         self.user_repo._update_experience_no_commit(user, achievement.exp_reward)
                     unlocked.append(achievement)
-        if unlocked:
+        if unlocked and commit:
             self.db.commit()
-            # Record coin transactions for each unlocked achievement
-            for achievement in unlocked:
-                if achievement.coin_reward and achievement.coin_reward > 0:
-                    self.coin_repo.create_transaction(
-                        user_id=user_id,
-                        amount=achievement.coin_reward,
-                        coin_type=CoinType.EARN,
-                        source=CoinSource.ACHIEVEMENT,
-                        description=f"Achievement unlocked: {achievement.name}",
-                    )
+        # Record coin transactions for each unlocked achievement.
+        for achievement in unlocked:
+            if achievement.coin_reward and achievement.coin_reward > 0:
+                create_transaction = self.coin_repo.create_transaction if commit else self.coin_repo._create_no_commit
+                data = {
+                    "user_id": user_id,
+                    "amount": achievement.coin_reward,
+                    "type": CoinType.EARN,
+                    "source": CoinSource.ACHIEVEMENT,
+                    "description": f"Achievement unlocked: {achievement.name}",
+                }
+                if commit:
+                    create_transaction(**data)
+                else:
+                    create_transaction(data)
         return unlocked
 
     def check_notes(self, user_id: UUID) -> List[Achievement]:

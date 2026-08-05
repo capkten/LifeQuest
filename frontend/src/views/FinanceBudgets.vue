@@ -534,7 +534,7 @@ select.form-input { appearance: auto; }
   font-family: var(--font-family); transition: all 0.15s ease;
 }
 .category-chip:hover { border-color: var(--color-primary); color: var(--color-primary); }
-.category-chip--active { background: rgba(108, 99, 255, 0.12); border-color: var(--color-primary); color: var(--color-primary); }
+.category-chip--active { background: rgba(14, 165, 233, 0.12); border-color: var(--color-primary); color: var(--color-primary); }
 .category-empty { font-size: var(--font-size-xs); color: var(--color-text-tertiary); padding: var(--spacing-xs) 0; }
 
 .dialog-error { font-size: var(--font-size-sm); color: var(--color-error); padding: var(--spacing-xs) 0; }

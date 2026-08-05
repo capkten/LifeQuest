@@ -38,7 +38,12 @@ let isRefreshing = false
 let refreshSubscribers = []
 
 function onRefreshed(newToken) {
-  refreshSubscribers.forEach(cb => cb(newToken))
+  refreshSubscribers.forEach(({ resolve }) => resolve(newToken))
+  refreshSubscribers = []
+}
+
+function onRefreshFailed(error) {
+  refreshSubscribers.forEach(({ reject }) => reject(error))
   refreshSubscribers = []
 }
 
@@ -59,11 +64,12 @@ api.interceptors.response.use(
 
       if (isRefreshing) {
         // Queue this request until refresh completes
-        return new Promise((resolve) => {
-          refreshSubscribers.push((newToken) => {
+        originalRequest._retry = true
+        return new Promise((resolve, reject) => {
+          refreshSubscribers.push({ resolve: (newToken) => {
             originalRequest.headers.Authorization = `Bearer ${newToken}`
             resolve(api(originalRequest))
-          })
+          }, reject })
         })
       }
 
@@ -84,7 +90,7 @@ api.interceptors.response.use(
         return api(originalRequest)
       } catch (refreshError) {
         isRefreshing = false
-        refreshSubscribers = []
+        onRefreshFailed(refreshError)
         localStorage.removeItem('token')
         localStorage.removeItem('refreshToken')
         window.location.href = '/login'

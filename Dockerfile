@@ -38,13 +38,16 @@ RUN mkdir -p /app/data/uploads/avatars \
              /app/data/notes_data
 
 # Symlink data dirs so the app finds them where it expects
-RUN ln -sf /app/data/uploads /app/backend/uploads && \
+RUN rm -rf /app/backend/uploads /app/backend/notes_data /app/backend/lifequest.db && \
+    ln -s /app/data/uploads /app/backend/uploads && \
     ln -sf /app/data/notes_data /app/backend/notes_data && \
-    ln -sf /app/data/lifequest.db /app/backend/lifequest.db 2>/dev/null; true
+    ln -sf /app/data/lifequest.db /app/backend/lifequest.db
 
 # Entrypoint script
 COPY deploy/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+COPY deploy/healthcheck.sh /usr/local/bin/lifequest-healthcheck
+RUN chmod +x /usr/local/bin/lifequest-healthcheck
 
 EXPOSE 80
 

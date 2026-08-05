@@ -1,4 +1,5 @@
 from typing import List
+import logging
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -13,6 +14,7 @@ from app.services.backpack import BackpackService
 
 
 class ShopService:
+    logger = logging.getLogger(__name__)
     def __init__(self, db: Session):
         self.db = db
         self.item_repo = ShopItemRepository(db)
@@ -108,7 +110,7 @@ class ShopService:
             self.achievement_service.check_coins_spent(user_id)
             self.achievement_service.check_transactions(user_id)
         except Exception:
-            pass  # Don't fail purchase if achievement check fails
+            self.logger.exception("Shop achievement processing failed for user %s", user_id)
 
         return exchange
 

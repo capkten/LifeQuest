@@ -410,7 +410,9 @@ function goToEditProfile() {
 .profile-hero {
   display: grid;
   gap: 12px;
-  background: var(--color-card);
+  background:
+    radial-gradient(circle at 90% 0%, rgba(16, 185, 129, 0.14), transparent 24%),
+    linear-gradient(135deg, #ffffff 0%, #eff9fc 100%);
   border: 1px solid var(--color-border);
   border-radius: var(--surface-radius);
   padding: var(--surface-padding);
@@ -506,7 +508,7 @@ function goToEditProfile() {
   min-height: 24px;
   padding: 0 8px;
   border-radius: 999px;
-  background: rgba(108, 99, 255, 0.08);
+  background: var(--color-bg-tertiary);
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   font-weight: 500;
@@ -573,6 +575,7 @@ function goToEditProfile() {
   border-radius: var(--surface-radius);
   padding: var(--surface-padding);
   margin-bottom: var(--spacing-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .stats-section .stats-grid {
@@ -621,7 +624,7 @@ function goToEditProfile() {
 }
 
 .stat-card--level .stat-card-icon {
-  background: rgba(108, 99, 255, 0.15);
+  background: rgba(14, 165, 233, 0.15);
 }
 
 .stat-card--level .stat-card-icon svg {
@@ -629,7 +632,7 @@ function goToEditProfile() {
 }
 
 .stat-card--exp .stat-card-icon {
-  background: rgba(0, 217, 255, 0.15);
+  background: rgba(14, 165, 233, 0.15);
 }
 
 .stat-card--exp .stat-card-icon svg {
@@ -671,6 +674,7 @@ function goToEditProfile() {
   border-radius: var(--surface-radius);
   padding: var(--surface-padding);
   margin-bottom: var(--spacing-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .exp-header {
@@ -720,6 +724,7 @@ function goToEditProfile() {
   border: 1px solid var(--color-border);
   border-radius: var(--surface-radius);
   padding: var(--surface-padding);
+  box-shadow: var(--shadow-sm);
 }
 
 .section-title {
@@ -1011,7 +1016,7 @@ function goToEditProfile() {
 }
 
 .title-item--active {
-  background: rgba(108, 99, 255, 0.1);
+  background: rgba(14, 165, 233, 0.1);
   border: 1px solid var(--color-primary);
 }
 
@@ -1120,5 +1125,14 @@ function goToEditProfile() {
     padding: 0 12px;
     font-size: var(--font-size-sm);
   }
+}
+@media (min-width: 768px) {
+  .profile-page {
+    padding: 0;
+  }
+}
+
+.stats-grid--hero {
+  display: none;
 }
 </style>

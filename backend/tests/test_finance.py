@@ -138,3 +138,39 @@ def test_update_transfer_transaction_updates_balances(client):
     balances = {acc["id"]: acc["balance"] for acc in accounts}
     assert balances[from_account["id"]] == 900
     assert balances[to_account["id"]] == 200
+
+
+def test_finance_rejects_non_positive_amounts_and_invalid_debt_remaining(client):
+    headers = _register_and_login(client)
+    account = _create_account(client, headers, "校验账户", 1000)
+
+    transaction = client.post(
+        "/api/finance/transactions",
+        json={
+            "account_id": account["id"],
+            "type": "expense",
+            "amount": 0,
+            "date": "2026-06-09",
+        },
+        headers=headers,
+    )
+    assert transaction.status_code == 422
+
+    budget = client.post(
+        "/api/finance/budgets",
+        json={"amount": 0, "period": "monthly"},
+        headers=headers,
+    )
+    assert budget.status_code == 422
+
+    debt = client.post(
+        "/api/finance/debts",
+        json={
+            "creditor": "银行",
+            "type": "loan",
+            "amount": 100,
+            "remaining": 101,
+        },
+        headers=headers,
+    )
+    assert debt.status_code == 422

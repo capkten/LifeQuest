@@ -2,6 +2,7 @@ import logging
 import os
 
 from fastapi import FastAPI, Request
+from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -19,6 +20,17 @@ app = FastAPI(title="LifeQuest", version="1.0.0")
 
 
 logger = logging.getLogger(__name__)
+
+
+@app.get("/api/health")
+def health_check():
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception as exc:
+        logger.exception("Health check database probe failed")
+        raise HTTPException(status_code=503, detail="database unavailable") from exc
+    return {"status": "ok"}
 
 
 def _migrate_columns():
@@ -74,6 +86,7 @@ def startup_event():
         _migrate_columns()
     except Exception:
         logger.exception("Column migration failed")
+        raise
     # Migrate old notes/folders tables to note_nodes
     migrate_db = SessionLocal()
     try:
@@ -81,6 +94,7 @@ def startup_event():
     except Exception:
         logger.exception("Note data migration failed")
         migrate_db.rollback()
+        raise
     finally:
         migrate_db.close()
     db = SessionLocal()
@@ -98,6 +112,7 @@ def startup_event():
         FinanceService.seed_categories(db)
     except Exception:
         logger.exception("Seed data failed")
+        raise
     finally:
         db.close()
 
@@ -138,6 +153,9 @@ _mcp_process = None
 def start_mcp_server():
     """Start the MCP SSE server as a subprocess on an internal port."""
     global _mcp_process
+    if os.environ.get("MCP_AUTOSTART", "false").lower() != "true":
+        logger.info("MCP autostart disabled; use supervisor to run the MCP service")
+        return
     import subprocess, sys
     mcp_port = int(os.environ.get("MCP_PORT", "3001"))
     cmd = [sys.executable, os.path.join(os.path.dirname(__file__), "..", "mcp_server.py"),
@@ -164,8 +182,12 @@ async def mcp_sse_proxy(request: Request):
     mcp_port = int(os.environ.get("MCP_PORT", "3001"))
     url = f"http://127.0.0.1:{mcp_port}/sse"
     client = httpx.AsyncClient()
-    req = client.build_request("GET", url, headers=dict(request.headers))
-    response = await client.send(req, stream=True)
+    try:
+        req = client.build_request("GET", url, headers=dict(request.headers))
+        response = await client.send(req, stream=True)
+    except httpx.HTTPError:
+        await client.aclose()
+        return Response(content='{"detail":"MCP service unavailable"}', status_code=503, media_type="application/json")
 
     async def stream():
         async for chunk in response.aiter_bytes():
@@ -189,8 +211,11 @@ async def mcp_messages_proxy(request: Request):
     qs = f"?{request.url.query}" if request.url.query else ""
     url = f"http://127.0.0.1:{mcp_port}{path}{qs}"
     body = await request.body()
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(url, content=body, headers=dict(request.headers))
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(url, content=body, headers=dict(request.headers))
+    except httpx.HTTPError:
+        return Response(content='{"detail":"MCP service unavailable"}', status_code=503, media_type="application/json")
     return Response(content=resp.content, status_code=resp.status_code, headers=dict(resp.headers))
 
 logger.info("MCP proxy registered at /mcp/sse and /mcp/messages")

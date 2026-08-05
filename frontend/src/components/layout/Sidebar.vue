@@ -62,6 +62,7 @@
     </div>
 
     <nav class="sidebar-nav">
+      <span v-if="!isCollapsed" class="nav-section-label">PLAN</span>
       <router-link to="/" class="nav-item" :class="{ 'nav-item--active': isHomeActive }" :title="isCollapsed ? '首页' : ''">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z" />
@@ -101,6 +102,7 @@
         </svg>
         <span v-if="!isCollapsed">笔记</span>
       </router-link>
+      <span v-if="!isCollapsed" class="nav-section-label">REWARDS</span>
       <router-link to="/shop" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '商城' : ''">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
@@ -118,6 +120,7 @@
         </svg>
         <span v-if="!isCollapsed">背包</span>
       </router-link>
+      <span v-if="!isCollapsed" class="nav-section-label">INSIGHTS</span>
       <router-link to="/finance" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '记账' : ''">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <rect x="2" y="4" width="20" height="16" rx="2" />
@@ -175,11 +178,11 @@ const isHomeActive = computed(() => route.path === '/')
 .sidebar {
   width: var(--sidebar-width);
   height: 100vh;
-  background: var(--color-bg-secondary);
+  background: linear-gradient(180deg, #ffffff 0%, #f5fbfd 100%);
   border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
-  padding: var(--spacing-lg);
+  padding: var(--spacing-md);
   position: fixed;
   left: 0;
   top: 0;
@@ -195,8 +198,8 @@ const isHomeActive = computed(() => route.path === '/')
 }
 
 .sidebar-header {
-  padding-bottom: var(--spacing-lg);
-  margin-bottom: var(--spacing-lg);
+  padding-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -207,6 +210,7 @@ const isHomeActive = computed(() => route.path === '/')
 }
 
 .logo {
+  font-family: var(--font-family-display);
   font-size: var(--font-size-2xl);
   font-weight: 700;
   color: var(--color-primary);
@@ -225,8 +229,8 @@ const isHomeActive = computed(() => route.path === '/')
 .user-card {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
-  padding: var(--spacing-md);
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
   background: var(--color-bg-tertiary);
   border-radius: var(--radius-lg);
   margin-bottom: var(--spacing-md);
@@ -279,7 +283,7 @@ const isHomeActive = computed(() => route.path === '/')
 .user-stats {
   display: flex;
   gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
 }
 
 .stat-item {
@@ -317,7 +321,7 @@ const isHomeActive = computed(() => route.path === '/')
 }
 
 .exp-bar-container {
-  margin-bottom: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
 }
 
 .exp-bar-label {
@@ -353,6 +357,15 @@ const isHomeActive = computed(() => route.path === '/')
   -ms-overflow-style: none;
 }
 
+.nav-section-label {
+  padding: 10px var(--spacing-sm) 3px;
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1;
+}
+
 .sidebar-nav::-webkit-scrollbar {
   display: none;
 }
@@ -360,13 +373,13 @@ const isHomeActive = computed(() => route.path === '/')
 .nav-item {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
-  padding: var(--spacing-sm) var(--spacing-md);
+  gap: var(--spacing-sm);
+  padding: 9px var(--spacing-sm);
   border-radius: var(--radius-md);
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
   text-decoration: none;
   white-space: nowrap;
 }
@@ -383,13 +396,14 @@ const isHomeActive = computed(() => route.path === '/')
 }
 
 .nav-item--active {
-  background: var(--color-primary);
-  color: #fff;
+  background: #DDF5FB;
+  color: var(--color-primary-dark);
+  box-shadow: inset 3px 0 0 var(--color-primary);
 }
 
 .nav-item--active:hover {
-  background: var(--color-primary-light);
-  color: #fff;
+  background: #D4F0F8;
+  color: var(--color-primary-dark);
 }
 
 .nav-item svg {

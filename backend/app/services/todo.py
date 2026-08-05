@@ -107,6 +107,7 @@ class TodoService:
         if user:
             self._update_rewards(user, habit.coins_reward, habit.exp_reward, CoinSource.HABIT)
             self._check_achievements(user)
+            self.db.commit()
 
         self.habit_repo.db.refresh(habit)
         return habit
@@ -143,6 +144,7 @@ class TodoService:
         if user:
             self._update_rewards(user, task.coins_reward, task.exp_reward, CoinSource.TASK)
             self._check_achievements(user)
+            self.db.commit()
 
         self.task_repo.db.refresh(task)
         return task
@@ -174,6 +176,7 @@ class TodoService:
         if user:
             self._update_rewards(user, goal.coins_reward, goal.exp_reward, CoinSource.GOAL)
             self._check_achievements(user)
+            self.db.commit()
 
         self.goal_repo.db.refresh(goal)
         return goal
@@ -182,44 +185,45 @@ class TodoService:
         """Update user coins and experience in a single transaction."""
         self.user_repo._update_coins_no_commit(user, coins)
         self.user_repo._update_experience_no_commit(user, exp)
-        self.task_repo.db.commit()
-        # Record coin transaction
-        self.coin_repo.create_transaction(
-            user_id=user.id,
-            amount=coins,
-            coin_type=CoinType.EARN,
-            source=source,
-            description=f"Reward from {source}",
+        self.coin_repo._create_no_commit(
+            {
+                "user_id": user.id,
+                "amount": coins,
+                "type": CoinType.EARN,
+                "source": source,
+                "description": f"Reward from {source}",
+            }
         )
 
     def _check_achievements(self, user) -> None:
         """Check and unlock achievements based on current user state."""
         from sqlalchemy import func
 
+        self.db.flush()
         uid = user.id
         # task_count: count completed tasks
         completed_tasks = self.task_repo.db.query(Task).filter(
             Task.user_id == uid, Task.status == TaskStatus.COMPLETED
         ).count()
-        self.achievement_service.check_and_unlock(uid, "task_count", completed_tasks)
+        self.achievement_service.check_and_unlock(uid, "task_count", completed_tasks, commit=False)
 
         # habit_streak: best streak across all habits
         max_streak = self.habit_repo.db.query(func.max(Habit.best_streak)).filter(
             Habit.user_id == uid
         ).scalar() or 0
-        self.achievement_service.check_and_unlock(uid, "habit_streak", max_streak)
+        self.achievement_service.check_and_unlock(uid, "habit_streak", max_streak, commit=False)
 
         # level
-        self.achievement_service.check_and_unlock(uid, "level", user.level)
+        self.achievement_service.check_and_unlock(uid, "level", user.level, commit=False)
 
         # coins_earned: use persisted cumulative counter
-        self.achievement_service.check_and_unlock(uid, "coins_earned", user.total_coins_earned)
+        self.achievement_service.check_and_unlock(uid, "coins_earned", user.total_coins_earned, commit=False)
 
         # goal_count: count completed goals
         completed_goals = self.goal_repo.db.query(Goal).filter(
             Goal.user_id == uid, Goal.status == TaskStatus.COMPLETED
         ).count()
-        self.achievement_service.check_and_unlock(uid, "goal_count", completed_goals)
+        self.achievement_service.check_and_unlock(uid, "goal_count", completed_goals, commit=False)
 
         # Check titles based on level
         self.title_service.check_and_unlock(uid, "level", user.level)

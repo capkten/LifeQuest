@@ -431,7 +431,7 @@ onMounted(() => {
 
 .search-input:focus {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.12);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
 }
 
 .search-input::placeholder {
@@ -498,7 +498,7 @@ onMounted(() => {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-lg);
-  background: rgba(108, 99, 255, 0.12);
+  background: rgba(14, 165, 233, 0.12);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -749,7 +749,7 @@ onMounted(() => {
   width: 48px;
   height: 48px;
   border-radius: var(--radius-lg);
-  background: rgba(108, 99, 255, 0.12);
+  background: rgba(14, 165, 233, 0.12);
   display: flex;
   align-items: center;
   justify-content: center;

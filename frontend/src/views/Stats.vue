@@ -660,7 +660,7 @@ onMounted(fetchAll)
 }
 
 .overview-card--tasks .overview-icon {
-  background: rgba(108, 99, 255, 0.15);
+  background: rgba(14, 165, 233, 0.15);
 }
 .overview-card--tasks .overview-icon svg {
   color: var(--color-primary);
@@ -681,7 +681,7 @@ onMounted(fetchAll)
 }
 
 .overview-card--active .overview-icon {
-  background: rgba(0, 217, 255, 0.15);
+  background: rgba(14, 165, 233, 0.15);
 }
 .overview-card--active .overview-icon svg {
   color: var(--color-secondary);
@@ -1116,6 +1116,24 @@ onMounted(fetchAll)
 @media (min-width: 768px) and (max-width: 1199px) {
   .overview-grid {
     grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (min-width: 1200px) {
+  .stats-page {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: var(--page-gap);
+  }
+
+  .stats-page > .page-header,
+  .stats-page > .overview-grid {
+    grid-column: 1 / -1;
+  }
+
+  .stats-page > .chart-section {
+    min-width: 0;
   }
 }
 </style>

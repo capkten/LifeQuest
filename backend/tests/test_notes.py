@@ -1,5 +1,6 @@
 # backend/tests/test_notes.py
 import os
+import pytest
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing-only")
 
@@ -391,3 +392,25 @@ def test_file_path_stays_within_notes_data(client):
     )
     # The name should be rejected by normalize_name due to invalid chars
     assert r.status_code == 400
+
+
+def test_create_note_rolls_back_when_markdown_write_fails(client, monkeypatch):
+    headers = _register_and_login(client)
+    nb = _create_notebook(client, headers)
+
+    from app.services import note as note_module
+
+    def fail_write(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(note_module, "_write_content_atomically", fail_write)
+    with pytest.raises(OSError):
+        client.post(
+            f"/api/notes/notebooks/{nb['id']}/notes",
+            json={"title": "Unwritten", "content": "content"},
+            headers=headers,
+        )
+
+    tree = client.get(f"/api/notes/notebooks/{nb['id']}/tree", headers=headers)
+    assert tree.status_code == 200
+    assert tree.json() == []

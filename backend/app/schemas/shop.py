@@ -12,8 +12,8 @@ class ShopItemCreate(BaseModel):
     description: Optional[str] = None
     icon: Optional[str] = None
     category: Optional[str] = None
-    coin_price: int = 0
-    stock: int = -1
+    coin_price: int = Field(default=0, ge=0)
+    stock: int = Field(default=-1, ge=-1)
 
 
 class ShopItemUpdate(BaseModel):
@@ -21,8 +21,8 @@ class ShopItemUpdate(BaseModel):
     description: Optional[str] = None
     icon: Optional[str] = None
     category: Optional[str] = None
-    coin_price: Optional[int] = None
-    stock: Optional[int] = None
+    coin_price: Optional[int] = Field(default=None, ge=0)
+    stock: Optional[int] = Field(default=None, ge=-1)
     is_active: Optional[bool] = None
 
 

@@ -298,6 +298,7 @@ def move_task(
     task = todo_service.get_task_for_user(task_id, current_user.id)
     return service.move_task(
         task,
+        current_user.id,
         project_id=body.project_id,
         phase_id=body.phase_id,
         milestone_id=body.milestone_id,

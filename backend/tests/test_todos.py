@@ -158,8 +158,18 @@ def test_complete_goal_awards_rewards(client):
 
     # Verify rewards
     user_after = client.get("/api/users/me", headers=headers).json()
-    assert user_after["coins"] == coins_before + 100
+    assert user_after["coins"] == coins_before + 150
     assert user_after["experience"] == exp_before + 50
+
+
+def test_todo_rewards_must_not_be_negative(client):
+    headers = _register_and_login(client)
+    response = client.post(
+        "/api/todos/tasks",
+        json={"title": "Invalid reward", "coins_reward": -1, "exp_reward": 0},
+        headers=headers,
+    )
+    assert response.status_code == 422
 
 
 def test_complete_task_idempotent(client):

@@ -1,10 +1,22 @@
 <template>
   <div class="shop-page">
+    <section class="shop-hero" aria-labelledby="shop-hero-title">
+      <div class="shop-hero-copy">
+        <span class="shop-hero-kicker">LIFEQUEST REWARDS</span>
+        <h1 id="shop-hero-title">用今天的努力，兑换生活里的小奖励</h1>
+        <p>把完成任务获得的金币，换成真正让你开心的时刻。</p>
+      </div>
+      <div class="shop-hero-summary">
+        <strong>{{ filteredItems.length }}</strong>
+        <span>个奖励等待兑换</span>
+      </div>
+    </section>
     <div class="page-header">
       <div class="page-header-main">
         <div class="header-left">
+          <span class="shop-kicker">REWARD MARKET</span>
           <h2 class="page-title">商城</h2>
-          <span class="item-count">{{ items.length }} 件商品</span>
+          <span class="item-count">{{ filteredItems.length }} 件奖励可兑换</span>
         </div>
         <div class="balance-display">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -30,6 +42,45 @@
           </svg>
           新建商品
         </button>
+      </div>
+    </div>
+
+    <nav v-if="items.length > 0" class="shop-categories" aria-label="商品分类">
+      <button
+        v-for="category in categoryOptions"
+        :key="category"
+        type="button"
+        class="shop-category"
+        :class="{ 'shop-category--active': activeCategory === category }"
+        @click="activeCategory = category"
+      >
+        {{ category }}
+      </button>
+    </nav>
+
+    <div v-if="items.length > 0" class="shop-toolbar">
+      <label class="shop-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-4-4" />
+        </svg>
+        <span class="sr-only">搜索商品</span>
+        <input v-model="searchQuery" type="search" placeholder="搜索奖励名称或描述" />
+        <button v-if="searchQuery" type="button" class="shop-search-clear" aria-label="清除搜索" @click="searchQuery = ''">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </label>
+      <div class="shop-toolbar-meta">
+        <span>{{ filteredItems.length }} 个结果</span>
+        <select v-model="sortOrder" aria-label="商品排序">
+          <option value="recommended">推荐排序</option>
+          <option value="price-asc">金币从低到高</option>
+          <option value="price-desc">金币从高到低</option>
+          <option value="name">名称排序</option>
+        </select>
       </div>
     </div>
 
@@ -61,9 +112,20 @@
       </button>
     </div>
 
+    <div v-else-if="filteredItems.length === 0" class="empty-state empty-state--filtered">
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-4-4" />
+        </svg>
+      </div>
+      <h3 class="empty-title">{{ searchQuery ? '没有找到匹配的奖励' : '这个分类还没有商品' }}</h3>
+      <p class="empty-text">{{ searchQuery ? '试试更短的关键词，或切换其他分类。' : '换个分类看看，或者创建一个新的商品。' }}</p>
+    </div>
+
     <div v-else class="items-grid">
       <div
-        v-for="item in items"
+        v-for="item in filteredItems"
         :key="item.id"
         class="item-card"
       >
@@ -91,7 +153,9 @@
                 <circle cx="12" cy="12" r="10" />
                 <path d="M12 6v12M6 12h12" />
               </svg>
-              <span>{{ item.coin_price }}</span>
+              <span class="item-price-label">兑换</span>
+              <strong>{{ item.coin_price }}</strong>
+              <small>金币</small>
             </div>
           </div>
         </div>
@@ -115,7 +179,7 @@
             <span v-if="purchasingId === item.id" class="loading-spinner loading-spinner--sm"></span>
             <span v-else-if="item.stock !== -1 && item.stock <= 0">已售罄</span>
             <span v-else-if="(user?.coins || 0) < item.coin_price">金币不足</span>
-            <span v-else>购买</span>
+            <span v-else>立即兑换</span>
           </button>
         </div>
       </div>
@@ -329,6 +393,30 @@ const items = ref([])
 const loading = ref(true)
 const error = ref(null)
 const purchasingId = ref(null)
+const activeCategory = ref('全部')
+const searchQuery = ref('')
+const sortOrder = ref('recommended')
+
+const categoryOptions = computed(() => [
+  '全部',
+  ...Array.from(new Set(items.value.map(item => item.category).filter(Boolean)))
+])
+
+const filteredItems = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+  const visibleItems = items.value.filter((item) => {
+    const inCategory = activeCategory.value === '全部' || item.category === activeCategory.value
+    const searchableText = `${item.name || ''} ${item.description || ''} ${item.category || ''}`.toLowerCase()
+    return inCategory && (!query || searchableText.includes(query))
+  })
+
+  return [...visibleItems].sort((left, right) => {
+    if (sortOrder.value === 'price-asc') return left.coin_price - right.coin_price
+    if (sortOrder.value === 'price-desc') return right.coin_price - left.coin_price
+    if (sortOrder.value === 'name') return (left.name || '').localeCompare(right.name || '')
+    return 0
+  })
+})
 
 const showCreateDialog = ref(false)
 const creating = ref(false)
@@ -560,6 +648,70 @@ onMounted(() => {
 .shop-page {
   padding: var(--page-padding-y) var(--page-padding-x);
   width: 100%;
+}
+
+.shop-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+  padding: 22px 24px;
+  overflow: hidden;
+  border: 1px solid rgba(14, 165, 233, 0.18);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 90% 0%, rgba(110, 231, 183, 0.34), transparent 28%),
+    linear-gradient(120deg, #123b5d 0%, #0a6c94 66%, #0ea5e9 100%);
+  color: #fff;
+  box-shadow: var(--shadow-md);
+}
+
+.shop-hero-copy {
+  min-width: 0;
+}
+
+.shop-hero-kicker {
+  display: block;
+  margin-bottom: 8px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.shop-hero h1 {
+  margin: 0;
+  color: #fff;
+  font-family: var(--font-family-display);
+  font-size: clamp(1.15rem, 1rem + 0.45vw, 1.65rem);
+  line-height: 1.2;
+}
+
+.shop-hero p {
+  margin-top: 7px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: var(--font-size-sm);
+}
+
+.shop-hero-summary {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  padding-left: 20px;
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: var(--font-size-xs);
+  text-align: right;
+}
+
+.shop-hero-summary strong {
+  color: #fff;
+  font-family: var(--font-family-display);
+  font-size: 1.8rem;
+  line-height: 1;
 }
 
 .page-header {
@@ -937,7 +1089,7 @@ onMounted(() => {
 }
 
 .item-tag--category {
-  background: rgba(108, 99, 255, 0.12);
+  background: rgba(14, 165, 233, 0.12);
   color: var(--color-primary);
 }
 
@@ -966,6 +1118,20 @@ onMounted(() => {
   color: var(--color-warning);
   justify-content: flex-end;
   text-align: right;
+}
+
+.item-price-label,
+.item-price small {
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.item-price strong {
+  color: var(--color-text);
+  font-family: var(--font-family-display);
+  font-size: 1.15rem;
+  line-height: 1;
 }
 
 .item-price svg {
@@ -1345,6 +1511,38 @@ onMounted(() => {
     padding: var(--spacing-md);
   }
 
+  .shop-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .shop-search {
+    max-width: none;
+    flex-basis: auto;
+  }
+
+  .shop-toolbar-meta {
+    justify-content: space-between;
+  }
+
+  .shop-hero {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+    padding: 18px;
+  }
+
+  .shop-hero-summary {
+    align-items: flex-start;
+    width: 100%;
+    padding-top: 12px;
+    padding-left: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.25);
+    border-left: 0;
+    text-align: left;
+  }
+
   .page-header {
     flex-direction: column;
     align-items: stretch;
@@ -1410,6 +1608,10 @@ onMounted(() => {
     font-size: 12px;
   }
 
+  .item-price strong {
+    font-size: 1rem;
+  }
+
   .item-card-footer {
     padding-top: 8px;
     margin-top: 8px;
@@ -1456,5 +1658,210 @@ onMounted(() => {
   .icon-option {
     height: 40px;
   }
+}
+@media (min-width: 768px) {
+  .shop-page {
+    padding: 0;
+  }
+
+  .items-grid {
+    gap: 14px;
+  }
+
+  .item-card {
+    border-radius: 12px;
+    padding: 13px;
+  }
+}
+
+.shop-categories {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 18px;
+  padding: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.shop-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.shop-search {
+  display: flex;
+  align-items: center;
+  flex: 1 1 360px;
+  gap: 9px;
+  min-height: 44px;
+  max-width: 520px;
+  padding: 0 13px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-card);
+  color: var(--color-text-tertiary);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.shop-search:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
+}
+
+.shop-search svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.shop-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-sm);
+}
+
+.shop-search input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.shop-search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+
+.shop-search-clear:hover {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+}
+
+.shop-search-clear svg {
+  width: 15px;
+  height: 15px;
+}
+
+.shop-toolbar-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.shop-toolbar-meta select {
+  min-height: 40px;
+  padding: 0 30px 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-card);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.shop-kicker {
+  display: block;
+  color: var(--color-accent-dark);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.shop-page .header-left {
+  gap: 5px;
+}
+
+.shop-page .balance-display {
+  border-color: rgba(16, 185, 129, 0.24);
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--color-accent-dark);
+}
+
+.shop-categories::-webkit-scrollbar {
+  display: none;
+}
+
+.shop-category {
+  min-height: 36px;
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.shop-category:hover {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+}
+
+.shop-category--active {
+  border-color: rgba(14, 165, 233, 0.2);
+  background: var(--color-bg-tertiary);
+  color: var(--color-primary-dark);
+}
+
+.empty-state--filtered {
+  min-height: 280px;
+}
+
+@media (min-width: 1200px) {
+  .items-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .item-card {
+    min-height: 248px;
+  }
+}
+
+.shop-page .btn-purchase {
+  background: var(--color-accent);
+  border: 1px solid var(--color-accent);
+}
+
+.shop-page .btn-purchase:hover:not(:disabled) {
+  background: var(--color-accent-dark);
+  border-color: var(--color-accent-dark);
 }
 </style>

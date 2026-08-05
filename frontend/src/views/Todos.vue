@@ -1265,7 +1265,7 @@ onMounted(() => {
 }
 
 .tab-count--tasks {
-  background: rgba(0, 217, 255, 0.12);
+  background: rgba(14, 165, 233, 0.12);
   color: var(--color-secondary);
 }
 
@@ -1275,7 +1275,7 @@ onMounted(() => {
 }
 
 .tab-count--goals {
-  background: rgba(108, 99, 255, 0.12);
+  background: rgba(14, 165, 233, 0.12);
   color: var(--color-primary);
 }
 
@@ -1538,12 +1538,12 @@ onMounted(() => {
 }
 
 .frequency-badge--daily {
-  background: rgba(0, 217, 255, 0.12);
+  background: rgba(14, 165, 233, 0.12);
   color: var(--color-secondary);
 }
 
 .frequency-badge--weekly {
-  background: rgba(108, 99, 255, 0.12);
+  background: rgba(14, 165, 233, 0.12);
   color: var(--color-primary);
 }
 
@@ -1558,7 +1558,7 @@ onMounted(() => {
 }
 
 .status-badge--in_progress {
-  background: rgba(0, 217, 255, 0.12);
+  background: rgba(14, 165, 233, 0.12);
   color: var(--color-secondary);
 }
 
@@ -1658,7 +1658,7 @@ onMounted(() => {
   font-weight: 600;
   padding: 2px 8px;
   border-radius: var(--radius-full);
-  background: rgba(108, 99, 255, 0.12);
+  background: rgba(14, 165, 233, 0.12);
   color: var(--color-primary);
   line-height: 18px;
 }
@@ -2176,7 +2176,7 @@ onMounted(() => {
 .action-btn--edit:hover {
   border-color: var(--color-primary);
   color: var(--color-primary);
-  background: rgba(108, 99, 255, 0.08);
+  background: rgba(14, 165, 233, 0.08);
 }
 
 .action-btn--delete:hover {
@@ -2433,6 +2433,20 @@ onMounted(() => {
   .error-toast-content {
     width: 100%;
     justify-content: center;
+  }
+}
+@media (min-width: 768px) {
+  .todos-page {
+    padding: 0;
+  }
+
+  .todo-list {
+    gap: 10px;
+  }
+
+  .todo-card {
+    border-radius: 12px;
+    padding: 11px 13px;
   }
 }
 </style>

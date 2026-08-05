@@ -3,7 +3,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional, List
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.account import AccountType
 from app.models.finance_category import CategoryType
@@ -100,7 +100,7 @@ class TransactionCreate(BaseModel):
     account_id: UUID
     category_id: Optional[UUID] = None
     type: FinanceTransactionType
-    amount: float
+    amount: float = Field(gt=0)
     description: str = ""
     date: Date
     to_account_id: Optional[UUID] = None
@@ -112,7 +112,7 @@ class TransactionUpdate(BaseModel):
     account_id: Optional[UUID] = None
     category_id: Optional[UUID] = None
     type: Optional[FinanceTransactionType] = None
-    amount: Optional[float] = None
+    amount: Optional[float] = Field(default=None, gt=0)
     description: Optional[str] = None
     date: Optional[Date] = None
     to_account_id: Optional[UUID] = None
@@ -138,7 +138,7 @@ class TransactionResponse(BaseModel):
 # Budget schemas
 class BudgetCreate(BaseModel):
     category_id: Optional[UUID] = None
-    amount: float
+    amount: float = Field(gt=0)
     period: BudgetPeriod = BudgetPeriod.MONTHLY
     start_date: Optional[Date] = None
 
@@ -147,7 +147,7 @@ class BudgetCreate(BaseModel):
 
 class BudgetUpdate(BaseModel):
     category_id: Optional[UUID] = None
-    amount: Optional[float] = None
+    amount: Optional[float] = Field(default=None, gt=0)
     period: Optional[BudgetPeriod] = None
     start_date: Optional[Date] = None
 
@@ -172,7 +172,7 @@ class RecurringCreate(BaseModel):
     account_id: UUID
     category_id: Optional[UUID] = None
     type: FinanceTransactionType
-    amount: float
+    amount: float = Field(gt=0)
     description: str = ""
     frequency: RecurFrequency
     next_date: Date
@@ -184,7 +184,7 @@ class RecurringUpdate(BaseModel):
     account_id: Optional[UUID] = None
     category_id: Optional[UUID] = None
     type: Optional[FinanceTransactionType] = None
-    amount: Optional[float] = None
+    amount: Optional[float] = Field(default=None, gt=0)
     description: Optional[str] = None
     frequency: Optional[RecurFrequency] = None
     next_date: Optional[Date] = None
@@ -213,20 +213,26 @@ class RecurringResponse(BaseModel):
 class DebtCreate(BaseModel):
     creditor: str
     type: DebtType
-    amount: float
-    remaining: float
+    amount: float = Field(gt=0)
+    remaining: float = Field(ge=0)
     interest_rate: float = 0.0
     description: str = ""
     due_date: Optional[Date] = None
 
     _round_amounts = field_validator("amount", "remaining", mode="before")(_round_money)
 
+    @model_validator(mode="after")
+    def validate_remaining(self):
+        if self.remaining > self.amount:
+            raise ValueError("remaining must not exceed amount")
+        return self
+
 
 class DebtUpdate(BaseModel):
     creditor: Optional[str] = None
     type: Optional[DebtType] = None
-    amount: Optional[float] = None
-    remaining: Optional[float] = None
+    amount: Optional[float] = Field(default=None, gt=0)
+    remaining: Optional[float] = Field(default=None, ge=0)
     interest_rate: Optional[float] = None
     description: Optional[str] = None
     due_date: Optional[Date] = None
@@ -253,7 +259,7 @@ class DebtResponse(BaseModel):
 
 
 class DebtPaymentCreate(BaseModel):
-    amount: float
+    amount: float = Field(gt=0)
     description: str = ""
     date: Date
 

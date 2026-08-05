@@ -368,13 +368,47 @@ onMounted(() => {
   width: 100%;
 }
 
+@media (min-width: 1200px) {
+  .home-page {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.8fr);
+    gap: var(--page-gap);
+    align-items: start;
+  }
+
+  .hero-card {
+    grid-column: 1 / -1;
+    margin-bottom: 0;
+  }
+
+  .daily-card {
+    grid-column: 1;
+    margin-bottom: 0;
+  }
+
+  .content-grid {
+    display: contents;
+  }
+
+  .content-grid .content-section:first-child {
+    grid-column: 1;
+  }
+
+  .content-grid .content-section:last-child {
+    grid-column: 2;
+    grid-row: 3;
+  }
+}
+
 .hero-card {
   display: grid;
   gap: var(--spacing-md);
   padding: var(--surface-padding);
   margin-bottom: var(--spacing-md);
   border-radius: var(--surface-radius);
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+  background:
+    radial-gradient(circle at 88% 16%, rgba(110, 231, 183, 0.32), transparent 24%),
+    linear-gradient(135deg, #123B5D 0%, #0A6C94 58%, var(--color-primary) 100%);
   box-shadow: var(--shadow-lg);
 }
 
@@ -502,6 +536,7 @@ onMounted(() => {
   border: 1px solid var(--color-border);
   border-radius: var(--surface-radius);
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .daily-card {
@@ -963,10 +998,13 @@ onMounted(() => {
 }
 
 @media (min-width: 1200px) {
-  .content-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--spacing-lg);
+  .daily-body,
+  .section-body {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  .daily-groups {
+    gap: var(--spacing-md);
   }
 }
 </style>

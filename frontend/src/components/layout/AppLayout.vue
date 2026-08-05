@@ -139,9 +139,7 @@ const pageTitle = computed(() => {
 .app-layout {
   display: flex;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top, rgba(20, 184, 166, 0.12), transparent 28%),
-    var(--color-bg);
+  background: var(--color-bg);
 }
 
 .app-main {
@@ -158,16 +156,23 @@ const pageTitle = computed(() => {
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: clip;
   padding-bottom: calc(var(--page-padding-y) + var(--safe-area-bottom));
 }
 
 .app-content-shell {
   width: 100%;
   max-width: none;
+  margin: 0;
+  min-width: 0;
   padding: var(--page-padding-y) var(--page-padding-x);
   display: flex;
   flex-direction: column;
   gap: var(--page-gap);
+}
+
+.app-content-shell > * {
+  min-width: 0;
 }
 
 /* Tablet: sidebar collapsed */
@@ -226,6 +231,8 @@ const pageTitle = computed(() => {
 
   .app-content-shell {
     width: 100%;
+    max-width: none;
+    margin: 0;
     padding-bottom: 0;
   }
 }

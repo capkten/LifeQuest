@@ -198,7 +198,7 @@ def update_node(
     try:
         if node_in.name is not None:
             service.rename_node(node_id, node_in.name)
-        if node_in.parent_id is not None:
+        if "parent_id" in node_in.model_fields_set:
             service.move_node(node_id, node_in.parent_id)
         return service.node_repo.get_by_id(node_id)
     except ValueError as e:

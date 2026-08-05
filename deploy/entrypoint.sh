@@ -49,14 +49,13 @@ from app.services.note import NoteService
 db = SessionLocal()
 try:
     NoteService.migrate_old_data(db)
-except: pass
-try:
     AchievementService(db).seed_achievements()
     TitleService(db).seed_titles()
     FinanceService.seed_categories(db)
     print('[entrypoint] Seed data loaded.')
 except Exception as e:
-    print(f'[entrypoint] Seed warning: {e}')
+    db.rollback()
+    raise RuntimeError(f'[entrypoint] Database migration or seed failed: {e}') from e
 finally:
     db.close()
 "

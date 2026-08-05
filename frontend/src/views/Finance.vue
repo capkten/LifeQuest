@@ -648,7 +648,7 @@ onMounted(() => {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-md);
-  background: rgba(108, 99, 255, 0.12);
+  background: rgba(14, 165, 233, 0.12);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1098,7 +1098,7 @@ select.form-input {
 
 .category-chip:hover { border-color: var(--color-primary); color: var(--color-primary); }
 .category-chip--active {
-  background: rgba(108, 99, 255, 0.12);
+  background: rgba(14, 165, 233, 0.12);
   border-color: var(--color-primary);
   color: var(--color-primary);
 }
@@ -1176,5 +1176,31 @@ select.form-input {
 
   .dialog { max-width: 100%; margin: var(--spacing-sm); }
   .dialog-body { padding: var(--spacing-md); }
+}
+
+@media (min-width: 1200px) {
+  .finance-page {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.85fr) minmax(0, 1.35fr);
+    align-items: start;
+    gap: var(--page-gap);
+  }
+
+  .finance-page > .page-header,
+  .finance-page > .accounts-row,
+  .finance-page > .summary-card,
+  .finance-page > .quick-links {
+    grid-column: 1 / -1;
+  }
+
+  .finance-page > .budgets-card,
+  .finance-page > .transactions-card {
+    min-width: 0;
+    margin-bottom: 0;
+  }
+
+  .finance-page:not(:has(.budgets-card)) > .transactions-card {
+    grid-column: 1 / -1;
+  }
 }
 </style>

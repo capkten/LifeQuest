@@ -582,7 +582,7 @@ const kanbanColumns = [
 const ganttScale = ref('week')
 
 // Preset colors
-const presetColors = ['#6c63ff', '#00d9ff', '#51cf66', '#ff6b6b', '#ffd93d', '#ff922b', '#845ef7', '#20c997']
+const presetColors = ['#0ea5e9', '#38bdf8', '#51cf66', '#ff6b6b', '#ffd93d', '#ff922b', '#845ef7', '#20c997']
 
 // Dialogs
 const showTaskDialog = ref(false)
@@ -648,7 +648,7 @@ function formatDateShort(d) {
 }
 
 function getPriorityColor(priority) {
-  const map = { urgent: '#ff6b6b', high: '#ff922b', medium: '#00d9ff', low: '#9ca3af' }
+  const map = { urgent: '#ff6b6b', high: '#ff922b', medium: '#0ea5e9', low: '#9ca3af' }
   return map[priority] || map.medium
 }
 
@@ -847,7 +847,7 @@ function openEditProject() {
   editForm.value = {
     name: project.value.name || '',
     description: project.value.description || '',
-    color: project.value.color || '#6c63ff',
+    color: project.value.color || '#0ea5e9',
     start_date: project.value.start_date ? new Date(project.value.start_date).toISOString().slice(0, 10) : '',
     end_date: project.value.end_date ? new Date(project.value.end_date).toISOString().slice(0, 10) : ''
   }
@@ -1235,7 +1235,7 @@ onMounted(() => {
 }
 
 .status-badge--planning { background: rgba(156, 163, 175, 0.15); color: var(--color-text-tertiary); }
-.status-badge--active { background: rgba(0, 217, 255, 0.12); color: var(--color-secondary); }
+.status-badge--active { background: rgba(14, 165, 233, 0.12); color: var(--color-primary-dark); }
 .status-badge--completed { background: rgba(81, 207, 102, 0.15); color: var(--color-success); }
 .status-badge--archived { background: rgba(156, 163, 175, 0.15); color: var(--color-text-tertiary); }
 
@@ -1475,7 +1475,7 @@ onMounted(() => {
 }
 
 .task-status-badge--pending { background: rgba(156, 163, 175, 0.15); color: var(--color-text-tertiary); }
-.task-status-badge--in_progress { background: rgba(0, 217, 255, 0.12); color: var(--color-secondary); }
+.task-status-badge--in_progress { background: rgba(14, 165, 233, 0.12); color: var(--color-primary-dark); }
 .task-status-badge--completed { background: rgba(81, 207, 102, 0.15); color: var(--color-success); }
 .task-status-badge--cancelled { background: rgba(255, 107, 107, 0.12); color: var(--color-error); }
 
@@ -1540,7 +1540,7 @@ onMounted(() => {
 }
 
 .btn-icon svg { width: 14px; height: 14px; }
-.btn-icon:hover { color: var(--color-primary); background: rgba(108, 99, 255, 0.08); }
+.btn-icon:hover { color: var(--color-primary); background: rgba(14, 165, 233, 0.08); }
 .btn-icon--danger:hover { color: var(--color-error); background: rgba(255, 107, 107, 0.08); }
 
 .btn-add-phase {
@@ -1654,7 +1654,7 @@ onMounted(() => {
   font-size: var(--font-size-xs);
   padding: 1px 6px;
   border-radius: var(--radius-full);
-  background: rgba(108, 99, 255, 0.12);
+  background: rgba(14, 165, 233, 0.12);
   color: var(--color-primary);
 }
 

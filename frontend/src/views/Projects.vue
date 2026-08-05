@@ -220,7 +220,7 @@ const dialogError = ref(null)
 const dialogNameInput = ref(null)
 
 const presetColors = [
-  '#6c63ff', '#00d9ff', '#51cf66', '#ff6b6b',
+  '#0ea5e9', '#38bdf8', '#51cf66', '#ff6b6b',
   '#ffd93d', '#ff922b', '#845ef7', '#20c997'
 ]
 
@@ -234,7 +234,7 @@ const filterTabs = [
 const defaultForm = {
   name: '',
   description: '',
-  color: '#6c63ff',
+  color: '#0ea5e9',
   start_date: '',
   end_date: ''
 }
@@ -613,7 +613,7 @@ onMounted(() => {
 }
 
 .status-badge--active {
-  background: rgba(0, 217, 255, 0.12);
+  background: rgba(14, 165, 233, 0.12);
   color: var(--color-secondary);
 }
 
@@ -1021,6 +1021,23 @@ onMounted(() => {
   .error-toast-content {
     width: 100%;
     justify-content: center;
+  }
+}
+@media (min-width: 768px) {
+  .projects-page {
+    padding: 0;
+  }
+
+  .projects-grid {
+    gap: 14px;
+  }
+
+  .project-card {
+    border-radius: 12px;
+  }
+
+  .project-card-body {
+    padding: 14px;
   }
 }
 </style>

@@ -445,7 +445,7 @@ onMounted(() => {
 }
 
 .status-badge--refunded {
-  background: rgba(0, 217, 255, 0.12);
+  background: rgba(14, 165, 233, 0.12);
   color: var(--color-secondary);
 }
 

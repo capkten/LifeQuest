@@ -149,7 +149,7 @@ def delete_category(
     cat = service.category_repo.get_by_id(category_id)
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
-    service.delete_category(cat)
+    service.delete_category(cat, current_user.id)
     return {"message": "Category deleted"}
 
 
@@ -197,7 +197,7 @@ def update_transaction(
     txn = service.transaction_repo.get_by_id(transaction_id)
     if not txn or txn.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Transaction not found")
-    return service.update_transaction(txn, data)
+    return service.update_transaction(txn, data, current_user.id)
 
 
 @router.delete("/transactions/{transaction_id}")

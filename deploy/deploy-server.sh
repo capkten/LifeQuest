@@ -75,14 +75,33 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
+cat > /etc/systemd/system/lifequest-mcp.service << EOF
+[Unit]
+Description=LifeQuest MCP Server
+After=network.target lifequest.service
+
+[Service]
+Type=simple
+WorkingDirectory=$APP_DIR/backend
+EnvironmentFile=$APP_DIR/backend/.env
+ExecStart=$(command -v python3) mcp_server.py --transport sse --host 127.0.0.1 --port 3001
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 systemctl daemon-reload
 systemctl enable lifequest
+systemctl enable lifequest-mcp
 systemctl restart lifequest
+systemctl restart lifequest-mcp
 
 # 5. 验证
 echo "[5/5] 验证部署..."
 sleep 2
-if systemctl is-active --quiet lifequest; then
+if systemctl is-active --quiet lifequest && systemctl is-active --quiet lifequest-mcp && curl --fail --silent "http://127.0.0.1:$APP_PORT/api/health" >/dev/null; then
   echo ""
   echo "========================================="
   echo "  部署成功!"

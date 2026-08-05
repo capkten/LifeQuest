@@ -561,7 +561,7 @@ onMounted(() => { fetchAccounts() })
 
 .account-row-icon {
   width: 40px; height: 40px; border-radius: var(--radius-md);
-  background: rgba(108, 99, 255, 0.12); display: flex;
+  background: rgba(14, 165, 233, 0.12); display: flex;
   align-items: center; justify-content: center; flex-shrink: 0;
 }
 .account-row-icon svg { width: 22px; height: 22px; color: var(--color-primary); }

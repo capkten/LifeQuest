@@ -54,6 +54,15 @@ def test_create_shop_item(client):
     assert items[0]["id"] == data["id"]
 
 
+def test_shop_item_rejects_negative_price_and_invalid_stock(client):
+    headers = _register_and_login(client)
+    negative_price = _create_item(client, headers, coin_price=-1, stock=1)
+    assert negative_price.status_code == 422
+
+    invalid_stock = _create_item(client, headers, coin_price=1, stock=-2)
+    assert invalid_stock.status_code == 422
+
+
 def test_purchase_insufficient_coins(client):
     headers = _register_and_login(client)
 
