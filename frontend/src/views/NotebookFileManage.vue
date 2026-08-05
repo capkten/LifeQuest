@@ -6,6 +6,8 @@
           type="button"
           class="icon-button mobile-only"
           aria-label="打开笔记目录"
+          aria-controls="notes-directory-panel"
+          :aria-expanded="treeOpen"
           @click="treeOpen = true"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -40,7 +42,7 @@
     <div class="workspace-layout">
       <div v-if="treeOpen" class="workspace-overlay" aria-hidden="true" @click="treeOpen = false"></div>
 
-      <aside class="directory-panel" :class="{ 'directory-panel--open': treeOpen }" aria-label="笔记目录">
+      <aside id="notes-directory-panel" class="directory-panel" :class="{ 'directory-panel--open': treeOpen }" aria-label="笔记目录">
         <div class="directory-header">
           <div>
             <p class="panel-kicker">目录</p>
@@ -86,7 +88,7 @@
 
       <main class="workspace-content">
         <div class="content-toolbar">
-          <button type="button" class="toolbar-button mobile-only" @click="treeOpen = true">
+          <button type="button" class="toolbar-button mobile-only" aria-controls="notes-directory-panel" :aria-expanded="treeOpen" @click="treeOpen = true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
               <path d="M4 6h16M4 12h16M4 18h16" />
             </svg>
