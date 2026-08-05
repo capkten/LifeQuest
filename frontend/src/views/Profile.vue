@@ -9,157 +9,140 @@
             <path d="M20 21a8 8 0 1 0-16 0" />
           </svg>
         </div>
-        <div class="profile-info">
+
+        <div class="profile-copy">
+          <span class="profile-kicker">PLAYER SUMMARY</span>
           <div class="profile-name-row">
-            <h2 class="profile-username">{{ user?.username || '冒险者' }}</h2>
-            <span v-if="activeTitle" class="profile-active-title">{{ activeTitle.name }}</span>
+            <h1 class="profile-name">{{ user?.username || '冒险者' }}</h1>
+            <span v-if="activeTitle" class="profile-title-badge">{{ activeTitle.name }}</span>
           </div>
-          <span class="profile-title">{{ user?.title || '冒险者' }}</span>
-          <span v-if="user?.email" class="profile-email">{{ user.email }}</span>
+          <p class="profile-subtitle">{{ user?.title || '冒险者' }}</p>
+          <p v-if="user?.email" class="profile-email">{{ user.email }}</p>
+
           <div class="profile-meta">
-            <span class="profile-meta-item">Lv. {{ user?.level || 1 }}</span>
-            <span class="profile-meta-item">{{ user?.coins || 0 }} 金币</span>
-            <span class="profile-meta-item">{{ user?.experience || 0 }} XP</span>
+            <span class="profile-meta-pill">Lv. {{ user?.level || 1 }}</span>
+            <span class="profile-meta-pill">{{ user?.coins || 0 }} 金币</span>
+            <span class="profile-meta-pill">{{ user?.experience || 0 }} XP</span>
+            <span class="profile-meta-pill">{{ unlockedAchievementsCount }} 个成就</span>
           </div>
         </div>
-        <div class="profile-level-badge">
-          <span class="level-badge-number">{{ user?.level || 1 }}</span>
-          <span class="level-badge-label">等级</span>
+
+        <div class="profile-actions">
+          <button class="secondary-btn" @click="showTitleModal = true">切换称号</button>
+          <button class="primary-btn" @click="goToEditProfile">编辑资料</button>
         </div>
       </div>
-      <div class="profile-actions">
-        <button class="edit-profile-btn" @click="showTitleModal = true">更换称号</button>
-        <button class="edit-profile-btn edit-profile-btn--primary" @click="goToEditProfile">编辑资料</button>
+
+      <div class="profile-progress-card">
+        <div class="progress-header">
+          <div>
+            <span class="section-kicker">NEXT LEVEL</span>
+            <h2>经验进度</h2>
+          </div>
+          <strong>{{ expPercent }}%</strong>
+        </div>
+        <div
+          class="exp-bar"
+          role="progressbar"
+          :aria-valuenow="expPercent"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-label="`Experience progress: ${expPercent}% toward next level`"
+        >
+          <div class="exp-bar-fill" :style="{ width: expPercent + '%' }"></div>
+        </div>
+        <div class="progress-meta">
+          <span>{{ user?.experience || 0 }} / {{ requiredExp }} XP</span>
+          <span>距离下一等级还差 {{ Math.max(requiredExp - (user?.experience || 0), 0) }} XP</span>
+        </div>
       </div>
     </section>
 
-    <div class="stats-grid stats-grid--hero">
-      <div class="stat-card stat-card--level">
-        <div class="stat-card-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-          </svg>
+    <section class="attributes-grid">
+      <article v-for="card in attributeCards" :key="card.key" class="attribute-card" :class="'attribute-card--' + card.key">
+        <div class="attribute-icon" v-html="card.icon" aria-hidden="true"></div>
+        <div class="attribute-copy">
+          <span class="attribute-label">{{ card.label }}</span>
+          <strong class="attribute-value">{{ card.value }}</strong>
+          <span class="attribute-note">{{ card.note }}</span>
         </div>
-        <div class="stat-card-info">
-          <span class="stat-card-value">{{ user?.level || 1 }}</span>
-          <span class="stat-card-label">等级</span>
-        </div>
-      </div>
-      <div class="stat-card stat-card--exp">
-        <div class="stat-card-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-          </svg>
-        </div>
-        <div class="stat-card-info">
-          <span class="stat-card-value">{{ user?.experience || 0 }}</span>
-          <span class="stat-card-label">经验值</span>
-        </div>
-      </div>
-      <div class="stat-card stat-card--coins">
-        <div class="stat-card-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 6v12M6 12h12" />
-          </svg>
-        </div>
-        <div class="stat-card-info">
-          <span class="stat-card-value">{{ user?.coins || 0 }}</span>
-          <span class="stat-card-label">金币</span>
-        </div>
-      </div>
-    </div>
+      </article>
+    </section>
 
-    <div class="exp-section">
-      <div class="exp-header">
-        <h3 class="exp-title">经验值进度</h3>
-        <span class="exp-text">{{ user?.experience || 0 }} / {{ requiredExp }} XP</span>
-      </div>
-      <div
-        class="exp-bar"
-        role="progressbar"
-        :aria-valuenow="expPercent"
-        aria-valuemin="0"
-        aria-valuemax="100"
-        :aria-label="`Experience progress: ${expPercent}% toward next level`"
-      >
-        <div class="exp-bar-fill" :style="{ width: expPercent + '%' }"></div>
-      </div>
-      <span class="exp-percent">{{ expPercent }}% 距离下一级</span>
-    </div>
+    <section class="content-grid">
+      <article class="surface-card">
+        <div class="section-heading">
+          <div>
+            <span class="section-kicker">ATTRIBUTES</span>
+            <h2>能力属性</h2>
+          </div>
+          <span class="section-meta">来自当前账号真实数据</span>
+        </div>
 
-    <div class="stats-section">
-      <h3 class="section-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M18 20V10" />
-          <path d="M12 20V4" />
-          <path d="M6 20v-6" />
-        </svg>
-        统计数据
-      </h3>
-      <div class="stats-grid stats-grid--detail">
-        <div class="stat-card stat-card--tasks">
-          <div class="stat-card-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path d="M9 11l3 3L22 4" />
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-            </svg>
+        <div class="stats-detail-grid">
+          <div class="detail-card">
+            <span class="detail-label">累计经验</span>
+            <strong>{{ user?.experience || 0 }}</strong>
+            <p>经验条和等级保持现有计算逻辑。</p>
           </div>
-          <div class="stat-card-info">
-            <span class="stat-card-value">{{ stats.totalTasksCompleted }}</span>
-            <span class="stat-card-label">已完成任务</span>
+          <div class="detail-card">
+            <span class="detail-label">累计金币</span>
+            <strong>{{ user?.coins || 0 }}</strong>
+            <p>商城兑换与背包消耗仍会同步影响这里。</p>
           </div>
-        </div>
-        <div class="stat-card stat-card--streak">
-          <div class="stat-card-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-            </svg>
+          <div class="detail-card">
+            <span class="detail-label">已完成任务</span>
+            <strong>{{ stats.totalTasksCompleted }}</strong>
+            <p>根据任务状态为 completed 的数量统计。</p>
           </div>
-          <div class="stat-card-info">
-            <span class="stat-card-value">{{ stats.maxHabitStreak }}</span>
-            <span class="stat-card-label">最佳连续天数</span>
+          <div class="detail-card">
+            <span class="detail-label">最佳习惯连击</span>
+            <strong>{{ stats.maxHabitStreak }}</strong>
+            <p>取所有习惯 best_streak / streak 的最大值。</p>
           </div>
         </div>
-        <div class="stat-card stat-card--coins">
-          <div class="stat-card-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 6v12M6 12h12" />
-            </svg>
-          </div>
-          <div class="stat-card-info">
-            <span class="stat-card-value">{{ user?.coins || 0 }}</span>
-            <span class="stat-card-label">累计金币</span>
-          </div>
-        </div>
-        <div class="stat-card stat-card--exp">
-          <div class="stat-card-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-            </svg>
-          </div>
-          <div class="stat-card-info">
-            <span class="stat-card-value">{{ user?.experience || 0 }}</span>
-            <span class="stat-card-label">累计经验</span>
-          </div>
-        </div>
-      </div>
-    </div>
+      </article>
 
-    <div class="achievements-section">
-      <h3 class="section-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <circle cx="12" cy="8" r="7" />
-          <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" />
-        </svg>
-        成就
-      </h3>
-      <div class="achievements-grid" v-if="!achievementsLoading">
-        <div
+      <article class="surface-card">
+        <div class="section-heading">
+          <div>
+            <span class="section-kicker">INVENTORY</span>
+            <h2>背包入口</h2>
+          </div>
+          <router-link class="text-link" to="/backpack">查看背包</router-link>
+        </div>
+
+        <div class="inventory-summary">
+          <div class="inventory-summary-card">
+            <span>奖励与背包</span>
+            <strong>继续管理你的道具收藏</strong>
+            <p>背包页会按物品类型分组，并保留使用、装备、丢弃和历史功能。</p>
+          </div>
+          <div class="inventory-actions">
+            <router-link class="secondary-link" to="/backpack/history">使用历史</router-link>
+            <router-link class="primary-link" to="/shop">前往商城</router-link>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="surface-card achievements-card">
+      <div class="section-heading">
+        <div>
+          <span class="section-kicker">ACHIEVEMENTS</span>
+          <h2>成就墙</h2>
+        </div>
+        <span class="section-meta">{{ unlockedAchievementsCount }} / {{ mergedAchievements.length || 0 }} 已解锁</span>
+      </div>
+
+      <div v-if="achievementsLoading" class="state-copy">加载中...</div>
+      <div v-else-if="mergedAchievements.length === 0" class="state-copy">暂无成就数据</div>
+      <div v-else class="achievements-grid">
+        <article
           v-for="ach in mergedAchievements"
           :key="ach.id"
           class="achievement-card"
+          :class="{ 'achievement-card--locked': !ach.unlocked }"
         >
           <div
             class="achievement-icon"
@@ -174,29 +157,23 @@
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
           </div>
-          <div class="achievement-info">
-            <span class="achievement-name">{{ ach.name }}</span>
-            <span class="achievement-desc">{{ ach.description || '' }}</span>
-            <span v-if="ach.unlocked && ach.unlocked_at" class="achievement-date">
-              {{ formatDate(ach.unlocked_at) }} 解锁
-            </span>
+          <div class="achievement-copy">
+            <div class="achievement-topline">
+              <h3>{{ ach.name }}</h3>
+              <span class="achievement-status">{{ ach.unlocked ? '已解锁' : '未解锁' }}</span>
+            </div>
+            <p>{{ ach.description || '暂无描述' }}</p>
+            <span v-if="ach.unlocked && ach.unlocked_at" class="achievement-date">{{ formatDate(ach.unlocked_at) }} 解锁</span>
           </div>
-        </div>
-        <div v-if="mergedAchievements.length === 0" class="achievements-empty">
-          暂无成就数据
-        </div>
+        </article>
       </div>
-      <div v-else class="achievements-grid">
-        <div class="achievements-loading">加载中...</div>
-      </div>
-    </div>
+    </section>
 
-    <!-- Title Change Modal -->
     <Teleport to="body">
       <div v-if="showTitleModal" class="dialog-overlay" @click.self="showTitleModal = false">
         <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="title-dialog-title">
           <div class="dialog-header">
-            <h3 id="title-dialog-title" class="dialog-title">更换称号</h3>
+            <h3 id="title-dialog-title" class="dialog-title">切换称号</h3>
             <button class="dialog-close" @click="showTitleModal = false" aria-label="Close">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -205,16 +182,18 @@
             </button>
           </div>
           <div class="dialog-body">
-            <div v-if="titlesLoading" class="titles-loading">加载中...</div>
+            <div v-if="titlesLoading" class="state-copy">加载中...</div>
             <div v-else class="titles-list">
-              <div
+              <button
                 v-for="title in allTitles"
                 :key="title.id"
+                type="button"
                 class="title-item"
                 :class="{
                   'title-item--active': activeTitle?.id === title.id,
                   'title-item--locked': !isUnlocked(title.id)
                 }"
+                :disabled="!isUnlocked(title.id)"
                 @click="isUnlocked(title.id) && activateTitle(title)"
               >
                 <div class="title-item-icon">
@@ -227,26 +206,25 @@
                     <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                   </svg>
                 </div>
-                <div class="title-item-info">
+                <div class="title-item-copy">
                   <span class="title-item-name">{{ title.name }}</span>
                   <span class="title-item-desc">
                     {{ isUnlocked(title.id) ? (title.description || '') : (title.unlock_condition || '未解锁') }}
                   </span>
                 </div>
-                <div v-if="activeTitle?.id === title.id" class="title-item-active-mark">
+                <div v-if="activeTitle?.id === title.id" class="title-item-mark">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                     <path d="M20 6L9 17l-5-5" />
                   </svg>
                 </div>
-              </div>
-              <div v-if="allTitles.length === 0" class="titles-empty">暂无称号数据</div>
+              </button>
+              <div v-if="allTitles.length === 0" class="state-copy">暂无称号数据</div>
             </div>
           </div>
         </div>
       </div>
     </Teleport>
 
-    <!-- Toast notifications -->
     <Transition name="toast">
       <div v-if="successToast" class="toast toast--success">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -309,6 +287,39 @@ const mergedAchievements = computed(() => {
   }))
 })
 
+const unlockedAchievementsCount = computed(() => mergedAchievements.value.filter((ach) => ach.unlocked).length)
+
+const attributeCards = computed(() => [
+  {
+    key: 'level',
+    label: '等级',
+    value: `Lv. ${user.value?.level || 1}`,
+    note: '成长阶段',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>'
+  },
+  {
+    key: 'exp',
+    label: '经验',
+    value: `${user.value?.experience || 0} XP`,
+    note: '下一等级进度',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>'
+  },
+  {
+    key: 'coins',
+    label: '金币',
+    value: `${user.value?.coins || 0}`,
+    note: '商城与奖励货币',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" /><path d="M12 6v12M6 12h12" /></svg>'
+  },
+  {
+    key: 'tasks',
+    label: '完成任务',
+    value: `${stats.totalTasksCompleted}`,
+    note: '已完成数量',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>'
+  }
+])
+
 function formatDate(dateStr) {
   if (!dateStr) return ''
   const d = new Date(dateStr)
@@ -325,7 +336,6 @@ onMounted(async () => {
       todoService.getHabits().catch(() => [])
     ])
 
-    // Achievement data
     allAchievements.value = all || []
     const ids = new Set()
     const dates = {}
@@ -339,11 +349,9 @@ onMounted(async () => {
     unlockedIds.value = ids
     unlockDates.value = dates
 
-    // Stats: total completed tasks
     const taskList = Array.isArray(tasks) ? tasks : (tasks?.data || [])
     stats.totalTasksCompleted = taskList.filter(t => t.status === 'completed').length
 
-    // Stats: max habit streak (best_streak across all habits)
     const habitList = Array.isArray(habits) ? habits : (habits?.data || [])
     stats.maxHabitStreak = habitList.reduce((max, h) => Math.max(max, h.best_streak || h.streak || 0), 0)
   } catch (e) {
@@ -390,7 +398,7 @@ async function fetchTitles() {
       activeTitle.value = allTitles.value.find(t => t.name === user.value.title) || null
     }
   } catch (e) {
-    // Non-critical: silently ignore
+    // Non-critical
   } finally {
     titlesLoading.value = false
   }
@@ -404,37 +412,45 @@ function goToEditProfile() {
 <style scoped>
 .profile-page {
   padding: var(--page-padding-y) var(--page-padding-x);
-  width: 100%;
+  display: grid;
+  gap: 16px;
+}
+
+.profile-hero,
+.surface-card,
+.attribute-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--surface-radius);
+  background: var(--color-card);
+  box-shadow: var(--shadow-sm);
 }
 
 .profile-hero {
-  display: grid;
-  gap: 12px;
-  background:
-    radial-gradient(circle at 90% 0%, rgba(16, 185, 129, 0.14), transparent 24%),
-    linear-gradient(135deg, #ffffff 0%, #eff9fc 100%);
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius);
   padding: var(--surface-padding);
-  margin-bottom: var(--spacing-md);
+  display: grid;
+  gap: 16px;
+  background:
+    radial-gradient(circle at top right, rgba(16, 185, 129, 0.16), transparent 30%),
+    linear-gradient(135deg, #ffffff 0%, #eef9fb 100%);
 }
 
 .profile-hero-main {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 16px;
   align-items: center;
-  gap: 14px;
 }
 
 .profile-avatar {
-  width: 68px;
-  height: 68px;
-  border-radius: var(--radius-full);
+  width: 96px;
+  height: 96px;
+  border-radius: 30px;
+  overflow: hidden;
   background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  overflow: hidden;
 }
 
 .profile-avatar-img {
@@ -444,488 +460,413 @@ function goToEditProfile() {
 }
 
 .profile-avatar svg {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   color: #fff;
 }
 
-.profile-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.profile-copy {
   min-width: 0;
+}
+
+.profile-kicker,
+.section-kicker {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--color-primary-dark);
 }
 
 .profile-name-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
+  margin-top: 8px;
 }
 
-.profile-username {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--color-text);
+.profile-name,
+.section-heading h2 {
   margin: 0;
-  word-break: break-word;
+  color: var(--color-text);
+  font-family: var(--font-family-display);
 }
 
-.profile-title {
-  font-size: var(--font-size-sm);
-  color: var(--color-primary);
-  font-weight: 500;
+.profile-name {
+  font-size: clamp(1.75rem, 2.2vw, 2.5rem);
 }
 
-.profile-email {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-tertiary);
-}
-
-.profile-level-badge {
-  width: 60px;
-  height: 60px;
-  border-radius: var(--radius-full);
-  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
-  display: flex;
-  flex-direction: column;
+.profile-title-badge {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  color: #fff;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+
+.profile-subtitle,
+.profile-email,
+.section-meta,
+.detail-card p,
+.inventory-summary-card p,
+.achievement-copy p,
+.title-item-desc,
+.state-copy {
+  color: var(--color-text-secondary);
+}
+
+.profile-subtitle,
+.profile-email {
+  margin: 6px 0 0;
 }
 
 .profile-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 2px;
+  gap: 8px;
+  margin-top: 14px;
 }
 
-.profile-meta-item {
+.profile-meta-pill {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: var(--color-bg-tertiary);
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(14, 165, 233, 0.12);
   color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
 }
 
 .profile-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.edit-profile-btn {
-  min-height: 38px;
-  padding: 0 14px;
-  background: var(--color-bg-tertiary);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-}
-
-.edit-profile-btn--primary {
-  background: var(--color-primary);
-  color: #fff;
-  border-color: var(--color-primary);
-}
-
-.edit-profile-btn:hover {
-  background: var(--color-primary);
-  color: #fff;
-  border-color: var(--color-primary);
-}
-
-.level-badge-number {
-  font-size: 1.375rem;
-  font-weight: 700;
-  color: #fff;
-  line-height: 1;
-}
-
-.level-badge-label {
-  font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.8);
-  font-weight: 500;
-}
-
-.stats-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
-.stats-grid--hero {
-  margin-bottom: var(--spacing-md);
-}
-
-.stats-section {
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius);
-  padding: var(--surface-padding);
-  margin-bottom: var(--spacing-md);
-  box-shadow: var(--shadow-sm);
-}
-
-.stats-section .stats-grid {
-  margin-bottom: 0;
-}
-
-.stat-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius-sm);
-  padding: 12px;
-  transition: border-color 0.2s ease;
-}
-
-.stat-card:hover {
-  border-color: var(--color-primary);
-}
-
-.stat-card-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-lg);
-  display: flex;
+.primary-btn,
+.secondary-btn,
+.primary-link,
+.secondary-link,
+.text-link {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 14px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-}
-
-.stat-card--tasks .stat-card-icon {
-  background: rgba(81, 207, 102, 0.15);
-}
-
-.stat-card--tasks .stat-card-icon svg {
-  color: var(--color-success);
-}
-
-.stat-card--streak .stat-card-icon {
-  background: rgba(255, 140, 50, 0.15);
-}
-
-.stat-card--streak .stat-card-icon svg {
-  color: #ff8c32;
-}
-
-.stat-card--level .stat-card-icon {
-  background: rgba(14, 165, 233, 0.15);
-}
-
-.stat-card--level .stat-card-icon svg {
-  color: var(--color-primary);
-}
-
-.stat-card--exp .stat-card-icon {
-  background: rgba(14, 165, 233, 0.15);
-}
-
-.stat-card--exp .stat-card-icon svg {
-  color: var(--color-secondary);
-}
-
-.stat-card--coins .stat-card-icon {
-  background: rgba(255, 217, 61, 0.15);
-}
-
-.stat-card--coins .stat-card-icon svg {
-  color: var(--color-warning);
-}
-
-.stat-card-icon svg {
-  width: 20px;
-  height: 20px;
-}
-
-.stat-card-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.stat-card-value {
-  font-size: 1.125rem;
+  text-decoration: none;
   font-weight: 700;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.primary-btn,
+.primary-link {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.secondary-btn,
+.secondary-link {
+  background: #fff;
   color: var(--color-text);
+  border-color: var(--color-border);
 }
 
-.stat-card-label {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-tertiary);
+.text-link {
+  background: transparent;
+  color: var(--color-primary-dark);
 }
 
-.exp-section {
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius);
-  padding: var(--surface-padding);
-  margin-bottom: var(--spacing-md);
-  box-shadow: var(--shadow-sm);
+.profile-progress-card {
+  padding: 18px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(14, 165, 233, 0.12);
+  display: grid;
+  gap: 12px;
 }
 
-.exp-header {
+.progress-header,
+.section-heading {
   display: flex;
-  align-items: center;
+  align-items: end;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
+  gap: 12px;
 }
 
-.exp-title {
-  font-size: var(--font-size-base);
-  font-weight: 600;
+.progress-header h2 {
+  margin: 6px 0 0;
+  font-family: var(--font-family-display);
+}
+
+.progress-header strong,
+.detail-card strong,
+.inventory-summary-card strong {
+  font-family: var(--font-family-display);
   color: var(--color-text);
-  margin: 0;
-}
-
-.exp-text {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-tertiary);
-  font-weight: 500;
 }
 
 .exp-bar {
-  height: 8px;
-  background: var(--color-bg-tertiary);
-  border-radius: var(--radius-full);
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
   overflow: hidden;
-  margin-bottom: var(--spacing-sm);
 }
 
 .exp-bar-fill {
   height: 100%;
+  border-radius: inherit;
   background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
-  border-radius: var(--radius-full);
-  transition: width 0.5s ease;
 }
 
-.exp-percent {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-tertiary);
-}
-
-.achievements-section {
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius);
-  padding: var(--surface-padding);
-  box-shadow: var(--shadow-sm);
-}
-
-.section-title {
+.progress-meta {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  font-size: var(--font-size-base);
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0 0 12px 0;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
 }
 
-.section-title svg {
-  width: 20px;
-  height: 20px;
-  color: var(--color-primary);
+.attributes-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.attribute-card {
+  padding: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.attribute-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.attribute-icon :deep(svg) {
+  width: 22px;
+  height: 22px;
+}
+
+.attribute-card--level .attribute-icon {
+  background: rgba(14, 165, 233, 0.14);
+  color: var(--color-primary-dark);
+}
+
+.attribute-card--exp .attribute-icon {
+  background: rgba(59, 130, 246, 0.14);
+  color: var(--color-secondary);
+}
+
+.attribute-card--coins .attribute-icon {
+  background: rgba(245, 158, 11, 0.16);
+  color: #b45309;
+}
+
+.attribute-card--tasks .attribute-icon {
+  background: rgba(16, 185, 129, 0.14);
+  color: var(--color-success);
+}
+
+.attribute-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.attribute-label,
+.detail-label {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-tertiary);
+  font-weight: 700;
+}
+
+.attribute-value {
+  color: var(--color-text);
+  font-size: 1.15rem;
+}
+
+.attribute-note {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 16px;
+}
+
+.surface-card {
+  padding: var(--surface-padding);
+  display: grid;
+  gap: 16px;
+}
+
+.stats-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.detail-card,
+.inventory-summary-card,
+.achievement-card,
+.title-item {
+  padding: 16px;
+  border-radius: 20px;
+  background: var(--color-bg-secondary);
+  border: 1px solid rgba(14, 165, 233, 0.08);
+}
+
+.detail-card {
+  display: grid;
+  gap: 8px;
+}
+
+.detail-card strong {
+  font-size: 1.45rem;
+}
+
+.detail-card p {
+  margin: 0;
+  line-height: 1.6;
+  font-size: var(--font-size-sm);
+}
+
+.inventory-summary {
+  display: grid;
+  gap: 14px;
+}
+
+.inventory-summary-card {
+  display: grid;
+  gap: 8px;
+}
+
+.inventory-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.achievements-card {
+  gap: 18px;
 }
 
 .achievements-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .achievement-card {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px;
-  background: var(--color-bg-tertiary);
-  border-radius: var(--surface-radius-sm);
-  transition: background 0.15s ease;
+  gap: 12px;
 }
 
-.achievement-card:hover {
-  background: var(--color-border);
+.achievement-card--locked {
+  opacity: 0.74;
 }
 
 .achievement-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: var(--radius-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
 }
 
 .achievement-icon svg {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
 }
 
 .achievement-icon--unlocked {
-  background: rgba(81, 207, 102, 0.15);
-}
-
-.achievement-icon--unlocked svg {
+  background: rgba(16, 185, 129, 0.14);
   color: var(--color-success);
 }
 
 .achievement-icon--locked {
-  background: rgba(150, 150, 150, 0.15);
-}
-
-.achievement-icon--locked svg {
+  background: rgba(148, 163, 184, 0.16);
   color: var(--color-text-tertiary);
 }
 
-.achievement-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.achievement-copy {
+  display: grid;
+  gap: 6px;
   min-width: 0;
 }
 
-.achievement-name {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
+.achievement-topline {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: start;
+}
+
+.achievement-topline h3 {
+  margin: 0;
+  font-size: 1rem;
   color: var(--color-text);
 }
 
-.achievement-desc {
+.achievement-status,
+.achievement-date {
   font-size: var(--font-size-xs);
-  color: var(--color-text-tertiary);
+  font-weight: 700;
+}
+
+.achievement-status {
+  color: var(--color-primary-dark);
 }
 
 .achievement-date {
-  font-size: var(--font-size-xs);
   color: var(--color-success);
-  margin-top: 2px;
 }
 
-.achievements-empty,
-.achievements-loading {
-  padding: var(--spacing-xl);
-  text-align: center;
-  color: var(--color-text-tertiary);
+.achievement-copy p {
+  margin: 0;
+  line-height: 1.6;
   font-size: var(--font-size-sm);
 }
 
-/* Responsive */
-@media (max-width: 1199px) {
-  .profile-page {
-    padding: var(--page-padding-y) var(--page-padding-x);
-    max-width: none;
-  }
-}
-
-@media (min-width: 1200px) {
-  .stats-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 900px) {
-  .stats-section .stats-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 767px) {
-  .profile-page {
-    padding: var(--spacing-md);
-  }
-
-  .profile-hero {
-    gap: 10px;
-  }
-
-  .profile-hero-main {
-    align-items: flex-start;
-    gap: 12px;
-  }
-
-  .profile-name-row {
-    gap: 6px;
-  }
-
-  .profile-username {
-    font-size: 1.125rem;
-  }
-
-  .profile-level-badge {
-    width: 52px;
-    height: 52px;
-  }
-
-  .profile-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    width: 100%;
-  }
-
-  .dialog {
-    width: min(100% - 16px, 640px);
-    max-height: calc(100vh - 16px);
-  }
-
-  .dialog-body {
-    padding: 12px;
-  }
-
-  .toast {
-    top: var(--spacing-md);
-    left: var(--spacing-md);
-    right: var(--spacing-md);
-  }
-}
-
-/* Title display */
-.profile-active-title {
-  display: inline-block;
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  color: #fff;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
-  padding: 2px 10px;
-  border-radius: var(--radius-full);
-  vertical-align: middle;
-  margin-left: var(--spacing-sm);
-}
-
-/* Title Modal */
 .dialog-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(15, 23, 42, 0.48);
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 16px;
   z-index: 1000;
-  padding: var(--spacing-lg);
 }
 
 .dialog {
-  width: min(100% - 24px, 640px);
-  max-height: min(78vh, 720px);
+  width: min(100%, 680px);
+  max-height: min(84vh, 760px);
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
+  border-radius: 28px;
   box-shadow: var(--shadow-xl);
   overflow: hidden;
   display: flex;
@@ -934,205 +875,211 @@ function goToEditProfile() {
 
 .dialog-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 14px 16px;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px;
   border-bottom: 1px solid var(--color-border);
-  flex-shrink: 0;
 }
 
 .dialog-title {
-  font-size: var(--font-size-lg);
-  font-weight: 600;
+  margin: 0;
+  font-size: 1.2rem;
   color: var(--color-text);
 }
 
 .dialog-close {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border: 0;
   background: transparent;
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
   color: var(--color-text-tertiary);
-  transition: background 0.15s ease;
-}
-
-.dialog-close:hover {
-  background: var(--color-bg-tertiary);
-  color: var(--color-text);
-}
-
-.dialog-close svg {
-  width: 18px;
-  height: 18px;
+  cursor: pointer;
 }
 
 .dialog-body {
-  padding: 14px 16px 16px;
+  padding: 20px;
   overflow-y: auto;
 }
 
-.titles-loading {
-  text-align: center;
-  padding: var(--spacing-xl);
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-sm);
-}
-
 .titles-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 10px;
-}
-
-.titles-empty {
-  text-align: center;
-  padding: var(--spacing-xl);
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-sm);
 }
 
 .title-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px;
-  border-radius: var(--radius-lg);
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease;
 }
 
-.title-item:hover:not(.title-item--locked) {
-  background: var(--color-bg-tertiary);
-}
-
-.title-item--locked {
-  opacity: 0.5;
+.title-item:disabled {
   cursor: not-allowed;
 }
 
 .title-item--active {
-  background: rgba(14, 165, 233, 0.1);
-  border: 1px solid var(--color-primary);
+  border-color: rgba(14, 165, 233, 0.28);
+  background: rgba(14, 165, 233, 0.08);
+}
+
+.title-item--locked {
+  opacity: 0.55;
 }
 
 .title-item-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  background: var(--color-bg-tertiary);
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  color: var(--color-primary-dark);
 }
 
 .title-item-icon svg {
   width: 18px;
   height: 18px;
-  color: var(--color-primary);
 }
 
-.title-item--locked .title-item-icon svg {
-  color: var(--color-text-tertiary);
-}
-
-.title-item-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.title-item-copy {
+  display: grid;
+  gap: 4px;
   min-width: 0;
 }
 
 .title-item-name {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--color-text);
 }
 
-.title-item-desc {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-tertiary);
+.title-item-mark {
+  color: var(--color-primary-dark);
+  display: grid;
+  place-items: center;
 }
 
-.title-item-active-mark {
-  flex-shrink: 0;
+.title-item-mark svg {
+  width: 20px;
+  height: 20px;
 }
 
-.title-item-active-mark svg {
-  width: 22px;
-  height: 22px;
-  color: var(--color-primary);
+.state-copy {
+  text-align: center;
+  padding: 32px 16px;
 }
 
-/* Toast notifications */
 .toast {
   position: fixed;
   top: var(--spacing-lg);
   right: var(--spacing-lg);
-  display: flex;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 14px;
+  display: inline-flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-md) var(--spacing-lg);
-  border-radius: var(--radius-lg);
+  gap: 8px;
+  color: #fff;
   font-size: var(--font-size-sm);
-  font-weight: 500;
-  box-shadow: var(--shadow-xl);
+  font-weight: 700;
+  box-shadow: var(--shadow-lg);
   z-index: 2000;
 }
 
 .toast svg {
   width: 18px;
   height: 18px;
-  flex-shrink: 0;
 }
 
 .toast--success {
   background: var(--color-success);
-  color: #fff;
 }
 
 .toast--error {
   background: var(--color-error);
-  color: #fff;
 }
 
 .toast-enter-active,
 .toast-leave-active {
-  transition: all 0.3s ease;
+  transition: all 0.25s ease;
 }
 
 .toast-enter-from,
 .toast-leave-to {
   opacity: 0;
-  transform: translateX(30px);
+  transform: translateY(-10px);
 }
 
-/* Responsive for profile-actions */
+@media (max-width: 1199px) {
+  .attributes-grid,
+  .content-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .profile-hero-main {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .profile-actions {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1023px) {
+  .attributes-grid,
+  .content-grid,
+  .stats-detail-grid,
+  .achievements-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 767px) {
-  .level-badge-number {
-    font-size: var(--font-size-lg);
+  .profile-page {
+    padding: var(--spacing-md);
   }
 
-  .edit-profile-btn {
-    width: 100%;
-    justify-content: center;
-    padding: 0 12px;
-    font-size: var(--font-size-sm);
+  .profile-hero,
+  .surface-card,
+  .attribute-card {
+    border-radius: 22px;
+  }
+
+  .profile-hero-main,
+  .profile-actions,
+  .progress-header,
+  .section-heading,
+  .title-item,
+  .achievement-topline {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .profile-avatar {
+    width: 84px;
+    height: 84px;
+  }
+
+  .profile-actions,
+  .inventory-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .toast {
+    left: var(--spacing-md);
+    right: var(--spacing-md);
+    top: var(--spacing-md);
   }
 }
+
 @media (min-width: 768px) {
   .profile-page {
     padding: 0;
   }
-}
-
-.stats-grid--hero {
-  display: none;
 }
 </style>

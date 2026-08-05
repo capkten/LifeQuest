@@ -1,7 +1,7 @@
 <template>
   <div class="history-page">
-    <div class="page-header">
-      <div class="header-left">
+    <section class="history-hero">
+      <div class="history-hero-main">
         <router-link to="/shop" class="back-link" aria-label="返回商城">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <line x1="19" y1="12" x2="5" y2="12" />
@@ -9,92 +9,139 @@
           </svg>
           返回商城
         </router-link>
-        <h2 class="page-title">兑换历史</h2>
+        <span class="history-kicker">REWARD LEDGER</span>
+        <h1 class="history-title">兑换历史</h1>
+        <p class="history-subtitle">查看奖励兑换、状态变化与金币支出，保留原有历史记录与退款状态展示。</p>
       </div>
-    </div>
+      <div class="history-hero-stats" v-if="!loading && !error && records.length">
+        <div class="summary-chip">
+          <span class="summary-chip-label">累计记录</span>
+          <strong>{{ records.length }}</strong>
+        </div>
+        <div class="summary-chip">
+          <span class="summary-chip-label">累计支出</span>
+          <strong>{{ totalSpent }}</strong>
+        </div>
+        <div class="summary-chip">
+          <span class="summary-chip-label">待处理</span>
+          <strong>{{ pendingCount }}</strong>
+        </div>
+      </div>
+    </section>
 
     <div v-if="loading" class="loading-state">
       <span class="loading-spinner"></span>
     </div>
 
-    <div v-else-if="error" class="error-state">
+    <div v-else-if="error" class="feedback-card feedback-card--error">
       <p>{{ error }}</p>
       <button class="retry-btn" @click="fetchAll">重试</button>
     </div>
 
-    <div v-else-if="records.length === 0" class="empty-state">
+    <div v-else-if="records.length === 0" class="feedback-card">
       <div class="empty-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
           <circle cx="12" cy="12" r="10" />
           <polyline points="12 6 12 12 16 14" />
         </svg>
       </div>
-      <h3 class="empty-title">暂无兑换记录</h3>
-      <p class="empty-text">前往商城购买商品后，兑换记录将显示在这里。</p>
-      <router-link to="/shop" class="btn-create">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-          <line x1="3" y1="6" x2="21" y2="6" />
-          <path d="M16 10a4 4 0 0 1-8 0" />
-        </svg>
-        前往商城
-      </router-link>
+      <h2>暂无兑换记录</h2>
+      <p>前往商城兑换奖励后，记录会自动出现在这里。</p>
+      <router-link to="/shop" class="primary-link">前往商城</router-link>
     </div>
 
-    <div v-else class="history-list">
-      <div
-        v-for="record in records"
-        :key="record.id"
-        class="history-card"
-      >
-        <div class="history-card-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-            <line x1="7" y1="7" x2="7.01" y2="7" />
-          </svg>
-        </div>
-        <div class="history-card-body">
-          <h3 class="history-card-name">{{ getItemName(record.item_id) }}</h3>
-          <div class="history-card-meta">
-            <span class="meta-item">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 6 12 12 16 14" />
-              </svg>
-              {{ formatDate(record.created_at) }}
-            </span>
-            <span class="meta-item" v-if="record.quantity > 1">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <line x1="8" y1="6" x2="21" y2="6" />
-                <line x1="8" y1="12" x2="21" y2="12" />
-                <line x1="8" y1="18" x2="21" y2="18" />
-                <line x1="3" y1="6" x2="3.01" y2="6" />
-                <line x1="3" y1="12" x2="3.01" y2="12" />
-                <line x1="3" y1="18" x2="3.01" y2="18" />
-              </svg>
-              数量: {{ record.quantity }}
-            </span>
+    <template v-else>
+      <section class="summary-grid">
+        <article class="summary-card">
+          <span class="summary-card-label">累计记录</span>
+          <strong class="summary-card-value">{{ records.length }}</strong>
+          <span class="summary-card-note">包含兑换、退款与处理中状态</span>
+        </article>
+        <article class="summary-card">
+          <span class="summary-card-label">累计支出金币</span>
+          <strong class="summary-card-value">{{ totalSpent }}</strong>
+          <span class="summary-card-note">按 total_cost 汇总</span>
+        </article>
+        <article class="summary-card">
+          <span class="summary-card-label">最近兑换</span>
+          <strong class="summary-card-value summary-card-value--small">{{ latestRecordDate }}</strong>
+          <span class="summary-card-note">按记录创建时间展示</span>
+        </article>
+      </section>
+
+      <section class="timeline-card">
+        <div class="section-heading">
+          <div>
+            <span class="section-kicker">TIMELINE</span>
+            <h2>兑换时间线</h2>
           </div>
+          <span class="section-meta">{{ records.length }} 条记录</span>
         </div>
-        <div class="history-card-right">
-          <div class="history-card-cost">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 6v12M6 12h12" />
-            </svg>
-            <span>-{{ record.total_cost }}</span>
-          </div>
-          <span class="status-badge" :class="'status-badge--' + record.status">
-            {{ formatStatus(record.status) }}
-          </span>
+
+        <div class="history-list">
+          <article
+            v-for="record in records"
+            :key="record.id"
+            class="history-card"
+          >
+            <div class="history-card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+                <line x1="7" y1="7" x2="7.01" y2="7" />
+              </svg>
+            </div>
+
+            <div class="history-card-body">
+              <div class="history-card-header">
+                <div>
+                  <h3 class="history-card-name">{{ getItemName(record.item_id) }}</h3>
+                  <p class="history-card-copy">奖励兑换已同步到原有商城记录系统。</p>
+                </div>
+                <span class="status-badge" :class="'status-badge--' + record.status">
+                  {{ formatStatus(record.status) }}
+                </span>
+              </div>
+
+              <div class="history-card-meta">
+                <span class="meta-item">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                  {{ formatDate(record.created_at) }}
+                </span>
+                <span class="meta-item" v-if="record.quantity > 1">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <line x1="8" y1="6" x2="21" y2="6" />
+                    <line x1="8" y1="12" x2="21" y2="12" />
+                    <line x1="8" y1="18" x2="21" y2="18" />
+                    <line x1="3" y1="6" x2="3.01" y2="6" />
+                    <line x1="3" y1="12" x2="3.01" y2="12" />
+                    <line x1="3" y1="18" x2="3.01" y2="18" />
+                  </svg>
+                  数量 {{ record.quantity }}
+                </span>
+              </div>
+            </div>
+
+            <div class="history-card-right">
+              <span class="cost-pill">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 6v12M6 12h12" />
+                </svg>
+                -{{ record.total_cost }}
+              </span>
+            </div>
+          </article>
         </div>
-      </div>
-    </div>
+      </section>
+    </template>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { shopService } from '../services/shop'
 
 const records = ref([])
@@ -108,6 +155,13 @@ const statusMap = {
   cancelled: '已取消',
   refunded: '已退款'
 }
+
+const totalSpent = computed(() => records.value.reduce((sum, record) => sum + (record.total_cost || 0), 0))
+const pendingCount = computed(() => records.value.filter((record) => record.status === 'pending').length)
+const latestRecordDate = computed(() => {
+  if (!records.value.length) return '暂无'
+  return formatDate(records.value[0].created_at)
+})
 
 function getItemName(itemId) {
   const shopItem = shopItemsMap.value[itemId]
@@ -166,35 +220,49 @@ onMounted(() => {
 
 <style scoped>
 .history-page {
-  padding: var(--spacing-xl);
-  width: 100%;
+  padding: var(--page-padding-y) var(--page-padding-x);
+  display: grid;
+  gap: 16px;
 }
 
-.page-header {
+.history-hero,
+.timeline-card,
+.summary-card,
+.feedback-card {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--surface-radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.history-hero {
+  padding: var(--surface-padding);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: var(--spacing-lg);
+  gap: 16px;
+  background:
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.18), transparent 28%),
+    linear-gradient(135deg, #ffffff 0%, #eef8fb 100%);
 }
 
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-lg);
+.history-hero-main {
+  display: grid;
+  gap: 8px;
 }
 
 .back-link {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-tertiary);
+  gap: 6px;
+  color: var(--color-text-secondary);
   text-decoration: none;
-  transition: color 0.15s ease;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
 }
 
 .back-link:hover {
-  color: var(--color-primary);
+  color: var(--color-primary-dark);
 }
 
 .back-link svg {
@@ -202,18 +270,278 @@ onMounted(() => {
   height: 16px;
 }
 
-.page-title {
-  font-size: var(--font-size-2xl);
+.history-kicker,
+.section-kicker {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-primary-dark);
   font-weight: 700;
-  color: var(--color-text);
 }
 
-/* Loading State */
-.loading-state {
+.history-title,
+.section-heading h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-family: var(--font-family-display);
+}
+
+.history-title {
+  font-size: clamp(1.75rem, 2vw, 2.25rem);
+}
+
+.history-subtitle {
+  margin: 0;
+  max-width: 560px;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.history-hero-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  min-width: min(100%, 320px);
+}
+
+.summary-chip,
+.summary-card {
+  padding: 16px;
+}
+
+.summary-chip {
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(14, 165, 233, 0.12);
+  display: grid;
+  gap: 6px;
+}
+
+.summary-chip-label,
+.summary-card-label,
+.summary-card-note,
+.section-meta,
+.history-card-copy,
+.meta-item {
+  color: var(--color-text-tertiary);
+}
+
+.summary-chip strong,
+.summary-card-value {
+  color: var(--color-text);
+  font-family: var(--font-family-display);
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-card {
+  display: grid;
+  gap: 8px;
+}
+
+.summary-card-value {
+  font-size: 1.5rem;
+}
+
+.summary-card-value--small {
+  font-size: 1rem;
+}
+
+.timeline-card {
+  padding: var(--surface-padding);
+  display: grid;
+  gap: 16px;
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 12px;
+}
+
+.history-list {
+  display: grid;
+  gap: 12px;
+}
+
+.history-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 20px;
+  background: var(--color-bg-secondary);
+  border: 1px solid rgba(14, 165, 233, 0.08);
+}
+
+.history-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 300px;
+  background: rgba(14, 165, 233, 0.1);
+  color: var(--color-primary-dark);
+}
+
+.history-card-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.history-card-body,
+.history-card-header {
+  display: grid;
+  gap: 10px;
+}
+
+.history-card-header {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.history-card-name {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--color-text);
+}
+
+.history-card-copy {
+  margin: 4px 0 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.history-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
+.meta-item,
+.cost-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid rgba(14, 165, 233, 0.1);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.meta-item svg,
+.cost-pill svg {
+  width: 14px;
+  height: 14px;
+}
+
+.history-card-right {
+  display: flex;
+  align-items: center;
+}
+
+.cost-pill {
+  color: var(--color-error);
+}
+
+.status-badge {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-badge--completed {
+  background: rgba(16, 185, 129, 0.14);
+  color: var(--color-success);
+}
+
+.status-badge--pending {
+  background: rgba(245, 158, 11, 0.15);
+  color: #b45309;
+}
+
+.status-badge--cancelled {
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--color-text-secondary);
+}
+
+.status-badge--refunded {
+  background: rgba(14, 165, 233, 0.14);
+  color: var(--color-primary-dark);
+}
+
+.feedback-card {
+  min-height: 320px;
+  padding: 28px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  gap: 12px;
+}
+
+.feedback-card--error {
+  color: var(--color-error);
+}
+
+.empty-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 24px;
+  display: grid;
+  place-items: center;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-tertiary);
+}
+
+.empty-icon svg {
+  width: 34px;
+  height: 34px;
+}
+
+.primary-link,
+.retry-btn {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  text-decoration: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.primary-link {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.retry-btn {
+  background: transparent;
+  color: var(--color-primary-dark);
+  border-color: rgba(14, 165, 233, 0.2);
+}
+
+.loading-state {
+  min-height: 280px;
+  display: grid;
+  place-items: center;
 }
 
 .loading-spinner {
@@ -229,230 +557,24 @@ onMounted(() => {
   to { transform: rotate(360deg); }
 }
 
-/* Error State */
-.error-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-  gap: var(--spacing-md);
-  color: var(--color-error);
-  font-size: var(--font-size-sm);
-}
+@media (max-width: 1023px) {
+  .history-hero,
+  .section-heading,
+  .history-card {
+    grid-template-columns: 1fr;
+  }
 
-.retry-btn {
-  padding: var(--spacing-xs) var(--spacing-md);
-  font-size: var(--font-size-sm);
-  color: var(--color-primary);
-  background: transparent;
-  border: 1px solid var(--color-primary);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-family: var(--font-family);
-  transition: all 0.15s ease;
-}
+  .history-hero {
+    align-items: stretch;
+  }
 
-.retry-btn:hover {
-  background: var(--color-primary);
-  color: #fff;
-}
+  .history-hero-stats,
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
 
-/* Empty State */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 400px;
-  text-align: center;
-}
-
-.empty-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-tertiary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: var(--spacing-lg);
-}
-
-.empty-icon svg {
-  width: 36px;
-  height: 36px;
-  color: var(--color-text-tertiary);
-}
-
-.empty-title {
-  font-size: var(--font-size-lg);
-  font-weight: 600;
-  color: var(--color-text);
-  margin-bottom: var(--spacing-sm);
-}
-
-.empty-text {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-tertiary);
-  margin-bottom: var(--spacing-xl);
-  max-width: 320px;
-}
-
-.btn-create {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-lg);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: #fff;
-  background: var(--color-primary);
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-family: var(--font-family);
-  text-decoration: none;
-  transition: background 0.15s ease;
-}
-
-.btn-create:hover {
-  background: var(--color-primary-dark);
-}
-
-.btn-create svg {
-  width: 18px;
-  height: 18px;
-}
-
-/* History List */
-.history-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-}
-
-.history-card {
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-lg);
-  padding: var(--spacing-lg);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.history-card:hover {
-  border-color: var(--color-primary);
-  box-shadow: var(--shadow-md);
-}
-
-.history-card-icon {
-  width: 48px;
-  height: 48px;
-  flex-shrink: 0;
-  border-radius: var(--radius-md);
-  background: var(--color-bg-tertiary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.history-card-icon svg {
-  width: 24px;
-  height: 24px;
-  color: var(--color-primary);
-}
-
-.history-card-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.history-card-name {
-  font-size: var(--font-size-base);
-  font-weight: 600;
-  color: var(--color-text);
-  margin-bottom: var(--spacing-xs);
-}
-
-.history-card-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-lg);
-  flex-wrap: wrap;
-}
-
-.meta-item {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-tertiary);
-  font-weight: 500;
-}
-
-.meta-item svg {
-  width: 14px;
-  height: 14px;
-}
-
-.history-card-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--spacing-xs);
-  flex-shrink: 0;
-}
-
-.history-card-cost {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  font-size: var(--font-size-base);
-  font-weight: 700;
-  color: var(--color-error);
-}
-
-.history-card-cost svg {
-  width: 18px;
-  height: 18px;
-  color: var(--color-warning);
-}
-
-.status-badge {
-  font-size: var(--font-size-xs);
-  padding: 2px 10px;
-  border-radius: var(--radius-full);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.status-badge--completed {
-  background: rgba(81, 207, 102, 0.12);
-  color: var(--color-success);
-}
-
-.status-badge--pending {
-  background: rgba(255, 217, 61, 0.12);
-  color: var(--color-warning);
-}
-
-.status-badge--cancelled {
-  background: rgba(156, 163, 175, 0.15);
-  color: var(--color-text-tertiary);
-}
-
-.status-badge--refunded {
-  background: rgba(14, 165, 233, 0.12);
-  color: var(--color-secondary);
-}
-
-/* Responsive */
-@media (max-width: 1199px) {
-  .history-page {
-    padding: var(--spacing-lg);
+  .history-card-right {
+    justify-content: flex-start;
   }
 }
 
@@ -461,23 +583,25 @@ onMounted(() => {
     padding: var(--spacing-md);
   }
 
-  .header-left {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--spacing-sm);
+  .history-hero,
+  .timeline-card,
+  .summary-card,
+  .feedback-card {
+    border-radius: 22px;
   }
 
   .history-card {
-    flex-wrap: wrap;
-    gap: var(--spacing-md);
+    padding: 16px;
   }
 
-  .history-card-right {
-    flex-direction: row;
-    align-items: center;
-    gap: var(--spacing-md);
-    width: 100%;
-    justify-content: flex-end;
+  .history-card-header {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 768px) {
+  .history-page {
+    padding: 0;
   }
 }
 </style>

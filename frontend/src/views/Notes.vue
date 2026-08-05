@@ -11,6 +11,7 @@
         type="text"
         class="search-input"
         placeholder="搜索笔记..."
+        aria-label="搜索笔记"
         @input="onSearchInput"
       />
       <button
@@ -25,6 +26,26 @@
         </svg>
       </button>
     </div>
+
+    <section v-if="!isSearching" class="discovery-panel" aria-label="绗旇鍙戠幇">
+      <div class="discovery-toolbar">
+        <select v-model="discoveryFilters.sort" class="discovery-control" aria-label="鎺掑簭">
+          <option value="last_opened">鏈€杩戞墦寮€</option><option value="updated">鏈€杩存洿鏂?</option><option value="created">鍒涘缓鏃堕棿</option><option value="title">鏍囬</option>
+        </select>
+        <select v-model="discoveryFilters.notebook_id" class="discovery-control" aria-label="绗旇鏈瓫閫夋湁">
+          <option value="">鎵€鏈夌瑪璁版湰</option><option v-for="book in notebooks" :key="book.id" :value="book.id">{{ book.name }}</option>
+        </select>
+        <input v-model="discoveryFilters.tag" class="discovery-control" placeholder="标签" aria-label="标签筛选" />
+        <input v-model="discoveryFilters.updated_after" type="date" class="discovery-control" aria-label="更新时间起始" />
+        <input v-model="discoveryFilters.updated_before" type="date" class="discovery-control" aria-label="更新时间结束" />
+        <label class="pin-filter"><input v-model="discoveryFilters.pinned" type="checkbox" /> 仅置顶</label>
+        <button v-if="hasDiscoveryFilters" type="button" class="discovery-clear" @click="resetDiscovery">清除筛选</button>
+      </div>
+      <div class="discovery-columns">
+        <section class="discovery-section"><div class="section-heading"><h3>最近打开</h3><span>{{ recentNotes.length }}</span></div><p v-if="recentLoading" class="discovery-muted">加载中…</p><p v-else-if="!recentNotes.length" class="discovery-muted">还没有最近打开的笔记</p><button v-for="note in recentNotes" :key="`recent-${note.id}`" type="button" class="discovery-card" @click="openNote(note)"><strong>{{ note.name }}</strong><span>{{ note.summary || note.path || '笔记' }}</span><small>{{ note.word_count || 0 }} 字 · {{ formatDiscoveryDate(note.last_opened_at || note.updated_at) }}</small></button></section>
+        <section class="discovery-section"><div class="section-heading"><h3>置顶笔记</h3><span>{{ pinnedNotes.length }}</span></div><p v-if="discoveryLoading" class="discovery-muted">加载中…</p><p v-else-if="!pinnedNotes.length" class="discovery-muted">暂无置顶笔记</p><button v-for="note in pinnedNotes" :key="`pinned-${note.id}`" type="button" class="discovery-card" @click="openNote(note)"><strong>{{ note.name }}</strong><span>{{ note.summary || note.path || '笔记' }}</span><small>{{ note.tags || '无标签' }} · {{ formatDiscoveryDate(note.updated_at) }}</small></button></section>
+      </div>
+    </section>
 
     <!-- Search Results -->
     <div v-if="isSearching">
@@ -235,7 +256,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { noteService } from '../services/note'
 
@@ -250,6 +271,12 @@ const searchResults = ref([])
 const isSearching = ref(false)
 const searchLoading = ref(false)
 let searchTimer = null
+const recentNotes = ref([])
+const pinnedNotes = ref([])
+const recentLoading = ref(false)
+const discoveryLoading = ref(false)
+const discoveryFilters = ref({ sort: 'updated', notebook_id: '', tag: '', pinned: false, updated_after: '', updated_before: '' })
+const hasDiscoveryFilters = computed(() => discoveryFilters.value.notebook_id || discoveryFilters.value.tag || discoveryFilters.value.pinned || discoveryFilters.value.updated_after || discoveryFilters.value.updated_before || discoveryFilters.value.sort !== 'updated')
 
 const showDialog = ref(false)
 const creating = ref(false)
@@ -276,7 +303,30 @@ function openNotebook(notebook) {
 }
 
 function openNote(result) {
-  router.push(`/notes/edit/${result.id}`)
+  const notebookId = result.notebook_id || result.notebook?.id
+  if (notebookId) router.push({ name: 'NotebookWorkspaceView', params: { notebookId, noteId: result.id } })
+  else router.push(`/notes/edit/${result.id}`)
+}
+
+function formatDiscoveryDate(value) { return value ? new Date(value).toLocaleDateString('zh-CN') : '未记录时间' }
+function resetDiscovery() { discoveryFilters.value = { sort: 'updated', notebook_id: '', tag: '', pinned: false, updated_after: '', updated_before: '' } }
+async function fetchDiscovery() {
+  recentLoading.value = true
+  discoveryLoading.value = true
+  try {
+    recentNotes.value = await noteService.getRecentNotes(8)
+    const params = { sort: discoveryFilters.value.sort, limit: 12 }
+    if (discoveryFilters.value.notebook_id) params.notebook_id = discoveryFilters.value.notebook_id
+    if (discoveryFilters.value.tag.trim()) params.tag = discoveryFilters.value.tag.trim()
+    if (discoveryFilters.value.pinned) params.pinned = true
+    if (discoveryFilters.value.updated_after) params.updated_after = discoveryFilters.value.updated_after
+    if (discoveryFilters.value.updated_before) params.updated_before = discoveryFilters.value.updated_before
+    const discovered = await noteService.discoverNotes(params)
+    pinnedNotes.value = discovered.filter(note => note.is_pinned)
+  } finally {
+    recentLoading.value = false
+    discoveryLoading.value = false
+  }
 }
 
 function onSearchInput() {
@@ -389,12 +439,14 @@ async function deleteNotebook() {
 
 onMounted(() => {
   fetchNotebooks()
+  fetchDiscovery()
 })
+watch(discoveryFilters, fetchDiscovery, { deep: true })
 </script>
 
 <style scoped>
 .notes-page {
-  padding: var(--spacing-xl);
+  padding: var(--page-padding-y) var(--page-padding-x);
   width: 100%;
 }
 
@@ -417,6 +469,7 @@ onMounted(() => {
 
 .search-input {
   width: 100%;
+  min-height: var(--touch-target-min);
   padding: var(--spacing-sm) var(--spacing-xl) var(--spacing-sm) calc(var(--spacing-md) + 26px);
   font-size: var(--font-size-sm);
   font-family: var(--font-family);
@@ -443,8 +496,8 @@ onMounted(() => {
   right: var(--spacing-sm);
   top: 50%;
   transform: translateY(-50%);
-  width: 28px;
-  height: 28px;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -534,6 +587,22 @@ onMounted(() => {
 }
 
 /* Page Header */
+.discovery-panel { margin-bottom: var(--spacing-xl); }
+.discovery-toolbar { display: flex; flex-wrap: wrap; gap: var(--spacing-sm); margin-bottom: var(--spacing-lg); }
+.discovery-control { min-height: 44px; max-width: 220px; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-card); color: var(--color-text); font: inherit; }
+.pin-filter, .discovery-clear { min-height: 44px; display: inline-flex; align-items: center; gap: var(--spacing-xs); padding: var(--spacing-sm) var(--spacing-md); border-radius: var(--radius-md); }
+.discovery-clear { border: 1px solid var(--color-border); background: transparent; color: var(--color-primary); cursor: pointer; }
+.discovery-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--spacing-lg); }
+.discovery-section { min-width: 0; padding: var(--spacing-lg); background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
+.section-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-md); }
+.section-heading h3 { margin: 0; font-size: var(--font-size-lg); color: var(--color-text); }
+.section-heading span { color: var(--color-text-tertiary); font-size: var(--font-size-sm); }
+.discovery-card { display: flex; flex-direction: column; align-items: flex-start; width: 100%; min-height: 72px; gap: 4px; margin-top: var(--spacing-sm); padding: var(--spacing-md); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-card); color: var(--color-text); text-align: left; cursor: pointer; }
+.discovery-card:hover, .discovery-card:focus-visible { border-color: var(--color-primary); outline: none; }
+.discovery-card strong { overflow-wrap: anywhere; }
+.discovery-card span, .discovery-card small, .discovery-muted { color: var(--color-text-tertiary); overflow-wrap: anywhere; }
+@media (max-width: 767px) { .discovery-columns { grid-template-columns: 1fr; } .discovery-control { flex: 1 1 140px; max-width: none; } }
+
 .page-header {
   display: flex;
   align-items: center;
@@ -712,8 +781,8 @@ onMounted(() => {
   position: absolute;
   top: var(--spacing-sm);
   right: var(--spacing-sm);
-  width: 28px;
-  height: 28px;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
   display: flex;
   align-items: center;
   justify-content: center;

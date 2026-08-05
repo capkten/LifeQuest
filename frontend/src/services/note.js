@@ -1,5 +1,14 @@
 import api from './api'
 
+const NOTE_FIELDS = ['title', 'content', 'summary', 'tags', 'is_pinned']
+
+function notePayload(data = {}) {
+  return NOTE_FIELDS.reduce((payload, field) => {
+    if (data[field] !== undefined) payload[field] = data[field]
+    return payload
+  }, {})
+}
+
 export const noteService = {
   // --- Notebooks ---
   async getNotebooks() {
@@ -46,7 +55,9 @@ export const noteService = {
 
   // --- Notes ---
   async createNote(notebookId, data) {
-    const response = await api.post(`/notes/notebooks/${notebookId}/notes`, data)
+    const payload = notePayload(data)
+    if (Object.prototype.hasOwnProperty.call(data, 'parent_id')) payload.parent_id = data.parent_id
+    const response = await api.post(`/notes/notebooks/${notebookId}/notes`, payload)
     return response.data
   },
 
@@ -56,7 +67,7 @@ export const noteService = {
   },
 
   async updateNote(noteId, data) {
-    const response = await api.put(`/notes/${noteId}`, data)
+    const response = await api.put(`/notes/${noteId}`, notePayload(data))
     return response.data
   },
 
@@ -78,6 +89,21 @@ export const noteService = {
   // --- Search ---
   async searchNotes(query) {
     const response = await api.get('/notes/search', { params: { query } })
+    return response.data
+  },
+
+  async getRecentNotes(limit) {
+    const response = await api.get('/notes/recent', { params: { limit } })
+    return response.data
+  },
+
+  async markNoteOpened(noteId) {
+    const response = await api.post(`/notes/${noteId}/open`)
+    return response.data
+  },
+
+  async discoverNotes(params) {
+    const response = await api.get('/notes/discover', { params })
     return response.data
   },
 

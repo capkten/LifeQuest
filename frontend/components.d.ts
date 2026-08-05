@@ -17,6 +17,8 @@ declare module 'vue' {
     ElFormItem: typeof import('element-plus/es')['ElFormItem']
     ElInput: typeof import('element-plus/es')['ElInput']
     Header: typeof import('./src/components/layout/Header.vue')['default']
+    NoteTree: typeof import('./src/components/notes/NoteTree.vue')['default']
+    NoteViewer: typeof import('./src/components/notes/NoteViewer.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     Sidebar: typeof import('./src/components/layout/Sidebar.vue')['default']

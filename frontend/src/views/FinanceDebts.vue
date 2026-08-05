@@ -125,7 +125,7 @@
     <!-- Create/Edit Debt Modal -->
     <Teleport to="body">
       <div v-if="showDialog" class="dialog-overlay" @click.self="cancelDialog">
-        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="debt-dialog-title" @keydown.escape="cancelDialog">
+        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="debt-dialog-title" tabindex="-1" @keydown.escape="cancelDialog">
           <div class="dialog-header">
             <h3 id="debt-dialog-title" class="dialog-title">{{ editingDebt ? '编辑借贷' : '新建借贷' }}</h3>
             <button class="dialog-close" @click="cancelDialog" aria-label="Close">
@@ -178,7 +178,7 @@
     <!-- Add Payment Modal -->
     <Teleport to="body">
       <div v-if="showPaymentDialog" class="dialog-overlay" @click.self="cancelPayment">
-        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="pay-dialog-title" @keydown.escape="cancelPayment">
+        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="pay-dialog-title" tabindex="-1" @keydown.escape="cancelPayment">
           <div class="dialog-header">
             <h3 id="pay-dialog-title" class="dialog-title">添加还款</h3>
             <button class="dialog-close" @click="cancelPayment" aria-label="Close">
@@ -215,7 +215,7 @@
     <!-- Delete Confirmation -->
     <Teleport to="body">
       <div v-if="showDeleteDialog" class="dialog-overlay" @click.self="cancelDelete">
-        <div class="dialog dialog--confirm" role="dialog" aria-modal="true" aria-labelledby="del-debt-title" @keydown.escape="cancelDelete">
+        <div class="dialog dialog--confirm" role="dialog" aria-modal="true" aria-labelledby="del-debt-title" tabindex="-1" @keydown.escape="cancelDelete">
           <div class="dialog-header">
             <h3 id="del-debt-title" class="dialog-title">确认删除</h3>
             <button class="dialog-close" @click="cancelDelete" aria-label="Close">
@@ -580,7 +580,7 @@ onMounted(() => { fetchDebts() })
 
 /* Buttons */
 .btn-icon {
-  width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+  width: var(--touch-target-min); height: var(--touch-target-min); display: flex; align-items: center; justify-content: center;
   background: transparent; border: 1px solid var(--color-border);
   border-radius: var(--radius-md); cursor: pointer;
   color: var(--color-text-tertiary); transition: all 0.15s ease;
@@ -609,7 +609,7 @@ onMounted(() => { fetchDebts() })
 }
 .dialog-title { font-size: var(--font-size-lg); font-weight: 600; color: var(--color-text); }
 .dialog-close {
-  width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+  width: var(--touch-target-min); height: var(--touch-target-min); display: flex; align-items: center; justify-content: center;
   background: transparent; border: none; border-radius: var(--radius-md);
   cursor: pointer; color: var(--color-text-tertiary); transition: background 0.15s ease;
 }
@@ -713,5 +713,250 @@ onMounted(() => { fetchDebts() })
   .form-row { grid-template-columns: 1fr; }
   .dialog { max-width: 100%; margin: var(--spacing-sm); }
   .dialog-body { padding: var(--spacing-md); }
+}
+
+.finance-page {
+  display: grid;
+  gap: var(--page-gap);
+  padding-bottom: calc(var(--spacing-xl) + var(--bottom-nav-height));
+  overflow-x: clip;
+}
+
+.page-header { margin-bottom: 0; gap: var(--spacing-md); }
+
+.btn-create,
+.btn-primary {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-create,
+.btn-primary,
+.btn-secondary,
+.btn-danger,
+.retry-btn,
+.btn-back,
+.btn-icon,
+.tab-btn {
+  min-height: 44px;
+}
+
+.tab-toggle {
+  max-width: 320px;
+  margin-bottom: 0;
+  padding: 6px;
+  border-radius: 18px;
+  background: rgba(14, 165, 233, 0.08);
+}
+
+.tab-btn {
+  border-radius: 14px;
+}
+
+.debts-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--page-gap);
+}
+
+.debt-card {
+  display: grid;
+  gap: var(--spacing-sm);
+  padding: clamp(1rem, 0.9rem + 0.35vw, 1.35rem);
+  border-radius: var(--surface-radius-sm);
+  box-shadow: var(--shadow-sm);
+}
+
+.debt-card--settled {
+  opacity: 0.82;
+}
+
+.debt-info {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.debt-status {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.debt-details {
+  gap: var(--spacing-sm);
+}
+
+.debt-detail {
+  padding: 0.8rem 0.9rem;
+  border-radius: 12px;
+  background: var(--color-bg-tertiary);
+}
+
+.debt-desc {
+  padding: 0.8rem 0.9rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(217, 231, 239, 0.8);
+}
+
+.payment-list {
+  padding-left: 0;
+}
+
+.payment-item {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: start;
+  padding: 0.7rem 0.8rem;
+  border-radius: 12px;
+  background: var(--color-bg-tertiary);
+}
+
+.empty-state,
+.error-state {
+  min-height: 280px;
+  padding: var(--spacing-xl);
+  border-radius: var(--surface-radius);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px dashed var(--color-border);
+}
+
+.success-toast,
+.error-toast {
+  max-width: calc(100vw - 32px);
+}
+
+@media (max-width: 767px) {
+  .finance-page {
+    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height));
+  }
+
+  .btn-create {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .tab-toggle,
+  .debts-list {
+    width: 100%;
+    max-width: none;
+  }
+
+  .debts-list {
+    grid-template-columns: 1fr;
+  }
+
+  .debt-header {
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+  }
+
+  .debt-details {
+    grid-template-columns: 1fr;
+  }
+
+  .payment-item {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .success-toast,
+  .error-toast {
+    left: var(--spacing-md);
+    right: var(--spacing-md);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Stitch refinement: debt details stay readable as compact responsive cards. */
+.finance-page,
+.debts-list,
+.debt-card,
+.debt-info,
+.debt-details,
+.payment-list {
+  min-width: 0;
+}
+
+.debt-title,
+.debt-person,
+.debt-desc,
+.payment-item,
+.debt-detail {
+  overflow-wrap: anywhere;
+}
+
+.btn-create:focus-visible,
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.btn-danger:focus-visible,
+.retry-btn:focus-visible,
+.btn-back:focus-visible,
+.btn-icon:focus-visible,
+.tab-btn:focus-visible,
+.dialog-close:focus-visible,
+.form-input:focus-visible {
+  outline: 3px solid rgba(14, 165, 233, 0.35);
+  outline-offset: 2px;
+}
+
+.dialog-overlay {
+  z-index: 1200;
+  padding: max(var(--spacing-md), env(safe-area-inset-top)) var(--spacing-md) max(var(--spacing-md), env(safe-area-inset-bottom));
+}
+
+.dialog {
+  max-height: min(720px, calc(100dvh - 2 * var(--spacing-md)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 767px) {
+  .finance-page {
+    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height) + env(safe-area-inset-bottom));
+  }
+
+  .debt-card {
+    padding: 14px;
+  }
+
+  .debt-header,
+  .debt-actions {
+    min-width: 0;
+  }
+
+  .debt-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .debt-actions > * {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .dialog-overlay {
+    align-items: flex-end;
+    padding: 8px 8px max(8px, env(safe-area-inset-bottom));
+  }
+
+  .dialog {
+    width: 100%;
+    max-height: calc(100dvh - 16px);
+    margin: 0;
+    border-radius: var(--surface-radius) var(--surface-radius) 18px 18px;
+  }
 }
 </style>

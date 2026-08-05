@@ -216,8 +216,8 @@ const pageTitle = computed(() => {
     right: 0;
     bottom: 0;
     height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
-    padding: 8px 10px calc(8px + var(--safe-area-bottom));
-    background: rgba(255, 255, 255, 0.94);
+    padding: 6px 10px calc(6px + var(--safe-area-bottom));
+    background: rgba(248, 249, 255, 0.92);
     backdrop-filter: blur(12px);
     border-top: 1px solid var(--color-border);
     z-index: 80;
@@ -244,19 +244,21 @@ const pageTitle = computed(() => {
   justify-content: center;
   min-width: 44px;
   min-height: 44px;
-  gap: 4px;
-  padding: var(--spacing-xs) var(--spacing-sm);
+  gap: 3px;
+  padding: 5px 8px;
   color: var(--color-text-tertiary);
   text-decoration: none;
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   transition: color 0.15s ease;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-xl);
 }
 
 .bottom-nav-item:hover,
 .bottom-nav-item--active {
   color: var(--color-primary);
+  background: var(--color-bg-tertiary);
 }
 
 .bottom-nav-item svg {

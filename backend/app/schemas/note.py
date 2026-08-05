@@ -76,10 +76,34 @@ class NodeResponse(BaseModel):
     word_count: int = 0
     created_at: datetime
     updated_at: datetime
+    last_opened_at: Optional[datetime] = None
+    notebook_name: Optional[str] = None
 
 
 class NoteDetailResponse(NodeResponse):
     content: Optional[str] = None
+
+
+def node_to_response(node) -> NodeResponse:
+    """Map a NoteNode ORM object to a response with explicit notebook metadata."""
+    notebook = getattr(node, "notebook", None)
+    return NodeResponse(
+        id=node.id,
+        notebook_id=node.notebook_id,
+        parent_id=node.parent_id,
+        type=node.type,
+        name=node.name,
+        path=node.path,
+        content_path=node.content_path,
+        summary=node.summary,
+        tags=node.tags,
+        is_pinned=node.is_pinned,
+        word_count=node.word_count,
+        created_at=node.created_at,
+        updated_at=node.updated_at,
+        last_opened_at=node.last_opened_at,
+        notebook_name=getattr(notebook, "name", None),
+    )
 
 
 class TreeResponse(BaseModel):

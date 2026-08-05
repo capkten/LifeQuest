@@ -70,6 +70,20 @@
             ></div>
           </div>
         </div>
+        <div class="detail-meta">
+          <div class="detail-meta-item">
+            <span class="detail-meta-label">任务</span>
+            <strong>{{ project.completed_tasks || 0 }}/{{ project.total_tasks || 0 }}</strong>
+          </div>
+          <div class="detail-meta-item">
+            <span class="detail-meta-label">阶段</span>
+            <strong>{{ phases.length }}</strong>
+          </div>
+          <div class="detail-meta-item">
+            <span class="detail-meta-label">里程碑</span>
+            <strong>{{ milestones.length }}</strong>
+          </div>
+        </div>
         <div class="detail-dates" v-if="project.start_date || project.end_date">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -139,7 +153,7 @@
 
         <!-- Phase Groups -->
         <div v-for="phase in sortedPhases" :key="phase.id" class="phase-group">
-          <div class="phase-header" @click="togglePhase(phase.id)">
+          <div class="phase-header" role="button" tabindex="0" @click="togglePhase(phase.id)" @keydown.enter.prevent="togglePhase(phase.id)" @keydown.space.prevent="togglePhase(phase.id)">
             <svg class="phase-toggle-icon" :class="{ 'phase-toggle-icon--expanded': expandedPhases.has(phase.id) }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="6 9 12 15 18 9" />
             </svg>
@@ -156,7 +170,7 @@
             </div>
           </div>
           <div v-if="expandedPhases.has(phase.id)" class="phase-body">
-            <div v-for="task in getPhaseTasks(phase.id)" :key="task.id" class="task-card" :style="{ borderLeftColor: getPriorityColor(task.priority) }">
+            <div v-for="task in getPhaseTasks(phase.id)" :key="task.id" class="task-card" :class="{ 'task-card--done': task.status === 'completed' }" :style="{ borderLeftColor: getPriorityColor(task.priority) }">
               <div class="task-card-main">
                 <button class="task-complete-btn" :class="{ 'task-complete-btn--done': task.status === 'completed' }" :disabled="task.status === 'completed'" @click="completeTaskCard(task)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12" /></svg>
@@ -164,6 +178,9 @@
                 <div class="task-card-info">
                   <span class="task-card-title" :class="{ 'task-card-title--done': task.status === 'completed' }">{{ task.title }}</span>
                   <span class="task-card-meta">
+                    <span class="priority-badge" :style="{ borderColor: getPriorityColor(task.priority), color: getPriorityColor(task.priority) }">
+                      {{ task.priority === 'low' ? '低' : task.priority === 'high' ? '高' : task.priority === 'urgent' ? '紧急' : '中' }}
+                    </span>
                     <span class="task-status-badge" :class="'task-status-badge--' + task.status">{{ formatTaskStatus(task.status) }}</span>
                     <span v-if="task.deadline" class="task-deadline">{{ formatDateShort(task.deadline) }}</span>
                   </span>
@@ -181,7 +198,7 @@
 
         <!-- Unphased Tasks -->
         <div class="phase-group">
-          <div class="phase-header" @click="togglePhase('__unphased')">
+          <div class="phase-header" role="button" tabindex="0" @click="togglePhase('__unphased')" @keydown.enter.prevent="togglePhase('__unphased')" @keydown.space.prevent="togglePhase('__unphased')">
             <svg class="phase-toggle-icon" :class="{ 'phase-toggle-icon--expanded': expandedPhases.has('__unphased') }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="6 9 12 15 18 9" />
             </svg>
@@ -189,7 +206,7 @@
             <span class="phase-count">{{ unphasedTasks.length }}</span>
           </div>
           <div v-if="expandedPhases.has('__unphased')" class="phase-body">
-            <div v-for="task in unphasedTasks" :key="task.id" class="task-card" :style="{ borderLeftColor: getPriorityColor(task.priority) }">
+            <div v-for="task in unphasedTasks" :key="task.id" class="task-card" :class="{ 'task-card--done': task.status === 'completed' }" :style="{ borderLeftColor: getPriorityColor(task.priority) }">
               <div class="task-card-main">
                 <button class="task-complete-btn" :class="{ 'task-complete-btn--done': task.status === 'completed' }" :disabled="task.status === 'completed'" @click="completeTaskCard(task)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12" /></svg>
@@ -197,6 +214,9 @@
                 <div class="task-card-info">
                   <span class="task-card-title" :class="{ 'task-card-title--done': task.status === 'completed' }">{{ task.title }}</span>
                   <span class="task-card-meta">
+                    <span class="priority-badge" :style="{ borderColor: getPriorityColor(task.priority), color: getPriorityColor(task.priority) }">
+                      {{ task.priority === 'low' ? '低' : task.priority === 'high' ? '高' : task.priority === 'urgent' ? '紧急' : '中' }}
+                    </span>
                     <span class="task-status-badge" :class="'task-status-badge--' + task.status">{{ formatTaskStatus(task.status) }}</span>
                     <span v-if="task.deadline" class="task-deadline">{{ formatDateShort(task.deadline) }}</span>
                   </span>
@@ -721,11 +741,13 @@ function addKanbanTask(event) {
 }
 
 async function completeTaskCard(task) {
+  if (!task || task.status === 'completed') return
+  const oldStatus = task.status
   try {
     const updated = await projectService.moveTask(task.id, { status: 'completed' })
     const idx = tasks.value.findIndex(t => t.id === task.id)
     if (idx !== -1) tasks.value[idx] = { ...tasks.value[idx], ...updated }
-    if (project.value) {
+    if (project.value && oldStatus !== 'completed') {
       project.value.completed_tasks = (project.value.completed_tasks || 0) + 1
     }
   } catch (e) {
@@ -1008,6 +1030,7 @@ onMounted(() => {
 .project-detail-page {
   padding: var(--spacing-xl);
   width: 100%;
+  overflow-x: hidden;
 }
 
 /* Header */
@@ -1056,6 +1079,7 @@ onMounted(() => {
   align-items: center;
   gap: var(--spacing-sm);
   margin-bottom: var(--spacing-sm);
+  flex-wrap: wrap;
 }
 
 .project-color-dot {
@@ -1101,6 +1125,7 @@ onMounted(() => {
   display: flex;
   gap: var(--spacing-sm);
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .btn-outline {
@@ -1144,6 +1169,35 @@ onMounted(() => {
   margin-bottom: var(--spacing-md);
 }
 
+.detail-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.detail-meta-item {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--surface-radius-sm);
+}
+
+.detail-meta-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.detail-meta-item strong {
+  color: var(--color-text);
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-lg);
+}
+
 .progress-info {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
@@ -1181,6 +1235,7 @@ onMounted(() => {
   display: flex;
   gap: var(--spacing-xs);
   margin-bottom: var(--spacing-xl);
+  flex-wrap: wrap;
 }
 
 .view-btn {
@@ -1322,7 +1377,7 @@ onMounted(() => {
   margin-bottom: var(--spacing-md);
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--surface-radius);
   overflow: hidden;
 }
 
@@ -1399,6 +1454,10 @@ onMounted(() => {
   transition: opacity 0.2s ease;
 }
 
+.task-card--done {
+  opacity: 0.72;
+}
+
 .task-card-main {
   display: flex;
   align-items: center;
@@ -1408,8 +1467,8 @@ onMounted(() => {
 }
 
 .task-complete-btn {
-  width: 24px;
-  height: 24px;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -1443,6 +1502,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  flex-wrap: wrap;
 }
 
 .task-card-title {
@@ -1465,6 +1525,17 @@ onMounted(() => {
   align-items: center;
   gap: var(--spacing-xs);
   flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.priority-badge {
+  font-size: var(--font-size-xs);
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  font-weight: 600;
+  background: rgba(14, 165, 233, 0.12);
+  border: 1px solid transparent;
+  white-space: nowrap;
 }
 
 .task-status-badge {
@@ -1526,8 +1597,8 @@ onMounted(() => {
 .btn-sm:hover { background: var(--color-primary); color: #fff; }
 
 .btn-icon {
-  width: 24px;
-  height: 24px;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1697,7 +1768,7 @@ onMounted(() => {
   display: flex;
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--surface-radius);
   overflow: hidden;
 }
 
@@ -1729,6 +1800,8 @@ onMounted(() => {
 }
 
 .gantt-chart-scroll {
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   flex: 1;
 }
@@ -1996,6 +2069,10 @@ onMounted(() => {
     gap: var(--spacing-md);
   }
 
+  .detail-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .detail-actions {
     flex-wrap: wrap;
   }
@@ -2012,6 +2089,15 @@ onMounted(() => {
     width: 120px;
   }
 
+  .view-toggle {
+    gap: 6px;
+  }
+
+  .view-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
   .form-row {
     grid-template-columns: 1fr;
   }
@@ -2019,6 +2105,158 @@ onMounted(() => {
   .dialog {
     max-width: 100%;
     margin: var(--spacing-sm);
+  }
+}
+
+/* Stitch refinement: keep dense project views inside their own scroll regions. */
+.project-detail-page {
+  min-width: 0;
+  padding-bottom: calc(var(--spacing-xl) + var(--bottom-nav-height));
+}
+
+.detail-header,
+.list-view,
+.kanban-view,
+.gantt-view {
+  min-width: 0;
+}
+
+.phase-header:focus-visible,
+.view-btn:focus-visible,
+.gantt-scale-btn:focus-visible,
+.btn-outline:focus-visible,
+.btn-sm:focus-visible,
+.btn-icon:focus-visible,
+.task-complete-btn:focus-visible,
+.btn-add-phase:focus-visible,
+.retry-btn:focus-visible,
+.dialog-close:focus-visible,
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.btn-danger:focus-visible,
+.back-link:focus-visible,
+.form-input:focus-visible,
+.inline-add-input:focus-visible {
+  outline: 3px solid rgba(14, 165, 233, 0.35);
+  outline-offset: 2px;
+}
+
+.phase-header {
+  min-height: 52px;
+}
+
+.task-card {
+  min-width: 0;
+}
+
+.task-card-main,
+.task-card-info,
+.task-card-meta {
+  min-width: 0;
+}
+
+.task-card-title {
+  overflow-wrap: anywhere;
+}
+
+.gantt-container {
+  display: grid;
+  grid-template-columns: minmax(132px, 22%) minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--surface-radius-sm);
+  background: var(--color-card);
+}
+
+.gantt-labels {
+  width: auto;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--color-bg-tertiary);
+  border-right: 1px solid var(--color-border);
+}
+
+.gantt-chart-scroll {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
+}
+
+.gantt-chart-scroll:focus-visible {
+  outline: 3px solid rgba(14, 165, 233, 0.35);
+  outline-offset: -3px;
+}
+
+.gantt-svg {
+  display: block;
+  min-width: 800px;
+}
+
+.btn-outline,
+.btn-sm,
+.btn-icon,
+.btn-add-phase,
+.gantt-scale-btn,
+.retry-btn {
+  min-height: 44px;
+}
+
+@media (max-width: 767px) {
+  .project-detail-page {
+    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height));
+  }
+
+  .detail-actions,
+  .dialog-actions {
+    width: 100%;
+  }
+
+  .detail-actions > *,
+  .dialog-actions > * {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
+  .phase-header {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .phase-name {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .gantt-container {
+    grid-template-columns: 104px minmax(0, 1fr);
+  }
+
+  .gantt-label {
+    padding-inline: 8px;
+    font-size: var(--font-size-xs);
+  }
+
+  .task-card {
+    padding: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 </style>

@@ -9,6 +9,15 @@
           <p class="hero-status">
             {{ checkinStatus?.checked_in ? `今日已签到，连续 ${checkinStatus?.streak || 0} 天` : `当前连续签到 ${checkinStatus?.streak || 0} 天` }}
           </p>
+          <div class="hero-progress" aria-label="经验值进度">
+            <div class="hero-progress-label">
+              <span>EXP TO LEVEL {{ (user?.level || 1) + 1 }}</span>
+              <strong>{{ expPercent }}%</strong>
+            </div>
+            <div class="hero-progress-track">
+              <span :style="{ width: expPercent + '%' }"></span>
+            </div>
+          </div>
         </div>
         <button
           v-if="!checkinStatus?.checked_in"
@@ -154,6 +163,32 @@
       </div>
     </div>
 
+    <aside class="home-aside-actions">
+      <section class="quick-actions-card">
+        <div class="aside-card-title">
+          <span class="aside-card-kicker">FOCUS</span>
+          <h3>快速行动</h3>
+        </div>
+        <div class="quick-actions-list">
+          <router-link to="/todos" class="quick-action-item">
+            <span class="quick-action-icon quick-action-icon--primary">+</span>
+            <span>创建任务</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+          </router-link>
+          <router-link to="/projects" class="quick-action-item">
+            <span class="quick-action-icon quick-action-icon--secondary">◇</span>
+            <span>新建项目</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+          </router-link>
+          <router-link to="/finance" class="quick-action-item">
+            <span class="quick-action-icon quick-action-icon--accent">¥</span>
+            <span>记录账目</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+          </router-link>
+        </div>
+      </section>
+    </aside>
+
     <div class="content-grid">
       <div class="content-section">
         <div class="section-header">
@@ -225,6 +260,24 @@
       </div>
     </div>
 
+    <section class="habit-progress-card">
+      <div class="habit-progress-heading">
+        <div>
+          <span class="aside-card-kicker">DAILY RHYTHM</span>
+          <h3>习惯进度</h3>
+        </div>
+        <strong>{{ habitProgress }}%</strong>
+      </div>
+      <div class="habit-progress-ring" :style="{ '--progress': habitProgress + '%' }">
+        <div class="habit-progress-ring-inner">
+          <strong>{{ habitProgress }}%</strong>
+          <span>完成</span>
+        </div>
+      </div>
+      <p v-if="dailySummary?.summary?.total_habits">今日完成 {{ dailySummary.summary.completed_habits }} / {{ dailySummary.summary.total_habits }} 个习惯</p>
+      <p v-else>创建习惯，建立自己的每日节奏。</p>
+    </section>
+
     <Transition name="toast">
       <div v-if="successToast" class="toast toast--success">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -252,9 +305,11 @@ import { useAuthStore } from '../stores/auth'
 import { todoService } from '../services/todo'
 import { checkinService } from '../services/checkin'
 import { useToast } from '../composables/useToast'
+import { useUserStats } from '../composables/useUserStats'
 
 const authStore = useAuthStore()
 const user = computed(() => authStore.user)
+const { expPercent } = useUserStats()
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
 const checkinStatus = ref(null)
@@ -273,6 +328,11 @@ const completingHabitId = ref(null)
 
 const recentTasks = computed(() => tasks.value.slice(0, 5))
 const recentGoals = computed(() => goals.value.slice(0, 5))
+const habitProgress = computed(() => {
+  const summary = dailySummary.value?.summary
+  if (!summary?.total_habits) return 0
+  return Math.round((summary.completed_habits / summary.total_habits) * 100)
+})
 const pendingTasksCount = computed(() =>
   (tasks.value || []).filter(t => t.status === 'pending' || t.status === 'in_progress').length
 )
@@ -383,7 +443,13 @@ onMounted(() => {
 
   .daily-card {
     grid-column: 1;
+    grid-row: 2;
     margin-bottom: 0;
+  }
+
+  .home-aside-actions {
+    grid-column: 2;
+    grid-row: 2;
   }
 
   .content-grid {
@@ -392,11 +458,17 @@ onMounted(() => {
 
   .content-grid .content-section:first-child {
     grid-column: 1;
+    grid-row: 3;
   }
 
   .content-grid .content-section:last-child {
     grid-column: 2;
     grid-row: 3;
+  }
+
+  .habit-progress-card {
+    grid-column: 2;
+    grid-row: 4;
   }
 }
 
@@ -448,6 +520,44 @@ onMounted(() => {
 .hero-status {
   font-size: var(--font-size-sm);
   color: rgba(255, 255, 255, 0.88);
+}
+
+.hero-progress {
+  display: grid;
+  gap: 6px;
+  max-width: 420px;
+  margin-top: 4px;
+}
+
+.hero-progress-label {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.hero-progress-label strong {
+  color: #fff;
+  letter-spacing: 0;
+}
+
+.hero-progress-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.hero-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #c9e6ff, #6ffbbe);
+  transition: width 300ms ease;
 }
 
 .hero-meta {
@@ -541,6 +651,151 @@ onMounted(() => {
 
 .daily-card {
   margin-bottom: var(--spacing-md);
+}
+
+.home-aside-actions {
+  min-width: 0;
+}
+
+.quick-actions-card,
+.habit-progress-card {
+  padding: var(--spacing-lg);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--surface-radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.aside-card-title,
+.habit-progress-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.aside-card-title h3,
+.habit-progress-heading h3 {
+  margin-top: 3px;
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.aside-card-kicker {
+  display: block;
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1;
+}
+
+.quick-actions-list {
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.quick-action-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-height: 56px;
+  padding: 8px 12px;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+  transition: background-color var(--transition-base), border-color var(--transition-base), transform var(--transition-base);
+}
+
+.quick-action-item:hover {
+  color: var(--color-text);
+  background: var(--color-surface-low);
+  border-color: var(--color-border-strong);
+  transform: translateY(-1px);
+}
+
+.quick-action-item > svg {
+  width: 17px;
+  height: 17px;
+  color: var(--color-text-tertiary);
+}
+
+.quick-action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-family-display);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.quick-action-icon--primary {
+  color: var(--color-primary-dark);
+  background: var(--color-bg-tertiary);
+}
+
+.quick-action-icon--secondary {
+  color: var(--color-secondary);
+  background: var(--color-surface-variant);
+}
+
+.quick-action-icon--accent {
+  color: var(--color-accent-dark);
+  background: rgba(16, 185, 129, 0.14);
+}
+
+.habit-progress-card {
+  text-align: center;
+}
+
+.habit-progress-heading {
+  text-align: left;
+}
+
+.habit-progress-heading > strong {
+  color: var(--color-primary-dark);
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-xl);
+}
+
+.habit-progress-ring {
+  display: grid;
+  place-items: center;
+  width: 148px;
+  height: 148px;
+  margin: var(--spacing-lg) auto;
+  border-radius: 50%;
+  background: conic-gradient(var(--color-secondary) var(--progress), var(--color-bg-tertiary) 0);
+}
+
+.habit-progress-ring-inner {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  width: 116px;
+  height: 116px;
+  border-radius: 50%;
+  background: var(--color-card);
+}
+
+.habit-progress-ring-inner strong {
+  color: var(--color-text);
+  font-family: var(--font-family-display);
+  font-size: 1.75rem;
+  line-height: 1;
+}
+
+.habit-progress-ring-inner span,
+.habit-progress-card > p {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
 }
 
 .daily-header,
@@ -951,6 +1206,15 @@ onMounted(() => {
 
   .hero-status {
     font-size: 12px;
+  }
+
+  .hero-progress {
+    max-width: none;
+  }
+
+  .quick-actions-card,
+  .habit-progress-card {
+    padding: var(--spacing-md);
   }
 
   .daily-card {

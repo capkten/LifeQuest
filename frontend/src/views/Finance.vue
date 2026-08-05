@@ -26,7 +26,13 @@
       <!-- Account Cards -->
       <div class="accounts-row">
         <div v-if="accounts.length === 0" class="accounts-empty">
-          <span>暂无账户</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+            <rect x="2" y="4" width="20" height="16" rx="3" />
+            <path d="M2 10h20M7 15h4" />
+          </svg>
+          <strong>还没有财务账户</strong>
+          <span>先创建一个账户，再开始记录你的现金流。</span>
+          <router-link to="/finance/accounts" class="accounts-empty-action">创建账户</router-link>
         </div>
         <div
           v-for="acct in accounts"
@@ -617,12 +623,45 @@ onMounted(() => {
 
 .accounts-empty {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   width: 100%;
-  padding: var(--spacing-lg);
+  gap: 6px;
+  min-height: 164px;
+  padding: var(--spacing-xl);
+  background: var(--color-surface-low);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--surface-radius);
   color: var(--color-text-tertiary);
   font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.accounts-empty svg {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 4px;
+  color: var(--color-primary);
+}
+
+.accounts-empty strong {
+  color: var(--color-text);
+  font-size: var(--font-size-base);
+}
+
+.accounts-empty-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  margin-top: 6px;
+  padding: 0 14px;
+  border-radius: var(--radius-lg);
+  background: var(--color-primary);
+  color: #fff;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
 }
 
 .account-card {
@@ -679,7 +718,7 @@ onMounted(() => {
 .summary-card {
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--surface-radius);
   padding: var(--spacing-lg);
   margin-bottom: var(--spacing-lg);
 }
@@ -1201,6 +1240,154 @@ select.form-input {
 
   .finance-page:not(:has(.budgets-card)) > .transactions-card {
     grid-column: 1 / -1;
+  }
+}
+
+/* Stitch refinement: consistent hierarchy and readable narrow-screen cards. */
+.finance-page {
+  min-width: 0;
+  padding-bottom: calc(var(--spacing-xl) + var(--bottom-nav-height));
+}
+
+.page-header,
+.accounts-row,
+.summary-card,
+.budgets-card,
+.transactions-card,
+.quick-links,
+.section-header,
+.transaction-item,
+.account-card {
+  min-width: 0;
+}
+
+.btn-create,
+.retry-btn,
+.accounts-empty-action,
+.quick-link,
+.dialog-close,
+.type-toggle-btn,
+.category-chip,
+.btn-primary,
+.btn-secondary {
+  min-height: 44px;
+}
+
+.btn-create:focus-visible,
+.retry-btn:focus-visible,
+.accounts-empty-action:focus-visible,
+.quick-link:focus-visible,
+.dialog-close:focus-visible,
+.type-toggle-btn:focus-visible,
+.category-chip:focus-visible,
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.form-input:focus-visible,
+.section-link:focus-visible {
+  outline: 3px solid rgba(14, 165, 233, 0.35);
+  outline-offset: 2px;
+}
+
+.summary-card,
+.budgets-card,
+.transactions-card {
+  overflow: hidden;
+}
+
+.transactions-body,
+.budgets-body {
+  min-width: 0;
+}
+
+.transaction-item {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.transaction-desc,
+.transaction-meta,
+.budget-item-name,
+.budget-item-amount {
+  overflow-wrap: anywhere;
+}
+
+.dialog-overlay {
+  z-index: 1200;
+  padding: max(var(--spacing-md), env(safe-area-inset-top)) var(--spacing-md) max(var(--spacing-md), env(safe-area-inset-bottom));
+}
+
+.dialog {
+  max-height: min(720px, calc(100dvh - 2 * var(--spacing-md)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 767px) {
+  .finance-page {
+    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height) + env(safe-area-inset-bottom));
+  }
+
+  .accounts-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    overflow: visible;
+  }
+
+  .account-card {
+    min-height: 84px;
+  }
+
+  .summary-grid {
+    gap: 8px;
+  }
+
+  .summary-item {
+    min-height: 72px;
+  }
+
+  .transaction-item {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+    padding: 12px 0;
+  }
+
+  .transaction-right {
+    grid-column: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    text-align: left;
+  }
+
+  .quick-links {
+    gap: 8px;
+  }
+
+  .quick-link {
+    min-height: 56px;
+  }
+
+  .dialog-overlay {
+    align-items: flex-end;
+    padding: 8px 8px max(8px, env(safe-area-inset-bottom));
+  }
+
+  .dialog {
+    width: 100%;
+    max-height: calc(100dvh - 16px);
+    margin: 0;
+    border-radius: var(--surface-radius) var(--surface-radius) 18px 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 </style>

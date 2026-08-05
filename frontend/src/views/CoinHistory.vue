@@ -591,4 +591,128 @@ onMounted(() => {
     grid-template-columns: repeat(3, 1fr);
   }
 }
+
+.coin-history-page {
+  display: grid;
+  gap: var(--page-gap);
+  padding-bottom: calc(var(--spacing-xl) + var(--bottom-nav-height));
+  overflow-x: clip;
+}
+
+.page-header {
+  margin-bottom: 0;
+}
+
+.summary-grid {
+  gap: var(--page-gap);
+  margin-bottom: 0;
+}
+
+.summary-card {
+  border-radius: var(--surface-radius);
+  box-shadow: var(--shadow-sm);
+  padding: clamp(1rem, 0.85rem + 0.4vw, 1.35rem);
+}
+
+.summary-card--balance {
+  background:
+    linear-gradient(135deg, rgba(14, 165, 233, 0.12), rgba(29, 78, 216, 0.06)),
+    var(--color-card);
+}
+
+.summary-value {
+  font-size: clamp(1.7rem, 1.45rem + 0.7vw, 2.3rem);
+}
+
+.filter-bar {
+  margin-bottom: 0;
+  padding: clamp(1rem, 0.85rem + 0.3vw, 1.2rem);
+  border-radius: var(--surface-radius-sm);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.filter-group {
+  flex-wrap: wrap;
+}
+
+.filter-btn,
+.filter-select,
+.retry-btn {
+  min-height: 44px;
+}
+
+.transaction-groups {
+  gap: var(--page-gap);
+}
+
+.transaction-group {
+  padding: clamp(1rem, 0.85rem + 0.3vw, 1.25rem);
+  border-radius: var(--surface-radius-sm);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.group-date {
+  padding-bottom: var(--spacing-sm);
+}
+
+.group-items {
+  gap: var(--spacing-sm);
+}
+
+.transaction-item {
+  padding: 1rem;
+  border-radius: 16px;
+}
+
+.empty-state,
+.error-state {
+  min-height: 280px;
+  padding: var(--spacing-xl);
+  border-radius: var(--surface-radius);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px dashed var(--color-border);
+}
+
+@media (max-width: 767px) {
+  .coin-history-page {
+    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height));
+  }
+
+  .filter-group {
+    width: 100%;
+  }
+
+  .filter-btn {
+    flex: 1 1 calc(50% - var(--spacing-xs));
+  }
+
+  .filter-select {
+    width: 100%;
+  }
+
+  .transaction-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .tx-amount {
+    grid-column: 2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 </style>

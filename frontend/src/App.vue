@@ -34,6 +34,17 @@
   --color-border: #D9E7EF;
   --color-border-strong: #A8D7E8;
   --color-card: #FFFFFF;
+  --color-surface: #F8F9FF;
+  --color-surface-low: #EFF4FF;
+  --color-surface-container: #E5EEFF;
+  --color-surface-high: #DBE9FF;
+  --color-surface-variant: #D2E4FF;
+  --color-on-surface: #001D37;
+  --color-on-surface-variant: #3E4850;
+  --color-outline: #6E7881;
+  --color-outline-variant: #BEC8D2;
+  --color-hero-start: #123B5D;
+  --color-hero-end: #0EA5E9;
   --font-family: 'DM Sans', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-family-display: 'Space Grotesk', 'DM Sans', sans-serif;
   --font-size-xs: 0.75rem;
@@ -47,10 +58,10 @@
   --spacing-xs: 0.5rem;
   --spacing-sm: 0.75rem;
   --spacing-md: 1rem;
-  --spacing-lg: 1.25rem;
-  --spacing-xl: 1.5rem;
-  --spacing-2xl: 2rem;
-  --spacing-3xl: 3rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+  --spacing-2xl: 2.5rem;
+  --spacing-3xl: 4rem;
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
@@ -77,6 +88,8 @@
   --shadow-md: 0 8px 24px rgba(22, 50, 79, 0.08);
   --shadow-lg: 0 14px 34px rgba(22, 50, 79, 0.1);
   --shadow-xl: 0 22px 48px rgba(22, 50, 79, 0.14);
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
 }
 
 * {
@@ -113,6 +126,41 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
+.stitch-surface {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--surface-radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.stitch-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-tertiary);
+  color: var(--color-primary-dark);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.stitch-progress {
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-tertiary);
+}
+
+.stitch-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+  transition: width 300ms ease;
+}
+
 button,
 a,
 [role='button'] {
@@ -126,6 +174,18 @@ button {
 .compact-section {
   display: grid;
   gap: var(--spacing-md);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 @media (min-width: 768px) {
@@ -267,6 +327,7 @@ h3,
 @media (max-width: 767px) {
   :root {
     --font-size-2xl: 1.125rem;
+    --bottom-nav-height: 72px;
   }
 
   .el-button {

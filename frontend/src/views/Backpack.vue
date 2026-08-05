@@ -14,6 +14,24 @@
       </router-link>
     </div>
 
+    <section class="inventory-summary" aria-label="背包概览">
+      <div class="inventory-summary-card inventory-summary-card--primary">
+        <span class="inventory-summary-label">当前持有</span>
+        <strong>{{ items.length }}</strong>
+        <span class="inventory-summary-meta">件物品</span>
+      </div>
+      <div class="inventory-summary-card">
+        <span class="inventory-summary-label">已装备</span>
+        <strong>{{ items.filter(item => item.is_equipped).length }}</strong>
+        <span class="inventory-summary-meta">件装备</span>
+      </div>
+      <div class="inventory-summary-card inventory-summary-card--hint">
+        <span class="inventory-summary-label">当前视图</span>
+        <strong>{{ filterTabs.find(tab => tab.value === activeFilter)?.label }}</strong>
+        <span class="inventory-summary-meta">可随时切换分类</span>
+      </div>
+    </section>
+
     <div class="filter-tabs">
       <button
         v-for="tab in filterTabs"
@@ -45,8 +63,8 @@
           <line x1="10" y1="14" x2="14" y2="14" />
         </svg>
       </div>
-      <h3 class="empty-title">你的背包是空的</h3>
-      <p class="empty-text">前往商城购买物品来填满你的背包吧。</p>
+      <h3 class="empty-title">{{ activeFilter === 'all' ? '你的背包是空的' : '这个分类还没有物品' }}</h3>
+      <p class="empty-text">{{ activeFilter === 'all' ? '前往商城购买物品来填满你的背包吧。' : '切换其他分类，或前往商城获得新的物品。' }}</p>
       <router-link to="/shop" class="btn-create">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
@@ -1093,6 +1111,118 @@ onMounted(() => {
   .dialog {
     max-width: 100%;
     margin: var(--spacing-sm);
+  }
+}
+.inventory-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1.45fr);
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.inventory-summary-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 4px 12px;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-card);
+}
+
+.inventory-summary-card--primary {
+  border-color: rgba(14, 165, 233, 0.28);
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.1), var(--color-card));
+}
+
+.inventory-summary-label,
+.inventory-summary-meta {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.inventory-summary-label {
+  grid-column: 1 / -1;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.inventory-summary-card strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text);
+  font-family: var(--font-family-display);
+  font-size: clamp(1.35rem, 1rem + 0.8vw, 2rem);
+  line-height: 1;
+}
+
+.inventory-summary-card--hint strong {
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+}
+
+.inventory-summary-meta {
+  justify-self: end;
+  text-align: right;
+}
+
+.tab-btn,
+.btn-action,
+.btn-history,
+.btn-create,
+.retry-btn,
+.btn-secondary,
+.btn-danger {
+  min-height: 44px;
+}
+
+.item-card-name,
+.item-card-desc,
+.stat-item {
+  overflow-wrap: anywhere;
+}
+
+.item-card-name {
+  line-height: 1.35;
+}
+
+@media (max-width: 767px) {
+  .inventory-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .inventory-summary-card {
+    padding: 14px;
+  }
+
+  .inventory-summary-card--hint {
+    grid-column: 1 / -1;
+  }
+
+  .filter-tabs {
+    gap: 4px;
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .tab-btn {
+    flex: 0 0 auto;
+    padding: 8px 12px;
+  }
+
+  .item-card-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+    width: 100%;
+  }
+
+  .btn-action {
+    justify-content: center;
+    min-width: 44px;
+    padding: 8px 10px;
   }
 }
 </style>

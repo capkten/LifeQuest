@@ -1,12 +1,15 @@
 import logging
 import os
+from contextlib import contextmanager
 
 from fastapi import FastAPI, Request
 from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import inspect, text
+from sqlalchemy import CheckConstraint, Column, Integer, MetaData, Table, inspect, select, text
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import engine, Base, SessionLocal
@@ -20,6 +23,122 @@ app = FastAPI(title="LifeQuest", version="1.0.0")
 
 
 logger = logging.getLogger(__name__)
+
+_NOTE_MIGRATION_LOCK_TABLE = "note_migration_lock"
+
+
+def _generic_note_migration_lock(connection):
+    """Create and lock the mutex row using SQLAlchemy's generic SQL constructs."""
+    metadata = MetaData()
+    lock_table = Table(
+        _NOTE_MIGRATION_LOCK_TABLE,
+        metadata,
+        Column("id", Integer, primary_key=True),
+        CheckConstraint("id = 1"),
+    )
+    lock_table.create(bind=connection, checkfirst=True)
+
+    lock_row = select(lock_table.c.id).where(lock_table.c.id == 1)
+    if connection.execute(lock_row).first() is None:
+        connection.execute(lock_table.insert().values(id=1))
+    connection.execute(lock_row.with_for_update())
+
+
+@contextmanager
+def _note_migration_lock(db_engine):
+    """Hold a database-backed mutex across the complete note migration."""
+    connection = db_engine.connect()
+    transaction = None
+    try:
+        dialect_name = (getattr(db_engine.dialect, "name", "") or "").lower()
+        if dialect_name == "sqlite":
+            connection.exec_driver_sql("BEGIN IMMEDIATE")
+            connection.execute(text(
+                f"CREATE TABLE IF NOT EXISTS {_NOTE_MIGRATION_LOCK_TABLE} "
+                "(id INTEGER PRIMARY KEY CHECK (id = 1))"
+            ))
+            connection.execute(text(
+                f"INSERT OR IGNORE INTO {_NOTE_MIGRATION_LOCK_TABLE} (id) VALUES (1)"
+            ))
+        else:
+            transaction = connection.begin()
+            if dialect_name == "postgresql":
+                connection.execute(text(
+                    f"CREATE TABLE IF NOT EXISTS {_NOTE_MIGRATION_LOCK_TABLE} "
+                    "(id INTEGER PRIMARY KEY CHECK (id = 1))"
+                ))
+                connection.execute(text(
+                    f"INSERT INTO {_NOTE_MIGRATION_LOCK_TABLE} (id) VALUES (1) "
+                    "ON CONFLICT (id) DO NOTHING"
+                ))
+                connection.execute(text(
+                    f"SELECT id FROM {_NOTE_MIGRATION_LOCK_TABLE} WHERE id = 1 FOR UPDATE"
+                ))
+            elif dialect_name in {"mysql", "mariadb"}:
+                connection.execute(text(
+                    f"CREATE TABLE IF NOT EXISTS {_NOTE_MIGRATION_LOCK_TABLE} "
+                    "(id INTEGER PRIMARY KEY CHECK (id = 1))"
+                ))
+                connection.execute(text(
+                    f"INSERT IGNORE INTO {_NOTE_MIGRATION_LOCK_TABLE} (id) VALUES (1)"
+                ))
+                connection.execute(text(
+                    f"SELECT id FROM {_NOTE_MIGRATION_LOCK_TABLE} WHERE id = 1 FOR UPDATE"
+                ))
+            elif dialect_name in {"mssql", "sql server"}:
+                connection.execute(text(
+                    f"IF OBJECT_ID(N'{_NOTE_MIGRATION_LOCK_TABLE}', N'U') IS NULL "
+                    "BEGIN "
+                    f"CREATE TABLE {_NOTE_MIGRATION_LOCK_TABLE} "
+                    "(id INT NOT NULL PRIMARY KEY CHECK (id = 1)) "
+                    "END"
+                ))
+                connection.execute(text(
+                    f"MERGE {_NOTE_MIGRATION_LOCK_TABLE} WITH (HOLDLOCK) AS target "
+                    "USING (VALUES (1)) AS source (id) "
+                    "ON target.id = source.id "
+                    "WHEN NOT MATCHED THEN INSERT (id) VALUES (source.id);"
+                ))
+                connection.execute(text(
+                    f"SELECT id FROM {_NOTE_MIGRATION_LOCK_TABLE} "
+                    "WITH (UPDLOCK, HOLDLOCK) WHERE id = 1"
+                ))
+            else:
+                _generic_note_migration_lock(connection)
+        yield connection
+    except Exception:
+        if transaction is not None:
+            transaction.rollback()
+        else:
+            connection.rollback()
+        raise
+    else:
+        if transaction is not None:
+            transaction.commit()
+        else:
+            connection.commit()
+    finally:
+        connection.close()
+
+
+def _migrate_note_data():
+    """Run note migration and canonicalization under one database mutex."""
+    moved_files = []
+    with _note_migration_lock(engine) as lock_connection:
+        migrate_db = Session(bind=lock_connection)
+        try:
+            moved_files = NoteService.migrate_old_data(migrate_db)
+            NoteService.canonicalize_existing_tags(migrate_db.connection())
+            migrate_db.commit()
+        except Exception:
+            migrate_db.rollback()
+            try:
+                NoteService.restore_moved_files(moved_files)
+            except Exception:
+                logger.exception("Failed to restore files after note migration rollback")
+            raise
+        finally:
+            migrate_db.close()
 
 
 @app.get("/api/health")
@@ -78,6 +197,34 @@ def _migrate_columns():
             ))
             logger.info("Migration: added finance_transactions.recurring_id")
 
+        # note_nodes.last_opened_at
+        note_node_cols = {c["name"] for c in inspector.get_columns("note_nodes")}
+        if "last_opened_at" not in note_node_cols:
+            try:
+                conn.execute(text(
+                    "ALTER TABLE note_nodes ADD COLUMN last_opened_at DATETIME"
+                ))
+            except OperationalError as exc:
+                error_text = str(getattr(exc, "orig", exc)).lower()
+                if "duplicate column" not in error_text or "last_opened_at" not in error_text:
+                    raise
+                logger.info("Migration: note_nodes.last_opened_at already exists")
+            else:
+                logger.info("Migration: added note_nodes.last_opened_at")
+
+        if "tags_normalized" not in note_node_cols:
+            try:
+                conn.execute(text(
+                    "ALTER TABLE note_nodes ADD COLUMN tags_normalized BOOLEAN"
+                ))
+            except OperationalError as exc:
+                error_text = str(getattr(exc, "orig", exc)).lower()
+                if "duplicate column" not in error_text or "tags_normalized" not in error_text:
+                    raise
+                logger.info("Migration: note_nodes.tags_normalized already exists")
+            else:
+                logger.info("Migration: added note_nodes.tags_normalized")
+
 
 @app.on_event("startup")
 def startup_event():
@@ -87,16 +234,11 @@ def startup_event():
     except Exception:
         logger.exception("Column migration failed")
         raise
-    # Migrate old notes/folders tables to note_nodes
-    migrate_db = SessionLocal()
     try:
-        NoteService.migrate_old_data(migrate_db)
+        _migrate_note_data()
     except Exception:
         logger.exception("Note data migration failed")
-        migrate_db.rollback()
         raise
-    finally:
-        migrate_db.close()
     db = SessionLocal()
     try:
         from app.services.achievement import AchievementService

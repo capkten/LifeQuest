@@ -1,0 +1,250 @@
+/* Stitch visual layer: page-level baseline shared by every authenticated view. */
+
+:where(
+  .todos-page,
+  .projects-page,
+  .shop-page,
+  .profile-page,
+  .finance-page,
+  .backpack-page,
+  .history-page,
+  .calendar-page,
+  .stats-page,
+  .coin-history-page,
+  .notes-page,
+  .file-manager,
+  .note-editor-page,
+  .project-detail-page,
+  .edit-profile-page
+) {
+  color: var(--color-text);
+}
+
+:where(
+  .todos-page,
+  .projects-page,
+  .shop-page,
+  .profile-page,
+  .finance-page,
+  .backpack-page,
+  .history-page,
+  .calendar-page,
+  .stats-page,
+  .coin-history-page,
+  .notes-page,
+  .file-manager,
+  .note-editor-page,
+  .project-detail-page,
+  .edit-profile-page
+) .page-header {
+  min-height: 48px;
+  align-items: center;
+  margin-bottom: var(--spacing-lg) !important;
+}
+
+:where(
+  .todos-page,
+  .projects-page,
+  .shop-page,
+  .profile-page,
+  .finance-page,
+  .backpack-page,
+  .history-page,
+  .calendar-page,
+  .stats-page,
+  .coin-history-page,
+  .notes-page,
+  .file-manager,
+  .note-editor-page,
+  .project-detail-page,
+  .edit-profile-page
+) .page-title {
+  color: var(--color-text) !important;
+  font-family: var(--font-family-display) !important;
+  font-size: clamp(1.25rem, 1.1rem + 0.25vw, 1.6rem) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.03em;
+}
+
+:where(.todos-page, .projects-page, .shop-page, .finance-page) .item-count {
+  color: var(--color-text-secondary) !important;
+  font-size: var(--font-size-sm) !important;
+}
+
+:where(.todos-page, .projects-page, .shop-page, .finance-page) .btn-create,
+:where(.todos-page, .projects-page, .shop-page, .finance-page) .btn-primary,
+:where(.finance-page) .accounts-empty-action {
+  min-height: var(--touch-target-min) !important;
+  border-radius: 10px !important;
+  background: var(--color-primary) !important;
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.18);
+  transition: background var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base);
+}
+
+:where(.todos-page, .projects-page, .shop-page, .finance-page) .btn-create:hover,
+:where(.todos-page, .projects-page, .shop-page, .finance-page) .btn-primary:hover,
+:where(.finance-page) .accounts-empty-action:hover {
+  background: var(--color-primary-dark) !important;
+  box-shadow: 0 8px 20px rgba(14, 165, 233, 0.22);
+  transform: translateY(-1px);
+}
+
+:where(.todos-page, .projects-page) .tabs,
+:where(.projects-page) .filter-tabs,
+:where(.shop-page) .shop-categories {
+  border-color: var(--color-border) !important;
+  background: rgba(255, 255, 255, 0.78) !important;
+}
+
+:where(.todos-page, .projects-page) .tab-btn,
+:where(.shop-page) .shop-category {
+  transition: color var(--transition-base), background var(--transition-base), border-color var(--transition-base) !important;
+}
+
+:where(.todos-page, .projects-page) .tab-btn--active,
+:where(.shop-page) .shop-category--active {
+  color: var(--color-primary-dark) !important;
+  background: var(--color-bg-tertiary) !important;
+  border-color: var(--color-primary) !important;
+}
+
+:where(
+  .todos-page,
+  .projects-page,
+  .shop-page,
+  .finance-page,
+  .profile-page,
+  .backpack-page,
+  .history-page,
+  .notes-page,
+  .file-manager,
+  .calendar-page,
+  .stats-page,
+  .project-detail-page
+) :where(.todo-card, .project-card, .item-card, .account-card, .summary-card, .stats-section, .achievement-card, .history-card, .notebook-card, .calendar-body, .chart-section, .transactions-card, .budgets-card, .overview-card) {
+  border-color: var(--color-border) !important;
+  border-radius: var(--surface-radius) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+:where(.todos-page, .projects-page, .shop-page, .finance-page, .notes-page) :where(.todo-card, .project-card, .item-card, .account-card, .notebook-card, .history-card) {
+  transition: border-color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base) !important;
+}
+
+:where(.todos-page, .projects-page, .shop-page, .finance-page, .notes-page) :where(.todo-card, .project-card, .item-card, .account-card, .notebook-card, .history-card):hover {
+  border-color: var(--color-border-strong) !important;
+  box-shadow: var(--shadow-md) !important;
+  transform: translateY(-2px);
+}
+
+:where(.todos-page, .projects-page, .shop-page, .finance-page, .notes-page) :where(.empty-state, .loading-state, .error-state) {
+  min-height: 260px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--surface-radius);
+  background: var(--color-surface-low);
+}
+
+:where(.todos-page, .projects-page, .shop-page, .finance-page, .notes-page) :where(.empty-title, .section-title, .summary-title, .dialog-title) {
+  font-family: var(--font-family-display) !important;
+  letter-spacing: -0.02em;
+}
+
+:where(.todos-page, .projects-page, .shop-page, .finance-page, .notes-page, .file-manager) :where(.form-input, .form-textarea, .form-select, select, input, textarea) {
+  border-color: var(--color-border) !important;
+  border-radius: 10px !important;
+  background: var(--color-card) !important;
+}
+
+:where(.todos-page, .projects-page, .shop-page, .finance-page, .notes-page, .file-manager) :where(.form-input, .form-textarea, .form-select, select, input, textarea):focus {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.14) !important;
+  outline: none;
+}
+
+.profile-page .profile-hero,
+.shop-page .shop-hero,
+.finance-page .summary-card,
+.notes-page .notebook-card,
+.stats-page .overview-card {
+  border-radius: var(--surface-radius) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.profile-page .profile-meta-item,
+.shop-page .item-tag,
+.finance-page .budget-item-remaining,
+.finance-page .transaction-meta {
+  border-radius: var(--radius-full) !important;
+}
+
+:where(.calendar-page, .stats-page, .coin-history-page) {
+  color: var(--color-text);
+}
+
+:where(.calendar-page, .stats-page, .coin-history-page) :where(.nav-btn, .today-btn, .detail-close, .period-tab, .filter-btn, .retry-btn) {
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+  cursor: pointer;
+}
+
+:where(.calendar-page, .stats-page, .coin-history-page) :where(.calendar-header, .chart-section, .summary-card, .filter-bar, .calendar-body) {
+  border-color: var(--color-border) !important;
+  border-radius: var(--surface-radius) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+:where(.stats-page, .coin-history-page) :where(.page-title, .chart-title, .summary-value, .empty-title) {
+  font-family: var(--font-family-display) !important;
+  letter-spacing: -0.02em;
+}
+
+:where(.stats-page, .coin-history-page) :where(.period-tab--active, .filter-btn--active) {
+  color: var(--color-primary-dark) !important;
+  background: var(--color-bg-tertiary) !important;
+  border-color: var(--color-primary) !important;
+}
+
+@media (max-width: 767px) {
+  :where(.calendar-page, .stats-page, .coin-history-page) {
+    padding-bottom: calc(var(--bottom-nav-height) + var(--safe-area-bottom));
+  }
+
+  :where(.stats-page, .coin-history-page) :where(.summary-grid, .overview-grid) {
+    gap: var(--spacing-sm) !important;
+  }
+
+  :where(.calendar-page, .stats-page, .coin-history-page) :where(.filter-bar, .calendar-header, .chart-header) {
+    gap: var(--spacing-sm);
+  }
+}
+
+@media (max-width: 767px) {
+  :where(
+    .todos-page,
+    .projects-page,
+    .shop-page,
+    .profile-page,
+    .finance-page,
+    .backpack-page,
+    .history-page,
+    .calendar-page,
+    .stats-page,
+    .coin-history-page,
+    .notes-page,
+    .file-manager,
+    .note-editor-page,
+    .project-detail-page,
+    .edit-profile-page
+  ) .page-header {
+    align-items: flex-start;
+    margin-bottom: var(--spacing-md) !important;
+  }
+
+  :where(.todos-page, .projects-page, .shop-page, .finance-page) .btn-create {
+    min-height: 44px !important;
+  }
+
+  :where(.todos-page, .projects-page, .shop-page, .finance-page) :where(.todo-card, .project-card, .item-card, .account-card, .summary-card, .stats-section, .transactions-card, .budgets-card) {
+    border-radius: var(--surface-radius-sm) !important;
+  }
+}

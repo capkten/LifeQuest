@@ -31,8 +31,23 @@ const routes = [
       },
       {
         path: 'notes/:notebookId',
-        name: 'NotebookFileManage',
+        name: 'NotebookWorkspace',
         component: () => import('../views/NotebookFileManage.vue')
+      },
+      {
+        path: 'notes/:notebookId/view/:noteId',
+        name: 'NotebookWorkspaceView',
+        component: () => import('../views/NotebookFileManage.vue')
+      },
+      {
+        path: 'notes/:notebookId/edit/:noteId',
+        name: 'NotebookWorkspaceEdit',
+        component: () => import('../views/NoteEditor.vue')
+      },
+      {
+        path: 'notes/:notebookId/new',
+        name: 'NewNoteInWorkspace',
+        component: () => import('../views/NoteEditor.vue')
       },
       {
         path: 'notes/new/:notebookId',

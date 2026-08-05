@@ -41,20 +41,22 @@
         class="login-form"
         @submit.prevent="handleLogin"
       >
-        <el-form-item prop="username">
+        <el-form-item prop="username" label="用户名">
           <el-input
             v-model="form.username"
             placeholder="用户名"
+            aria-label="用户名"
             size="large"
             prefix-icon="User"
           />
         </el-form-item>
 
-        <el-form-item prop="password">
+        <el-form-item prop="password" label="密码">
           <el-input
             v-model="form.password"
             type="password"
             placeholder="密码"
+            aria-label="密码"
             size="large"
             prefix-icon="Lock"
             show-password
@@ -144,7 +146,7 @@ async function handleLogin() {
     radial-gradient(circle at 18% 20%, rgba(14, 165, 233, 0.2), transparent 30%),
     radial-gradient(circle at 82% 78%, rgba(16, 185, 129, 0.12), transparent 28%),
     var(--color-bg);
-  padding: var(--spacing-xl);
+  padding: max(var(--spacing-xl), var(--safe-area-top)) var(--spacing-xl) max(var(--spacing-xl), var(--safe-area-bottom));
 }
 
 .login-brand {
@@ -293,7 +295,7 @@ async function handleLogin() {
 
 .login-card {
   background: var(--color-card);
-  border-radius: 20px;
+  border-radius: var(--surface-radius);
   padding: var(--spacing-2xl);
   width: 100%;
   max-width: 420px;
@@ -325,7 +327,8 @@ async function handleLogin() {
 
 .login-button {
   width: 100%;
-  height: 48px;
+  min-height: var(--touch-target-min);
+  height: auto;
   font-size: var(--font-size-lg);
   font-weight: 600;
   border-radius: 10px;
@@ -361,12 +364,14 @@ async function handleLogin() {
 
 @media (max-width: 767px) {
   .login-container {
-    padding: var(--spacing-md);
+    align-items: flex-start;
+    padding: calc(var(--spacing-md) + var(--safe-area-top)) var(--spacing-md) calc(var(--spacing-md) + var(--safe-area-bottom));
   }
 
   .login-card {
+    margin-top: 8vh;
     padding: var(--spacing-xl);
-    border-radius: 18px;
+    border-radius: var(--surface-radius-sm);
   }
 }
 </style>

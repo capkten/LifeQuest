@@ -41,6 +41,17 @@
       </button>
     </div>
 
+    <section class="todo-progress-card" aria-label="当前列表进度">
+      <div class="todo-progress-copy">
+        <span class="todo-progress-kicker">DAILY PROGRESS</span>
+        <strong>{{ activeTabProgress }}%</strong>
+      </div>
+      <div class="todo-progress-track" aria-hidden="true">
+        <span :style="{ width: activeTabProgress + '%' }"></span>
+      </div>
+      <span class="todo-progress-count">{{ activeTabCompleted }} / {{ currentList.length }} 已完成</span>
+    </section>
+
     <!-- Project filter (only for tasks tab) -->
     <div v-if="activeTab === 'tasks' && projects.length > 0" class="project-filter">
       <label class="project-filter-label" for="project-filter-select">按项目筛选</label>
@@ -48,6 +59,20 @@
         <option value="">全部项目</option>
         <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
       </select>
+    </div>
+
+    <div class="mobile-add-cta">
+      <div class="mobile-add-copy">
+        <span class="mobile-add-kicker">QUICK ADD</span>
+        <strong>新建{{ activeTabSingular }}</strong>
+      </div>
+      <button class="btn-create btn-create--compact" @click="showCreateDialog = true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+        添加
+      </button>
     </div>
 
     <div v-if="loading" class="loading-state">
@@ -184,7 +209,10 @@
                 <span v-if="task.project_name" class="task-project-tag" :style="{ borderColor: task.project_color || '#0EA5E9' }">
                   {{ task.project_name }}
                 </span>
-                <div class="todo-card-meta todo-card-meta--inline">
+                <div class="todo-card-meta todo-card-meta--inline todo-card-meta--task">
+                  <span class="priority-badge" :class="'priority-badge--' + task.priority">
+                    {{ formatPriority(task.priority) }}
+                  </span>
                   <span class="difficulty-badge" :class="'difficulty-badge--' + task.difficulty">
                     {{ task.difficulty === 'easy' ? '简单' : task.difficulty === 'medium' ? '中等' : '困难' }}
                   </span>
@@ -694,6 +722,25 @@ const currentList = computed(() => {
   return goals.value
 })
 
+const activeTabCompleted = computed(() => {
+  if (activeTab.value === 'habits') {
+    return habits.value.filter(item => item.completed_today).length
+  }
+  if (activeTab.value === 'tasks') {
+    return tasks.value.filter(item => item.status === 'completed').length
+  }
+  return goals.value.filter(item => Number(item.progress || 0) >= 100).length
+})
+
+const activeTabProgress = computed(() => {
+  if (activeTab.value === 'goals') {
+    if (goals.value.length === 0) return 0
+    return Math.round(goals.value.reduce((sum, goal) => sum + Number(goal.progress || 0), 0) / goals.value.length)
+  }
+  if (currentList.value.length === 0) return 0
+  return Math.round((activeTabCompleted.value / currentList.value.length) * 100)
+})
+
 function getCount(tab) {
   if (tab === 'habits') return habits.value.length
   if (tab === 'tasks') return tasks.value.length
@@ -708,6 +755,16 @@ function formatStatus(status) {
     'cancelled': '已取消'
   }
   return statusMap[status] || status.replace(/_/g, ' ')
+}
+
+function formatPriority(priority) {
+  const priorityMap = {
+    low: '低优先级',
+    medium: '中优先级',
+    high: '高优先级',
+    urgent: '紧急'
+  }
+  return priorityMap[priority] || '中优先级'
 }
 
 function formatDate(dateStr) {
@@ -1121,6 +1178,7 @@ onMounted(() => {
 .todos-page {
   padding: var(--page-padding-y) var(--page-padding-x);
   width: 100%;
+  overflow-x: clip;
 }
 
 .page-header {
@@ -1195,6 +1253,97 @@ onMounted(() => {
   background: rgba(255, 255, 255, 0.72);
   border: 1px solid var(--color-border);
   border-radius: 16px;
+  min-width: 0;
+}
+
+.todo-progress-card {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--surface-radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.todo-progress-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.todo-progress-kicker {
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1;
+}
+
+.todo-progress-copy strong {
+  color: var(--color-text);
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-xl);
+}
+
+.todo-progress-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-tertiary);
+}
+
+.todo-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+  transition: width 300ms ease;
+}
+
+.todo-progress-count {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.mobile-add-cta {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(29, 78, 216, 0.08));
+  border: 1px solid rgba(14, 165, 233, 0.16);
+  border-radius: var(--surface-radius);
+}
+
+.mobile-add-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mobile-add-kicker {
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1;
+}
+
+.mobile-add-copy strong {
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+}
+
+.btn-create--compact {
+  padding-inline: var(--spacing-md);
   min-width: 0;
 }
 
@@ -1520,6 +1669,37 @@ onMounted(() => {
   text-transform: capitalize;
   white-space: nowrap;
   line-height: 20px;
+}
+
+.priority-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-weight: 600;
+  white-space: nowrap;
+  line-height: 20px;
+  background: rgba(14, 165, 233, 0.12);
+  color: var(--color-primary);
+}
+
+.priority-badge--low {
+  background: rgba(156, 163, 175, 0.15);
+  color: var(--color-text-tertiary);
+}
+
+.priority-badge--medium {
+  background: rgba(14, 165, 233, 0.12);
+  color: var(--color-primary);
+}
+
+.priority-badge--high {
+  background: rgba(255, 146, 43, 0.14);
+  color: #c15d00;
+}
+
+.priority-badge--urgent {
+  background: rgba(255, 107, 107, 0.14);
+  color: var(--color-error);
 }
 
 .difficulty-badge--easy {
@@ -2293,6 +2473,10 @@ onMounted(() => {
     justify-content: center;
   }
 
+  .mobile-add-cta {
+    display: flex;
+  }
+
   .tab-btn {
     padding: 10px 8px;
     font-size: 11px;
@@ -2349,6 +2533,10 @@ onMounted(() => {
     gap: 4px;
   }
 
+  .todo-card-meta--task {
+    align-items: flex-start;
+  }
+
   .action-buttons {
     flex-wrap: nowrap;
   }
@@ -2365,6 +2553,21 @@ onMounted(() => {
 
   .project-filter-select {
     max-width: 100%;
+  }
+
+  .todo-progress-card {
+    grid-template-columns: 1fr auto;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md);
+  }
+
+  .todo-progress-track {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .todo-progress-count {
+    align-self: end;
   }
 
   .subtask-item {

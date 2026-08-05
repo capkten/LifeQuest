@@ -104,7 +104,7 @@
     <!-- Create/Edit Budget Modal -->
     <Teleport to="body">
       <div v-if="showDialog" class="dialog-overlay" @click.self="cancelDialog">
-        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="budget-dialog-title" @keydown.escape="cancelDialog">
+        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="budget-dialog-title" tabindex="-1" @keydown.escape="cancelDialog">
           <div class="dialog-header">
             <h3 id="budget-dialog-title" class="dialog-title">{{ editingBudget ? '编辑预算' : '新建预算' }}</h3>
             <button class="dialog-close" @click="cancelDialog" aria-label="Close">
@@ -148,7 +148,7 @@
     <!-- Delete Confirmation -->
     <Teleport to="body">
       <div v-if="showDeleteDialog" class="dialog-overlay" @click.self="cancelDelete">
-        <div class="dialog dialog--confirm" role="dialog" aria-modal="true" aria-labelledby="del-budget-title" @keydown.escape="cancelDelete">
+        <div class="dialog dialog--confirm" role="dialog" aria-modal="true" aria-labelledby="del-budget-title" tabindex="-1" @keydown.escape="cancelDelete">
           <div class="dialog-header">
             <h3 id="del-budget-title" class="dialog-title">确认删除</h3>
             <button class="dialog-close" @click="cancelDelete" aria-label="Close">
@@ -475,7 +475,7 @@ onMounted(() => { fetchBudgets() })
 .budget-percent { font-size: var(--font-size-xs); color: var(--color-text-tertiary); margin-left: var(--spacing-xs); }
 
 .btn-icon {
-  width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+  width: var(--touch-target-min); height: var(--touch-target-min); display: flex; align-items: center; justify-content: center;
   background: transparent; border: 1px solid var(--color-border);
   border-radius: var(--radius-md); cursor: pointer;
   color: var(--color-text-tertiary); transition: all 0.15s ease;
@@ -503,7 +503,7 @@ onMounted(() => { fetchBudgets() })
 }
 .dialog-title { font-size: var(--font-size-lg); font-weight: 600; color: var(--color-text); }
 .dialog-close {
-  width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+  width: var(--touch-target-min); height: var(--touch-target-min); display: flex; align-items: center; justify-content: center;
   background: transparent; border: none; border-radius: var(--radius-md);
   cursor: pointer; color: var(--color-text-tertiary); transition: background 0.15s ease;
 }
@@ -603,5 +603,228 @@ select.form-input { appearance: auto; }
   .overview-grid { grid-template-columns: 1fr; }
   .dialog { max-width: 100%; margin: var(--spacing-sm); }
   .dialog-body { padding: var(--spacing-md); }
+}
+
+.finance-page {
+  display: grid;
+  gap: var(--page-gap);
+  padding-bottom: calc(var(--spacing-xl) + var(--bottom-nav-height));
+  overflow-x: clip;
+}
+
+.page-header { margin-bottom: 0; gap: var(--spacing-md); }
+
+.btn-back,
+.btn-create,
+.btn-primary,
+.btn-secondary,
+.btn-danger,
+.retry-btn,
+.btn-icon {
+  min-height: 44px;
+}
+
+.btn-create,
+.btn-primary {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  box-shadow: var(--shadow-sm);
+}
+
+.overview-card {
+  padding: clamp(1rem, 0.8rem + 0.8vw, 1.6rem);
+  margin-bottom: 0;
+  border-radius: var(--surface-radius);
+  box-shadow: var(--shadow-md);
+  background:
+    linear-gradient(135deg, rgba(14, 165, 233, 0.12), rgba(29, 78, 216, 0.06)),
+    var(--color-card);
+}
+
+.overview-title {
+  font-size: var(--font-size-xl);
+}
+
+.overview-grid {
+  gap: var(--spacing-lg);
+}
+
+.overview-item {
+  padding: 0.9rem 1rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(168, 215, 232, 0.4);
+}
+
+.overview-value {
+  font-size: clamp(1.35rem, 1.15rem + 0.6vw, 1.8rem);
+}
+
+.budgets-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--page-gap);
+}
+
+.budget-row {
+  display: grid;
+  gap: var(--spacing-sm);
+  padding: clamp(1rem, 0.9rem + 0.25vw, 1.3rem);
+  border-radius: var(--surface-radius-sm);
+  box-shadow: var(--shadow-sm);
+}
+
+.budget-row-header {
+  gap: var(--spacing-sm);
+}
+
+.budget-row-amounts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-sm);
+}
+
+.budget-row-amounts span,
+.budget-row-remaining {
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  background: var(--color-bg-tertiary);
+}
+
+.empty-state,
+.error-state {
+  min-height: 280px;
+  padding: var(--spacing-xl);
+  border-radius: var(--surface-radius);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px dashed var(--color-border);
+}
+
+.success-toast,
+.error-toast {
+  max-width: calc(100vw - 32px);
+}
+
+@media (max-width: 767px) {
+  .finance-page {
+    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height));
+  }
+
+  .btn-create {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .budgets-list {
+    grid-template-columns: 1fr;
+  }
+
+  .budget-row-header,
+  .budget-row-amounts {
+    grid-template-columns: 1fr;
+  }
+
+  .budget-row-header {
+    display: grid;
+  }
+
+  .budget-row-actions {
+    justify-content: flex-end;
+  }
+
+  .success-toast,
+  .error-toast {
+    left: var(--spacing-md);
+    right: var(--spacing-md);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Stitch refinement: budget cards preserve amount hierarchy at every width. */
+.finance-page,
+.budgets-list,
+.budget-row,
+.budget-row-info,
+.budget-row-actions {
+  min-width: 0;
+}
+
+.budget-row-name,
+.budget-row-period,
+.budget-row-amounts,
+.budget-row-remaining {
+  overflow-wrap: anywhere;
+}
+
+.btn-back:focus-visible,
+.btn-create:focus-visible,
+.btn-icon:focus-visible,
+.retry-btn:focus-visible,
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.btn-danger:focus-visible,
+.dialog-close:focus-visible,
+.category-chip:focus-visible,
+.form-input:focus-visible {
+  outline: 3px solid rgba(14, 165, 233, 0.35);
+  outline-offset: 2px;
+}
+
+.dialog-overlay {
+  z-index: 1200;
+  padding: max(var(--spacing-md), env(safe-area-inset-top)) var(--spacing-md) max(var(--spacing-md), env(safe-area-inset-bottom));
+}
+
+.dialog {
+  max-height: min(720px, calc(100dvh - 2 * var(--spacing-md)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 767px) {
+  .finance-page {
+    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height) + env(safe-area-inset-bottom));
+  }
+
+  .budget-row {
+    padding: 14px;
+  }
+
+  .budget-row-header {
+    align-items: flex-start;
+  }
+
+  .budget-row-amounts {
+    grid-template-columns: 1fr;
+  }
+
+  .budget-row-actions {
+    gap: 8px;
+  }
+
+  .budget-row-actions > * {
+    min-width: 44px;
+  }
+
+  .dialog-overlay {
+    align-items: flex-end;
+    padding: 8px 8px max(8px, env(safe-area-inset-bottom));
+  }
+
+  .dialog {
+    width: 100%;
+    max-height: calc(100dvh - 16px);
+    margin: 0;
+    border-radius: var(--surface-radius) var(--surface-radius) 18px 18px;
+  }
 }
 </style>

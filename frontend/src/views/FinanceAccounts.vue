@@ -110,7 +110,7 @@
     <!-- Create/Edit Account Modal -->
     <Teleport to="body">
       <div v-if="showDialog" class="dialog-overlay" @click.self="cancelDialog">
-        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="account-dialog-title" @keydown.escape="cancelDialog">
+        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="account-dialog-title" tabindex="-1" @keydown.escape="cancelDialog">
           <div class="dialog-header">
             <h3 id="account-dialog-title" class="dialog-title">{{ dialogMode === 'edit' ? '编辑账户' : '新建账户' }}</h3>
             <button class="dialog-close" @click="cancelDialog" aria-label="Close">
@@ -171,7 +171,7 @@
     <!-- Transfer Modal -->
     <Teleport to="body">
       <div v-if="showTransferDialog" class="dialog-overlay" @click.self="cancelTransfer">
-        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="transfer-dialog-title" @keydown.escape="cancelTransfer">
+        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="transfer-dialog-title" tabindex="-1" @keydown.escape="cancelTransfer">
           <div class="dialog-header">
             <h3 id="transfer-dialog-title" class="dialog-title">转账</h3>
             <button class="dialog-close" @click="cancelTransfer" aria-label="Close">
@@ -220,7 +220,7 @@
     <!-- Delete Confirmation -->
     <Teleport to="body">
       <div v-if="showDeleteDialog" class="dialog-overlay" @click.self="cancelDelete">
-        <div class="dialog dialog--confirm" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title" @keydown.escape="cancelDelete">
+        <div class="dialog dialog--confirm" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title" tabindex="-1" @keydown.escape="cancelDelete">
           <div class="dialog-header">
             <h3 id="delete-dialog-title" class="dialog-title">确认删除</h3>
             <button class="dialog-close" @click="cancelDelete" aria-label="Close">
@@ -578,7 +578,7 @@ onMounted(() => { fetchAccounts() })
 .account-row-actions { display: flex; gap: 4px; flex-shrink: 0; }
 
 .btn-icon {
-  width: 28px; height: 28px; display: flex;
+  width: var(--touch-target-min); height: var(--touch-target-min); display: flex;
   align-items: center; justify-content: center;
   background: transparent; border: 1px solid var(--color-border);
   border-radius: var(--radius-md); cursor: pointer;
@@ -607,7 +607,7 @@ onMounted(() => { fetchAccounts() })
 }
 .dialog-title { font-size: var(--font-size-lg); font-weight: 600; color: var(--color-text); }
 .dialog-close {
-  width: 32px; height: 32px; display: flex;
+  width: var(--touch-target-min); height: var(--touch-target-min); display: flex;
   align-items: center; justify-content: center;
   background: transparent; border: none;
   border-radius: var(--radius-md); cursor: pointer;
@@ -697,5 +697,256 @@ select.form-input { appearance: auto; }
   .form-row { grid-template-columns: 1fr; }
   .dialog { max-width: 100%; margin: var(--spacing-sm); }
   .dialog-body { padding: var(--spacing-md); }
+}
+
+.finance-page {
+  display: grid;
+  gap: var(--page-gap);
+  padding-bottom: calc(var(--spacing-xl) + var(--bottom-nav-height));
+  overflow-x: clip;
+}
+
+.page-header {
+  margin-bottom: 0;
+  gap: var(--spacing-md);
+}
+
+.header-left,
+.header-right,
+.accounts-list,
+.account-row-info {
+  min-width: 0;
+}
+
+.btn-back,
+.btn-secondary,
+.btn-create,
+.btn-icon,
+.retry-btn,
+.btn-primary,
+.btn-danger {
+  min-height: 44px;
+}
+
+.btn-back,
+.btn-icon {
+  border-radius: 14px;
+}
+
+.btn-create,
+.btn-primary {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-secondary {
+  background: var(--color-card);
+}
+
+.total-assets {
+  padding: clamp(1rem, 0.8rem + 0.6vw, 1.6rem);
+  border-radius: var(--surface-radius);
+  background:
+    linear-gradient(135deg, rgba(14, 165, 233, 0.92), rgba(29, 78, 216, 0.92)),
+    var(--color-card);
+  box-shadow: var(--shadow-md);
+  margin-bottom: 0;
+  flex-wrap: wrap;
+}
+
+.total-assets-label {
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.total-assets-value {
+  font-size: clamp(2rem, 1.6rem + 1vw, 2.8rem);
+  line-height: 1;
+}
+
+.accounts-list {
+  display: grid;
+  gap: var(--spacing-md);
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+}
+
+.account-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  padding: clamp(1rem, 0.9rem + 0.3vw, 1.25rem);
+  border: 1px solid var(--color-border);
+  border-radius: var(--surface-radius-sm);
+  background: var(--color-card);
+  box-shadow: var(--shadow-sm);
+  gap: var(--spacing-md);
+}
+
+.account-row:hover {
+  background: var(--color-card);
+  border-color: var(--color-border-strong);
+}
+
+.account-row-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+}
+
+.account-row-name {
+  font-size: var(--font-size-base);
+}
+
+.account-row-type {
+  font-size: var(--font-size-sm);
+}
+
+.account-row-balance {
+  font-size: var(--font-size-lg);
+  min-width: 120px;
+}
+
+.empty-state,
+.error-state {
+  min-height: 280px;
+  padding: var(--spacing-xl);
+  border-radius: var(--surface-radius);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px dashed var(--color-border);
+}
+
+.success-toast,
+.error-toast {
+  max-width: calc(100vw - 32px);
+}
+
+@media (max-width: 767px) {
+  .finance-page {
+    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height));
+  }
+
+  .header-right {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .btn-secondary,
+  .btn-create {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .account-row {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: flex-start;
+  }
+
+  .account-row-balance {
+    grid-column: 2;
+    min-width: 0;
+    text-align: left;
+  }
+
+  .account-row-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .success-toast,
+  .error-toast {
+    left: var(--spacing-md);
+    right: var(--spacing-md);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Stitch refinement: account rows remain scannable without table overflow. */
+.finance-page {
+  min-width: 0;
+}
+
+.account-row,
+.account-row-info,
+.account-row-actions {
+  min-width: 0;
+}
+
+.account-row-name,
+.account-row-type,
+.account-row-balance {
+  overflow-wrap: anywhere;
+}
+
+.btn-back:focus-visible,
+.btn-secondary:focus-visible,
+.btn-create:focus-visible,
+.btn-icon:focus-visible,
+.retry-btn:focus-visible,
+.btn-primary:focus-visible,
+.btn-danger:focus-visible,
+.dialog-close:focus-visible,
+.form-input:focus-visible {
+  outline: 3px solid rgba(14, 165, 233, 0.35);
+  outline-offset: 2px;
+}
+
+.dialog-overlay {
+  z-index: 1200;
+  padding: max(var(--spacing-md), env(safe-area-inset-top)) var(--spacing-md) max(var(--spacing-md), env(safe-area-inset-bottom));
+}
+
+.dialog {
+  max-height: min(720px, calc(100dvh - 2 * var(--spacing-md)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 767px) {
+  .finance-page {
+    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height) + env(safe-area-inset-bottom));
+  }
+
+  .account-row {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .account-row-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    gap: 8px;
+  }
+
+  .account-row-actions > * {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .dialog-overlay {
+    align-items: flex-end;
+    padding: 8px 8px max(8px, env(safe-area-inset-bottom));
+  }
+
+  .dialog {
+    width: 100%;
+    max-height: calc(100dvh - 16px);
+    margin: 0;
+    border-radius: var(--surface-radius) var(--surface-radius) 18px 18px;
+  }
 }
 </style>

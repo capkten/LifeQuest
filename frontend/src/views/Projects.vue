@@ -27,6 +27,19 @@
       </button>
     </div>
 
+    <section class="project-summary-card" aria-label="项目概览">
+      <div>
+        <span class="project-summary-kicker">PROJECT COMMAND CENTER</span>
+        <h3>把长期目标拆成可推进的阶段</h3>
+        <p class="project-summary-copy">把 Active Projects、进度和任务完成情况放在同一层级里看。</p>
+      </div>
+      <div class="project-summary-stats">
+        <span><strong>{{ activeProjectsCount }}</strong> 进行中</span>
+        <span><strong>{{ averageActiveProgress }}%</strong> 平均进度</span>
+        <span><strong>{{ activeTasksCount }}</strong> 活跃任务</span>
+      </div>
+    </section>
+
     <div v-if="loading" class="loading-state">
       <span class="loading-spinner"></span>
     </div>
@@ -58,7 +71,12 @@
         v-for="project in filteredProjects"
         :key="project.id"
         class="project-card"
+        role="button"
+        tabindex="0"
+        :aria-label="`打开项目：${project.name}`"
         @click="$router.push(`/projects/${project.id}`)"
+        @keydown.enter="$router.push(`/projects/${project.id}`)"
+        @keydown.space.prevent="$router.push(`/projects/${project.id}`)"
       >
         <div class="project-card-color" :style="{ background: project.color || 'var(--color-primary)' }"></div>
         <div class="project-card-body">
@@ -246,6 +264,25 @@ const filteredProjects = computed(() => {
   return projects.value.filter(p => p.status === activeFilter.value)
 })
 
+const activeProjectsCount = computed(() => projects.value.filter(project => project.status === 'active').length)
+
+const averageActiveProgress = computed(() => {
+  const active = projects.value.filter(project => project.status === 'active')
+  if (active.length === 0) return 0
+  return Math.round(active.reduce((sum, project) => sum + getProgress(project), 0) / active.length)
+})
+
+const activeTasksCount = computed(() => {
+  return projects.value
+    .filter(project => project.status === 'active')
+    .reduce((sum, project) => {
+      if (Array.isArray(project.tasks)) {
+        return sum + project.tasks.filter(task => task.status !== 'completed').length
+      }
+      return sum + Math.max(0, (project.total_tasks || 0) - (project.completed_tasks || 0))
+    }, 0)
+})
+
 function getCount(filter) {
   if (filter === 'all') return projects.value.length
   return projects.value.filter(p => p.status === filter).length
@@ -345,6 +382,7 @@ onMounted(() => {
 .projects-page {
   padding: var(--spacing-xl);
   width: 100%;
+  overflow-x: clip;
 }
 
 .page-header {
@@ -405,6 +443,66 @@ onMounted(() => {
   gap: var(--spacing-sm);
   margin-bottom: var(--spacing-xl);
   border-bottom: 1px solid var(--color-border);
+}
+
+.project-summary-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-lg);
+  background: linear-gradient(135deg, var(--color-hero-start), var(--color-primary));
+  border-radius: var(--surface-radius);
+  color: #fff;
+  box-shadow: var(--shadow-md);
+}
+
+.project-summary-kicker {
+  display: block;
+  margin-bottom: 6px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.project-summary-card h3 {
+  color: #fff;
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+}
+
+.project-summary-copy {
+  margin-top: 6px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.project-summary-stats {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.project-summary-stats span {
+  min-width: 92px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: var(--font-size-xs);
+  text-align: center;
+}
+
+.project-summary-stats strong {
+  display: block;
+  color: #fff;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-xl);
 }
 
 .tab-btn {
@@ -547,7 +645,7 @@ onMounted(() => {
 .project-card {
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--surface-radius);
   overflow: hidden;
   cursor: pointer;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
@@ -556,6 +654,7 @@ onMounted(() => {
 .project-card:hover {
   border-color: var(--color-primary);
   box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .project-card-color {
@@ -670,6 +769,7 @@ onMounted(() => {
   align-items: center;
   gap: var(--spacing-lg);
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .stat-item {
@@ -948,6 +1048,18 @@ onMounted(() => {
     padding-bottom: var(--spacing-xs);
     gap: 0;
     overflow: hidden;
+  }
+
+  .project-summary-card {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+  }
+
+  .project-summary-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .tab-btn {

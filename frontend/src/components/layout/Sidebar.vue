@@ -178,7 +178,7 @@ const isHomeActive = computed(() => route.path === '/')
 .sidebar {
   width: var(--sidebar-width);
   height: 100vh;
-  background: linear-gradient(180deg, #ffffff 0%, #f5fbfd 100%);
+  background: var(--color-card);
   border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
@@ -199,7 +199,7 @@ const isHomeActive = computed(() => route.path === '/')
 
 .sidebar-header {
   padding-bottom: var(--spacing-md);
-  margin-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -211,7 +211,7 @@ const isHomeActive = computed(() => route.path === '/')
 
 .logo {
   font-family: var(--font-family-display);
-  font-size: var(--font-size-2xl);
+  font-size: 1.75rem;
   font-weight: 700;
   color: var(--color-primary);
 }
@@ -231,7 +231,7 @@ const isHomeActive = computed(() => route.path === '/')
   align-items: center;
   gap: var(--spacing-sm);
   padding: var(--spacing-sm);
-  background: var(--color-bg-tertiary);
+  background: var(--color-surface-low);
   border-radius: var(--radius-lg);
   margin-bottom: var(--spacing-md);
 }
@@ -293,7 +293,7 @@ const isHomeActive = computed(() => route.path === '/')
   align-items: center;
   gap: var(--spacing-xs);
   padding: var(--spacing-sm);
-  background: var(--color-bg-tertiary);
+  background: var(--color-surface-low);
   border-radius: var(--radius-md);
 }
 
@@ -374,8 +374,9 @@ const isHomeActive = computed(() => route.path === '/')
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  min-height: var(--touch-target-min);
   padding: 9px var(--spacing-sm);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
   font-weight: 500;
@@ -396,13 +397,13 @@ const isHomeActive = computed(() => route.path === '/')
 }
 
 .nav-item--active {
-  background: #DDF5FB;
+  background: var(--color-bg-tertiary);
   color: var(--color-primary-dark);
   box-shadow: inset 3px 0 0 var(--color-primary);
 }
 
 .nav-item--active:hover {
-  background: #D4F0F8;
+  background: var(--color-surface-container);
   color: var(--color-primary-dark);
 }
 

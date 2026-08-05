@@ -1,8 +1,9 @@
 # backend/app/api/notes.py
 import shutil
 import uuid
+from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -21,6 +22,7 @@ from app.schemas.note import (
     NodeResponse,
     NoteDetailResponse,
     TreeResponse,
+    node_to_response,
 )
 from app.services.note import NoteService
 from app.api.auth import get_current_user
@@ -236,6 +238,57 @@ def search_notes(
     return service.search_notes(current_user.id, query)
 
 
+@router.get("/recent", response_model=List[NodeResponse])
+def get_recent_notes(
+    limit: int = Query(8, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = NoteService(db)
+    return [node_to_response(node) for node in service.get_recent_notes(current_user.id, limit)]
+
+
+@router.get("/discover", response_model=List[NodeResponse])
+def discover_notes(
+    sort: Literal["last_opened", "updated", "created", "title"] = Query("last_opened"),
+    notebook_id: Optional[UUID] = Query(None),
+    tag: Optional[str] = Query(None, min_length=1),
+    pinned: Optional[bool] = Query(None),
+    updated_after: Optional[datetime] = Query(None),
+    updated_before: Optional[datetime] = Query(None),
+    limit: int = Query(50, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = NoteService(db)
+    nodes = service.discover_notes(
+        user_id=current_user.id,
+        sort=sort,
+        notebook_id=notebook_id,
+        tag=tag,
+        pinned=pinned,
+        updated_after=updated_after,
+        updated_before=updated_before,
+        limit=limit,
+    )
+    return [node_to_response(node) for node in nodes]
+
+
+@router.post("/{note_id}/open", response_model=NodeResponse)
+def mark_note_opened(
+    note_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = NoteService(db)
+    try:
+        return service.mark_note_opened(note_id, current_user.id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Note not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+
 @router.get("/{note_id}", response_model=NoteDetailResponse)
 def get_note(
     note_id: UUID,
@@ -263,6 +316,7 @@ def get_note(
         word_count=node.word_count,
         created_at=node.created_at,
         updated_at=node.updated_at,
+        last_opened_at=node.last_opened_at,
         content=content,
     )
 

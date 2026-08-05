@@ -497,6 +497,17 @@ username=用户名&password=密码
 #### GET /api/notes/search?query=关键词
 按关键词搜索笔记。
 
+#### GET /api/notes/recent?limit=8
+获取当前用户最近打开的笔记。`limit` 范围为 1–50，结果按 `last_opened_at` 倒序返回，并包含路径、摘要、标签、字数、更新时间和置顶状态。
+
+#### POST /api/notes/{note_id}/open
+记录当前用户打开笔记的时间并返回更新后的节点。文件夹或其他用户的笔记分别返回 404/403。
+
+#### GET /api/notes/discover
+按条件发现当前用户的笔记。
+
+查询参数：`sort`（`last_opened`、`updated`、`created`、`title`）、`notebook_id`、`tag`、`pinned`、`updated_after`、`updated_before` 和 `limit`（1–50）。返回字段包括 `path`、`summary`、`tags`、`word_count`、`is_pinned`、`created_at`、`updated_at` 和 `last_opened_at`。
+
 #### POST /api/notes/upload-image
 上传笔记中使用的图片。
 

@@ -5,7 +5,7 @@ import re
 import shutil
 import logging
 from datetime import date, datetime, time, timezone
-from typing import List, Optional
+from typing import List, Optional, Sequence, Tuple
 from uuid import UUID, uuid4
 
 from sqlalchemy import inspect, text
@@ -26,6 +26,12 @@ from app.services.achievement import AchievementService
 BACKEND_DIR = pathlib.Path(__file__).resolve().parent.parent.parent
 NOTES_DIR = BACKEND_DIR / "notes_data"
 logger = logging.getLogger(__name__)
+
+
+def canonicalize_tags(tags: Optional[str]) -> Optional[str]:
+    if tags is None:
+        return None
+    return ",".join(token.strip() for token in tags.split(",") if token.strip())
 
 
 def sanitize_filename(name: str) -> str:
@@ -126,6 +132,7 @@ class NoteService:
             name=folder_in.name.strip(),
             normalized_name=norm,
             path=path,
+            tags_normalized=True,
         )
         self.db.add(node)
         self.db.commit()
@@ -152,7 +159,8 @@ class NoteService:
             path=path,
             content_path=content_path,
             summary=note_in.summary,
-            tags=note_in.tags,
+            tags=canonicalize_tags(note_in.tags),
+            tags_normalized=True,
             word_count=len(note_in.content.split()) if note_in.content else 0,
         )
         self.db.add(node)
@@ -310,7 +318,10 @@ class NoteService:
         if note_in.summary is not None:
             node.summary = note_in.summary
         if note_in.tags is not None:
-            node.tags = note_in.tags
+            node.tags = canonicalize_tags(note_in.tags)
+        else:
+            node.tags = canonicalize_tags(node.tags)
+        node.tags_normalized = True
         if note_in.is_pinned is not None:
             node.is_pinned = note_in.is_pinned
 
@@ -366,6 +377,62 @@ class NoteService:
     def search_notes(self, user_id: UUID, query: str) -> List[NoteNode]:
         return self.node_repo.search(user_id, query)
 
+    def mark_note_opened(self, note_id: UUID, user_id: UUID) -> NoteNode:
+        node = self.node_repo.get_by_id(note_id)
+        if not node or node.type != "note":
+            raise ValueError("Note not found")
+        if not self.verify_notebook_ownership(node.notebook_id, user_id):
+            raise PermissionError("Not authorized")
+
+        node.last_opened_at = datetime.now(timezone.utc)
+        self.db.commit()
+        self.db.refresh(node)
+        return node
+
+    def get_recent_notes(self, user_id: UUID, limit: int) -> List[NoteNode]:
+        return self.node_repo.get_recent_by_user(user_id, limit)
+
+    def discover_notes(
+        self,
+        user_id: UUID,
+        sort: str,
+        notebook_id: Optional[UUID] = None,
+        tag: Optional[str] = None,
+        pinned: Optional[bool] = None,
+        updated_after: Optional[datetime] = None,
+        updated_before: Optional[datetime] = None,
+        limit: int = 50,
+    ) -> List[NoteNode]:
+        return self.node_repo.discover(
+            user_id=user_id,
+            sort=sort,
+            notebook_id=notebook_id,
+            tag=tag,
+            pinned=pinned,
+            updated_after=updated_after,
+            updated_before=updated_before,
+            limit=limit,
+        )
+
+    @staticmethod
+    def canonicalize_existing_tags(db) -> None:
+        """Normalize each unmarked row once and mark it complete."""
+        rows = db.execute(text(
+            "SELECT id, tags FROM note_nodes WHERE tags_normalized IS NULL"
+        )).fetchall()
+        if not rows:
+            return
+
+        updates = [
+            {"id": row.id, "tags": canonicalize_tags(row.tags), "tags_normalized": True}
+            for row in rows
+        ]
+        db.execute(text(
+            "UPDATE note_nodes "
+            "SET tags = :tags, tags_normalized = :tags_normalized "
+            "WHERE id = :id AND tags_normalized IS NULL"
+        ), updates)
+
     # --- Migration from old tables ---
 
     @staticmethod
@@ -387,16 +454,26 @@ class NoteService:
         return None
 
     @staticmethod
-    def migrate_old_data(db: Session) -> None:
+    def restore_moved_files(moved_files: Sequence[Tuple[str, str]]) -> None:
+        """Restore legacy files moved by a migration that did not commit."""
+        for old_path, new_path in reversed(moved_files):
+            if os.path.exists(new_path):
+                os.makedirs(os.path.dirname(old_path), exist_ok=True)
+                shutil.move(new_path, old_path)
+
+    @staticmethod
+    def migrate_old_data(db: Session) -> List[Tuple[str, str]]:
         """Migrate data from old folders/notes tables to note_nodes.
 
         Called once at startup. If old tables don't exist or are empty, no-op.
+        The returned file moves remain the caller's responsibility until the
+        caller commits the surrounding transaction.
         """
         inspector = inspect(db.bind)
         existing_tables = inspector.get_table_names()
 
         if "folders" not in existing_tables or "notes" not in existing_tables:
-            return
+            return []
 
         # Check if there's data to migrate
         old_folders = db.execute(text("SELECT id, notebook_id, parent_id, name, path FROM folders")).fetchall()
@@ -405,12 +482,12 @@ class NoteService:
         )).fetchall()
 
         if not old_folders and not old_notes:
-            return
+            return []
 
         # Check if note_nodes already has data (don't re-migrate)
         existing_nodes = db.execute(text("SELECT COUNT(*) FROM note_nodes")).scalar()
         if existing_nodes > 0:
-            return
+            return []
 
         moved_files = []
 
@@ -433,6 +510,7 @@ class NoteService:
                     name=safe_name,
                     normalized_name=norm,
                     path=node_path,
+                    tags_normalized=True,
                 )
                 db.add(node)
                 db.flush()
@@ -476,7 +554,8 @@ class NoteService:
                     path=node_path,
                     content_path=new_content_path,
                     summary=summary,
-                    tags=tags,
+                    tags=canonicalize_tags(tags),
+                    tags_normalized=True,
                     is_pinned=bool(is_pinned),
                     word_count=word_count or 0,
                     created_at=NoteService._parse_legacy_datetime(created_at) or datetime.now(timezone.utc),
@@ -493,11 +572,8 @@ class NoteService:
             db.flush()
             db.execute(text("DROP TABLE IF EXISTS notes"))
             db.execute(text("DROP TABLE IF EXISTS folders"))
-            db.commit()
+            return moved_files
         except Exception:
-            for moved_old_path, moved_new_path in reversed(moved_files):
-                if os.path.exists(moved_new_path):
-                    os.makedirs(os.path.dirname(moved_old_path), exist_ok=True)
-                    shutil.move(moved_new_path, moved_old_path)
             db.rollback()
+            NoteService.restore_moved_files(moved_files)
             raise

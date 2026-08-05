@@ -23,8 +23,11 @@
             <circle cx="12" cy="12" r="10" />
             <path d="M12 6v12M6 12h12" />
           </svg>
-          <span class="balance-value">{{ user?.coins || 0 }}</span>
-          <span class="balance-label">金币</span>
+          <span class="balance-copy">
+            <span class="balance-label">当前钱包</span>
+            <span class="balance-value">{{ user?.coins || 0 }}</span>
+          </span>
+          <span class="balance-unit">金币</span>
         </div>
       </div>
       <div class="shop-actions">
@@ -125,10 +128,12 @@
 
     <div v-else class="items-grid">
       <div
-        v-for="item in filteredItems"
+        v-for="(item, index) in filteredItems"
         :key="item.id"
         class="item-card"
+        :class="{ 'item-card--featured': index === 0 }"
       >
+        <span v-if="index === 0" class="item-card-featured">本页推荐</span>
         <div class="item-card-top">
           <div class="item-card-icon">
             <component :is="resolveShopIcon(item.icon)" />
@@ -952,7 +957,7 @@ onMounted(() => {
 .item-card {
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius-sm);
+  border-radius: var(--surface-radius);
   display: flex;
   flex-direction: column;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
@@ -1863,5 +1868,97 @@ onMounted(() => {
 .shop-page .btn-purchase:hover:not(:disabled) {
   background: var(--color-accent-dark);
   border-color: var(--color-accent-dark);
+}
+
+.balance-copy {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  line-height: 1;
+}
+
+.balance-copy .balance-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.balance-unit {
+  align-self: flex-end;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.item-card--featured {
+  border-color: rgba(16, 185, 129, 0.38);
+  box-shadow: 0 10px 24px rgba(16, 185, 129, 0.08);
+}
+
+.item-card-featured {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1;
+  padding: 3px 7px;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: 999px;
+  background: var(--color-card);
+  color: var(--color-accent-dark);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.item-card-name,
+.item-card-desc {
+  overflow-wrap: anywhere;
+}
+
+.shop-category,
+.shop-search-clear,
+.btn-icon {
+  min-height: 44px;
+}
+
+.shop-search-clear {
+  width: 44px;
+  height: 44px;
+}
+
+.btn-icon {
+  width: 44px;
+  height: 44px;
+}
+
+@media (max-width: 767px) {
+  .balance-display {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .balance-unit {
+    margin-left: auto;
+  }
+
+  .shop-category {
+    min-height: 44px;
+  }
+
+  .item-card-featured {
+    top: 8px;
+    left: 8px;
+  }
+
+  .item-card--featured .item-card-top {
+    padding-top: 24px;
+  }
+
+  .btn-icon {
+    width: 44px;
+    height: 44px;
+  }
 }
 </style>

@@ -1,474 +1,1262 @@
-<!-- frontend/src/views/NotebookFileManage.vue -->
 <template>
-  <div class="file-manager">
-    <!-- Breadcrumb -->
-    <div class="fm-toolbar">
-      <div class="fm-breadcrumb">
-        <button class="breadcrumb-item" @click="navigateTo(null)">
-          {{ notebook?.name || '笔记本' }}
-        </button>
-        <template v-for="crumb in breadcrumbs" :key="crumb.id">
-          <span class="breadcrumb-sep">/</span>
-          <button class="breadcrumb-item" @click="navigateTo(crumb.id)">
-            {{ crumb.name }}
-          </button>
-        </template>
-      </div>
-      <div class="fm-actions">
-        <button class="action-btn" @click="showCreateFolder = true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-            <line x1="12" y1="11" x2="12" y2="17" />
-            <line x1="9" y1="14" x2="15" y2="14" />
+  <div class="workspace-shell">
+    <header class="workspace-header">
+      <div class="workspace-heading">
+        <button
+          type="button"
+          class="icon-button mobile-only"
+          aria-label="打开笔记目录"
+          @click="treeOpen = true"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h16" />
           </svg>
-          新建文件夹
         </button>
-        <button class="action-btn action-btn--primary" @click="showCreateNote = true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          新建笔记
-        </button>
+        <div>
+          <p class="workspace-kicker">笔记工作区</p>
+          <h1 class="workspace-title">{{ notebook?.name || '笔记本' }}</h1>
+          <p class="workspace-subtitle">{{ contextLabel }}</p>
+        </div>
       </div>
-    </div>
 
-    <!-- Main content area: tree sidebar + content list -->
-    <div class="fm-body">
-      <!-- Tree sidebar -->
-      <aside class="fm-tree" :class="{ 'fm-tree--open': treeOpen }">
-        <div class="tree-header">
-          <span class="tree-title">目录</span>
-          <button class="tree-close" @click="treeOpen = false" aria-label="关闭目录">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      <div class="workspace-actions">
+        <button type="button" class="button button--quiet" @click="openCreateFolder()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            <path d="M12 11v6M9 14h6" />
+          </svg>
+          <span>新建文件夹</span>
+        </button>
+        <button type="button" class="button button--primary" @click="openCreateNote()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <path d="M14 2v6h6M12 11v6M9 14h6" />
+          </svg>
+          <span>新建笔记</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="workspace-layout">
+      <div v-if="treeOpen" class="workspace-overlay" aria-hidden="true" @click="treeOpen = false"></div>
+
+      <aside class="directory-panel" :class="{ 'directory-panel--open': treeOpen }" aria-label="笔记目录">
+        <div class="directory-header">
+          <div>
+            <p class="panel-kicker">目录</p>
+            <h2 class="panel-title">{{ notebook?.name || '笔记本目录' }}</h2>
+          </div>
+          <button
+            type="button"
+            class="icon-button mobile-only"
+            aria-label="关闭笔记目录"
+            @click="treeOpen = false"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
           </button>
         </div>
-        <div v-if="treeLoading" class="tree-loading">
-          <span class="loading-spinner loading-spinner--sm"></span>
+
+        <div v-if="workspaceLoading" class="directory-state" aria-live="polite">
+          <span class="spinner" aria-hidden="true"></span>
+          <span>正在加载目录…</span>
         </div>
-        <ul v-else class="tree-list">
-          <li v-for="node in tree" :key="node.id">
-            <TreeItem :node="node" :current-id="currentFolderId" @navigate="navigateTo" />
-          </li>
-        </ul>
+        <div v-else-if="workspaceError" class="directory-state directory-state--error" role="alert">
+          <p>目录加载失败</p>
+          <button type="button" class="text-button" @click="loadWorkspace">重试</button>
+        </div>
+        <NoteTree
+          v-else
+          :nodes="tree"
+          :selected-id="selectedNoteId"
+          :current-folder-id="currentFolderId"
+          :expanded-ids="expandedIds"
+          label="笔记目录"
+          empty-label="还没有笔记内容"
+          @select="handleSelect"
+          @toggle="toggleFolder"
+          @create-folder="handleCreateFolderRequest"
+          @create-note="handleCreateNoteRequest"
+          @rename="openRename"
+          @move="openMove"
+          @delete="handleDelete"
+        />
       </aside>
 
-      <!-- Content list -->
-      <div class="fm-content">
-        <button class="tree-toggle" @click="treeOpen = !treeOpen" aria-label="切换目录">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
-        </button>
-
-        <div v-if="loading" class="loading-state">
-          <span class="loading-spinner"></span>
+      <main class="workspace-content">
+        <div class="content-toolbar">
+          <button type="button" class="toolbar-button mobile-only" @click="treeOpen = true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            <span>目录</span>
+          </button>
+          <nav class="breadcrumbs" aria-label="当前位置">
+            <button type="button" class="breadcrumb-button" :class="{ 'breadcrumb-button--active': !currentFolderId }" @click="goToRoot">
+              {{ notebook?.name || '笔记本' }}
+            </button>
+            <template v-for="crumb in breadcrumbs" :key="crumb.id">
+              <span class="breadcrumb-separator" aria-hidden="true">/</span>
+              <button
+                type="button"
+                class="breadcrumb-button"
+                :class="{ 'breadcrumb-button--active': String(crumb.id) === String(currentFolderId) }"
+                @click="goToFolder(crumb.id)"
+              >
+                {{ crumb.name }}
+              </button>
+            </template>
+          </nav>
         </div>
 
-        <div v-else-if="error" class="error-state">
-          <p>{{ error }}</p>
-          <button class="retry-btn" @click="fetchChildren">重试</button>
+        <div v-if="workspaceLoading" class="content-state" aria-live="polite">
+          <span class="spinner spinner--large" aria-hidden="true"></span>
+          <p>正在准备你的工作区…</p>
         </div>
-
-        <div v-else-if="children.length === 0" class="empty-state">
-          <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-          </svg>
-          <h3>暂无内容</h3>
-          <p>点击上方按钮创建文件夹或笔记</p>
+        <div v-else-if="workspaceError" class="content-state content-state--error" role="alert">
+          <div class="state-icon state-icon--error">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5M12 16h.01" />
+            </svg>
+          </div>
+          <h2>工作区暂时无法打开</h2>
+          <p>{{ errorMessage }}</p>
+          <button type="button" class="button button--primary" @click="loadWorkspace">重新加载</button>
         </div>
+        <template v-else>
+          <NoteViewer
+            v-if="selectedNode"
+            :note-id="selectedNode.id"
+            :note="viewerNote"
+            :loading="viewerLoading"
+            :error="viewerError"
+            @edit="editViewer"
+            @toggle-pin="toggleViewerPin"
+            @move="openMove"
+            @delete="handleDelete"
+            @retry="retryViewer"
+          />
+          <article v-else-if="false" class="selection-card">
+            <div class="selection-icon selection-icon--note">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <path d="M14 2v6h6M8 13h8M8 17h5" />
+              </svg>
+            </div>
+            <div class="selection-copy">
+              <p class="selection-eyebrow">{{ routeModeLabel }}</p>
+              <h2>{{ selectedNode.name }}</h2>
+              <p>目录已保持打开。阅读器和编辑器将在后续任务中接入这里。</p>
+              <div class="selection-links">
+                <router-link class="button button--primary" :to="{ name: 'NotebookWorkspaceView', params: { notebookId, noteId: selectedNode.id } }">
+                  打开阅读视图
+                </router-link>
+                <router-link class="button button--quiet" :to="{ name: 'NotebookWorkspaceEdit', params: { notebookId, noteId: selectedNode.id } }">
+                  打开编辑视图
+                </router-link>
+                <router-link class="context-link" :to="{ name: 'NoteEditor', params: { id: selectedNode.id } }">
+                  使用旧版编辑器
+                </router-link>
+              </div>
+            </div>
+          </article>
 
-        <div v-else class="node-list">
-          <div
-            v-for="node in children"
-            :key="node.id"
-            class="node-card"
-            tabindex="0"
-            role="button"
-            @click="openNode(node)"
-            @keydown.enter="openNode(node)"
-          >
-            <div class="node-icon" :class="{ 'node-icon--folder': node.type === 'folder' }">
-              <svg v-if="node.type === 'folder'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <article v-else-if="isNewNoteRoute" class="selection-card selection-card--new">
+            <div class="selection-icon selection-icon--accent">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <path d="M14 2v6h6M12 11v6M9 14h6" />
+              </svg>
+            </div>
+            <div class="selection-copy">
+              <p class="selection-eyebrow">新建笔记</p>
+              <h2>从当前目录开始</h2>
+              <p>新笔记编辑器将在 Task 5 接入。你可以先选择保存位置，然后继续创建。</p>
+              <button type="button" class="button button--primary" @click="openCreateNote()">新建笔记</button>
+            </div>
+          </article>
+
+          <article v-else class="selection-card selection-card--empty">
+            <div class="selection-icon selection-icon--folder">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
               </svg>
-              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-              </svg>
             </div>
-            <div class="node-info">
-              <h3 class="node-name">{{ node.name }}</h3>
-              <p class="node-meta" v-if="node.type === 'note' && node.updated_at">
-                {{ formatDate(node.updated_at) }}
-                <span v-if="node.word_count"> · {{ node.word_count }} 字</span>
-              </p>
-              <p class="node-meta" v-else-if="node.type === 'folder'">文件夹</p>
+            <div class="selection-copy">
+              <p class="selection-eyebrow">{{ currentFolderId ? '当前文件夹' : '工作区概览' }}</p>
+              <h2>{{ currentFolderName }}</h2>
+              <p>{{ currentFolderId ? '在这里快速创建内容，目录会保留你的展开状态。' : '从左侧目录选择笔记，或创建一个新的文件夹和笔记。' }}</p>
+              <div class="selection-links">
+                <button type="button" class="button button--primary" @click="openCreateNote()">新建笔记</button>
+                <button type="button" class="button button--quiet" @click="openCreateFolder()">新建文件夹</button>
+              </div>
             </div>
-            <div class="node-actions">
-              <button class="node-action-btn" @click.stop="startRename(node)" title="重命名">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              </button>
-              <button class="node-action-btn node-action-btn--danger" @click.stop="confirmDelete(node)" title="删除">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+          </article>
+        </template>
+      </main>
     </div>
 
-    <!-- Create Folder Dialog -->
     <Teleport to="body">
-      <div v-if="showCreateFolder" class="dialog-overlay" @click.self="showCreateFolder = false">
-        <div class="dialog" role="dialog" aria-modal="true">
+      <div v-if="dialogMode" class="dialog-overlay" @click.self="closeDialog">
+        <div class="dialog" role="dialog" aria-modal="true" :aria-labelledby="dialogTitleId" tabindex="-1" @keydown.esc="closeDialog">
           <div class="dialog-header">
-            <h3 class="dialog-title">新建文件夹</h3>
-            <button class="dialog-close" @click="showCreateFolder = false" aria-label="关闭">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            <div>
+              <p class="dialog-kicker">工作区操作</p>
+              <h2 :id="dialogTitleId" class="dialog-title">{{ dialogTitle }}</h2>
+            </div>
+            <button type="button" class="icon-button" aria-label="关闭对话框" @click="closeDialog">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path d="m6 6 12 12M18 6 6 18" />
+              </svg>
             </button>
           </div>
-          <form class="dialog-body" @submit.prevent="createFolder">
-            <div class="form-group">
-              <label class="form-label" for="folder-name-input">文件夹名称</label>
-              <input id="folder-name-input" ref="folderNameRef" v-model="folderForm.name" type="text" class="form-input" placeholder="我的文件夹" required maxlength="100" />
-            </div>
-            <div v-if="dialogError" class="dialog-error" role="alert">{{ dialogError }}</div>
+
+          <form v-if="dialogMode === 'folder'" class="dialog-body" @submit.prevent="submitCreateFolder">
+            <label class="form-label" for="workspace-folder-name">文件夹名称</label>
+            <input id="workspace-folder-name" ref="dialogInput" v-model="folderForm.name" class="form-input" type="text" maxlength="100" placeholder="例如：项目资料" required />
+            <p v-if="dialogError" class="form-error" role="alert">{{ dialogError }}</p>
             <div class="dialog-actions">
-              <button type="button" class="btn-secondary" @click="showCreateFolder = false">取消</button>
-              <button type="submit" class="btn-primary" :disabled="!folderForm.name.trim()">创建</button>
+              <button type="button" class="button button--quiet" @click="closeDialog">取消</button>
+              <button type="submit" class="button button--primary" :disabled="!folderForm.name.trim()">创建文件夹</button>
+            </div>
+          </form>
+
+          <form v-else-if="dialogMode === 'note'" class="dialog-body" @submit.prevent="submitCreateNote">
+            <label class="form-label" for="workspace-note-title">笔记标题</label>
+            <input id="workspace-note-title" ref="dialogInput" v-model="noteForm.title" class="form-input" type="text" maxlength="200" placeholder="例如：本周计划" required />
+            <p v-if="dialogError" class="form-error" role="alert">{{ dialogError }}</p>
+            <div class="dialog-actions">
+              <button type="button" class="button button--quiet" @click="closeDialog">取消</button>
+              <button type="submit" class="button button--primary" :disabled="!noteForm.title.trim()">创建笔记</button>
+            </div>
+          </form>
+
+          <form v-else-if="dialogMode === 'rename'" class="dialog-body" @submit.prevent="submitRename">
+            <label class="form-label" for="workspace-rename">新名称</label>
+            <input id="workspace-rename" ref="dialogInput" v-model="renameForm.name" class="form-input" type="text" maxlength="200" required />
+            <p v-if="dialogError" class="form-error" role="alert">{{ dialogError }}</p>
+            <div class="dialog-actions">
+              <button type="button" class="button button--quiet" @click="closeDialog">取消</button>
+              <button type="submit" class="button button--primary" :disabled="!renameForm.name.trim()">保存名称</button>
+            </div>
+          </form>
+
+          <form v-else class="dialog-body" @submit.prevent="submitMove">
+            <label class="form-label" for="workspace-move">移动到</label>
+            <select id="workspace-move" v-model="moveForm.parentId" class="form-input">
+              <option :value="null">笔记本根目录</option>
+              <option v-for="folder in folderOptions" :key="folder.id" :value="folder.id" :disabled="String(folder.id) === String(moveForm.nodeId)">
+                {{ folder.label }}
+              </option>
+            </select>
+            <p v-if="dialogError" class="form-error" role="alert">{{ dialogError }}</p>
+            <div class="dialog-actions">
+              <button type="button" class="button button--quiet" @click="closeDialog">取消</button>
+              <button type="submit" class="button button--primary">移动</button>
             </div>
           </form>
         </div>
       </div>
     </Teleport>
 
-    <!-- Create Note Dialog -->
-    <Teleport to="body">
-      <div v-if="showCreateNote" class="dialog-overlay" @click.self="showCreateNote = false">
-        <div class="dialog" role="dialog" aria-modal="true">
-          <div class="dialog-header">
-            <h3 class="dialog-title">新建笔记</h3>
-            <button class="dialog-close" @click="showCreateNote = false" aria-label="关闭">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          </div>
-          <form class="dialog-body" @submit.prevent="createNote">
-            <div class="form-group">
-              <label class="form-label" for="note-title-input">笔记标题</label>
-              <input id="note-title-input" ref="noteTitleRef" v-model="noteForm.title" type="text" class="form-input" placeholder="我的笔记" required maxlength="200" />
-            </div>
-            <div v-if="dialogError" class="dialog-error" role="alert">{{ dialogError }}</div>
-            <div class="dialog-actions">
-              <button type="button" class="btn-secondary" @click="showCreateNote = false">取消</button>
-              <button type="submit" class="btn-primary" :disabled="!noteForm.title.trim()">创建</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </Teleport>
-
-    <!-- Rename Dialog -->
-    <Teleport to="body">
-      <div v-if="showRename" class="dialog-overlay" @click.self="showRename = false">
-        <div class="dialog" role="dialog" aria-modal="true">
-          <div class="dialog-header">
-            <h3 class="dialog-title">重命名</h3>
-            <button class="dialog-close" @click="showRename = false" aria-label="关闭">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          </div>
-          <form class="dialog-body" @submit.prevent="doRename">
-            <div class="form-group">
-              <label class="form-label" for="rename-input">新名称</label>
-              <input id="rename-input" ref="renameRef" v-model="renameForm.name" type="text" class="form-input" required maxlength="200" />
-            </div>
-            <div v-if="dialogError" class="dialog-error" role="alert">{{ dialogError }}</div>
-            <div class="dialog-actions">
-              <button type="button" class="btn-secondary" @click="showRename = false">取消</button>
-              <button type="submit" class="btn-primary" :disabled="!renameForm.name.trim()">确认</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </Teleport>
-
-    <!-- Toast -->
     <Teleport to="body">
       <Transition name="toast">
-        <div v-if="toast.show" class="toast" :class="toast.type">{{ toast.message }}</div>
+        <div v-if="toast.show" class="workspace-toast" :class="`workspace-toast--${toast.type}`" role="status">{{ toast.message }}</div>
       </Transition>
     </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import NoteTree from '../components/notes/NoteTree.vue'
+import NoteViewer from '../components/notes/NoteViewer.vue'
+import { useNoteWorkspace } from '../composables/useNoteWorkspace'
 import { noteService } from '../services/note'
-import TreeItem from '../components/TreeItem.vue'
 
 const route = useRoute()
 const router = useRouter()
 const notebookId = computed(() => route.params.notebookId)
+const workspace = useNoteWorkspace(notebookId)
+
+const {
+  tree,
+  selectedNoteId,
+  currentFolderId,
+  expandedIds,
+  loading,
+  error: workspaceErrorCause,
+  loadTree,
+  selectNote,
+  toggleFolder,
+  createFolder,
+  createNote,
+  renameNode,
+  moveNode,
+  deleteNode,
+} = workspace
 
 const notebook = ref(null)
-const tree = ref([])
-const children = ref([])
-const currentFolderId = ref(null)
-const loading = ref(true)
-const treeLoading = ref(true)
-const error = ref(null)
+const notebookError = ref(null)
 const treeOpen = ref(false)
-
-// Dialogs
-const showCreateFolder = ref(false)
-const showCreateNote = ref(false)
-const showRename = ref(false)
+const dialogMode = ref(null)
 const dialogError = ref(null)
-const folderForm = ref({ name: '' })
-const noteForm = ref({ title: '' })
+const dialogInput = ref(null)
+const folderForm = ref({ name: '', parentId: null })
+const noteForm = ref({ title: '', parentId: null })
 const renameForm = ref({ name: '', nodeId: null })
-const folderNameRef = ref(null)
-const noteTitleRef = ref(null)
-const renameRef = ref(null)
-
-// Toast
+const moveForm = ref({ nodeId: null, parentId: null })
+const dialogTrigger = ref(null)
 const toast = ref({ show: false, message: '', type: 'success' })
+const viewerNote = ref(null)
+const viewerLoading = ref(false)
+const viewerError = ref(null)
+const openedViewerNotes = new Set()
 let toastTimer = null
+let loadRequest = 0
+
+const workspaceLoading = computed(() => loading.value || !notebook.value && !notebookError.value)
+const workspaceError = computed(() => notebookError.value || workspaceErrorCause.value)
+const errorMessage = computed(() => workspaceError.value?.response?.data?.detail || '请检查网络后重试。')
+const isNewNoteRoute = computed(() => route.name === 'NewNoteInWorkspace')
+const routeModeLabel = computed(() => route.name === 'NotebookWorkspaceEdit' ? '编辑上下文' : '已选择笔记')
+
+function findNode(nodes, nodeId) {
+  for (const node of nodes || []) {
+    if (String(node.id) === String(nodeId)) return node
+    const nested = findNode(node.children, nodeId)
+    if (nested) return nested
+  }
+  return null
+}
+
+function getBreadcrumbs(nodes, targetId, parents = []) {
+  for (const node of nodes || []) {
+    if (String(node.id) === String(targetId)) return [...parents, { id: node.id, name: node.name }]
+    const nested = getBreadcrumbs(node.children, targetId, [...parents, { id: node.id, name: node.name }])
+    if (nested) return nested
+  }
+  return []
+}
+
+function getFolderOptions(nodes, depth = 0, result = []) {
+  for (const node of nodes || []) {
+    if (node.type !== 'folder') continue
+    result.push({ id: node.id, label: `${'　'.repeat(depth)}${node.name}` })
+    getFolderOptions(node.children, depth + 1, result)
+  }
+  return result
+}
+
+const selectedNode = computed(() => selectedNoteId.value ? findNode(tree.value, selectedNoteId.value) : null)
+const breadcrumbs = computed(() => currentFolderId.value ? getBreadcrumbs(tree.value, currentFolderId.value) : [])
+const folderOptions = computed(() => getFolderOptions(tree.value))
+const currentFolderName = computed(() => {
+  if (!currentFolderId.value) return '选择一个笔记开始'
+  return findNode(tree.value, currentFolderId.value)?.name || '当前文件夹'
+})
+const contextLabel = computed(() => {
+  if (selectedNode.value) return `正在查看 · ${selectedNode.value.name}`
+  if (currentFolderId.value) return `当前位置 · ${currentFolderName.value}`
+  return '目录和内容会一直保持在身边'
+})
+const dialogTitle = computed(() => ({
+  folder: '新建文件夹',
+  note: '新建笔记',
+  rename: '重命名节点',
+  move: '移动节点',
+}[dialogMode.value] || '工作区操作'))
+const dialogTitleId = computed(() => `workspace-dialog-${dialogMode.value || 'default'}`)
 
 function showToast(message, type = 'success') {
   if (toastTimer) clearTimeout(toastTimer)
   toast.value = { show: true, message, type }
-  toastTimer = setTimeout(() => { toast.value.show = false }, 3000)
+  toastTimer = setTimeout(() => { toast.value.show = false }, 2800)
 }
 
-// Build breadcrumbs from tree data
-const breadcrumbs = computed(() => {
-  if (!currentFolderId.value) return []
-  const crumbs = []
-  const findPath = (nodes, targetId, path) => {
-    for (const n of nodes) {
-      if (n.id === targetId) return [...path, { id: n.id, name: n.name }]
-      if (n.children?.length) {
-        const found = findPath(n.children, targetId, [...path, { id: n.id, name: n.name }])
-        if (found) return found
-      }
-    }
-    return null
+async function loadWorkspace() {
+  const requestId = ++loadRequest
+  notebookError.value = null
+  notebook.value = null
+  try {
+    const [nextNotebook] = await Promise.all([
+      noteService.getNotebook(notebookId.value),
+      loadTree({ preserveExpansion: true }),
+    ])
+    if (requestId !== loadRequest) return
+    notebook.value = nextNotebook
+    syncRouteSelection()
+  } catch (cause) {
+    if (requestId === loadRequest) notebookError.value = cause
   }
-  return findPath(tree.value, currentFolderId.value, []) || []
-})
+}
 
-function formatDate(dateStr) {
-  return new Date(dateStr).toLocaleDateString('zh-CN', {
-    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+function syncRouteSelection() {
+  const routeNoteId = route.params.noteId
+  if (!routeNoteId) {
+    selectedNoteId.value = null
+    viewerNote.value = null
+    return
+  }
+  const node = selectNote(routeNoteId)
+  if (!node || node.type !== 'note') {
+    router.replace({ name: 'NotebookWorkspace', params: { notebookId: notebookId.value } })
+    return
+  }
+  loadViewer(routeNoteId)
+}
+
+async function loadViewer(noteId) {
+  viewerLoading.value = true
+  viewerError.value = null
+  try {
+    viewerNote.value = await noteService.getNote(noteId)
+    if (!openedViewerNotes.has(String(noteId))) {
+      openedViewerNotes.add(String(noteId))
+      await noteService.markNoteOpened(noteId)
+    }
+  } catch (cause) {
+    viewerNote.value = null
+    viewerError.value = cause
+  } finally {
+    viewerLoading.value = false
+  }
+}
+
+function retryViewer() { if (route.params.noteId) loadViewer(route.params.noteId) }
+function editViewer() {
+  if (selectedNode.value) router.push({ name: 'NotebookWorkspaceEdit', params: { notebookId: notebookId.value, noteId: selectedNode.value.id } })
+}
+
+async function toggleViewerPin() {
+  if (!viewerNote.value) return
+  try {
+    viewerNote.value = await noteService.updateNote(viewerNote.value.id, { is_pinned: !viewerNote.value.is_pinned })
+    showToast(viewerNote.value.is_pinned ? '已置顶' : '已取消置顶')
+  } catch (cause) {
+    showToast(cause.response?.data?.detail || '置顶失败', 'error')
+  }
+}
+
+function goToRoot() {
+  selectedNoteId.value = null
+  currentFolderId.value = null
+  router.replace({ name: 'NotebookWorkspace', params: { notebookId: notebookId.value } })
+}
+
+function goToFolder(folderId) {
+  selectedNoteId.value = null
+  currentFolderId.value = folderId
+  const folder = findNode(tree.value, folderId)
+  if (folder) selectNote(folder)
+  router.replace({ name: 'NotebookWorkspace', params: { notebookId: notebookId.value } })
+}
+
+function handleSelect(node) {
+  const selected = selectNote(node)
+  if (!selected) return
+  treeOpen.value = false
+  if (selected.type === 'folder') {
+    selectedNoteId.value = null
+    router.replace({ name: 'NotebookWorkspace', params: { notebookId: notebookId.value } })
+    return
+  }
+  router.push({ name: 'NotebookWorkspaceView', params: { notebookId: notebookId.value, noteId: selected.id } })
+}
+
+function handleCreateFolderRequest(payload = {}) {
+  openCreateFolder(payload.parentId ?? currentFolderId.value)
+}
+
+function handleCreateNoteRequest(payload = {}) {
+  openCreateNote(payload.parentId ?? currentFolderId.value)
+}
+
+function openCreateFolder(parentId = currentFolderId.value) {
+  dialogTrigger.value = document.activeElement
+  dialogMode.value = 'folder'
+  dialogError.value = null
+  folderForm.value = { name: '', parentId: parentId ?? null }
+  focusDialogInput()
+}
+
+function openCreateNote(parentId = currentFolderId.value) {
+  dialogTrigger.value = document.activeElement
+  dialogMode.value = 'note'
+  dialogError.value = null
+  noteForm.value = { title: '', parentId: parentId ?? null }
+  focusDialogInput()
+}
+
+function openRename(node) {
+  dialogTrigger.value = document.activeElement
+  dialogMode.value = 'rename'
+  dialogError.value = null
+  renameForm.value = { name: node.name, nodeId: node.id }
+  focusDialogInput(true)
+}
+
+function openMove(node) {
+  dialogTrigger.value = document.activeElement
+  dialogMode.value = 'move'
+  dialogError.value = null
+  moveForm.value = { nodeId: node.id, parentId: node.parent_id ?? node.parentId ?? null }
+}
+
+function closeDialog() {
+  dialogMode.value = null
+  dialogError.value = null
+  nextTick(() => dialogTrigger.value?.focus?.())
+  dialogTrigger.value = null
+}
+
+function focusDialogInput(select = false) {
+  nextTick(() => {
+    dialogInput.value?.focus()
+    if (select) dialogInput.value?.select()
   })
 }
 
-async function fetchTree() {
-  treeLoading.value = true
+async function submitCreateFolder() {
   try {
-    tree.value = await noteService.getTree(notebookId.value)
-  } catch (e) {
-    console.error('Failed to load tree:', e)
-  } finally {
-    treeLoading.value = false
+    await createFolder({ name: folderForm.value.name, parentId: folderForm.value.parentId })
+    closeDialog()
+    showToast('文件夹已创建')
+  } catch (cause) {
+    dialogError.value = cause.response?.data?.detail || cause.message || '创建失败，请重试。'
   }
 }
 
-async function fetchChildren() {
-  loading.value = true
-  error.value = null
+async function submitCreateNote() {
   try {
-    children.value = await noteService.getChildren(notebookId.value, currentFolderId.value)
-  } catch (e) {
-    error.value = '加载失败，请重试'
-  } finally {
-    loading.value = false
+    const node = await createNote({ title: noteForm.value.title, parentId: noteForm.value.parentId })
+    closeDialog()
+    treeOpen.value = false
+    showToast('笔记已创建')
+    if (node?.id != null) {
+      router.push({ name: 'NotebookWorkspaceView', params: { notebookId: notebookId.value, noteId: node.id } })
+    }
+  } catch (cause) {
+    dialogError.value = cause.response?.data?.detail || cause.message || '创建失败，请重试。'
   }
 }
 
-async function fetchAll() {
-  await Promise.all([fetchTree(), fetchChildren()])
-}
-
-function navigateTo(folderId) {
-  currentFolderId.value = folderId
-  fetchChildren()
-}
-
-function openNode(node) {
-  if (node.type === 'folder') {
-    navigateTo(node.id)
-  } else {
-    router.push({ name: 'NoteEditor', params: { id: node.id } })
-  }
-}
-
-async function createFolder() {
-  if (!folderForm.value.name.trim()) return
-  dialogError.value = null
+async function submitRename() {
   try {
-    await noteService.createFolder(notebookId.value, {
-      name: folderForm.value.name.trim(),
-      parent_id: currentFolderId.value,
-    })
-    showCreateFolder.value = false
-    folderForm.value = { name: '' }
-    await fetchAll()
-  } catch (e) {
-    dialogError.value = e.response?.data?.detail || '创建失败，请重试。'
+    await renameNode(renameForm.value.nodeId, renameForm.value.name)
+    closeDialog()
+    showToast('名称已更新')
+  } catch (cause) {
+    dialogError.value = cause.response?.data?.detail || cause.message || '重命名失败，请重试。'
   }
 }
 
-async function createNote() {
-  if (!noteForm.value.title.trim()) return
-  dialogError.value = null
+async function submitMove() {
   try {
-    const node = await noteService.createNote(notebookId.value, {
-      title: noteForm.value.title.trim(),
-      parent_id: currentFolderId.value,
-    })
-    showCreateNote.value = false
-    noteForm.value = { title: '' }
-    router.push({ name: 'NoteEditor', params: { id: node.id } })
-  } catch (e) {
-    dialogError.value = e.response?.data?.detail || '创建失败，请重试。'
+    await moveNode(moveForm.value.nodeId, moveForm.value.parentId)
+    closeDialog()
+    showToast('节点已移动')
+  } catch (cause) {
+    dialogError.value = cause.response?.data?.detail || cause.message || '移动失败，请重试。'
   }
 }
 
-function startRename(node) {
-  renameForm.value = { name: node.name, nodeId: node.id }
-  dialogError.value = null
-  showRename.value = true
-}
-
-async function doRename() {
-  if (!renameForm.value.name.trim()) return
-  dialogError.value = null
+async function handleDelete(node) {
+  const kind = node.type === 'folder' ? '文件夹及其内容' : '笔记'
+  if (!window.confirm(`确定删除${kind}「${node.name}」吗？此操作不可撤销。`)) return
   try {
-    await noteService.renameNode(renameForm.value.nodeId, renameForm.value.name.trim())
-    showRename.value = false
-    await fetchAll()
-    showToast('重命名成功')
-  } catch (e) {
-    dialogError.value = e.response?.data?.detail || '重命名失败。'
+    await deleteNode(node)
+    if (!selectedNoteId.value && route.params.noteId) {
+      selectedNoteId.value = null
+      router.replace({ name: 'NotebookWorkspace', params: { notebookId: notebookId.value } })
+    }
+    showToast('已删除')
+  } catch (cause) {
+    showToast(cause.response?.data?.detail || '删除失败，请重试。', 'error')
   }
 }
 
-async function confirmDelete(node) {
-  const label = node.type === 'folder' ? '文件夹' : '笔记'
-  if (!confirm(`确定要删除${label}「${node.name}」吗？${node.type === 'folder' ? '文件夹内的所有内容将被删除。' : ''}`)) return
-  try {
-    await noteService.deleteNode(node.id)
-    await fetchAll()
-    showToast('删除成功')
-  } catch (e) {
-    showToast('删除失败', 'error')
-  }
-}
-
-// Auto-focus dialog inputs
-watch(showCreateFolder, (open) => {
-  if (open) { nextTick(() => folderNameRef.value?.focus()) }
-  else { dialogError.value = null }
+watch(notebookId, loadWorkspace, { immediate: true })
+watch(() => route.params.noteId, syncRouteSelection)
+watch(isNewNoteRoute, (isNew) => {
+  if (isNew) openCreateNote(currentFolderId.value)
 })
-watch(showCreateNote, (open) => {
-  if (open) { nextTick(() => noteTitleRef.value?.focus()) }
-  else { dialogError.value = null }
-})
-watch(showRename, (open) => {
-  if (open) { nextTick(() => renameRef.value?.select()) }
-  else { dialogError.value = null }
+watch(dialogMode, (mode) => {
+  if (mode) nextTick(focusDialogInput)
 })
 
-onMounted(async () => {
-  notebook.value = await noteService.getNotebook(notebookId.value)
-  await fetchAll()
+onUnmounted(() => {
+  if (toastTimer) clearTimeout(toastTimer)
 })
 </script>
 
 <style scoped>
-.file-manager { display: flex; flex-direction: column; height: 100%; width: 100%; }
-.fm-toolbar { display: flex; align-items: center; justify-content: space-between; padding: var(--spacing-md) var(--spacing-xl); border-bottom: 1px solid var(--color-border); flex-shrink: 0; gap: var(--spacing-md); flex-wrap: wrap; }
-.fm-breadcrumb { display: flex; align-items: center; gap: var(--spacing-xs); font-size: var(--font-size-sm); min-width: 0; overflow-x: auto; }
-.breadcrumb-item { background: none; border: none; cursor: pointer; padding: var(--spacing-xs) var(--spacing-sm); border-radius: var(--radius-sm); color: var(--color-text-secondary); font-size: var(--font-size-sm); font-family: var(--font-family); white-space: nowrap; transition: color 0.15s; }
-.breadcrumb-item:hover { color: var(--color-primary); }
-.breadcrumb-sep { color: var(--color-text-tertiary); }
-.fm-actions { display: flex; gap: var(--spacing-sm); }
-.action-btn { display: inline-flex; align-items: center; gap: var(--spacing-xs); padding: var(--spacing-xs) var(--spacing-md); font-size: var(--font-size-sm); font-weight: 500; color: var(--color-text-secondary); background: transparent; border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; font-family: var(--font-family); transition: all 0.15s; white-space: nowrap; }
-.action-btn:hover { background: var(--color-bg-tertiary); }
-.action-btn--primary { color: #fff; background: var(--color-primary); border-color: var(--color-primary); }
-.action-btn--primary:hover { background: var(--color-primary-dark); }
-.action-btn svg { width: 16px; height: 16px; }
-.fm-body { display: flex; flex: 1; min-height: 0; }
-.fm-tree { width: 240px; border-right: 1px solid var(--color-border); overflow-y: auto; flex-shrink: 0; padding: var(--spacing-md); }
-.tree-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-md); }
-.tree-title { font-size: var(--font-size-sm); font-weight: 600; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; }
-.tree-close { display: none; background: none; border: none; cursor: pointer; padding: 4px; color: var(--color-text-tertiary); }
-.tree-close svg { width: 16px; height: 16px; }
-.tree-loading { display: flex; justify-content: center; padding: var(--spacing-lg); }
-.tree-list { list-style: none; padding: 0; margin: 0; }
-.fm-content { flex: 1; overflow-y: auto; padding: var(--spacing-lg) var(--spacing-xl); min-width: 0; }
-.tree-toggle { display: none; background: none; border: none; cursor: pointer; padding: var(--spacing-sm); margin-bottom: var(--spacing-md); color: var(--color-text); border-radius: var(--radius-md); }
-.tree-toggle:hover { background: var(--color-bg-tertiary); }
-.tree-toggle svg { width: 20px; height: 20px; }
-.node-list { display: flex; flex-direction: column; gap: var(--spacing-sm); }
-.node-card { display: flex; align-items: center; gap: var(--spacing-md); padding: var(--spacing-md) var(--spacing-lg); background: var(--color-card); border: 1px solid var(--color-border); border-radius: var(--radius-lg); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
-.node-card:hover { border-color: var(--color-primary); box-shadow: var(--shadow-sm); }
-.node-icon { width: 40px; height: 40px; border-radius: var(--radius-md); background: var(--color-bg-tertiary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.node-icon--folder { background: rgba(14, 165, 233, 0.12); }
-.node-icon svg { width: 22px; height: 22px; color: var(--color-primary); }
-.node-info { flex: 1; min-width: 0; }
-.node-name { font-size: var(--font-size-base); font-weight: 600; color: var(--color-text); margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.node-meta { font-size: var(--font-size-xs); color: var(--color-text-tertiary); margin: var(--spacing-xs) 0 0; }
-.node-actions { display: flex; gap: var(--spacing-xs); opacity: 0; transition: opacity 0.15s; }
-.node-card:hover .node-actions { opacity: 1; }
-.node-action-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: var(--radius-md); cursor: pointer; color: var(--color-text-tertiary); transition: background 0.15s, color 0.15s; }
-.node-action-btn:hover { background: var(--color-bg-tertiary); color: var(--color-text); }
-.node-action-btn--danger:hover { color: var(--color-error); }
-.node-action-btn svg { width: 16px; height: 16px; }
-.loading-state { display: flex; align-items: center; justify-content: center; min-height: 300px; }
-.loading-spinner { width: 32px; height: 32px; border: 3px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
-.loading-spinner--sm { width: 16px; height: 16px; border-width: 2px; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.error-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px; gap: var(--spacing-md); color: var(--color-error); font-size: var(--font-size-sm); }
-.retry-btn { padding: var(--spacing-xs) var(--spacing-md); font-size: var(--font-size-sm); color: var(--color-primary); background: transparent; border: 1px solid var(--color-primary); border-radius: var(--radius-md); cursor: pointer; font-family: var(--font-family); }
-.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px; text-align: center; color: var(--color-text-tertiary); }
-.empty-icon { width: 56px; height: 56px; margin-bottom: var(--spacing-md); }
-.empty-state h3 { font-size: var(--font-size-lg); font-weight: 600; color: var(--color-text); margin: 0 0 var(--spacing-xs); }
-.empty-state p { font-size: var(--font-size-sm); margin: 0; }
-.dialog-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: var(--spacing-lg); }
-.dialog { width: 100%; max-width: 440px; background: var(--color-card); border: 1px solid var(--color-border); border-radius: var(--radius-xl); box-shadow: var(--shadow-xl); overflow: hidden; }
-.dialog-header { display: flex; align-items: center; justify-content: space-between; padding: var(--spacing-lg); border-bottom: 1px solid var(--color-border); }
-.dialog-title { font-size: var(--font-size-lg); font-weight: 600; color: var(--color-text); margin: 0; }
-.dialog-close { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: var(--radius-md); cursor: pointer; color: var(--color-text-tertiary); transition: background 0.15s; }
-.dialog-close:hover { background: var(--color-bg-tertiary); color: var(--color-text); }
-.dialog-close svg { width: 18px; height: 18px; }
-.dialog-body { padding: var(--spacing-lg); display: flex; flex-direction: column; gap: var(--spacing-md); }
-.form-group { display: flex; flex-direction: column; gap: var(--spacing-xs); }
-.form-label { font-size: var(--font-size-sm); font-weight: 600; color: var(--color-text); }
-.form-input { width: 100%; padding: var(--spacing-sm) var(--spacing-md); font-size: var(--font-size-sm); font-family: var(--font-family); color: var(--color-text); background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: var(--radius-md); outline: none; transition: border-color 0.15s; box-sizing: border-box; }
-.form-input:focus { border-color: var(--color-primary); }
-.dialog-error { font-size: var(--font-size-sm); color: var(--color-error); padding: var(--spacing-xs) 0; }
-.dialog-actions { display: flex; justify-content: flex-end; gap: var(--spacing-sm); padding-top: var(--spacing-sm); }
-.btn-secondary { padding: var(--spacing-sm) var(--spacing-lg); font-size: var(--font-size-sm); font-weight: 500; color: var(--color-text-secondary); background: transparent; border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; font-family: var(--font-family); }
-.btn-secondary:hover { background: var(--color-bg-tertiary); }
-.btn-primary { display: inline-flex; align-items: center; gap: var(--spacing-xs); padding: var(--spacing-sm) var(--spacing-lg); font-size: var(--font-size-sm); font-weight: 600; color: #fff; background: var(--color-primary); border: none; border-radius: var(--radius-md); cursor: pointer; font-family: var(--font-family); }
-.btn-primary:hover { background: var(--color-primary-dark); }
-.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-.toast { position: fixed; bottom: var(--spacing-xl); left: 50%; transform: translateX(-50%); padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); font-size: var(--font-size-sm); font-weight: 500; z-index: 200; box-shadow: var(--shadow-lg); pointer-events: none; }
-.toast.success { background: #10b981; color: white; }
-.toast.error { background: #ef4444; color: white; }
-.toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
-.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(20px); }
+.workspace-shell {
+  --workspace-line: rgba(148, 163, 184, 0.22);
+  --workspace-soft: rgba(14, 165, 233, 0.08);
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: calc(100vh - 150px);
+  overflow: hidden;
+  color: var(--color-text);
+}
+
+.workspace-header,
+.workspace-layout,
+.workspace-heading,
+.workspace-actions,
+.directory-header,
+.content-toolbar,
+.selection-card,
+.selection-links,
+.dialog-header,
+.dialog-actions {
+  display: flex;
+}
+
+.workspace-header {
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+  padding: 0 0 var(--spacing-lg);
+  border-bottom: 1px solid var(--workspace-line);
+}
+
+.workspace-heading {
+  align-items: center;
+  min-width: 0;
+  gap: var(--spacing-sm);
+}
+
+.workspace-kicker,
+.panel-kicker,
+.selection-eyebrow,
+.dialog-kicker {
+  margin: 0 0 4px;
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.workspace-title,
+.panel-title,
+.selection-copy h2,
+.dialog-title {
+  margin: 0;
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.workspace-title {
+  font-size: clamp(1.35rem, 2.4vw, 1.9rem);
+  line-height: 1.2;
+}
+
+.workspace-subtitle {
+  max-width: 58vw;
+  margin: 5px 0 0;
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-actions {
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+}
+
+.workspace-layout {
+  flex: 1;
+  min-height: 0;
+  padding-top: var(--spacing-lg);
+  gap: var(--spacing-lg);
+}
+
+.directory-panel {
+  display: flex;
+  flex: 0 0 min(350px, 31%);
+  flex-direction: column;
+  min-width: 0;
+  min-height: 420px;
+  overflow: hidden;
+  background: var(--color-card);
+  border: 1px solid var(--workspace-line);
+  border-radius: var(--radius-xl);
+}
+
+.directory-header {
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--workspace-line);
+}
+
+.panel-title {
+  overflow: hidden;
+  font-size: var(--font-size-base);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.directory-panel :deep(.note-tree) {
+  min-height: 0;
+  overflow: auto;
+}
+
+.directory-panel :deep(.note-tree__list) {
+  padding: var(--spacing-sm);
+}
+
+.directory-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-lg);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.directory-state--error {
+  flex-direction: column;
+  color: var(--color-error);
+}
+
+.directory-state--error p {
+  margin: 0;
+}
+
+.workspace-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 420px;
+  overflow: hidden;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--workspace-line);
+  border-radius: var(--radius-xl);
+}
+
+.content-toolbar {
+  align-items: center;
+  min-width: 0;
+  min-height: 58px;
+  gap: var(--spacing-md);
+  padding: 0 var(--spacing-lg);
+  border-bottom: 1px solid var(--workspace-line);
+}
+
+.breadcrumbs {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  overflow: auto;
+}
+
+.breadcrumb-button,
+.toolbar-button,
+.icon-button,
+.text-button,
+.context-link {
+  cursor: pointer;
+  font-family: var(--font-family);
+}
+
+.breadcrumb-button {
+  min-height: 44px;
+  max-width: 220px;
+  overflow: hidden;
+  padding: 0 4px;
+  color: var(--color-text-tertiary);
+  background: transparent;
+  border: 0;
+  font-size: var(--font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breadcrumb-button:hover,
+.breadcrumb-button:focus-visible,
+.breadcrumb-button--active {
+  color: var(--color-primary);
+}
+
+.breadcrumb-separator {
+  flex: 0 0 auto;
+  color: var(--color-text-tertiary);
+}
+
+.toolbar-button {
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 var(--spacing-sm);
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 0;
+  font-size: var(--font-size-sm);
+}
+
+.toolbar-button svg,
+.button svg,
+.icon-button svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.content-state {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  min-height: 320px;
+  padding: var(--spacing-xl);
+  color: var(--color-text-tertiary);
+  text-align: center;
+}
+
+.content-state p {
+  margin: 0;
+}
+
+.content-state--error h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--font-size-lg);
+}
+
+.content-state--error p {
+  max-width: 340px;
+}
+
+.state-icon,
+.selection-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: var(--radius-xl);
+}
+
+.state-icon {
+  width: 64px;
+  height: 64px;
+}
+
+.state-icon svg,
+.selection-icon svg {
+  width: 30px;
+  height: 30px;
+}
+
+.state-icon--error {
+  color: var(--color-error);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.selection-card {
+  align-items: flex-start;
+  max-width: 720px;
+  margin: auto;
+  padding: clamp(var(--spacing-lg), 6vw, 4rem);
+  gap: var(--spacing-xl);
+}
+
+.selection-icon {
+  width: 68px;
+  height: 68px;
+}
+
+.selection-icon--note {
+  color: var(--color-primary);
+  background: rgba(14, 165, 233, 0.12);
+}
+
+.selection-icon--folder {
+  color: var(--color-secondary);
+  background: rgba(20, 184, 166, 0.12);
+}
+
+.selection-icon--accent {
+  color: var(--color-cta, #f97316);
+  background: rgba(249, 115, 22, 0.12);
+}
+
+.selection-copy {
+  min-width: 0;
+}
+
+.selection-copy h2 {
+  overflow-wrap: anywhere;
+  font-size: clamp(1.35rem, 3vw, 2rem);
+}
+
+.selection-copy > p:not(.selection-eyebrow) {
+  max-width: 480px;
+  margin: var(--spacing-sm) 0 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+  line-height: 1.7;
+}
+
+.selection-links {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-xl);
+}
+
+.button,
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.button {
+  gap: 8px;
+  padding: 0 var(--spacing-md);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.button--primary {
+  color: #fff;
+  background: var(--color-primary);
+}
+
+.button--primary:hover {
+  background: var(--color-primary-dark);
+}
+
+.button--quiet {
+  color: var(--color-text-secondary);
+  background: transparent;
+  border-color: var(--workspace-line);
+}
+
+.button--quiet:hover,
+.button--quiet:focus-visible,
+.toolbar-button:hover,
+.toolbar-button:focus-visible,
+.icon-button:hover,
+.icon-button:focus-visible {
+  color: var(--color-primary);
+  background: var(--workspace-soft);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.context-link,
+.text-button {
+  min-height: 44px;
+  padding: 0 var(--spacing-sm);
+  color: var(--color-primary);
+  background: transparent;
+  border: 0;
+  font-size: var(--font-size-sm);
+  text-decoration: none;
+}
+
+.context-link:hover,
+.context-link:focus-visible,
+.text-button:hover,
+.text-button:focus-visible {
+  text-decoration: underline;
+}
+
+.icon-button {
+  width: 44px;
+  padding: 0;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 0;
+}
+
+.mobile-only {
+  display: none;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--workspace-line);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: workspace-spin 0.8s linear infinite;
+}
+
+.spinner--large {
+  width: 32px;
+  height: 32px;
+  border-width: 3px;
+}
+
+@keyframes workspace-spin {
+  to { transform: rotate(360deg); }
+}
+
+.dialog-overlay {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  background: rgba(15, 23, 42, 0.52);
+}
+
+.dialog {
+  width: min(100%, 440px);
+  overflow: hidden;
+  background: var(--color-card);
+  border: 1px solid var(--workspace-line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+}
+
+.dialog-header {
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--workspace-line);
+}
+
+.dialog-title {
+  font-size: var(--font-size-lg);
+}
+
+.dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-lg);
+}
+
+.form-label {
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.form-input {
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 0 var(--spacing-md);
+  color: var(--color-text);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--workspace-line);
+  border-radius: var(--radius-md);
+  outline: none;
+  font: inherit;
+}
+
+.form-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
+}
+
+.form-error {
+  margin: 0;
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+}
+
+.dialog-actions {
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+}
+
+.workspace-toast {
+  position: fixed;
+  z-index: 1100;
+  right: var(--spacing-lg);
+  bottom: calc(var(--spacing-lg) + var(--safe-area-bottom));
+  max-width: min(360px, calc(100vw - 2rem));
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.workspace-toast--success {
+  color: #fff;
+  background: var(--color-primary);
+}
+
+.workspace-toast--error {
+  color: #fff;
+  background: var(--color-error);
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+  .button,
+  .icon-button { transition: none; }
+}
+
 @media (max-width: 767px) {
-  .fm-toolbar { padding: var(--spacing-sm) var(--spacing-md); }
-  .fm-actions { width: 100%; }
-  .action-btn { flex: 1; justify-content: center; }
-  .fm-tree { position: fixed; left: 0; top: 0; bottom: 0; z-index: 100; background: var(--color-card); transform: translateX(-100%); transition: transform 0.3s ease; }
-  .fm-tree--open { transform: translateX(0); }
-  .tree-close { display: flex; }
-  .tree-toggle { display: flex; }
-  .fm-content { padding: var(--spacing-md); }
+  .workspace-shell {
+    min-height: calc(100vh - 130px);
+  }
+
+  .workspace-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--spacing-md);
+  }
+
+  .workspace-heading {
+    width: 100%;
+  }
+
+  .workspace-subtitle {
+    max-width: calc(100vw - 100px);
+  }
+
+  .workspace-actions {
+    width: 100%;
+  }
+
+  .workspace-actions .button {
+    flex: 1;
+  }
+
+  .workspace-layout {
+    position: relative;
+    min-height: 0;
+    padding-top: var(--spacing-md);
+  }
+
+  .mobile-only {
+    display: inline-flex;
+  }
+
+  .directory-panel {
+    position: fixed;
+    z-index: 101;
+    top: var(--safe-area-top);
+    bottom: calc(var(--bottom-nav-height) + var(--safe-area-bottom));
+    left: 0;
+    width: min(88vw, 350px);
+    min-height: 0;
+    border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
+    padding-bottom: var(--safe-area-bottom);
+    box-sizing: border-box;
+    transform: translateX(-105%);
+    transition: transform 0.22s ease;
+  }
+
+  .directory-panel--open {
+    transform: translateX(0);
+  }
+
+  .workspace-overlay {
+    position: fixed;
+    z-index: 100;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.42);
+  }
+
+  .workspace-content {
+    min-height: 520px;
+  }
+
+  .content-toolbar {
+    gap: var(--spacing-sm);
+    padding: 0 var(--spacing-sm);
+  }
+
+  .breadcrumbs {
+    gap: 4px;
+  }
+
+  .breadcrumb-button {
+    max-width: 140px;
+  }
+
+  .selection-card {
+    flex-direction: column;
+    margin: 0;
+    padding: var(--spacing-xl) var(--spacing-lg);
+    gap: var(--spacing-lg);
+  }
+
+  .selection-links {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .selection-links .button,
+  .selection-links .context-link {
+    width: 100%;
+    box-sizing: border-box;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .dialog-overlay {
+    align-items: flex-end;
+    padding: var(--spacing-sm);
+  }
+
+  .dialog-actions {
+    flex-direction: column-reverse;
+  }
+
+  .dialog-actions .button {
+    width: 100%;
+  }
+
+  .workspace-toast {
+    right: var(--spacing-md);
+    left: var(--spacing-md);
+    max-width: none;
+    text-align: center;
+  }
 }
 </style>

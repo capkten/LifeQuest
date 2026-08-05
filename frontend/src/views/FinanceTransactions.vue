@@ -2,12 +2,15 @@
   <div class="finance-page">
     <div class="page-header">
       <div class="header-left">
-        <button class="btn-back" @click="$router.push('/finance')" aria-label="返回">
+        <button class="btn-back" @click="$router.push('/finance')" aria-label="返回财务总览">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </button>
-        <h2 class="page-title">全部流水</h2>
+        <div class="page-heading">
+          <h2 class="page-title">全部流水</h2>
+          <p class="page-subtitle">保留现有筛选、编辑、删除与转账记账行为，只调整信息层级与响应式呈现。</p>
+        </div>
       </div>
       <button class="btn-create" @click="openCreate">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -18,49 +21,104 @@
       </button>
     </div>
 
-    <!-- Summary -->
-    <div class="filter-summary">
-      <span class="summary-tag summary-tag--income">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>
-        收入 {{ formatMoney(filteredIncome) }}
-      </span>
-      <span class="summary-tag summary-tag--expense">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6" /><polyline points="17 18 23 18 23 12" /></svg>
-        支出 {{ formatMoney(filteredExpense) }}
-      </span>
-    </div>
+    <section class="finance-summary-grid">
+      <article class="summary-panel summary-panel--primary stitch-surface">
+        <div class="summary-panel__eyebrow">Wallet summary</div>
+        <div class="summary-panel__hero">
+          <div>
+            <span class="summary-panel__label">净流动</span>
+            <div class="summary-panel__value" :class="filteredNet >= 0 ? 'is-positive' : 'is-negative'">
+              {{ filteredNet >= 0 ? '+' : '' }}{{ formatMoney(filteredNet) }}
+            </div>
+          </div>
+          <span class="summary-pill">{{ transactions.length }} 条记录</span>
+        </div>
+        <div class="summary-chip-row">
+          <span class="summary-tag summary-tag--income">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+              <polyline points="17 6 23 6 23 12" />
+            </svg>
+            收入 {{ formatMoney(filteredIncome) }}
+          </span>
+          <span class="summary-tag summary-tag--expense">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" />
+              <polyline points="17 18 23 18 23 12" />
+            </svg>
+            支出 {{ formatMoney(filteredExpense) }}
+          </span>
+        </div>
+        <div class="summary-stats">
+          <div class="summary-stat">
+            <span class="summary-stat__label">账户</span>
+            <strong class="summary-stat__value">{{ accounts.length }}</strong>
+          </div>
+          <div class="summary-stat">
+            <span class="summary-stat__label">分类</span>
+            <strong class="summary-stat__value">{{ categories.length }}</strong>
+          </div>
+          <div class="summary-stat">
+            <span class="summary-stat__label">筛选中</span>
+            <strong class="summary-stat__value">{{ activeFilterCount }}</strong>
+          </div>
+        </div>
+      </article>
 
-    <!-- Filters -->
-    <div class="filter-bar">
-      <div class="filter-type-group">
-        <button v-for="t in typeFilters" :key="t.value" class="filter-btn" :class="{ 'filter-btn--active': filters.type === t.value }" @click="filters.type = t.value; fetchTransactions()">
-          {{ t.label }}
-        </button>
-      </div>
-      <div class="filter-selects">
-        <select v-model="filters.account_id" class="filter-select" @change="fetchTransactions()">
-          <option value="">全部账户</option>
-          <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
-        </select>
-        <select v-model="filters.category_id" class="filter-select" @change="fetchTransactions()">
-          <option value="">全部分类</option>
-          <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
-        </select>
-        <input v-model="filters.start_date" type="date" class="filter-select" @change="fetchTransactions()" />
-        <input v-model="filters.end_date" type="date" class="filter-select" @change="fetchTransactions()" />
-      </div>
-    </div>
+      <article class="summary-panel stitch-surface">
+        <div class="summary-panel__header">
+          <div>
+            <div class="summary-panel__eyebrow">Recent transactions</div>
+            <h3 class="summary-panel__title">筛选与范围</h3>
+          </div>
+          <span class="summary-panel__meta">{{ activeFilterCount === 0 ? '当前查看全部' : `已启用 ${activeFilterCount} 个筛选` }}</span>
+        </div>
+
+        <div class="filter-bar">
+          <div class="filter-type-group" role="tablist" aria-label="交易类型">
+            <button
+              v-for="t in typeFilters"
+              :key="t.value"
+              class="filter-btn"
+              :class="{ 'filter-btn--active': filters.type === t.value }"
+              role="tab"
+              :aria-selected="filters.type === t.value"
+              @click="filters.type = t.value; fetchTransactions()"
+            >
+              {{ t.label }}
+            </button>
+          </div>
+
+          <div class="filter-selects">
+            <label class="sr-only" for="transactions-account-filter">账户</label>
+            <select id="transactions-account-filter" v-model="filters.account_id" class="filter-select" @change="fetchTransactions()">
+              <option value="">全部账户</option>
+              <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
+            </select>
+            <label class="sr-only" for="transactions-category-filter">分类</label>
+            <select id="transactions-category-filter" v-model="filters.category_id" class="filter-select" @change="fetchTransactions()">
+              <option value="">全部分类</option>
+              <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
+            </select>
+            <label class="sr-only" for="transactions-start-date">开始日期</label>
+            <input id="transactions-start-date" v-model="filters.start_date" type="date" class="filter-select" @change="fetchTransactions()" />
+            <label class="sr-only" for="transactions-end-date">结束日期</label>
+            <input id="transactions-end-date" v-model="filters.end_date" type="date" class="filter-select" @change="fetchTransactions()" />
+          </div>
+        </div>
+      </article>
+    </section>
 
     <div v-if="loading" class="loading-state">
       <span class="loading-spinner"></span>
     </div>
 
-    <div v-else-if="error" class="error-state">
+    <div v-else-if="error" class="error-state stitch-surface">
       <p>{{ error }}</p>
       <button class="retry-btn" @click="fetchTransactions">重试</button>
     </div>
 
-    <div v-else-if="transactions.length === 0" class="empty-state">
+    <div v-else-if="transactions.length === 0" class="empty-state stitch-surface">
       <div class="empty-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
           <circle cx="12" cy="12" r="10" />
@@ -68,21 +126,26 @@
         </svg>
       </div>
       <h3 class="empty-title">暂无流水记录</h3>
-      <p class="empty-text">开始记账来查看你的收支流水。</p>
+      <p class="empty-text">开始记账后，这里会按日期展示最近交易。</p>
     </div>
 
-    <template v-else>
-      <!-- Grouped by date -->
-      <div v-for="(group, dateKey) in groupedTransactions" :key="dateKey" class="date-group">
+    <section v-else class="transactions-section">
+      <div class="section-heading">
+        <div>
+          <div class="section-eyebrow">Recent activity</div>
+          <h3 class="section-title">按日期查看流水</h3>
+        </div>
+      </div>
+
+      <div v-for="(group, dateKey) in groupedTransactions" :key="dateKey" class="date-group stitch-surface">
         <div class="date-group-header">
           <span class="date-group-label">{{ formatGroupDate(dateKey) }}</span>
-          <span class="date-group-sum">
-            收 {{ formatMoney(groupIncome(group)) }} / 支 {{ formatMoney(groupExpense(group)) }}
-          </span>
+          <span class="date-group-sum">收 {{ formatMoney(groupIncome(group)) }} / 支 {{ formatMoney(groupExpense(group)) }}</span>
         </div>
+
         <div class="date-group-list">
           <div v-for="tx in group" :key="tx.id" class="tx-item">
-            <div class="tx-icon">
+            <div class="tx-icon" :class="'tx-icon--' + tx.type">
               <svg v-if="tx.type === 'income'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
                 <polyline points="17 6 23 6 23 12" />
@@ -98,44 +161,57 @@
                 <path d="M21 13v2a4 4 0 0 1-4 4H3" />
               </svg>
             </div>
+
             <div class="tx-info">
               <span class="tx-desc">{{ tx.description || '无备注' }}</span>
-              <span class="tx-meta">{{ tx.category_name || '' }} {{ tx.account_name ? '- ' + tx.account_name : '' }}</span>
+              <span class="tx-meta">
+                {{ tx.category_name || '未分类' }}
+                <template v-if="tx.account_name"> · {{ tx.account_name }}</template>
+              </span>
             </div>
+
             <div class="tx-right">
               <span class="tx-amount" :class="'tx-amount--' + tx.type">
                 {{ tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : '' }}{{ formatMoney(tx.amount) }}
               </span>
             </div>
+
             <div class="tx-actions">
               <button class="btn-icon btn-icon--edit" @click="openEdit(tx)" aria-label="编辑">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
               </button>
               <button class="btn-icon btn-icon--delete" @click="openDelete(tx)" aria-label="删除">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Load More -->
       <div v-if="hasMore" class="load-more">
         <button class="btn-load-more" :disabled="loadingMore" @click="loadMore">
           <span v-if="loadingMore" class="loading-spinner loading-spinner--sm"></span>
-          {{ loadingMore ? '加载中...' : '加载更多' }}
+          {{ loadingMore ? '加载中…' : '加载更多' }}
         </button>
       </div>
-    </template>
+    </section>
 
-    <!-- Create/Edit Transaction Modal -->
     <Teleport to="body">
       <div v-if="showDialog" class="dialog-overlay" @click.self="cancelDialog">
-        <div class="dialog dialog--wide" role="dialog" aria-modal="true" aria-labelledby="tx-dialog-title" @keydown.escape="cancelDialog">
+        <div class="dialog dialog--wide" role="dialog" aria-modal="true" aria-labelledby="tx-dialog-title" tabindex="-1" @keydown.escape="cancelDialog">
           <div class="dialog-header">
             <h3 id="tx-dialog-title" class="dialog-title">{{ editingTx ? '编辑流水' : '记一笔' }}</h3>
-            <button class="dialog-close" @click="cancelDialog" aria-label="Close">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            <button class="dialog-close" @click="cancelDialog" aria-label="关闭">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
             </button>
           </div>
           <form class="dialog-body" @submit.prevent="saveTransaction">
@@ -186,7 +262,7 @@
               <button type="button" class="btn-secondary" @click="cancelDialog">取消</button>
               <button type="submit" class="btn-primary" :disabled="savingTx || !txForm.amount || !txForm.account_id">
                 <span v-if="savingTx" class="loading-spinner loading-spinner--sm"></span>
-                {{ savingTx ? '保存中...' : '保存' }}
+                {{ savingTx ? '保存中…' : '保存' }}
               </button>
             </div>
           </form>
@@ -194,14 +270,16 @@
       </div>
     </Teleport>
 
-    <!-- Delete Confirmation -->
     <Teleport to="body">
       <div v-if="showDeleteDialog" class="dialog-overlay" @click.self="cancelDelete">
-        <div class="dialog dialog--confirm" role="dialog" aria-modal="true" aria-labelledby="del-dialog-title" @keydown.escape="cancelDelete">
+        <div class="dialog dialog--confirm" role="dialog" aria-modal="true" aria-labelledby="del-dialog-title" tabindex="-1" @keydown.escape="cancelDelete">
           <div class="dialog-header">
             <h3 id="del-dialog-title" class="dialog-title">确认删除</h3>
-            <button class="dialog-close" @click="cancelDelete" aria-label="Close">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            <button class="dialog-close" @click="cancelDelete" aria-label="关闭">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
             </button>
           </div>
           <div class="dialog-body">
@@ -210,7 +288,7 @@
               <button type="button" class="btn-secondary" @click="cancelDelete">取消</button>
               <button type="button" class="btn-danger" :disabled="deleting" @click="deleteTransaction">
                 <span v-if="deleting" class="loading-spinner loading-spinner--sm"></span>
-                {{ deleting ? '删除中...' : '删除' }}
+                {{ deleting ? '删除中…' : '删除' }}
               </button>
             </div>
           </div>
@@ -218,12 +296,13 @@
       </div>
     </Teleport>
 
-    <!-- Toast -->
     <Teleport to="body">
       <Transition name="toast">
         <div v-if="successToast" class="success-toast" role="status" aria-live="polite">
           <div class="success-toast-content">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
             <span>{{ successToast }}</span>
           </div>
         </div>
@@ -233,7 +312,11 @@
       <Transition name="toast">
         <div v-if="errorToast" class="error-toast" role="status" aria-live="polite">
           <div class="error-toast-content">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+              <line x1="9" y1="9" x2="15" y2="15" />
+            </svg>
             <span>{{ errorToast }}</span>
           </div>
         </div>
@@ -299,6 +382,12 @@ const filteredIncome = computed(() => {
 
 const filteredExpense = computed(() => {
   return transactions.value.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount || 0), 0)
+})
+
+const filteredNet = computed(() => filteredIncome.value - filteredExpense.value)
+
+const activeFilterCount = computed(() => {
+  return ['type', 'account_id', 'category_id', 'start_date', 'end_date'].filter(key => !!filters.value[key]).length
 })
 
 const groupedTransactions = computed(() => {
@@ -410,6 +499,10 @@ async function fetchSupportData() {
 
 async function saveTransaction() {
   if (!txForm.value.amount || !txForm.value.account_id) return
+  if (txForm.value.type === 'transfer' && !txForm.value.to_account_id) {
+    txDialogError.value = '请选择转入账户'
+    return
+  }
   savingTx.value = true
   txDialogError.value = null
   try {
@@ -440,8 +533,9 @@ async function saveTransaction() {
         date: txForm.value.date
       })
     }
+    const wasEditing = !!editingTx.value
     cancelDialog()
-    showSuccess(editingTx.value ? '流水已更新' : '记账成功！')
+    showSuccess(wasEditing ? '流水已更新' : '记账成功')
     await fetchTransactions()
   } catch (e) {
     txDialogError.value = e.response?.data?.detail || '保存失败，请重试。'
@@ -473,318 +567,829 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.finance-page { padding: var(--spacing-xl); width: 100%; }
-
-.page-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: var(--spacing-lg);
+.finance-page {
+  display: grid;
+  gap: var(--page-gap);
+  width: 100%;
+  padding: var(--spacing-xl);
+  overflow-x: clip;
 }
-.header-left { display: flex; align-items: center; gap: var(--spacing-md); }
 
-.btn-back {
-  width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
-  background: transparent; border: 1px solid var(--color-border);
-  border-radius: var(--radius-md); cursor: pointer;
-  color: var(--color-text-secondary); transition: all 0.15s ease;
+.page-header,
+.header-left,
+.summary-panel__header,
+.date-group-header,
+.dialog-header,
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
 }
-.btn-back:hover { background: var(--color-bg-tertiary); color: var(--color-text); }
-.btn-back svg { width: 20px; height: 20px; }
 
-.page-title { font-size: var(--font-size-2xl); font-weight: 700; color: var(--color-text); }
-
-.btn-create {
-  display: inline-flex; align-items: center; gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-lg);
-  font-size: var(--font-size-sm); font-weight: 600; color: #fff;
-  background: var(--color-primary); border: none;
-  border-radius: var(--radius-md); cursor: pointer;
-  font-family: var(--font-family); transition: background 0.15s ease;
+.header-left,
+.page-heading,
+.summary-panel,
+.filter-bar,
+.transactions-section,
+.date-group,
+.date-group-list,
+.tx-info,
+.form-group,
+.dialog-body {
+  min-width: 0;
 }
-.btn-create:hover { background: var(--color-primary-dark); }
-.btn-create svg { width: 18px; height: 18px; }
 
-/* Summary */
-.filter-summary {
-  display: flex; gap: var(--spacing-md);
-  margin-bottom: var(--spacing-md);
+.page-heading,
+.summary-panel,
+.tx-info,
+.form-group,
+.dialog-body,
+.transactions-section,
+.date-group {
+  display: grid;
 }
-.summary-tag {
-  display: inline-flex; align-items: center; gap: var(--spacing-xs);
-  padding: var(--spacing-xs) var(--spacing-md);
-  font-size: var(--font-size-sm); font-weight: 600;
+
+.page-heading,
+.summary-panel,
+.tx-info,
+.dialog-body,
+.transactions-section,
+.date-group {
+  gap: var(--spacing-sm);
+}
+
+.page-subtitle,
+.summary-panel__label,
+.summary-panel__meta,
+.summary-stat__label,
+.tx-meta,
+.empty-text,
+.confirm-text,
+.dialog-error {
+  color: var(--color-text-tertiary);
+}
+
+.page-subtitle,
+.summary-stat__label,
+.summary-panel__meta,
+.tx-meta,
+.empty-text {
+  font-size: var(--font-size-sm);
+}
+
+.page-title,
+.summary-panel__title,
+.section-title,
+.dialog-title {
+  margin: 0;
+  color: var(--color-text);
+}
+
+.page-title {
+  font-size: clamp(1.4rem, 1.15rem + 0.6vw, 1.85rem);
+  font-weight: 700;
+}
+
+.page-subtitle {
+  margin: 0;
+  max-width: 48rem;
+}
+
+.btn-back,
+.btn-icon,
+.dialog-close {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-base), border-color var(--transition-base), color var(--transition-base), transform var(--transition-base);
+}
+
+.btn-back:hover,
+.btn-icon:hover,
+.dialog-close:hover {
+  background: var(--color-bg-tertiary);
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.btn-create,
+.btn-load-more,
+.btn-primary,
+.btn-secondary,
+.btn-danger,
+.retry-btn,
+.filter-btn,
+.type-toggle-btn,
+.category-chip {
+  min-height: 44px;
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition: background var(--transition-base), border-color var(--transition-base), color var(--transition-base), transform var(--transition-base), box-shadow var(--transition-base), opacity var(--transition-base);
+}
+
+.btn-create,
+.btn-load-more,
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  padding: 0.75rem 1.05rem;
+  border: none;
+  border-radius: 14px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  box-shadow: var(--shadow-sm);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.btn-create:hover,
+.btn-load-more:hover,
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-secondary,
+.retry-btn,
+.filter-btn,
+.type-toggle-btn {
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-text-secondary);
+  border-radius: 14px;
+  padding: 0.65rem 0.9rem;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.btn-secondary:hover,
+.retry-btn:hover,
+.filter-btn:hover,
+.type-toggle-btn:hover {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+}
+
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: 14px;
+  background: var(--color-error);
+  color: #fff;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.btn-danger:hover { opacity: 0.92; }
+
+.btn-create svg,
+.btn-back svg,
+.dialog-close svg { width: 18px; height: 18px; }
+
+.finance-summary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: var(--page-gap);
+}
+
+.summary-panel {
+  padding: clamp(1rem, 0.8rem + 0.6vw, 1.5rem);
+  border-radius: var(--surface-radius);
+}
+
+.summary-panel--primary {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.12), rgba(29, 78, 216, 0.06)), var(--color-card);
+}
+
+.summary-panel__eyebrow,
+.section-eyebrow {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.summary-panel__hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.summary-panel__value {
+  font-size: clamp(2rem, 1.55rem + 1vw, 2.75rem);
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1;
+  margin-top: 4px;
+}
+
+.summary-panel__value.is-positive { color: var(--color-success-dark); }
+.summary-panel__value.is-negative { color: var(--color-error-dark); }
+
+.summary-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0.35rem 0.75rem;
   border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--color-primary-dark);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  white-space: nowrap;
 }
+
+.summary-chip-row,
+.summary-stats,
+.filter-type-group,
+.category-grid,
+.tx-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.summary-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-height: 32px;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+
 .summary-tag svg { width: 16px; height: 16px; }
-.summary-tag--income { background: rgba(81, 207, 102, 0.12); color: var(--color-success); }
-.summary-tag--expense { background: rgba(255, 107, 107, 0.12); color: var(--color-error); }
+.summary-tag--income { background: rgba(34, 197, 94, 0.12); color: var(--color-success-dark); }
+.summary-tag--expense { background: rgba(239, 68, 68, 0.12); color: var(--color-error-dark); }
 
-/* Filter Bar */
+.summary-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.summary-stat {
+  display: grid;
+  gap: 4px;
+  padding: 0.9rem;
+  border-radius: 14px;
+  border: 1px solid rgba(168, 215, 232, 0.45);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.summary-stat__value {
+  font-size: var(--font-size-lg);
+  color: var(--color-text);
+}
+
+.summary-panel__title,
+.section-title {
+  font-size: var(--font-size-xl);
+}
+
 .filter-bar {
-  display: flex; flex-wrap: wrap; gap: var(--spacing-md);
-  margin-bottom: var(--spacing-lg); align-items: center;
+  display: grid;
+  gap: var(--spacing-md);
 }
-.filter-type-group { display: flex; gap: 2px; background: var(--color-bg-tertiary); border-radius: var(--radius-md); padding: 2px; }
-.filter-btn {
-  padding: var(--spacing-xs) var(--spacing-md);
-  font-size: var(--font-size-xs); font-weight: 500;
-  color: var(--color-text-secondary); background: transparent;
-  border: none; border-radius: var(--radius-md); cursor: pointer;
-  font-family: var(--font-family); transition: all 0.15s ease;
-}
-.filter-btn--active { background: var(--color-card); color: var(--color-text); box-shadow: var(--shadow-sm); }
 
-.filter-selects { display: flex; flex-wrap: wrap; gap: var(--spacing-sm); }
-.filter-select {
-  padding: var(--spacing-xs) var(--spacing-sm);
-  font-size: var(--font-size-xs); font-family: var(--font-family);
-  color: var(--color-text); background: var(--color-card);
-  border: 1px solid var(--color-border); border-radius: var(--radius-md);
-  outline: none; cursor: pointer;
-}
-.filter-select:focus { border-color: var(--color-primary); }
+.filter-type-group { gap: 8px; }
 
-/* States */
-.loading-state { display: flex; align-items: center; justify-content: center; min-height: 300px; }
-.loading-spinner {
-  width: 32px; height: 32px; border: 3px solid var(--color-border);
-  border-top-color: var(--color-primary); border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+.filter-btn--active,
+.type-toggle-btn--active,
+.category-chip--active {
+  background: rgba(14, 165, 233, 0.12);
+  border-color: rgba(14, 165, 233, 0.25);
+  color: var(--color-primary-dark);
 }
-.loading-spinner--sm { width: 16px; height: 16px; border-width: 2px; }
-@keyframes spin { to { transform: rotate(360deg); } }
 
-.error-state {
-  display: flex; flex-direction: column; align-items: center;
-  justify-content: center; min-height: 300px; gap: var(--spacing-md);
-  color: var(--color-error); font-size: var(--font-size-sm);
+.filter-selects,
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-sm);
 }
-.retry-btn {
-  padding: var(--spacing-xs) var(--spacing-md); font-size: var(--font-size-sm);
-  color: var(--color-primary); background: transparent;
-  border: 1px solid var(--color-primary); border-radius: var(--radius-md);
-  cursor: pointer; font-family: var(--font-family); transition: all 0.15s ease;
-}
-.retry-btn:hover { background: var(--color-primary); color: #fff; }
 
-.empty-state {
-  display: flex; flex-direction: column; align-items: center;
-  justify-content: center; min-height: 400px; text-align: center;
+.filter-select,
+.form-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
 }
-.empty-icon {
-  width: 72px; height: 72px; border-radius: var(--radius-xl);
-  background: var(--color-bg-tertiary); display: flex;
-  align-items: center; justify-content: center; margin-bottom: var(--spacing-lg);
-}
-.empty-icon svg { width: 36px; height: 36px; color: var(--color-text-tertiary); }
-.empty-title { font-size: var(--font-size-lg); font-weight: 600; color: var(--color-text); margin-bottom: var(--spacing-sm); }
-.empty-text { font-size: var(--font-size-sm); color: var(--color-text-tertiary); max-width: 320px; }
 
-/* Date Groups */
-.date-group { margin-bottom: var(--spacing-lg); }
+.filter-select:focus,
+.form-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
+}
+
+.transactions-section { gap: var(--spacing-md); }
+
+.date-group {
+  padding: clamp(1rem, 0.85rem + 0.3vw, 1.3rem);
+  gap: var(--spacing-sm);
+}
+
 .date-group-header {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: var(--spacing-sm) 0; margin-bottom: var(--spacing-sm);
+  padding-bottom: var(--spacing-sm);
   border-bottom: 1px solid var(--color-border);
 }
-.date-group-label { font-size: var(--font-size-sm); font-weight: 600; color: var(--color-text); }
-.date-group-sum { font-size: var(--font-size-xs); color: var(--color-text-tertiary); }
+
+.date-group-label {
+  font-size: var(--font-size-base);
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.date-group-sum {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
+.date-group-list { gap: 0; }
+
+.tx-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: 0.95rem 0;
+  border-bottom: 1px solid rgba(217, 231, 239, 0.72);
+}
+
+.tx-item:last-child { border-bottom: none; }
+
+.tx-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tx-icon svg { width: 18px; height: 18px; }
+.tx-icon--income { background: rgba(34, 197, 94, 0.12); color: var(--color-success-dark); }
+.tx-icon--expense { background: rgba(239, 68, 68, 0.12); color: var(--color-error-dark); }
+.tx-icon--transfer { background: rgba(29, 78, 216, 0.12); color: var(--color-secondary); }
+
+.tx-desc {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tx-right { text-align: right; }
+
+.tx-amount {
+  font-size: var(--font-size-base);
+  font-weight: 700;
+}
+
+.tx-amount--income { color: var(--color-success-dark); }
+.tx-amount--expense { color: var(--color-error-dark); }
+.tx-amount--transfer { color: var(--color-secondary); }
+
+.btn-icon {
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
+}
+
+.btn-icon svg { width: 14px; height: 14px; }
+.btn-icon--edit:hover { background: rgba(14, 165, 233, 0.12); color: var(--color-primary-dark); }
+.btn-icon--delete:hover { background: rgba(239, 68, 68, 0.12); color: var(--color-error-dark); }
+
+.loading-state,
+.error-state,
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  min-height: 280px;
+  gap: var(--spacing-md);
+  text-align: center;
+}
+
+.empty-state,
+.error-state {
+  padding: var(--spacing-xl);
+}
+
+.empty-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 22px;
+  background: var(--color-bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.empty-icon svg { width: 36px; height: 36px; color: var(--color-text-tertiary); }
+.empty-title { margin: 0; font-size: var(--font-size-lg); color: var(--color-text); }
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.loading-spinner--sm {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.load-more {
+  display: flex;
+  justify-content: center;
+  padding-top: var(--spacing-sm);
+}
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  padding: var(--spacing-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 15, 28, 0.48);
+}
+
+.dialog {
+  width: min(100%, 520px);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 22px;
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+}
+
+.dialog--wide { width: min(100%, 560px); }
+.dialog--confirm { width: min(100%, 420px); }
+
+.dialog-header {
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dialog-body { padding: var(--spacing-lg); }
+
+.type-toggle {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 6px;
+  border-radius: 16px;
+  background: var(--color-bg-tertiary);
+}
+
+.type-toggle-btn {
+  border-radius: 12px;
+}
+
+.form-label {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.form-input--amount {
+  font-size: var(--font-size-2xl);
+  font-weight: 700;
+  text-align: center;
+}
+
+.category-grid { gap: 8px; }
+
+.category-chip {
+  min-height: 36px;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+
+.category-empty {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  padding: 0.4rem 0;
+}
+
+.confirm-text {
+  margin: 0;
+  line-height: 1.6;
+  font-size: var(--font-size-sm);
+}
+
+.success-toast,
+.error-toast {
+  position: fixed;
+  right: var(--spacing-lg);
+  z-index: 1100;
+  max-width: calc(100vw - 32px);
+}
+
+.success-toast { top: var(--spacing-lg); }
+.error-toast { top: calc(var(--spacing-lg) + 60px); }
+
+.success-toast-content,
+.error-toast-content {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-radius: 14px;
+  color: #fff;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  box-shadow: var(--shadow-lg);
+}
+
+.success-toast-content { background: var(--color-success); }
+.error-toast-content { background: var(--color-error); }
+
+.success-toast-content svg,
+.error-toast-content svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+
+@media (max-width: 1199px) {
+  .finance-page {
+    padding: var(--spacing-lg);
+  }
+
+  .finance-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .finance-page {
+    padding: var(--spacing-md);
+    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height));
+  }
+
+  .page-header,
+  .header-left,
+  .summary-panel__header,
+  .summary-panel__hero,
+  .date-group-header,
+  .dialog-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .header-left {
+    width: 100%;
+  }
+
+  .btn-create {
+    width: 100%;
+  }
+
+  .summary-stats,
+  .filter-selects,
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .tx-item {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+  }
+
+  .tx-right {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  .tx-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    width: 100%;
+  }
+
+  .dialog-overlay {
+    padding: var(--spacing-sm);
+    align-items: flex-end;
+  }
+
+  .dialog {
+    width: 100%;
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+  }
+
+  .success-toast,
+  .error-toast {
+    left: var(--spacing-md);
+    right: var(--spacing-md);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Stitch refinement: dense transactions use cards and safe horizontal filter space. */
+.finance-page {
+  min-width: 0;
+}
+
+.summary-panel,
+.filter-bar,
+.transactions-section,
+.date-group,
+.tx-info,
+.tx-actions,
+.dialog-body {
+  min-width: 0;
+}
+
+.btn-back,
+.btn-icon,
+.dialog-close,
+.btn-create,
+.btn-load-more,
+.btn-primary,
+.btn-secondary,
+.btn-danger,
+.filter-btn,
+.type-toggle-btn {
+  min-height: 44px;
+}
+
+.btn-back:focus-visible,
+.btn-icon:focus-visible,
+.dialog-close:focus-visible,
+.btn-create:focus-visible,
+.btn-load-more:focus-visible,
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.btn-danger:focus-visible,
+.filter-btn:focus-visible,
+.type-toggle-btn:focus-visible,
+.filter-select:focus-visible,
+.form-input:focus-visible {
+  outline: 3px solid rgba(14, 165, 233, 0.35);
+  outline-offset: 2px;
+}
+
+.filter-bar {
+  align-items: stretch;
+}
+
+.filter-type-group {
+  flex-wrap: wrap;
+}
+
+.filter-selects {
+  min-width: 0;
+}
 
 .date-group-list {
-  display: flex; flex-direction: column; gap: 2px;
-  background: var(--color-card); border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg); overflow: hidden;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .tx-item {
-  display: flex; align-items: center; gap: var(--spacing-md);
-  padding: var(--spacing-sm) var(--spacing-md);
-  transition: background 0.15s ease;
+  min-width: 0;
 }
-.tx-item:hover { background: var(--color-bg-tertiary); }
 
-.tx-icon {
-  width: 32px; height: 32px; border-radius: var(--radius-full);
-  background: var(--color-bg-tertiary); display: flex;
-  align-items: center; justify-content: center; flex-shrink: 0;
+.tx-desc,
+.tx-meta,
+.tx-amount {
+  overflow-wrap: anywhere;
 }
-.tx-icon svg { width: 16px; height: 16px; color: var(--color-primary); }
 
-.tx-info { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.tx-desc {
-  font-size: var(--font-size-sm); font-weight: 500; color: var(--color-text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.tx-meta { font-size: var(--font-size-xs); color: var(--color-text-tertiary); }
-
-.tx-right { flex-shrink: 0; text-align: right; }
-.tx-amount { font-size: var(--font-size-sm); font-weight: 700; }
-.tx-amount--income { color: var(--color-success); }
-.tx-amount--expense { color: var(--color-error); }
-.tx-amount--transfer { color: var(--color-secondary); }
-
-.tx-actions { display: flex; gap: 4px; flex-shrink: 0; opacity: 0; transition: opacity 0.15s ease; }
-.tx-item:hover .tx-actions { opacity: 1; }
-
-.btn-icon {
-  width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
-  background: transparent; border: 1px solid var(--color-border);
-  border-radius: var(--radius-md); cursor: pointer;
-  color: var(--color-text-tertiary); transition: all 0.15s ease;
-}
-.btn-icon svg { width: 13px; height: 13px; }
-.btn-icon--edit:hover { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
-.btn-icon--delete:hover { background: var(--color-error); border-color: var(--color-error); color: #fff; }
-
-/* Load More */
-.load-more { display: flex; justify-content: center; padding: var(--spacing-lg) 0; }
-.btn-load-more {
-  display: inline-flex; align-items: center; gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-xl);
-  font-size: var(--font-size-sm); font-weight: 500;
-  color: var(--color-primary); background: transparent;
-  border: 1px solid var(--color-primary); border-radius: var(--radius-md);
-  cursor: pointer; font-family: var(--font-family); transition: all 0.15s ease;
-}
-.btn-load-more:hover { background: var(--color-primary); color: #fff; }
-.btn-load-more:disabled { opacity: 0.6; cursor: not-allowed; }
-
-/* Dialog */
 .dialog-overlay {
-  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 1000; padding: var(--spacing-lg);
+  z-index: 1200;
+  padding: max(var(--spacing-md), env(safe-area-inset-top)) var(--spacing-md) max(var(--spacing-md), env(safe-area-inset-bottom));
 }
+
 .dialog {
-  width: 100%; max-width: 480px; background: var(--color-card);
-  border: 1px solid var(--color-border); border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl); overflow: hidden;
+  max-height: min(720px, calc(100dvh - 2 * var(--spacing-md)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
-.dialog--wide { max-width: 520px; }
-.dialog--confirm { max-width: 400px; }
-
-.dialog-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: var(--spacing-lg); border-bottom: 1px solid var(--color-border);
-}
-.dialog-title { font-size: var(--font-size-lg); font-weight: 600; color: var(--color-text); }
-.dialog-close {
-  width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
-  background: transparent; border: none; border-radius: var(--radius-md);
-  cursor: pointer; color: var(--color-text-tertiary); transition: background 0.15s ease;
-}
-.dialog-close:hover { background: var(--color-bg-tertiary); color: var(--color-text); }
-.dialog-close svg { width: 18px; height: 18px; }
-
-.dialog-body { padding: var(--spacing-lg); display: flex; flex-direction: column; gap: var(--spacing-md); }
-
-.type-toggle {
-  display: flex; background: var(--color-bg-tertiary);
-  border-radius: var(--radius-md); padding: 3px; gap: 3px;
-}
-.type-toggle-btn {
-  flex: 1; padding: var(--spacing-sm); font-size: var(--font-size-sm);
-  font-weight: 600; color: var(--color-text-secondary);
-  background: transparent; border: none; border-radius: var(--radius-md);
-  cursor: pointer; font-family: var(--font-family); transition: all 0.15s ease;
-}
-.type-toggle-btn--active { background: var(--color-card); color: var(--color-text); box-shadow: var(--shadow-sm); }
-
-.form-group { display: flex; flex-direction: column; gap: var(--spacing-xs); }
-.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md); }
-.form-label { font-size: var(--font-size-sm); font-weight: 600; color: var(--color-text); }
-
-.form-input {
-  width: 100%; padding: var(--spacing-sm) var(--spacing-md);
-  font-size: var(--font-size-sm); font-family: var(--font-family);
-  color: var(--color-text); background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border); border-radius: var(--radius-md);
-  outline: none; transition: border-color 0.15s ease; box-sizing: border-box;
-}
-.form-input:focus { border-color: var(--color-primary); }
-select.form-input { appearance: auto; }
-.form-input--amount { font-size: var(--font-size-2xl); font-weight: 700; text-align: center; padding: var(--spacing-md); }
-
-.category-grid { display: flex; flex-wrap: wrap; gap: var(--spacing-xs); }
-.category-chip {
-  padding: var(--spacing-xs) var(--spacing-md); font-size: var(--font-size-xs);
-  font-weight: 500; color: var(--color-text-secondary);
-  background: var(--color-bg-tertiary); border: 1px solid transparent;
-  border-radius: var(--radius-full); cursor: pointer;
-  font-family: var(--font-family); transition: all 0.15s ease;
-}
-.category-chip:hover { border-color: var(--color-primary); color: var(--color-primary); }
-.category-chip--active { background: rgba(14, 165, 233, 0.12); border-color: var(--color-primary); color: var(--color-primary); }
-.category-empty { font-size: var(--font-size-xs); color: var(--color-text-tertiary); padding: var(--spacing-xs) 0; }
-
-.dialog-error { font-size: var(--font-size-sm); color: var(--color-error); padding: var(--spacing-xs) 0; }
-.dialog-actions { display: flex; justify-content: flex-end; gap: var(--spacing-sm); padding-top: var(--spacing-sm); }
-
-.btn-secondary {
-  padding: var(--spacing-sm) var(--spacing-lg); font-size: var(--font-size-sm);
-  font-weight: 500; color: var(--color-text-secondary);
-  background: transparent; border: 1px solid var(--color-border);
-  border-radius: var(--radius-md); cursor: pointer;
-  font-family: var(--font-family); transition: background 0.15s ease;
-}
-.btn-secondary:hover { background: var(--color-bg-tertiary); }
-
-.btn-primary {
-  display: inline-flex; align-items: center; gap: var(--spacing-xs);
-  padding: var(--spacing-sm) var(--spacing-lg); font-size: var(--font-size-sm);
-  font-weight: 600; color: #fff; background: var(--color-primary);
-  border: none; border-radius: var(--radius-md); cursor: pointer;
-  font-family: var(--font-family); transition: background 0.15s ease;
-}
-.btn-primary:hover { background: var(--color-primary-dark); }
-.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-
-.confirm-text { font-size: var(--font-size-sm); color: var(--color-text-secondary); line-height: 1.6; }
-.confirm-text strong { color: var(--color-text); }
-
-.btn-danger {
-  display: inline-flex; align-items: center; gap: var(--spacing-xs);
-  padding: var(--spacing-sm) var(--spacing-lg); font-size: var(--font-size-sm);
-  font-weight: 600; color: #fff; background: var(--color-error);
-  border: none; border-radius: var(--radius-md); cursor: pointer;
-  font-family: var(--font-family); transition: opacity 0.15s ease;
-}
-.btn-danger:hover { opacity: 0.9; }
-.btn-danger:disabled { opacity: 0.6; cursor: not-allowed; }
-
-/* Toast */
-.success-toast { position: fixed; top: var(--spacing-lg); right: var(--spacing-lg); z-index: 1100; }
-.success-toast-content {
-  display: inline-flex; align-items: center; gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-lg); background: var(--color-success);
-  color: #fff; border-radius: var(--radius-md); font-size: var(--font-size-sm);
-  font-weight: 600; box-shadow: var(--shadow-lg);
-}
-.success-toast-content svg { width: 18px; height: 18px; }
-
-.error-toast { position: fixed; top: calc(var(--spacing-lg) + 60px); right: var(--spacing-lg); z-index: 1100; }
-.error-toast-content {
-  display: inline-flex; align-items: center; gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-lg); background: var(--color-error);
-  color: #fff; border-radius: var(--radius-md); font-size: var(--font-size-sm);
-  font-weight: 600; box-shadow: var(--shadow-lg);
-}
-.error-toast-content svg { width: 18px; height: 18px; flex-shrink: 0; }
-
-.toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
-.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-20px); }
-
-/* Responsive */
-@media (max-width: 1199px) { .finance-page { padding: var(--spacing-lg); } }
 
 @media (max-width: 767px) {
-  .finance-page { padding: var(--spacing-md); }
-  .page-header { flex-direction: column; align-items: flex-start; gap: var(--spacing-md); }
-  .filter-bar { flex-direction: column; }
-  .filter-selects { width: 100%; }
-  .filter-select { flex: 1; min-width: 0; }
-  .tx-actions { opacity: 1; }
-  .form-row { grid-template-columns: 1fr; }
-  .dialog { max-width: 100%; margin: var(--spacing-sm); }
-  .dialog-body { padding: var(--spacing-md); }
+  .finance-page {
+    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height) + env(safe-area-inset-bottom));
+  }
+
+  .filter-bar {
+    gap: 10px;
+  }
+
+  .filter-type-group {
+    width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: thin;
+    padding-bottom: 2px;
+  }
+
+  .filter-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .filter-selects {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .tx-item {
+    grid-template-columns: 40px minmax(0, 1fr);
+    align-items: start;
+    padding: 14px 12px;
+  }
+
+  .tx-right {
+    grid-column: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    text-align: left;
+  }
+
+  .tx-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .dialog-overlay {
+    align-items: flex-end;
+    padding: 8px 8px max(8px, env(safe-area-inset-bottom));
+  }
+
+  .dialog {
+    width: 100%;
+    max-height: calc(100dvh - 16px);
+    border-radius: var(--surface-radius) var(--surface-radius) 18px 18px;
+  }
 }
 </style>
