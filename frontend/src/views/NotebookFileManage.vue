@@ -413,10 +413,26 @@ async function loadViewer(noteId) {
   viewerLoading.value = true
   viewerError.value = null
   try {
-    viewerNote.value = await noteService.getNote(noteId)
+    let lastError
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        viewerNote.value = await noteService.getNote(noteId)
+        lastError = null
+        break
+      } catch (cause) {
+        lastError = cause
+        if (cause.response?.status !== 404 || attempt === 2) throw cause
+        await new Promise(resolve => setTimeout(resolve, 200 * (attempt + 1)))
+      }
+    }
+    if (lastError) throw lastError
     if (!openedViewerNotes.has(String(noteId))) {
       openedViewerNotes.add(String(noteId))
-      await noteService.markNoteOpened(noteId)
+      try {
+        await noteService.markNoteOpened(noteId)
+      } catch {
+        // Opening metadata is best-effort; it must not hide successfully loaded content.
+      }
     }
   } catch (cause) {
     viewerNote.value = null

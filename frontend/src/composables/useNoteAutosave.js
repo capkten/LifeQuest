@@ -19,8 +19,8 @@ function resolveSnapshot(source) {
 export function useNoteAutosave({ snapshot, save, delay = 900, initialSnapshot = null } = {}) {
   if (typeof save !== 'function') throw new TypeError('useNoteAutosave requires a save function')
 
-  let savedSnapshot = initialSnapshot == null ? null : resolveSnapshot(initialSnapshot)
-  let hasBaseline = savedSnapshot !== null
+  const savedSnapshot = ref(initialSnapshot == null ? null : resolveSnapshot(initialSnapshot))
+  const hasBaseline = ref(savedSnapshot.value !== null)
   let timer = null
   let queued = false
   const inFlight = ref(null)
@@ -29,16 +29,16 @@ export function useNoteAutosave({ snapshot, save, delay = 900, initialSnapshot =
 
   const dirty = computed(() => {
     const currentSnapshot = resolveSnapshot(snapshot)
-    return currentSnapshot !== null && (!hasBaseline || !snapshotsEqual(currentSnapshot, savedSnapshot))
+    return currentSnapshot !== null && (!hasBaseline.value || !snapshotsEqual(currentSnapshot, savedSnapshot.value))
   })
 
   function schedule() {
     const currentSnapshot = resolveSnapshot(snapshot)
     if (currentSnapshot === null) return
 
-    if (!hasBaseline) {
-      savedSnapshot = currentSnapshot
-      hasBaseline = true
+    if (!hasBaseline.value) {
+      savedSnapshot.value = currentSnapshot
+      hasBaseline.value = true
       status.value = 'idle'
       return
     }
@@ -71,8 +71,8 @@ export function useNoteAutosave({ snapshot, save, delay = 900, initialSnapshot =
 
     request
       .then(() => {
-        savedSnapshot = payload
-        hasBaseline = true
+        savedSnapshot.value = payload
+        hasBaseline.value = true
         lastSavedAt.value = new Date()
         status.value = dirty.value ? 'dirty' : 'saved'
         if (queued || dirty.value) {
@@ -97,8 +97,8 @@ export function useNoteAutosave({ snapshot, save, delay = 900, initialSnapshot =
     if (timer) clearTimeout(timer)
     timer = null
     queued = false
-    savedSnapshot = nextSnapshot == null ? null : resolveSnapshot(nextSnapshot)
-    hasBaseline = savedSnapshot !== null
+    savedSnapshot.value = nextSnapshot == null ? null : resolveSnapshot(nextSnapshot)
+    hasBaseline.value = savedSnapshot.value !== null
     lastSavedAt.value = savedAt ? new Date(savedAt) : null
     status.value = 'idle'
   }

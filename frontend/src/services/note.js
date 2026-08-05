@@ -98,7 +98,7 @@ export const noteService = {
   },
 
   async markNoteOpened(noteId) {
-    const response = await api.post(`/notes/${noteId}/open`)
+    const response = await api.post(`/notes/${noteId}/open`, null, { skipErrorToast: true })
     return response.data
   },
 
