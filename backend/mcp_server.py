@@ -18,6 +18,7 @@ import contextvars
 import logging
 import os
 import sys
+import weakref
 from datetime import date, datetime
 from typing import Any, Optional
 from uuid import UUID
@@ -26,21 +27,35 @@ from uuid import UUID
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.server import TransportSecuritySettings
+from mcp.server.lowlevel.server import request_ctx
 
 from app.database import SessionLocal, engine, Base
 from app.models.user import User
+from app.models.account import AccountType
+from app.models.budget import Budget, BudgetPeriod
+from app.models.debt import Debt, DebtStatus, DebtType
+from app.models.finance_transaction import FinanceTransaction, FinanceTransactionType
+from app.models.project import ProjectPhase, ProjectMilestone
 from app.schemas.finance import (
     AccountCreate,
+    AccountUpdate,
     TransactionCreate,
-    FinanceTransactionType,
+    TransactionUpdate,
+    BudgetUpdate,
+    DebtUpdate,
 )
 from app.schemas.todo import (
     HabitCreate,
+    HabitUpdate,
     TaskCreate,
+    TaskUpdate,
+    GoalUpdate,
     Difficulty,
     Frequency,
 )
+from app.schemas.project import ProjectUpdate, PhaseUpdate, MilestoneUpdate
+from app.schemas.note import NoteCreate, NoteUpdate
+from app.models.todo import TaskStatus
 from app.services.checkin import CheckinService
 from app.services.finance import FinanceService
 from app.services.note import NoteService
@@ -58,6 +73,24 @@ logger = logging.getLogger(__name__)
 _auth_user_id: contextvars.ContextVar[Optional[UUID]] = contextvars.ContextVar(
     "_auth_user_id", default=None
 )
+_auth_users_by_session: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _current_mcp_session():
+    """Return the active MCP session, when called from an MCP request."""
+    try:
+        return request_ctx.get().session
+    except LookupError:
+        return None
+
+
+def _set_authenticated_user(user_id: UUID) -> None:
+    """Persist authentication for the whole MCP session, not one tool call."""
+    session = _current_mcp_session()
+    if session is not None:
+        _auth_users_by_session[session] = user_id
+    # Keep the context-local value for stdio and direct unit-test calls.
+    _auth_user_id.set(user_id)
 
 # ---------------------------------------------------------------------------
 # DB init — run migrations on first use
@@ -109,11 +142,19 @@ def _ensure_db():
 def _resolve_user_id(db) -> UUID:
     """Resolve user ID from the authenticated session or explicit service account."""
     _ensure_db()
-    # 1. Check login session
+    # 1. Check the authenticated MCP session.
+    session = _current_mcp_session()
+    if session is not None:
+        uid = _auth_users_by_session.get(session)
+        if uid:
+            return uid
+
+    # 2. Check the context-local value for stdio/direct calls.
     uid = _auth_user_id.get()
     if uid:
         return uid
-    # 2. Check explicitly configured service account
+
+    # 3. Check explicitly configured service account.
     env_id = os.environ.get("LIFEQUEST_MCP_SERVICE_USER_ID")
     if env_id:
         try:
@@ -157,11 +198,6 @@ mcp = FastMCP(
         "LifeQuest 是一个个人成长 gamification 系统。"
         "你可以通过这些工具管理待办事项、记账、打卡、查看项目和统计数据。"
     ),
-    # Disable DNS rebinding protection for remote access.
-    # The MCP server sits behind the same FastAPI app that already has CORS configured.
-    transport_security=TransportSecuritySettings(
-        enable_dns_rebinding_protection=False,
-    ),
 )
 
 
@@ -178,7 +214,7 @@ def login(username: str, password: str) -> Any:
         user = svc.authenticate(username, password)
         if not user:
             return {"error": "用户名或密码错误"}
-        _auth_user_id.set(user.id)
+        _set_authenticated_user(user.id)
         return {
             "status": "ok",
             "message": f"已登录为 {user.username}",
@@ -234,6 +270,48 @@ def list_goals() -> Any:
 
 
 @mcp.tool()
+def update_goal(
+    goal_id: str,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    status: Optional[str] = None,
+    coins_reward: Optional[int] = None,
+    exp_reward: Optional[int] = None,
+    progress: Optional[float] = None,
+    deadline: Optional[str] = None,
+) -> Any:
+    """更新目标。只传入需要修改的字段；deadline 使用 ISO 8601 格式。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = TodoService(db)
+        goal = svc.get_goal_for_user(UUID(goal_id), uid)
+        update_data = {}
+        if title is not None:
+            update_data["title"] = title
+        if description is not None:
+            update_data["description"] = description
+        if difficulty is not None:
+            update_data["difficulty"] = Difficulty(difficulty)
+        if status is not None:
+            update_data["status"] = TaskStatus(status)
+        if coins_reward is not None:
+            update_data["coins_reward"] = coins_reward
+        if exp_reward is not None:
+            update_data["exp_reward"] = exp_reward
+        if progress is not None:
+            update_data["progress"] = progress
+        if deadline is not None:
+            update_data["deadline"] = datetime.fromisoformat(deadline)
+        if not update_data:
+            return _serialize(goal)
+        return _serialize(svc.update_goal(goal, GoalUpdate(**update_data)))
+    finally:
+        db.close()
+
+
+@mcp.tool()
 def create_task(
     title: str,
     description: str = "",
@@ -273,6 +351,61 @@ def complete_task(task_id: str) -> Any:
         task = svc.get_task_for_user(UUID(task_id), uid)
         result = svc.complete_task(task, uid)
         return _serialize(result)
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def update_task(
+    task_id: str,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    status: Optional[str] = None,
+    coins_reward: Optional[int] = None,
+    exp_reward: Optional[int] = None,
+    deadline: Optional[str] = None,
+    project_id: Optional[str] = None,
+    phase_id: Optional[str] = None,
+    milestone_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    priority: Optional[str] = None,
+) -> Any:
+    """更新任务。只传入需要修改的字段；日期使用 ISO 8601 格式。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = TodoService(db)
+        task = svc.get_task_for_user(UUID(task_id), uid)
+        update_data = {}
+        if title is not None:
+            update_data["title"] = title
+        if description is not None:
+            update_data["description"] = description
+        if difficulty is not None:
+            update_data["difficulty"] = Difficulty(difficulty)
+        if status is not None:
+            update_data["status"] = TaskStatus(status)
+        if coins_reward is not None:
+            update_data["coins_reward"] = coins_reward
+        if exp_reward is not None:
+            update_data["exp_reward"] = exp_reward
+        if deadline is not None:
+            update_data["deadline"] = datetime.fromisoformat(deadline)
+        if project_id is not None:
+            update_data["project_id"] = UUID(project_id)
+        if phase_id is not None:
+            update_data["phase_id"] = UUID(phase_id)
+        if milestone_id is not None:
+            update_data["milestone_id"] = UUID(milestone_id)
+        if start_date is not None:
+            update_data["start_date"] = datetime.fromisoformat(start_date)
+        if priority is not None:
+            update_data["priority"] = priority
+        if not update_data:
+            return _serialize(task)
+        updated_task = svc.update_task(task, TaskUpdate(**update_data))
+        return _serialize(updated_task)
     finally:
         db.close()
 
@@ -320,6 +453,45 @@ def complete_habit(habit_id: str) -> Any:
 
 
 @mcp.tool()
+def update_habit(
+    habit_id: str,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    frequency: Optional[str] = None,
+    coins_reward: Optional[int] = None,
+    exp_reward: Optional[int] = None,
+    is_active: Optional[bool] = None,
+) -> Any:
+    """更新习惯。只传入需要修改的字段。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = TodoService(db)
+        habit = svc.get_habit_for_user(UUID(habit_id), uid)
+        update_data = {}
+        if title is not None:
+            update_data["title"] = title
+        if description is not None:
+            update_data["description"] = description
+        if difficulty is not None:
+            update_data["difficulty"] = Difficulty(difficulty)
+        if frequency is not None:
+            update_data["frequency"] = Frequency(frequency)
+        if coins_reward is not None:
+            update_data["coins_reward"] = coins_reward
+        if exp_reward is not None:
+            update_data["exp_reward"] = exp_reward
+        if is_active is not None:
+            update_data["is_active"] = is_active
+        if not update_data:
+            return _serialize(habit)
+        return _serialize(svc.update_habit(habit, HabitUpdate(**update_data)))
+    finally:
+        db.close()
+
+
+@mcp.tool()
 def get_daily_summary() -> Any:
     """获取今日摘要：今日习惯完成情况、到期任务、活跃目标。"""
     db = SessionLocal()
@@ -355,6 +527,45 @@ def list_accounts() -> Any:
         svc = FinanceService(db)
         accounts = svc.get_accounts(uid)
         return [_serialize(a) for a in accounts]
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def update_account(
+    account_id: str,
+    name: Optional[str] = None,
+    type: Optional[str] = None,
+    icon: Optional[str] = None,
+    balance: Optional[float] = None,
+    credit_limit: Optional[float] = None,
+    billing_day: Optional[int] = None,
+    repayment_day: Optional[int] = None,
+    interest_rate: Optional[float] = None,
+    currency: Optional[str] = None,
+    is_active: Optional[bool] = None,
+    sort_order: Optional[int] = None,
+) -> Any:
+    """更新账户。只传入需要修改的字段。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = FinanceService(db)
+        account = svc._get_account_for_user(UUID(account_id), uid)
+        update_data = {}
+        for key, value in {
+            "name": name, "icon": icon, "balance": balance,
+            "credit_limit": credit_limit, "billing_day": billing_day,
+            "repayment_day": repayment_day, "interest_rate": interest_rate,
+            "currency": currency, "is_active": is_active, "sort_order": sort_order,
+        }.items():
+            if value is not None:
+                update_data[key] = value
+        if type is not None:
+            update_data["type"] = AccountType(type)
+        if not update_data:
+            return _serialize(account)
+        return _serialize(svc.update_account(account, AccountUpdate(**update_data)))
     finally:
         db.close()
 
@@ -431,6 +642,128 @@ def list_transactions(
         db.close()
 
 
+@mcp.tool()
+def update_transaction(
+    transaction_id: str,
+    account_id: Optional[str] = None,
+    category_id: Optional[str] = None,
+    type: Optional[str] = None,
+    amount: Optional[float] = None,
+    description: Optional[str] = None,
+    date_str: Optional[str] = None,
+    to_account_id: Optional[str] = None,
+) -> Any:
+    """更新交易并同步账户余额。只传入需要修改的字段。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = FinanceService(db)
+        transaction = db.query(FinanceTransaction).filter(
+            FinanceTransaction.id == UUID(transaction_id),
+            FinanceTransaction.user_id == uid,
+        ).first()
+        if transaction is None:
+            raise ValueError("Transaction not found")
+        update_data = {}
+        if account_id is not None:
+            update_data["account_id"] = UUID(account_id)
+        if category_id is not None:
+            update_data["category_id"] = UUID(category_id)
+        if type is not None:
+            update_data["type"] = FinanceTransactionType(type)
+        if amount is not None:
+            update_data["amount"] = amount
+        if description is not None:
+            update_data["description"] = description
+        if date_str is not None:
+            update_data["date"] = date.fromisoformat(date_str)
+        if to_account_id is not None:
+            update_data["to_account_id"] = UUID(to_account_id)
+        if not update_data:
+            return _serialize(transaction)
+        return _serialize(svc.update_transaction(
+            transaction, TransactionUpdate(**update_data), uid
+        ))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def update_budget(
+    budget_id: str,
+    category_id: Optional[str] = None,
+    amount: Optional[float] = None,
+    period: Optional[str] = None,
+    start_date: Optional[str] = None,
+) -> Any:
+    """更新预算。只传入需要修改的字段。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = FinanceService(db)
+        budget = db.query(Budget).filter(
+            Budget.id == UUID(budget_id), Budget.user_id == uid
+        ).first()
+        if budget is None:
+            raise ValueError("Budget not found")
+        update_data = {}
+        if category_id is not None:
+            update_data["category_id"] = UUID(category_id)
+        if amount is not None:
+            update_data["amount"] = amount
+        if period is not None:
+            update_data["period"] = BudgetPeriod(period)
+        if start_date is not None:
+            update_data["start_date"] = date.fromisoformat(start_date)
+        if not update_data:
+            return _serialize(budget)
+        return _serialize(svc.update_budget(budget, BudgetUpdate(**update_data)))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def update_debt(
+    debt_id: str,
+    creditor: Optional[str] = None,
+    type: Optional[str] = None,
+    amount: Optional[float] = None,
+    remaining: Optional[float] = None,
+    interest_rate: Optional[float] = None,
+    description: Optional[str] = None,
+    due_date: Optional[str] = None,
+    status: Optional[str] = None,
+) -> Any:
+    """更新债务。只传入需要修改的字段。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = FinanceService(db)
+        debt = db.query(Debt).filter(
+            Debt.id == UUID(debt_id), Debt.user_id == uid
+        ).first()
+        if debt is None:
+            raise ValueError("Debt not found")
+        update_data = {}
+        for key, value in {
+            "creditor": creditor, "amount": amount, "remaining": remaining,
+            "interest_rate": interest_rate, "description": description,
+        }.items():
+            if value is not None:
+                update_data[key] = value
+        if type is not None:
+            update_data["type"] = DebtType(type)
+        if due_date is not None:
+            update_data["due_date"] = date.fromisoformat(due_date)
+        if status is not None:
+            update_data["status"] = DebtStatus(status)
+        if not update_data:
+            return _serialize(debt)
+        return _serialize(svc.update_debt(debt, DebtUpdate(**update_data)))
+    finally:
+        db.close()
+
+
 # ===================== 项目 =====================
 
 
@@ -480,6 +813,106 @@ def get_project_detail(project_id: str) -> Any:
             "phases": _serialize(detail["phases"]),
             "milestones": _serialize(detail["milestones"]),
         }
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def update_project(
+    project_id: str,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    color: Optional[str] = None,
+    icon: Optional[str] = None,
+    status: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> Any:
+    """更新项目。只传入需要修改的字段；日期使用 YYYY-MM-DD。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = ProjectService(db)
+        project = svc.get_project_for_user(UUID(project_id), uid)
+        update_data = {}
+        for key, value in {
+            "name": name, "description": description, "color": color,
+            "icon": icon, "status": status,
+        }.items():
+            if value is not None:
+                update_data[key] = value
+        if start_date is not None:
+            update_data["start_date"] = date.fromisoformat(start_date)
+        if end_date is not None:
+            update_data["end_date"] = date.fromisoformat(end_date)
+        if not update_data:
+            return _serialize(project)
+        return _serialize(svc.update_project(project, ProjectUpdate(**update_data)))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def update_project_phase(
+    phase_id: str,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    status: Optional[str] = None,
+    sort_order: Optional[int] = None,
+) -> Any:
+    """更新项目阶段。只传入需要修改的字段。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = ProjectService(db)
+        phase = svc.phase_repo.get_by_id(UUID(phase_id))
+        if phase is None:
+            raise ValueError("Phase not found")
+        svc.get_project_for_user(phase.project_id, uid)
+        update_data = {}
+        for key, value in {
+            "name": name, "description": description, "status": status,
+            "sort_order": sort_order,
+        }.items():
+            if value is not None:
+                update_data[key] = value
+        if not update_data:
+            return _serialize(phase)
+        return _serialize(svc.update_phase(phase, PhaseUpdate(**update_data)))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def update_project_milestone(
+    milestone_id: str,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    due_date: Optional[str] = None,
+    sort_order: Optional[int] = None,
+) -> Any:
+    """更新项目里程碑。只传入需要修改的字段。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = ProjectService(db)
+        milestone = svc.milestone_repo.get_by_id(UUID(milestone_id))
+        if milestone is None:
+            raise ValueError("Milestone not found")
+        svc.get_project_for_user(milestone.project_id, uid)
+        update_data = {}
+        for key, value in {
+            "name": name, "description": description, "sort_order": sort_order,
+        }.items():
+            if value is not None:
+                update_data[key] = value
+        if due_date is not None:
+            update_data["due_date"] = date.fromisoformat(due_date)
+        if not update_data:
+            return _serialize(milestone)
+        return _serialize(svc.update_milestone(
+            milestone, MilestoneUpdate(**update_data)
+        ))
     finally:
         db.close()
 
@@ -573,6 +1006,64 @@ def search_notes(query: str) -> Any:
         svc = NoteService(db)
         results = svc.search_notes(uid, query)
         return [_serialize(n) for n in results]
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def get_note(note_id: str) -> Any:
+    """读取笔记详情和正文。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = NoteService(db)
+        if not svc.verify_node_ownership(UUID(note_id), uid):
+            raise ValueError("Note not found")
+        note = svc.node_repo.get_by_id(UUID(note_id))
+        if not note or note.type != "note":
+            raise ValueError("Note not found")
+        result = _serialize(note)
+        result["content"] = svc.get_note_content(note.id)
+        return result
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def update_note(
+    note_id: str,
+    title: Optional[str] = None,
+    content: Optional[str] = None,
+    summary: Optional[str] = None,
+    tags: Optional[str] = None,
+    is_pinned: Optional[bool] = None,
+) -> Any:
+    """更新笔记标题、正文或元数据。只传入需要修改的字段。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = NoteService(db)
+        note_id_uuid = UUID(note_id)
+        if not svc.verify_node_ownership(note_id_uuid, uid):
+            raise ValueError("Note not found")
+        note = svc.node_repo.get_by_id(note_id_uuid)
+        if not note or note.type != "note":
+            raise ValueError("Note not found")
+        update_data = {}
+        for key, value in {
+            "title": title, "content": content, "summary": summary,
+            "tags": tags, "is_pinned": is_pinned,
+        }.items():
+            if value is not None:
+                update_data[key] = value
+        if not update_data:
+            result = _serialize(note)
+            result["content"] = svc.get_note_content(note.id)
+            return result
+        updated = svc.update_note(note.id, NoteUpdate(**update_data))
+        result = _serialize(updated)
+        result["content"] = svc.get_note_content(updated.id)
+        return result
     finally:
         db.close()
 

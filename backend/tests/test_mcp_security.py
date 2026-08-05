@@ -1,9 +1,11 @@
 import pytest
+from types import SimpleNamespace
 from uuid import UUID
 
 import mcp_server
 from app.database import Base
 from app.models.user import User
+from mcp.server.lowlevel.server import request_ctx
 
 
 def test_mcp_requires_login_or_explicit_service_account(db_session, monkeypatch):
@@ -44,3 +46,30 @@ def test_mcp_context_does_not_switch_between_users(db_session):
         assert mcp_server._resolve_user_id(db_session) == user_b.id
     finally:
         mcp_server._auth_user_id.reset(token)
+
+
+def test_mcp_login_persists_across_requests_in_same_session(db_session):
+    Base.metadata.create_all(bind=db_session.bind)
+    user = User(
+        username="mcp-session-user",
+        email="mcp-session-user@example.com",
+        password_hash="hashed",
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    class Session:
+        pass
+
+    session = Session()
+    first_request = request_ctx.set(SimpleNamespace(session=session))
+    try:
+        mcp_server._set_authenticated_user(user.id)
+    finally:
+        request_ctx.reset(first_request)
+
+    second_request = request_ctx.set(SimpleNamespace(session=session))
+    try:
+        assert mcp_server._resolve_user_id(db_session) == user.id
+    finally:
+        request_ctx.reset(second_request)
