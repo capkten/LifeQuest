@@ -39,9 +39,11 @@ from app.schemas.finance import (
 from app.schemas.todo import (
     HabitCreate,
     TaskCreate,
+    TaskUpdate,
     Difficulty,
     Frequency,
 )
+from app.models.todo import TaskStatus
 from app.services.checkin import CheckinService
 from app.services.finance import FinanceService
 from app.services.note import NoteService
@@ -295,6 +297,61 @@ def complete_task(task_id: str) -> Any:
         task = svc.get_task_for_user(UUID(task_id), uid)
         result = svc.complete_task(task, uid)
         return _serialize(result)
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def update_task(
+    task_id: str,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    status: Optional[str] = None,
+    coins_reward: Optional[int] = None,
+    exp_reward: Optional[int] = None,
+    deadline: Optional[str] = None,
+    project_id: Optional[str] = None,
+    phase_id: Optional[str] = None,
+    milestone_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    priority: Optional[str] = None,
+) -> Any:
+    """更新任务。只传入需要修改的字段；日期使用 ISO 8601 格式。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = TodoService(db)
+        task = svc.get_task_for_user(UUID(task_id), uid)
+        update_data = {}
+        if title is not None:
+            update_data["title"] = title
+        if description is not None:
+            update_data["description"] = description
+        if difficulty is not None:
+            update_data["difficulty"] = Difficulty(difficulty)
+        if status is not None:
+            update_data["status"] = TaskStatus(status)
+        if coins_reward is not None:
+            update_data["coins_reward"] = coins_reward
+        if exp_reward is not None:
+            update_data["exp_reward"] = exp_reward
+        if deadline is not None:
+            update_data["deadline"] = datetime.fromisoformat(deadline)
+        if project_id is not None:
+            update_data["project_id"] = UUID(project_id)
+        if phase_id is not None:
+            update_data["phase_id"] = UUID(phase_id)
+        if milestone_id is not None:
+            update_data["milestone_id"] = UUID(milestone_id)
+        if start_date is not None:
+            update_data["start_date"] = datetime.fromisoformat(start_date)
+        if priority is not None:
+            update_data["priority"] = priority
+        if not update_data:
+            return _serialize(task)
+        updated_task = svc.update_task(task, TaskUpdate(**update_data))
+        return _serialize(updated_task)
     finally:
         db.close()
 
