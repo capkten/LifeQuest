@@ -18,6 +18,7 @@ import contextvars
 import logging
 import os
 import sys
+import weakref
 from datetime import date, datetime
 from typing import Any, Optional
 from uuid import UUID
@@ -26,6 +27,7 @@ from uuid import UUID
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.lowlevel.server import request_ctx
 
 from app.database import SessionLocal, engine, Base
 from app.models.user import User
@@ -57,6 +59,24 @@ logger = logging.getLogger(__name__)
 _auth_user_id: contextvars.ContextVar[Optional[UUID]] = contextvars.ContextVar(
     "_auth_user_id", default=None
 )
+_auth_users_by_session: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _current_mcp_session():
+    """Return the active MCP session, when called from an MCP request."""
+    try:
+        return request_ctx.get().session
+    except LookupError:
+        return None
+
+
+def _set_authenticated_user(user_id: UUID) -> None:
+    """Persist authentication for the whole MCP session, not one tool call."""
+    session = _current_mcp_session()
+    if session is not None:
+        _auth_users_by_session[session] = user_id
+    # Keep the context-local value for stdio and direct unit-test calls.
+    _auth_user_id.set(user_id)
 
 # ---------------------------------------------------------------------------
 # DB init — run migrations on first use
@@ -108,11 +128,19 @@ def _ensure_db():
 def _resolve_user_id(db) -> UUID:
     """Resolve user ID from the authenticated session or explicit service account."""
     _ensure_db()
-    # 1. Check login session
+    # 1. Check the authenticated MCP session.
+    session = _current_mcp_session()
+    if session is not None:
+        uid = _auth_users_by_session.get(session)
+        if uid:
+            return uid
+
+    # 2. Check the context-local value for stdio/direct calls.
     uid = _auth_user_id.get()
     if uid:
         return uid
-    # 2. Check explicitly configured service account
+
+    # 3. Check explicitly configured service account.
     env_id = os.environ.get("LIFEQUEST_MCP_SERVICE_USER_ID")
     if env_id:
         try:
@@ -172,7 +200,7 @@ def login(username: str, password: str) -> Any:
         user = svc.authenticate(username, password)
         if not user:
             return {"error": "用户名或密码错误"}
-        _auth_user_id.set(user.id)
+        _set_authenticated_user(user.id)
         return {
             "status": "ok",
             "message": f"已登录为 {user.username}",
