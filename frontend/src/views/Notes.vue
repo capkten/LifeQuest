@@ -27,13 +27,13 @@
       </button>
     </div>
 
-    <section v-if="!isSearching" class="discovery-panel" aria-label="绗旇鍙戠幇">
+    <section v-if="!isSearching" class="discovery-panel" aria-label="笔记发现">
       <div class="discovery-toolbar">
-        <select v-model="discoveryFilters.sort" class="discovery-control" aria-label="鎺掑簭">
-          <option value="last_opened">鏈€杩戞墦寮€</option><option value="updated">鏈€杩存洿鏂?</option><option value="created">鍒涘缓鏃堕棿</option><option value="title">鏍囬</option>
+        <select v-model="discoveryFilters.sort" class="discovery-control" aria-label="排序">
+          <option value="last_opened">最近打开</option><option value="updated">最近更新</option><option value="created">创建时间</option><option value="title">标题</option>
         </select>
-        <select v-model="discoveryFilters.notebook_id" class="discovery-control" aria-label="绗旇鏈瓫閫夋湁">
-          <option value="">鎵€鏈夌瑪璁版湰</option><option v-for="book in notebooks" :key="book.id" :value="book.id">{{ book.name }}</option>
+        <select v-model="discoveryFilters.notebook_id" class="discovery-control" aria-label="笔记本筛选">
+          <option value="">所有笔记本</option><option v-for="book in notebooks" :key="book.id" :value="book.id">{{ book.name }}</option>
         </select>
         <input v-model="discoveryFilters.tag" class="discovery-control" placeholder="标签" aria-label="标签筛选" />
         <input v-model="discoveryFilters.updated_after" type="date" class="discovery-control" aria-label="更新时间起始" />

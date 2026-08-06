@@ -1522,11 +1522,6 @@ onMounted(() => {
     gap: 10px;
   }
 
-  .shop-search {
-    max-width: none;
-    flex-basis: auto;
-  }
-
   .shop-toolbar-meta {
     justify-content: space-between;
   }
@@ -1934,6 +1929,21 @@ onMounted(() => {
 }
 
 @media (max-width: 767px) {
+  .shop-search {
+    flex: 0 0 44px;
+    max-width: none;
+    height: 44px;
+    min-height: 44px;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .shop-search input {
+    height: 100%;
+    min-height: 0;
+    line-height: 1.2;
+  }
+
   .balance-display {
     width: 100%;
     justify-content: flex-start;
