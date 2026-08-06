@@ -54,7 +54,7 @@ from app.schemas.todo import (
     Frequency,
 )
 from app.schemas.project import ProjectUpdate, PhaseUpdate, MilestoneUpdate
-from app.schemas.note import NoteCreate, NoteUpdate
+from app.schemas.note import FolderCreate, NotebookCreate, NoteCreate, NoteUpdate
 from app.models.todo import TaskStatus
 from app.services.checkin import CheckinService
 from app.services.finance import FinanceService
@@ -995,6 +995,273 @@ def get_profile() -> Any:
 
 
 # ===================== 笔记 =====================
+
+
+def _build_note_tree(nodes: list) -> list:
+    """Build the nested tree shape used by the notes REST endpoint."""
+    children_map = {}
+    for node in nodes:
+        children_map.setdefault(node.parent_id, []).append(node)
+
+    def build(parent_id):
+        result = []
+        for node in children_map.get(parent_id, []):
+            result.append({
+                "id": _serialize(node.id),
+                "name": node.name,
+                "type": node.type,
+                "parent_id": _serialize(node.parent_id),
+                "children": build(node.id),
+            })
+        return result
+
+    return build(None)
+
+
+@mcp.tool()
+def list_notebooks() -> Any:
+    """列出当前用户的所有笔记本。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        return [_serialize(notebook) for notebook in NoteService(db).get_notebooks(uid)]
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def create_notebook(
+    name: str,
+    description: Optional[str] = None,
+    icon: Optional[str] = None,
+) -> Any:
+    """创建笔记本。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        notebook = NoteService(db).create_notebook(
+            uid, NotebookCreate(name=name, description=description, icon=icon)
+        )
+        return _serialize(notebook)
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def delete_notebook(notebook_id: str) -> Any:
+    """删除当前用户的笔记本。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = NoteService(db)
+        notebook_uuid = UUID(notebook_id)
+        if not svc.verify_notebook_ownership(notebook_uuid, uid):
+            raise ValueError("Notebook not found")
+        root_nodes = [
+            node for node in svc.node_repo.get_by_notebook(notebook_uuid)
+            if node.parent_id is None
+        ]
+        for node in root_nodes:
+            svc.delete_node(node.id)
+        svc.notebook_repo.delete(notebook_uuid)
+        return {"status": "ok", "message": "Notebook deleted"}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def get_notebook_tree(notebook_id: str) -> Any:
+    """获取当前用户笔记本的完整目录树。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = NoteService(db)
+        notebook_uuid = UUID(notebook_id)
+        if not svc.verify_notebook_ownership(notebook_uuid, uid):
+            raise ValueError("Notebook not found")
+        return _build_note_tree(svc.get_tree(notebook_uuid))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def list_note_children(notebook_id: str, parent_id: Optional[str] = None) -> Any:
+    """列出笔记本根目录或指定文件夹下的直接子节点。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = NoteService(db)
+        notebook_uuid = UUID(notebook_id)
+        if not svc.verify_notebook_ownership(notebook_uuid, uid):
+            raise ValueError("Notebook not found")
+        parent_uuid = UUID(parent_id) if parent_id else None
+        if parent_uuid:
+            parent = svc.node_repo.get_by_id(parent_uuid)
+            if not parent or parent.notebook_id != notebook_uuid or parent.type != "folder":
+                raise ValueError("Folder not found")
+        return [_serialize(node) for node in svc.get_children(notebook_uuid, parent_uuid)]
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def create_folder(
+    notebook_id: str,
+    name: str,
+    parent_id: Optional[str] = None,
+) -> Any:
+    """在笔记本根目录或指定文件夹下创建文件夹。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = NoteService(db)
+        notebook_uuid = UUID(notebook_id)
+        if not svc.verify_notebook_ownership(notebook_uuid, uid):
+            raise ValueError("Notebook not found")
+        folder = svc.create_folder(
+            notebook_uuid,
+            uid,
+            FolderCreate(name=name, parent_id=UUID(parent_id) if parent_id else None),
+        )
+        return _serialize(folder)
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def create_note(
+    notebook_id: str,
+    title: str,
+    content: Optional[str] = None,
+    parent_id: Optional[str] = None,
+    summary: Optional[str] = None,
+    tags: Optional[str] = None,
+) -> Any:
+    """创建笔记并返回笔记元数据和正文。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = NoteService(db)
+        notebook_uuid = UUID(notebook_id)
+        if not svc.verify_notebook_ownership(notebook_uuid, uid):
+            raise ValueError("Notebook not found")
+        note = svc.create_note(
+            notebook_uuid,
+            uid,
+            NoteCreate(
+                title=title,
+                content=content,
+                parent_id=UUID(parent_id) if parent_id else None,
+                summary=summary,
+                tags=tags,
+            ),
+        )
+        result = _serialize(note)
+        result["content"] = content or ""
+        return result
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def rename_or_move_node(
+    node_id: str,
+    name: Optional[str] = None,
+    parent_id: Optional[str] = None,
+    move_to_root: bool = False,
+) -> Any:
+    """重命名或移动笔记/文件夹；使用 move_to_root=true 将节点移到根目录。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = NoteService(db)
+        node_uuid = UUID(node_id)
+        if not svc.verify_node_ownership(node_uuid, uid):
+            raise ValueError("Node not found")
+        node = svc.node_repo.get_by_id(node_uuid)
+        if name is not None:
+            svc.rename_node(node_uuid, name, commit=False)
+        if move_to_root or parent_id is not None:
+            svc.move_node(node_uuid, UUID(parent_id) if parent_id else None)
+        if name is not None and not (move_to_root or parent_id is not None):
+            db.commit()
+            db.refresh(node)
+        return _serialize(svc.node_repo.get_by_id(node_uuid))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def delete_node(node_id: str) -> Any:
+    """删除笔记或文件夹；删除文件夹会递归删除其内容。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = NoteService(db)
+        node_uuid = UUID(node_id)
+        if not svc.verify_node_ownership(node_uuid, uid):
+            raise ValueError("Node not found")
+        svc.delete_node(node_uuid)
+        return {"status": "ok", "message": "Node deleted"}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def list_recent_notes(limit: int = 8) -> Any:
+    """列出当前用户最近打开的笔记。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        if limit < 1 or limit > 50:
+            raise ValueError("limit must be between 1 and 50")
+        return [_serialize(node) for node in NoteService(db).get_recent_notes(uid, limit)]
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def discover_notes(
+    sort: str = "last_opened",
+    notebook_id: Optional[str] = None,
+    tag: Optional[str] = None,
+    pinned: Optional[bool] = None,
+    updated_after: Optional[str] = None,
+    updated_before: Optional[str] = None,
+    limit: int = 50,
+) -> Any:
+    """按排序、笔记本、标签、置顶和更新时间筛选笔记。时间使用 ISO 8601。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        if limit < 1 or limit > 50:
+            raise ValueError("limit must be between 1 and 50")
+        return [
+            _serialize(node)
+            for node in NoteService(db).discover_notes(
+                user_id=uid,
+                sort=sort,
+                notebook_id=UUID(notebook_id) if notebook_id else None,
+                tag=tag,
+                pinned=pinned,
+                updated_after=datetime.fromisoformat(updated_after) if updated_after else None,
+                updated_before=datetime.fromisoformat(updated_before) if updated_before else None,
+                limit=limit,
+            )
+        ]
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def mark_note_opened(note_id: str) -> Any:
+    """记录当前用户打开笔记的时间并返回更新后的笔记元数据。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        return _serialize(NoteService(db).mark_note_opened(UUID(note_id), uid))
+    finally:
+        db.close()
 
 
 @mcp.tool()
