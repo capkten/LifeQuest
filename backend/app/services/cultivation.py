@@ -631,6 +631,8 @@ class CultivationService:
 
     @classmethod
     def _is_final_minor_stage(cls, profile: CultivationProfile) -> bool:
+        if profile.realm_key == ASCENDED_REALM_KEY:
+            return True
         thresholds = REALM_THRESHOLDS[profile.realm_key]
         return profile.minor_stage == len(thresholds) and profile.cultivation >= thresholds[-1]
 
@@ -668,18 +670,22 @@ class CultivationService:
         ))
         stones = max(1, math.floor(cultivation * 0.6))
         profile.cultivation += cultivation
-        while profile.minor_stage < len(REALM_THRESHOLDS[profile.realm_key]):
-            next_threshold = self.get_next_stage(
-                profile.realm_key, profile.minor_stage, profile.cultivation
-            ).next_threshold
-            if next_threshold is None or profile.cultivation < next_threshold:
-                break
-            profile.cultivation -= next_threshold
-            profile.minor_stage += 1
-            if profile.minor_stage == len(REALM_THRESHOLDS[profile.realm_key]):
-                profile.cultivation += next_threshold
-                break
-        ready_for_tribulation = self._is_final_minor_stage(profile)
+        if profile.realm_key != ASCENDED_REALM_KEY:
+            while profile.minor_stage < len(REALM_THRESHOLDS[profile.realm_key]):
+                next_threshold = self.get_next_stage(
+                    profile.realm_key, profile.minor_stage, profile.cultivation
+                ).next_threshold
+                if next_threshold is None or profile.cultivation < next_threshold:
+                    break
+                profile.cultivation -= next_threshold
+                profile.minor_stage += 1
+                if profile.minor_stage == len(REALM_THRESHOLDS[profile.realm_key]):
+                    profile.cultivation += next_threshold
+                    break
+        ready_for_tribulation = (
+            profile.realm_key != ASCENDED_REALM_KEY
+            and self._is_final_minor_stage(profile)
+        )
         profile.spirit_stones += stones
         log = CultivationLog(
             user_id=user_id,

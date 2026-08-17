@@ -62,3 +62,32 @@ Actual output: exit code `0`, no output.
 
 - The combined cultivation/todo command has an order-sensitive concurrent tribulation test failure: `55 passed, 1 failed`. The same test passes in isolation. It is outside Task 10 and was not changed because it belongs to the explicitly excluded concurrency scope.
 - Existing deprecation warnings from FastAPI/HTTPX/Jose and existing Vite/Rollup warnings remain.
+
+## Closure Task 10 Ascended Reward Fix (2026-08-17)
+
+### Status
+
+Fixed the scoped ascended reward regression. `settle_todo_reward` now skips mortal minor-stage threshold progression for `profile.realm_key == "ascended"`, while preserving cultivation, spirit stones, cultivation logs, `RewardSettlement`, and legacy todo rewards. The final-stage helper treats ascended as terminal without accessing `REALM_THRESHOLDS["ascended"]`; ascended settlements do not report mortal tribulation readiness.
+
+### Added Regression Test
+
+`backend/tests/test_todos.py::test_ascended_todo_completion_keeps_rewards_and_does_not_progress_mortal_stage`
+
+TDD red command:
+
+`cd backend; $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; pytest tests/test_todos.py::test_ascended_todo_completion_keeps_rewards_and_does_not_progress_mortal_stage -q`
+
+Actual result: `1 failed`; failure was the expected `KeyError: 'ascended'` at `settle_todo_reward` before the fix.
+
+TDD green command:
+
+`cd backend; $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; pytest tests/test_todos.py::test_ascended_todo_completion_keeps_rewards_and_does_not_progress_mortal_stage -q`
+
+Actual result: `1 passed, 9 warnings`.
+
+### Final Verification
+
+- `cd backend; $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; pytest tests/test_cultivation.py tests/test_todos.py -q` -> `57 passed, 67 warnings in 23.61s`
+- `cd frontend; node --test src/views/cultivation-regressions.test.mjs` -> `23 passed, 0 failed`
+- `cd frontend; npm run build` -> exit code `0`; `1959 modules transformed`; Vite build completed in `17.83s`. Existing npm/Rollup warnings remain.
+- `git diff --check` -> exit code `0`, no output.

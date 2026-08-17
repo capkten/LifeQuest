@@ -104,6 +104,60 @@ def test_todo_completion_responses_include_cultivation_reward(client):
     assert all(response.json()["cultivation_reward"]["spirit_stones"] > 0 for response in responses)
 
 
+def test_ascended_todo_completion_keeps_rewards_and_does_not_progress_mortal_stage(client):
+    headers = _register_and_login(client)
+
+    from app.models.cultivation import CultivationLog, CultivationProfile
+    from app.models.user import User
+    from app.services.cultivation import CultivationService
+    from tests.conftest import TestingSessionLocal
+
+    db = TestingSessionLocal()
+    try:
+        user = db.query(User).filter(User.username == "testuser").one()
+        profile = CultivationService(db).ensure_profile(user.id)
+        profile.realm_key = "ascended"
+        profile.minor_stage = 7
+        profile.cultivation = 123
+        profile.spirit_stones = 11
+        db.commit()
+        coins_before = user.coins
+        experience_before = user.experience
+    finally:
+        db.close()
+
+    task = client.post(
+        "/api/todos/tasks",
+        json={"title": "Ascended task", "coins_reward": 20, "exp_reward": 15},
+        headers=headers,
+    ).json()
+    response = client.post(f"/api/todos/tasks/{task['id']}/complete", headers=headers)
+
+    assert response.status_code == 200
+    settlement = response.json()["cultivation_reward"]
+    assert settlement["cultivation"] == 15
+    assert settlement["spirit_stones"] == 9
+    assert settlement["legacy_exp"] == 15
+
+    db = TestingSessionLocal()
+    try:
+        user = db.query(User).filter(User.username == "testuser").one()
+        profile = db.query(CultivationProfile).filter(
+            CultivationProfile.user_id == user.id
+        ).one()
+        logs = db.query(CultivationLog).filter(CultivationLog.user_id == user.id).all()
+        assert user.coins == coins_before + 20 + 50
+        assert user.experience == experience_before + 15
+        assert (profile.realm_key, profile.minor_stage, profile.cultivation) == (
+            "ascended", 7, 138
+        )
+        assert profile.spirit_stones == 20
+        assert len(logs) == 1
+        assert logs[0].source == "task"
+    finally:
+        db.close()
+
+
 def test_complete_habit_awards_rewards(client):
     headers = _register_and_login(client)
 
