@@ -63,7 +63,7 @@ def test_reward_uses_difficulty_and_never_writes_negative_resources(db_session, 
     service = CultivationService(db_session)
     result = service.settle_todo_reward(user.id, "task", 25, "hard", quality=0.8)
 
-    assert result.cultivation == 27
+    assert result.cultivation == 28
     assert result.spirit_stones == 16
     assert result.cultivation >= 0
 
@@ -111,6 +111,38 @@ def test_overview_returns_profile_resources_and_stage_progress(db_session, user)
     assert overview.minor_stage == 1
     assert overview.cultivation == 0
     assert overview.next_stage.next_threshold == 180
+    assert overview.today == []
+    assert overview.recent_rewards == []
+
+
+def test_settlement_advances_minor_stage_but_does_not_bypass_tribulation(db_session, user):
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    service.set_realm(user.id, "qi_refining", 1, 179)
+
+    settlement = service.settle_todo_reward(user.id, "task", 10, "hard")
+
+    profile = service.ensure_profile(user.id)
+    assert settlement.cultivation == 14
+    assert profile.minor_stage == 2
+    assert profile.realm_key == "qi_refining"
+    assert settlement.ready_for_tribulation is False
+
+
+def test_settlement_marks_final_stage_ready_without_changing_realm(db_session, user):
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    service.set_realm(user.id, "qi_refining", 9, 234)
+
+    settlement = service.settle_todo_reward(user.id, "task", 1, "hard")
+
+    profile = service.ensure_profile(user.id)
+    assert profile.realm_key == "qi_refining"
+    assert profile.minor_stage == 9
+    assert profile.cultivation == 235
+    assert settlement.ready_for_tribulation is True
 
 
 def test_overview_creates_profile_for_current_user(client, auth_headers):

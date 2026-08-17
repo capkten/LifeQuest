@@ -1,6 +1,6 @@
 <template>
   <div class="world-page">
-    <header class="world-page__header"><div><p class="cultivation-eyebrow">WORLD MAP</p><h1>仙界地图</h1><p>选择节点查看进入条件与当前进度。</p></div></header>
+    <header class="world-page__header"><div><p class="cultivation-eyebrow">MORTAL WORLD</p><h1>凡界地图</h1><p>选择节点查看进入条件与当前进度。</p></div></header>
     <div v-if="loading" class="cultivation-state">正在读取地图...</div>
     <div v-else-if="error" class="cultivation-state cultivation-state--error" role="alert"><span>地图暂时无法读取。</span><button type="button" class="cultivation-action" @click="load">重试</button></div>
     <div v-else-if="!nodes.length" class="cultivation-state">暂无可探索节点。</div>

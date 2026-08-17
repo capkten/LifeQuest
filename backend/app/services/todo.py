@@ -113,12 +113,14 @@ class TodoService:
         habit.last_completed_at = now
 
         user = self.user_repo.get_by_id(user_id)
+        settlement = None
         if user:
-            self._update_rewards(user, habit.coins_reward, habit.exp_reward, CoinSource.HABIT, habit.difficulty)
+            settlement = self._update_rewards(user, habit.coins_reward, habit.exp_reward, CoinSource.HABIT, habit.difficulty)
             self._check_achievements(user)
             self.db.commit()
 
         self.habit_repo.db.refresh(habit)
+        habit.cultivation_reward = settlement
         return habit
 
     # --- Task operations ---
@@ -150,8 +152,9 @@ class TodoService:
         task.completed_at = datetime.now(timezone.utc)
 
         user = self.user_repo.get_by_id(user_id)
+        settlement = None
         if user:
-            self._update_rewards(
+            settlement = self._update_rewards(
                 user,
                 task.coins_reward,
                 task.exp_reward,
@@ -163,6 +166,7 @@ class TodoService:
             self.db.commit()
 
         self.task_repo.db.refresh(task)
+        task.cultivation_reward = settlement
         return task
 
     # --- Goal operations ---
@@ -189,12 +193,14 @@ class TodoService:
         goal.progress = GOAL_COMPLETED_PROGRESS
 
         user = self.user_repo.get_by_id(user_id)
+        settlement = None
         if user:
-            self._update_rewards(user, goal.coins_reward, goal.exp_reward, CoinSource.GOAL, goal.difficulty)
+            settlement = self._update_rewards(user, goal.coins_reward, goal.exp_reward, CoinSource.GOAL, goal.difficulty)
             self._check_achievements(user)
             self.db.commit()
 
         self.goal_repo.db.refresh(goal)
+        goal.cultivation_reward = settlement
         return goal
 
     def _update_rewards(
@@ -205,7 +211,7 @@ class TodoService:
         source: str,
         difficulty: str = "medium",
         importance: float = 1.0,
-    ) -> None:
+    ):
         """Update user coins and experience in a single transaction."""
         self.user_repo._update_coins_no_commit(user, coins)
         legacy_level = user.level
@@ -229,6 +235,7 @@ class TodoService:
                 "description": f"Reward from {source}",
             }
         )
+        return settlement
 
     def _check_achievements(self, user) -> None:
         """Check and unlock achievements based on current user state."""

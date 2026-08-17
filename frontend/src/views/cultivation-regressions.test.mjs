@@ -19,6 +19,27 @@ test('todo page keeps the legacy reward fallback', async () => {
   assert.match(source, /coins_reward/)
   assert.match(source, /exp_reward/)
   assert.match(source, /cultivation|修为/)
+  assert.match(source, /cultivation_reward/)
+})
+
+test('mortal world is reachable and labeled consistently', async () => {
+  const [sidebar, world] = await Promise.all([
+    readFile(new URL('../components/layout/Sidebar.vue', import.meta.url), 'utf8'),
+    readFile(new URL('./World.vue', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(sidebar, /to="\/world"/)
+  assert.match(sidebar, /凡界/)
+  assert.doesNotMatch(sidebar, /cultivationUnlocked\s*&&\s*isAscended[^\n]*to="\/world"/)
+  assert.match(world, /凡界地图/)
+  assert.doesNotMatch(world, /仙界地图/)
+})
+
+test('cultivation overview exposes stable today and recent reward arrays', async () => {
+  const schema = await readFile(new URL('../../../backend/app/schemas/cultivation.py', import.meta.url), 'utf8')
+
+  assert.match(schema, /today:[\s\S]*default_factory=list/)
+  assert.match(schema, /recent_rewards:[\s\S]*default_factory=list/)
 })
 
 test('cultivation service keeps endpoint paths in one module', async () => {

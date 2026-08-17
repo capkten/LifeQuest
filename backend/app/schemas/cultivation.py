@@ -21,6 +21,7 @@ class RewardSettlement(BaseModel):
     efficiency: float
     log_id: UUID
     legacy_exp: int
+    ready_for_tribulation: bool = False
 
 
 class CultivationOverview(BaseModel):
@@ -38,6 +39,8 @@ class CultivationOverview(BaseModel):
     ascended: bool = False
     next_stage: StageProgress
     realm: Optional[Dict[str, Any]] = None
+    today: List[Dict[str, Any]] = Field(default_factory=list)
+    recent_rewards: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class WorldNodeResponse(BaseModel):

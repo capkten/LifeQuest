@@ -69,7 +69,7 @@ SECT_ENTRY_REALMS = {
     9: "tribulation",
 }
 
-DIFFICULTY_FACTORS = {"easy": 0.8, "medium": 1.0, "hard": 1.35}
+DIFFICULTY_FACTORS = {"easy": 0.8, "medium": 1.0, "hard": 1.4}
 SLOT_PRICES = [0, 100, 300, 800, 2000, 5000, 12000]
 SLOT_REALMS = ["qi_refining", "foundation", "golden_core", "nascent_soul", "spirit_transformation", "void_refining", "body_combination"]
 _TRIBULATION_PROCESS_LOCK = threading.Lock()
@@ -97,6 +97,29 @@ class CultivationService:
             next_threshold=None,
             remaining=0,
         ) if profile.realm_key == ASCENDED_REALM_KEY else self.get_next_stage(profile.realm_key, profile.minor_stage, profile.cultivation)
+        from app.services.todo import TodoService
+
+        daily = TodoService(self.db).get_daily_summary(user_id)
+        today = [
+            {**item, "kind": kind}
+            for kind in ("habits", "tasks", "goals")
+            for item in daily.get(kind, [])
+        ]
+        recent_rewards = [
+            {
+                "id": log.id,
+                "source": log.source,
+                "cultivation": log.cultivation_delta,
+                "spirit_stones": log.spirit_stones_delta,
+                "merit": log.merit_delta,
+                "created_at": log.created_at,
+            }
+            for log in self.db.query(CultivationLog)
+            .filter(CultivationLog.user_id == user_id)
+            .order_by(CultivationLog.created_at.desc())
+            .limit(10)
+            .all()
+        ]
         return CultivationOverview(
             realm_key=profile.realm_key,
             minor_stage=profile.minor_stage,
@@ -110,6 +133,8 @@ class CultivationService:
             ascended=profile.realm_key == ASCENDED_REALM_KEY,
             next_stage=progress,
             realm={"key": profile.realm_key, "minor_stage": profile.minor_stage},
+            today=today,
+            recent_rewards=recent_rewards,
         )
 
     @staticmethod
@@ -643,6 +668,18 @@ class CultivationService:
         ))
         stones = max(1, math.floor(cultivation * 0.6))
         profile.cultivation += cultivation
+        while profile.minor_stage < len(REALM_THRESHOLDS[profile.realm_key]):
+            next_threshold = self.get_next_stage(
+                profile.realm_key, profile.minor_stage, profile.cultivation
+            ).next_threshold
+            if next_threshold is None or profile.cultivation < next_threshold:
+                break
+            profile.cultivation -= next_threshold
+            profile.minor_stage += 1
+            if profile.minor_stage == len(REALM_THRESHOLDS[profile.realm_key]):
+                profile.cultivation += next_threshold
+                break
+        ready_for_tribulation = self._is_final_minor_stage(profile)
         profile.spirit_stones += stones
         log = CultivationLog(
             user_id=user_id,
@@ -661,6 +698,7 @@ class CultivationService:
             efficiency=profile.cultivation_efficiency,
             log_id=log.id,
             legacy_exp=cultivation,
+            ready_for_tribulation=ready_for_tribulation,
         )
 
     def get_next_stage(

@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.todo import Difficulty, TaskStatus, Frequency
+from app.schemas.cultivation import RewardSettlement
 
 
 # Habit schemas
@@ -44,6 +45,7 @@ class HabitResponse(BaseModel):
     last_completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+    cultivation_reward: Optional[RewardSettlement] = None
 
 
 # Task schemas
@@ -97,6 +99,7 @@ class TaskResponse(BaseModel):
     start_date: Optional[datetime] = None
     priority: str = "medium"
     sort_order: int = 0
+    cultivation_reward: Optional[RewardSettlement] = None
     project_name: Optional[str] = None
     project_color: Optional[str] = None
 
@@ -137,6 +140,7 @@ class GoalResponse(BaseModel):
     deadline: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+    cultivation_reward: Optional[RewardSettlement] = None
 
 
 # Subtask schemas

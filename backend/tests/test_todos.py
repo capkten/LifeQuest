@@ -86,6 +86,24 @@ def test_complete_task_awards_rewards(client):
     assert user_after["level"] == 2
 
 
+def test_todo_completion_responses_include_cultivation_reward(client):
+    headers = _register_and_login(client)
+
+    task = client.post("/api/todos/tasks", json={"title": "Task reward"}, headers=headers).json()
+    habit = client.post("/api/todos/habits", json={"title": "Habit reward"}, headers=headers).json()
+    goal = client.post("/api/todos/goals", json={"title": "Goal reward"}, headers=headers).json()
+
+    responses = [
+        client.post(f"/api/todos/tasks/{task['id']}/complete", headers=headers),
+        client.post(f"/api/todos/habits/{habit['id']}/complete", headers=headers),
+        client.post(f"/api/todos/goals/{goal['id']}/complete", headers=headers),
+    ]
+
+    assert all(response.status_code == 200 for response in responses)
+    assert all(response.json()["cultivation_reward"]["cultivation"] > 0 for response in responses)
+    assert all(response.json()["cultivation_reward"]["spirit_stones"] > 0 for response in responses)
+
+
 def test_complete_habit_awards_rewards(client):
     headers = _register_and_login(client)
 
@@ -243,7 +261,7 @@ def test_complete_task_creates_one_cultivation_log_and_keeps_legacy_rewards(clie
         ).one()
         assert user.experience == 15
         assert user.coins == 70
-        assert profile.cultivation == 32
+        assert profile.cultivation == 33
         assert profile.spirit_stones == 19
     finally:
         db.close()
