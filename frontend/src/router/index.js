@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useCultivationStore } from '../stores/cultivation'
 
 const cultivationRouteComponent = () => import('../components/cultivation/CultivationStatusBar.vue')
 
@@ -89,7 +90,8 @@ const routes = [
       {
         path: 'npcs',
         name: 'Npcs',
-        component: () => import('../views/Npcs.vue')
+        component: () => import('../views/Npcs.vue'),
+        meta: { requiresAscended: true }
       },
       {
         path: 'tribulations',
@@ -210,6 +212,20 @@ router.beforeEach(async (to, from, next) => {
         next({ name: 'Login', query: { redirect: to.fullPath } })
         return
       }
+    }
+  }
+
+  if (to.matched.some(record => record.meta.requiresAscended)) {
+    const cultivationStore = useCultivationStore()
+    try {
+      const overview = cultivationStore.overview || await cultivationStore.loadOverview()
+      if (overview?.ascended !== true) {
+        next({ name: 'Cultivation' })
+        return
+      }
+    } catch (error) {
+      next({ name: 'Cultivation' })
+      return
     }
   }
 

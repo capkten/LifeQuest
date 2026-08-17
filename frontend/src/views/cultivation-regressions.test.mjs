@@ -56,6 +56,8 @@ test('tribulation page exposes transparent risk order and authoritative result s
   assert.match(page, /requestId|sequence|AbortController|latest/i)
   assert.match(page, /skipErrorToast/)
   assert.match(page, /error\.value\s*=\s*null/)
+  assert.match(page, /useCultivationStore/)
+  assert.match(page, /cultivationStore\.refresh\(\)/)
   assert.match(probability, /:disabled="[^"]*operationBusy/)
   assert.match(probability, /aria-live="polite"/)
 })
@@ -145,6 +147,16 @@ test('sidebar uses the explicit API ascended state', async () => {
   const schema = await readFile(new URL('../../../backend/app/schemas/cultivation.py', import.meta.url), 'utf8')
   assert.match(sidebar, /cultivationOverview\.value\?\.ascended\s*===\s*true/)
   assert.match(schema, /ascended:\s*bool\s*=\s*False/)
+})
+
+test('npcs route and API access are protected by ascended state', async () => {
+  const router = await readFile(new URL('../router/index.js', import.meta.url), 'utf8')
+  const api = await readFile(new URL('../../../backend/app/api/cultivation.py', import.meta.url), 'utf8')
+  const service = await readFile(new URL('../../../backend/app/services/cultivation.py', import.meta.url), 'utf8')
+  assert.match(router, /path:\s*['"]npcs['"][\s\S]*requiresAscended:\s*true/)
+  assert.match(router, /requiresAscended[\s\S]*cultivationStore\.loadOverview/)
+  assert.match(api, /def npcs\([\s\S]*get_npcs\(current_user\.id\)/)
+  assert.match(service, /NPCs require ascended realm/)
 })
 
 test('recent rewards preserve descriptions before numeric fallback', async () => {

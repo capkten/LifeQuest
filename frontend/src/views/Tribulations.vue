@@ -23,8 +23,10 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import TribulationProbability from '../components/cultivation/TribulationProbability.vue'
 import { cultivationService } from '../services/cultivation'
+import { useCultivationStore } from '../stores/cultivation'
 
 const preview = ref(null), overview = ref(null), result = ref(null), error = ref(null), loading = ref(false), attempting = ref(false), pillCount = ref(0)
+const cultivationStore = useCultivationStore()
 let previewRequestId = 0
 let previewController = null
 const readinessItems = [{ key: 'mind_state', label: '心境状态' }, { key: 'habit', label: '最近 7 天习惯' }, { key: 'task_quality', label: '最近 7 天任务质量' }, { key: 'trial', label: '渡劫试炼质量' }, { key: 'compatibility', label: '功法宗门契合度' }]
@@ -50,7 +52,11 @@ async function load() {
 async function attempt() {
   if (attempting.value || preview.value?.cooldown_until) return
   attempting.value = true; error.value = null
-  try { result.value = await cultivationService.attemptTribulation({ pill_count: pillCount.value }); await load() } catch (cause) { error.value = cause } finally { attempting.value = false }
+  try {
+    result.value = await cultivationService.attemptTribulation({ pill_count: pillCount.value })
+    if (result.value.success) await cultivationStore.refresh()
+    await load()
+  } catch (cause) { error.value = cause } finally { attempting.value = false }
 }
 watch(pillCount, (value) => { const bounded = Math.max(0, Math.min(15, Number(value) || 0)); if (bounded !== value) pillCount.value = bounded; if (!attempting.value) loadPreview() })
 onMounted(load)

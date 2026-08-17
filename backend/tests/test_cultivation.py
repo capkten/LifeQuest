@@ -144,13 +144,31 @@ def test_sect_join_is_locked_before_foundation(client, auth_headers):
     assert response.json()["detail"] == "sect requires foundation realm"
 
 
-def test_world_and_fixed_npcs_are_available(client, auth_headers):
+def test_mortal_npcs_are_locked_without_creating_relationships(client, auth_headers):
     world = client.get("/api/cultivation/world", headers=auth_headers)
     npcs = client.get("/api/cultivation/npcs", headers=auth_headers)
 
-    assert world.status_code == npcs.status_code == 200
+    assert world.status_code == 200
     assert len(world.json()["nodes"]) >= 9
-    assert len(npcs.json()["fixed_core"]) == 270
+    assert npcs.status_code == 409
+    assert npcs.json()["detail"] == "NPCs require ascended realm"
+
+
+def test_ascended_user_can_load_fixed_npcs_without_changing_data_boundary(db_session, user):
+    from app.services.cultivation import CultivationService
+    from app.models.cultivation import CultivationProfile
+    from app.models.world import Npc
+
+    service = CultivationService(db_session)
+    service.set_realm(user.id, "ascended", 1, 0)
+
+    response = service.get_npcs(user.id)
+
+    assert len(response.fixed_core) == 270
+    assert db_session.query(Npc).filter(Npc.user_id == user.id, Npc.is_core.is_(True)).count() == 270
+    db_session.query(Npc).filter(Npc.user_id == user.id).delete(synchronize_session=False)
+    db_session.query(CultivationProfile).filter(CultivationProfile.user_id == user.id).delete(synchronize_session=False)
+    db_session.commit()
 
 
 def test_technique_slot_purchase_progresses_indices_and_charges_profile(client, auth_headers):
@@ -450,6 +468,31 @@ def test_non_daily_integrity_error_is_not_reported_as_cooldown(db_session, user,
 
     monkeypatch.setattr(db_session, "commit", raise_other_integrity_error)
     with pytest.raises(IntegrityError, match="unrelated_table.key"):
+        service.attempt_tribulation(user.id, 0)
+    monkeypatch.setattr(db_session, "commit", original_commit)
+
+
+def test_similar_daily_fields_without_unique_error_are_not_reported_as_cooldown(db_session, user, monkeypatch):
+    from sqlalchemy.exc import IntegrityError
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    profile = service.ensure_profile(user.id)
+    profile.realm_key = "foundation"
+    profile.minor_stage = 4
+    profile.cultivation = 950
+    db_session.commit()
+    monkeypatch.setattr(service, "roll", lambda probability: True)
+    original_commit = db_session.commit
+
+    def raise_similar_non_unique_error():
+        raise IntegrityError(
+            "INSERT", {},
+            Exception("CHECK constraint failed: tribulation_attempts.user_id, attempted_date"),
+        )
+
+    monkeypatch.setattr(db_session, "commit", raise_similar_non_unique_error)
+    with pytest.raises(IntegrityError, match="CHECK constraint failed"):
         service.attempt_tribulation(user.id, 0)
     monkeypatch.setattr(db_session, "commit", original_commit)
 

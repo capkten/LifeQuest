@@ -116,7 +116,10 @@ def update_loadout(payload: LoadoutRequest, current_user: User = Depends(get_cur
 
 @router.get("/npcs", response_model=NpcRelationshipResponse)
 def npcs(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return _service(db).get_npcs(current_user.id)
+    try:
+        return _service(db).get_npcs(current_user.id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/tribulation/preview", response_model=TribulationPreview)

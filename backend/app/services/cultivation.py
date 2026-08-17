@@ -1,5 +1,6 @@
 import math
 import random
+import threading
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
@@ -71,6 +72,7 @@ SECT_ENTRY_REALMS = {
 DIFFICULTY_FACTORS = {"easy": 0.8, "medium": 1.0, "hard": 1.35}
 SLOT_PRICES = [0, 100, 300, 800, 2000, 5000, 12000]
 SLOT_REALMS = ["qi_refining", "foundation", "golden_core", "nascent_soul", "spirit_transformation", "void_refining", "body_combination"]
+_TRIBULATION_PROCESS_LOCK = threading.Lock()
 
 
 class CultivationService:
@@ -418,6 +420,9 @@ class CultivationService:
         )
 
     def get_npcs(self, user_id: UUID) -> NpcRelationshipResponse:
+        profile = self.ensure_profile(user_id)
+        if profile.realm_key != ASCENDED_REALM_KEY:
+            raise PermissionError("NPCs require ascended realm")
         self.seed_world(self.db)
         sects = self.db.query(Sect).all()
         for sect in sects:
@@ -490,7 +495,8 @@ class CultivationService:
         )
 
     def attempt_tribulation(self, user_id: UUID, pill_count: int) -> TribulationResult:
-        return self._attempt_tribulation(user_id, pill_count)
+        with _TRIBULATION_PROCESS_LOCK:
+            return self._attempt_tribulation(user_id, pill_count)
 
     def _attempt_tribulation(self, user_id: UUID, pill_count: int) -> TribulationResult:
         profile = self.db.query(CultivationProfile).with_for_update().filter_by(user_id=user_id).one_or_none()
@@ -525,13 +531,15 @@ class CultivationService:
         )
         self.db.add(attempt)
         try:
+            self.db.flush()
+            attempt_id = attempt.id
             self.db.commit()
         except IntegrityError as exc:
             self.db.rollback()
             if self._is_daily_attempt_conflict(exc):
                 raise PermissionError("tribulation cooldown active") from exc
             raise
-        return TribulationResult(success=success, realm_key=profile.realm_key, target_realm=preview.target_realm, cultivation_loss=loss, log_id=attempt.id, cooldown_until=self._cooldown_until(user_id), terminal=success and preview.target_realm == "ascension")
+        return TribulationResult(success=success, realm_key=profile.realm_key, target_realm=preview.target_realm, cultivation_loss=loss, log_id=attempt_id, cooldown_until=self._cooldown_until(user_id), terminal=success and preview.target_realm == "ascension")
 
     def roll(self, probability: float):
         roll = random.random() * 100
@@ -586,10 +594,10 @@ class CultivationService:
         if constraint_name == "uq_tribulation_attempt_user_day":
             return True
         error_text = str(original or exc).lower()
-        return (
-            "tribulation_attempts" in error_text
-            and "user_id" in error_text
-            and "attempted_date" in error_text
+        normalized = " ".join(error_text.split())
+        return normalized.endswith(
+            "unique constraint failed: tribulation_attempts.user_id, "
+            "tribulation_attempts.attempted_date"
         )
 
     @staticmethod
