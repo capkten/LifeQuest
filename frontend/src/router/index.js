@@ -90,8 +90,7 @@ const routes = [
       {
         path: 'npcs',
         name: 'Npcs',
-        component: () => import('../views/Npcs.vue'),
-        meta: { requiresAscended: true }
+        component: () => import('../views/Npcs.vue')
       },
       {
         path: 'tribulations',

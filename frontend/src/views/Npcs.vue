@@ -1,6 +1,6 @@
 <template>
   <div class="npcs-page">
-    <header class="npcs-page__header"><div><p class="cultivation-eyebrow">RELATIONSHIPS</p><h1>仙官关系</h1><p>记录固定核心人物、最近相遇与修炼变化。</p></div></header>
+    <header class="npcs-page__header"><div><p class="cultivation-eyebrow">RELATIONSHIPS</p><h1>人物关系</h1><p>记录固定核心人物、最近相遇与修炼变化。</p></div></header>
     <div v-if="loading" class="cultivation-state">正在读取关系记录...</div>
     <div v-else-if="error" class="cultivation-state cultivation-state--error" role="alert"><span>关系记录暂时无法读取。</span><button type="button" class="cultivation-action" @click="load">重试</button></div>
     <template v-else>
@@ -9,7 +9,7 @@
         <NpcGroup title="固定核心 NPC" :items="fixedCore" empty="暂无固定核心 NPC。" />
         <NpcGroup title="最近遇见" :items="recentlyMet" empty="暂无最近遇见的 NPC。" />
       </section>
-      <NpcTimeline :npcs="{ fixed_core: [], recently_met: [], events }" :events="events" />
+      <NpcTimeline :npcs="relationship" :events="events" />
     </template>
   </div>
 </template>

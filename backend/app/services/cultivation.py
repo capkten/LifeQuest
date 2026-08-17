@@ -1,6 +1,7 @@
 import math
 import random
 import threading
+from hashlib import sha256
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
@@ -446,21 +447,99 @@ class CultivationService:
 
     def get_npcs(self, user_id: UUID) -> NpcRelationshipResponse:
         profile = self.ensure_profile(user_id)
-        if profile.realm_key != ASCENDED_REALM_KEY:
-            raise PermissionError("NPCs require ascended realm")
         self.seed_world(self.db)
-        sects = self.db.query(Sect).all()
-        for sect in sects:
-            for role in ("sect master", "transmission elder", "trial envoy"):
-                name = f"{sect.sect_key}-{role.replace(' ', '-') }"
+        fixed_core = self._ensure_fixed_core_npcs(user_id) if profile.realm_key == ASCENDED_REALM_KEY else []
+        recent_ids = [row[0] for row in self.db.query(NpcEvent.npc_id).join(
+            Npc, Npc.id == NpcEvent.npc_id
+        ).filter(
+            NpcEvent.user_id == user_id, Npc.is_generated.is_(True)
+        ).order_by(NpcEvent.created_at.desc()).limit(20).all()]
+        recent = []
+        seen = set()
+        for npc_id in recent_ids:
+            if npc_id in seen:
+                continue
+            npc = self.db.get(Npc, npc_id)
+            if npc is not None:
+                self.refresh_npc_cultivation(npc, date.today())
+                recent.append(npc)
+                seen.add(npc_id)
+        return NpcRelationshipResponse(
+            fixed_core=[NpcSummary.model_validate(row) for row in fixed_core],
+            recently_met=[NpcSummary.model_validate(row) for row in recent],
+        )
+
+    def meet_npc(self, user_id: UUID, sect_key: str, population_index: int) -> NpcSummary:
+        if population_index < 0:
+            raise ValueError("population_index must be non-negative")
+        self.seed_world(self.db)
+        sect = self._get_sect(sect_key)
+        npc = self.db.query(Npc).filter(
+            Npc.user_id == user_id,
+            Npc.sect_id == sect.id,
+            Npc.population_index == population_index,
+            Npc.is_generated.is_(True),
+        ).first()
+        if npc is None:
+            seed = self._npc_seed(str(sect.id), population_index)
+            npc = Npc(
+                user_id=user_id,
+                sect_id=sect.id,
+                name=self._ordinary_npc_name(seed),
+                role="ordinary disciple",
+                description=f"A disciple of {sect.name}.",
+                is_core=False,
+                population_index=population_index,
+                is_generated=True,
+                cultivation=20 + seed % 81,
+                cultivation_updated_on=date.today(),
+                cultivation_locked=False,
+            )
+            self.db.add(npc)
+            self.db.flush()
+        self.db.add(NpcEvent(user_id=user_id, npc_id=npc.id, event_key="met", summary="Met ordinary disciple"))
+        self.db.commit()
+        self.db.refresh(npc)
+        return NpcSummary.model_validate(npc)
+
+    def refresh_npc_cultivation(self, npc: Npc, today: date) -> Npc:
+        if npc.cultivation_locked or npc.cultivation_updated_on is None or today <= npc.cultivation_updated_on:
+            return npc
+        days = (today - npc.cultivation_updated_on).days
+        seed = self._npc_seed(str(npc.sect_id), npc.population_index or 0)
+        npc.cultivation += days * (1 + seed % 10)
+        npc.cultivation_updated_on = today
+        self.db.commit()
+        return npc
+
+    def _ensure_fixed_core_npcs(self, user_id: UUID):
+        roles = (("sect master", "玄衡宗主"), ("transmission elder", "传法长老"), ("trial envoy", "入门使者"))
+        for sect in self.db.query(Sect).all():
+            for role, name in roles:
                 exists = self.db.query(Npc).filter(
-                    Npc.user_id == user_id, Npc.sect_id == sect.id, Npc.role == role, Npc.is_core.is_(True)
+                    Npc.user_id == user_id, Npc.sect_id == sect.id,
+                    Npc.role == role, Npc.is_core.is_(True),
                 ).first()
                 if exists is None:
-                    self.db.add(Npc(user_id=user_id, sect_id=sect.id, name=name, role=role, description=f"Core NPC of {sect.name}", is_core=True))
+                    self.db.add(Npc(
+                        user_id=user_id, sect_id=sect.id, name=name, role=role,
+                        description=f"{sect.name}的固定核心人物。", is_core=True,
+                        is_generated=False, cultivation_locked=True,
+                    ))
         self.db.commit()
-        rows = self.db.query(Npc).filter(Npc.user_id == user_id, Npc.is_core.is_(True)).order_by(Npc.name).all()
-        return NpcRelationshipResponse(fixed_core=[NpcSummary.model_validate(row) for row in rows])
+        return self.db.query(Npc).filter(
+            Npc.user_id == user_id, Npc.is_core.is_(True)
+        ).order_by(Npc.name).all()
+
+    @staticmethod
+    def _npc_seed(sect_key: str, population_index: int) -> int:
+        return int.from_bytes(sha256(f"{sect_key}:{population_index}".encode("utf-8")).digest()[:8], "big")
+
+    @staticmethod
+    def _ordinary_npc_name(seed: int) -> str:
+        surnames = ("沈", "顾", "陆", "叶", "苏", "宁", "萧", "秦")
+        given = ("清衡", "知远", "景行", "云舟", "若木", "闻道", "怀瑾", "明川")
+        return f"{surnames[seed % len(surnames)]}{given[(seed // len(surnames)) % len(given)]}"
 
     def set_realm(self, user_id: UUID, realm_key: str, minor_stage: int, cultivation: int):
         profile = self.ensure_profile(user_id)

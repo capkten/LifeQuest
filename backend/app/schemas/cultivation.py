@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -139,12 +139,17 @@ class NpcSummary(BaseModel):
     role: Optional[str] = None
     description: Optional[str] = None
     is_core: bool
+    population_index: Optional[int] = None
+    is_generated: bool = False
+    cultivation: int = 0
+    cultivation_updated_on: Optional[date] = None
+    cultivation_locked: bool = False
 
 
 class NpcRelationshipResponse(BaseModel):
     fixed_core: List[NpcSummary]
-    recently_met: List[NpcSummary] = []
-    events: List[Dict[str, Any]] = []
+    recently_met: List[NpcSummary] = Field(default_factory=list)
+    events: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class TribulationAttemptRequest(BaseModel):

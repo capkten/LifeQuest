@@ -1,4 +1,5 @@
 import math
+from datetime import date
 
 import pytest
 from uuid import uuid4
@@ -55,6 +56,65 @@ def test_npc_user_id_is_non_nullable():
     from app.models.world import Npc
 
     assert Npc.__table__.c.user_id.nullable is False
+
+
+def test_meeting_same_disciple_is_permanent_and_stable(db_session, user):
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    first = service.meet_npc(user.id, "sect-1-normal-1", 7)
+    second = service.meet_npc(user.id, "sect-1-normal-1", 7)
+
+    assert first.id == second.id
+    assert first.name == second.name
+    assert first.population_index == 7
+    assert first.is_generated is True
+
+
+def test_npc_cultivation_updates_once_per_natural_day(db_session, user):
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    npc = service.meet_npc(user.id, "sect-1-normal-1", 2)
+    before = npc.cultivation
+
+    service.refresh_npc_cultivation(npc, date(2026, 8, 17))
+    after = npc.cultivation
+    service.refresh_npc_cultivation(npc, date(2026, 8, 17))
+
+    assert after >= before
+    assert npc.cultivation == after
+    assert npc.cultivation_updated_on == date(2026, 8, 17)
+
+
+def test_npc_population_is_stable_but_isolated_between_users(db_session, user):
+    from app.models.user import User
+    from app.services.cultivation import CultivationService
+
+    other = User(username=f"other-{uuid4().hex}", email=f"{uuid4().hex}@example.com", password_hash="hashed")
+    db_session.add(other)
+    db_session.commit()
+    service = CultivationService(db_session)
+
+    first = service.meet_npc(user.id, "sect-1-normal-1", 3)
+    second = service.meet_npc(other.id, "sect-1-normal-1", 3)
+
+    assert first.id != second.id
+    assert first.name == second.name
+    assert service.get_npcs(user.id).recently_met[0].id == first.id
+    assert service.get_npcs(other.id).recently_met[0].id == second.id
+
+
+def test_mortal_npcs_return_core_and_recent_disciples_without_ascended_data(db_session, user):
+    from app.services.cultivation import CultivationService
+
+    response = CultivationService(db_session).get_npcs(user.id)
+
+    assert len(response.fixed_core) == 0
+    assert response.recently_met == []
+    disciple = CultivationService(db_session).meet_npc(user.id, "sect-1-normal-1", 1)
+    response = CultivationService(db_session).get_npcs(user.id)
+    assert [item.id for item in response.recently_met] == [disciple.id]
 
 
 def test_reward_uses_difficulty_and_never_writes_negative_resources(db_session, user):
@@ -176,14 +236,15 @@ def test_sect_join_is_locked_before_foundation(client, auth_headers):
     assert response.json()["detail"] == "sect requires foundation realm"
 
 
-def test_mortal_npcs_are_locked_without_creating_relationships(client, auth_headers):
+def test_mortal_npcs_expose_only_the_mortal_population(client, auth_headers):
     world = client.get("/api/cultivation/world", headers=auth_headers)
     npcs = client.get("/api/cultivation/npcs", headers=auth_headers)
 
     assert world.status_code == 200
     assert len(world.json()["nodes"]) >= 9
-    assert npcs.status_code == 409
-    assert npcs.json()["detail"] == "NPCs require ascended realm"
+    assert npcs.status_code == 200
+    assert npcs.json()["fixed_core"] == []
+    assert npcs.json()["recently_met"] == []
 
 
 def test_ascended_user_can_load_fixed_npcs_without_changing_data_boundary(db_session, user):

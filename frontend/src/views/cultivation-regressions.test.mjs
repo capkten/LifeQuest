@@ -173,14 +173,16 @@ test('sidebar uses the explicit API ascended state', async () => {
   assert.match(schema, /ascended:\s*bool\s*=\s*False/)
 })
 
-test('npcs route and API access are protected by ascended state', async () => {
+test('npcs route exposes mortal disciples without ascended-only officials', async () => {
   const router = await readFile(new URL('../router/index.js', import.meta.url), 'utf8')
   const api = await readFile(new URL('../../../backend/app/api/cultivation.py', import.meta.url), 'utf8')
   const service = await readFile(new URL('../../../backend/app/services/cultivation.py', import.meta.url), 'utf8')
-  assert.match(router, /path:\s*['"]npcs['"][\s\S]*requiresAscended:\s*true/)
+  assert.match(router, /path:\s*['"]npcs['"][\s\S]*component:/)
+  assert.doesNotMatch(router, /path:\s*['"]npcs['"][\s\S]*requiresAscended:\s*true/)
   assert.match(router, /requiresAscended[\s\S]*cultivationStore\.loadOverview/)
   assert.match(api, /def npcs\([\s\S]*get_npcs\(current_user\.id\)/)
-  assert.match(service, /NPCs require ascended realm/)
+  assert.match(service, /profile\.realm_key == ASCENDED_REALM_KEY/)
+  assert.match(service, /is_generated\.is_\(True\)/)
 })
 
 test('cultivation state is cleared across auth identity changes', async () => {

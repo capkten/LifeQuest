@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, Uuid, UniqueConstraint
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, String, Text, Uuid, UniqueConstraint
 
 from app.database import Base
 
@@ -61,6 +61,9 @@ class SectAccessProgress(Base):
 
 class Npc(Base):
     __tablename__ = "npcs"
+    __table_args__ = (
+        UniqueConstraint("user_id", "sect_id", "population_index", name="uq_npc_user_sect_population"),
+    )
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
@@ -69,6 +72,11 @@ class Npc(Base):
     role = Column(String(64), nullable=True)
     description = Column(Text, nullable=True)
     is_core = Column(Boolean, nullable=False, default=False)
+    population_index = Column(Integer, nullable=True)
+    is_generated = Column(Boolean, nullable=False, default=False)
+    cultivation = Column(Integer, nullable=False, default=0)
+    cultivation_updated_on = Column(Date, nullable=True)
+    cultivation_locked = Column(Boolean, nullable=False, default=False)
 
 
 class NpcEvent(Base):
