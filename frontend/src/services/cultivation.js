@@ -12,7 +12,14 @@ export const cultivationService = {
   },
 
   async getSects(params) {
-    const response = await api.get('/cultivation/sects', { params })
+    const filters = params || {}
+    const response = await api.get('/cultivation/sects', {
+      params: {
+        star: filters.star ?? null,
+        kind: filters.kind ?? null,
+        task_preference: filters.task_preference ?? null,
+      },
+    })
     return response.data
   },
 

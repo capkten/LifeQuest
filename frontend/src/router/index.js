@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
-// Tasks 7-8 replace these placeholder destinations with their feature pages.
 const cultivationRouteComponent = () => import('../components/cultivation/CultivationStatusBar.vue')
 
 const routes = [
@@ -80,12 +79,12 @@ const routes = [
       {
         path: 'sects',
         name: 'Sects',
-        component: cultivationRouteComponent
+        component: () => import('../views/Sects.vue')
       },
       {
         path: 'techniques',
         name: 'Techniques',
-        component: cultivationRouteComponent
+        component: () => import('../views/Techniques.vue')
       },
       {
         path: 'npcs',

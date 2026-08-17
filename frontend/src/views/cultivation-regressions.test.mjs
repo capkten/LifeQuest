@@ -128,3 +128,20 @@ test('static world detail does not claim expansion state', async () => {
   assert.doesNotMatch(source, /<article[^>]+aria-expanded/)
   assert.doesNotMatch(source, /<p[^>]+aria-expanded/)
 })
+
+test('sect page exposes comparison filters', async () => {
+  const source = await readFile(new URL('./Sects.vue', import.meta.url), 'utf8')
+
+  assert.match(source, /星级/)
+  assert.match(source, /特殊|隐藏/)
+  assert.match(source, /比较/)
+})
+
+test('technique page shows price and conflict without relying on color', async () => {
+  const source = await readFile(new URL('./Techniques.vue', import.meta.url), 'utf8')
+
+  assert.match(source, /需要境界/)
+  assert.match(source, /灵石/)
+  assert.match(source, /冲突/)
+  assert.match(source, /TechniqueSlotGrid/)
+})
