@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import { invalidateAuthSession } from './authSession'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
 const serverBaseUrl = apiBaseUrl.replace(/\/api\/?$/, '')
@@ -57,8 +58,7 @@ api.interceptors.response.use(
       const refreshToken = localStorage.getItem('refreshToken')
 
       if (!refreshToken) {
-        localStorage.removeItem('token')
-        window.location.href = '/login'
+        invalidateAuthSession()
         return Promise.reject(error)
       }
 
@@ -91,9 +91,7 @@ api.interceptors.response.use(
       } catch (refreshError) {
         isRefreshing = false
         onRefreshFailed(refreshError)
-        localStorage.removeItem('token')
-        localStorage.removeItem('refreshToken')
-        window.location.href = '/login'
+        invalidateAuthSession()
         return Promise.reject(refreshError)
       }
     }

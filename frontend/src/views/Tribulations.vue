@@ -7,7 +7,7 @@
       <section class="tribulations-layout">
         <div class="tribulations-main">
           <section class="tribulation-surface" aria-labelledby="current-realm-title"><div class="tribulation-heading"><h2 id="current-realm-title">当前境界</h2><strong>{{ realmLabel }}</strong></div><p class="tribulation-cultivation">当前小境界修为：<strong>{{ overview.cultivation }}</strong></p><p class="tribulation-warning">失败损失：{{ preview.failure_loss }} 点修为（{{ preview.failure_loss_percent }}%）。不会降低境界名称或删除功法、装备、格子、宗门记录和 NPC 关系。</p></section>
-          <TribulationProbability :preview="preview" :loading="loading" :error="error" :attempting="attempting" @attempt="attempt" @retry="load" />
+      <TribulationProbability :preview="preview" :loading="loading" :error="error" :attempting="attempting" @attempt="attempt" @retry="syncAndLoad" />
         </div>
         <aside class="tribulations-side">
           <section class="tribulation-surface" aria-labelledby="readiness-title"><div class="tribulation-heading"><h2 id="readiness-title">渡劫准备度</h2><strong>{{ preview.readiness_score }}/100</strong></div><dl class="readiness-list"><div v-for="item in readinessItems" :key="item.key"><dt>{{ item.label }}</dt><dd>{{ preview.readiness_breakdown[item.key] }}</dd></div></dl></section>
@@ -49,13 +49,18 @@ async function load() {
   loading.value = true; error.value = null
   try { overview.value = await cultivationService.getOverview(); await loadPreview() } catch (cause) { error.value = cause } finally { loading.value = false }
 }
+async function syncAndLoad() {
+  let syncError = null
+  try { await cultivationStore.refresh() } catch (cause) { syncError = cause }
+  await load()
+  if (syncError) error.value = syncError
+}
 async function attempt() {
   if (attempting.value || preview.value?.cooldown_until) return
   attempting.value = true; error.value = null
   try {
     result.value = await cultivationService.attemptTribulation({ pill_count: pillCount.value })
-    await cultivationStore.refresh()
-    await load()
+    await syncAndLoad()
   } catch (cause) { error.value = cause } finally { attempting.value = false }
 }
 watch(pillCount, (value) => { const bounded = Math.max(0, Math.min(15, Number(value) || 0)); if (bounded !== value) pillCount.value = bounded; if (!attempting.value) loadPreview() })

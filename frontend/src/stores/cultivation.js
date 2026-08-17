@@ -7,6 +7,7 @@ export const useCultivationStore = defineStore('cultivation', () => {
   const loading = ref(false)
   const error = ref(null)
   let requestVersion = 0
+  let requestSequence = 0
 
   function clear() {
     requestVersion += 1
@@ -17,19 +18,20 @@ export const useCultivationStore = defineStore('cultivation', () => {
 
   async function loadOverview() {
     const version = requestVersion
+    const sequence = ++requestSequence
     loading.value = true
     error.value = null
     try {
       const nextOverview = await cultivationService.getOverview()
-      if (version !== requestVersion) return null
+      if (version !== requestVersion || sequence !== requestSequence) return null
       overview.value = nextOverview
       return overview.value
     } catch (requestError) {
-      if (version !== requestVersion) return null
+      if (version !== requestVersion || sequence !== requestSequence) return null
       error.value = requestError
       throw requestError
     } finally {
-      if (version === requestVersion) loading.value = false
+      if (version === requestVersion && sequence === requestSequence) loading.value = false
     }
   }
 
