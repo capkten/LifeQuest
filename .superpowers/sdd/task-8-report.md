@@ -71,7 +71,7 @@ Output: no output; exit code `0`.
 ## Concerns
 
 - The full backend suite and frontend build emit existing deprecation, npm configuration, and large-chunk warnings; none are Task 8 failures.
-- Habit and task readiness are calculated from currently persisted seven-day data. The repository has no persisted quality/history model for trial quality or cultivation-style compatibility, so those two components use the documented neutral score of `50.0` until those upstream data sources exist.
+- Habit and task readiness are calculated from currently persisted seven-day data. When no task history exists, task quality remains the documented neutral score of `50.0`; trial and compatibility now derive from persisted sect access, active membership, and learned-technique state.
 - No browser screenshot/manual session was run; frontend verification is static regression coverage plus the production build.
 
 ## Review Fixes
@@ -117,4 +117,4 @@ git diff --check
 
 Output: no output; exit code `0`.
 
-Final review-fix commit: `f4dd7250d435105bacbb333b00a0c4573b2a52f3`
+Final review-fix implementation commit: `f4dd7250d435105bacbb333b00a0c4573b2a52f3`
