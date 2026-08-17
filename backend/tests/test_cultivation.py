@@ -306,6 +306,49 @@ def test_sect_join_rejects_hidden_and_lower_realm_with_stable_locks(db_session, 
         service.join_sect(user.id, star_two.sect_key)
 
 
+def test_sect_listing_and_join_share_realm_eligibility_rule(db_session, user):
+    from app.models.world import Sect
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    service.seed_world(db_session)
+    profile = service.ensure_profile(user.id)
+    sect = db_session.query(Sect).filter_by(star=1, kind="normal").first()
+
+    profile.realm_key = "qi_refining"
+    locked = next(item for item in service.get_sects(user.id) if item.id == sect.id)
+    assert locked.visible is True
+    assert locked.realm_confirmed is False
+    assert locked.can_join is False
+    with pytest.raises(PermissionError, match="sect requires foundation realm"):
+        service.join_sect(user.id, sect.sect_key)
+
+    profile.realm_key = "foundation"
+    eligible = next(item for item in service.get_sects(user.id) if item.id == sect.id)
+    assert eligible.realm_confirmed is True
+    assert eligible.can_join is True
+    assert service.join_sect(user.id, sect.sect_key).status == "active"
+
+
+def test_technique_library_exposes_authoritative_next_slot_previews(db_session, user):
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    profile = service.ensure_profile(user.id)
+    profile.realm_key = "foundation"
+    profile.spirit_stones = 500
+
+    response = service.get_techniques(user.id)
+
+    assert response.spirit_stones == 500
+    preview = response.next_slot_purchases["main"]
+    assert preview.next_slot_index == 0
+    assert preview.price == 0
+    assert preview.required_realm == "qi_refining"
+    assert preview.post_purchase_balance == 500
+    assert preview.can_purchase is True
+
+
 def test_update_loadout_requires_owned_learned_technique_and_realm(db_session, user):
     from app.models.technique import LearnedTechnique, Technique, TechniqueSlot
     from app.services.cultivation import CultivationService

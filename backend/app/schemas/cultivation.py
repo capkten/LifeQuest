@@ -99,11 +99,22 @@ class TechniqueSlotResponse(BaseModel):
     technique_id: Optional[UUID] = None
 
 
+class TechniqueSlotPurchasePreview(BaseModel):
+    next_slot_index: int
+    price: int
+    required_realm: str
+    post_purchase_balance: int
+    realm_confirmed: bool
+    can_purchase: bool
+
+
 class TechniqueLibraryResponse(BaseModel):
     techniques: List[TechniqueSummary]
     slots: List[TechniqueSlotResponse]
-    loadout: Dict[str, Optional[UUID]]
+    loadout: Dict[str, Any]
     slot_assignments: Dict[str, List[Optional[UUID]]] = Field(default_factory=dict)
+    spirit_stones: int
+    next_slot_purchases: Dict[str, TechniqueSlotPurchasePreview]
 
 
 class TechniqueSlotPurchaseRequest(BaseModel):

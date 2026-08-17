@@ -20,6 +20,7 @@ from app.schemas.cultivation import (
     StageProgress,
     TechniqueLibraryResponse,
     TechniqueSlotResponse,
+    TechniqueSlotPurchasePreview,
     TechniqueSummary,
     TribulationPreview,
     TribulationResult,
@@ -165,24 +166,23 @@ class CultivationService:
             query = query.filter(Sect.kind == kind)
         if task_preference is not None:
             query = query.filter(Sect.task_preference == task_preference)
-        return [SectSummary(
-            id=sect.id,
-            sect_key=sect.sect_key,
-            name=sect.name,
-            star=sect.star,
-            kind=sect.kind,
-            task_preference=sect.task_preference,
-            entry_realm=sect.entry_realm,
-            world_node_key=self.db.query(WorldNode.node_key).filter(WorldNode.id == sect.world_node_id).scalar(),
-            core_legacy=sect.core_legacy,
-            joined=bool(membership and membership.sect_id == sect.id),
-            visible=True,
-            can_join=False,
-            realm_confirmed=self._realm_meets_entry(profile, sect.star, sect.entry_realm or SECT_ENTRY_REALMS[sect.star]),
-            messenger_contacted=False,
-            trial_confirmed=False,
-            trial_status="awaiting_messenger_and_trial",
-        ) for sect in query.all()]
+        summaries = []
+        for sect in query.all():
+            eligibility = self._sect_eligibility(profile, sect)
+            summaries.append(SectSummary(
+                id=sect.id,
+                sect_key=sect.sect_key,
+                name=sect.name,
+                star=sect.star,
+                kind=sect.kind,
+                task_preference=sect.task_preference,
+                entry_realm=sect.entry_realm,
+                world_node_key=self.db.query(WorldNode.node_key).filter(WorldNode.id == sect.world_node_id).scalar(),
+                core_legacy=sect.core_legacy,
+                joined=bool(membership and membership.sect_id == sect.id),
+                **eligibility,
+            ))
+        return summaries
 
     def join_sect(self, user_id: UUID, sect_key: str) -> SectMembershipResponse:
         profile = self.ensure_profile(user_id)
@@ -195,10 +195,11 @@ class CultivationService:
                 sect = None
         if sect is None:
             raise LookupError("sect not found")
-        if sect.kind == "hidden":
+        eligibility = self._sect_eligibility(profile, sect)
+        if not eligibility["visible"]:
             raise PermissionError("sect is locked")
-        required_realm = SECT_ENTRY_REALMS[sect.star]
-        if not self._realm_meets_entry(profile, sect.star, required_realm):
+        if not eligibility["can_join"]:
+            required_realm = sect.entry_realm or SECT_ENTRY_REALMS[sect.star]
             raise PermissionError(f"sect requires {required_realm} realm")
         current = self.db.query(SectMembership).filter(
             SectMembership.user_id == user_id, SectMembership.status == "active"
@@ -224,7 +225,7 @@ class CultivationService:
 
     def get_techniques(self, user_id: UUID) -> TechniqueLibraryResponse:
         self.seed_world(self.db)
-        self.ensure_profile(user_id)
+        profile = self.ensure_profile(user_id)
         learned = {row.technique_id for row in self.db.query(LearnedTechnique).filter(LearnedTechnique.user_id == user_id)}
         techniques = self.db.query(Technique).order_by(Technique.technique_key).all()
         slots = self.db.query(TechniqueSlot).filter(TechniqueSlot.user_id == user_id).order_by(TechniqueSlot.slot_type, TechniqueSlot.slot_index).all()
@@ -239,11 +240,16 @@ class CultivationService:
                 description=t.description, technique_type=t.technique_type,
                 required_realm=t.required_realm, spirit_stone_cost=t.spirit_stone_cost,
                 slot_count=t.slot_count, learned=t.id in learned,
-                realm_confirmed=not t.required_realm or self._realm_at_least(self.ensure_profile(user_id).realm_key, t.required_realm),
+                realm_confirmed=not t.required_realm or self._realm_at_least(profile.realm_key, t.required_realm),
             ) for t in techniques],
             slots=[TechniqueSlotResponse(slot_type=s.slot_type, slot_index=s.slot_index, technique_id=s.technique_id) for s in slots],
             loadout=loadout,
             slot_assignments=slot_assignments,
+            spirit_stones=profile.spirit_stones,
+            next_slot_purchases={
+                slot_type: self._slot_purchase_preview(profile, slot_type, len([slot for slot in slots if slot.slot_type == slot_type]))
+                for slot_type in ("main", "auxiliary", "mind", "body")
+            },
         )
 
     def purchase_slot(self, user_id: UUID, slot_type: str):
@@ -299,10 +305,39 @@ class CultivationService:
                 raise ValueError("SLOT_CONFLICT:DUPLICATE_TECHNIQUE")
             if len(locations) != technique.slot_count:
                 raise ValueError("SLOT_CONFLICT:OCCUPANCY")
+            indexes = sorted(index for _, index in locations)
+            if indexes != list(range(indexes[0], indexes[0] + technique.slot_count)):
+                raise ValueError("SLOT_CONFLICT:NON_CONTIGUOUS")
         for slot, technique_id in updates:
             slot.technique_id = technique_id
         self.db.commit()
         return self.get_techniques(user_id)
+
+    def _sect_eligibility(self, profile: CultivationProfile, sect: Sect):
+        visible = sect.kind != "hidden"
+        required_realm = sect.entry_realm or SECT_ENTRY_REALMS[sect.star]
+        realm_confirmed = visible and self._realm_at_least(profile.realm_key, required_realm)
+        return {
+            "visible": visible,
+            "can_join": realm_confirmed,
+            "realm_confirmed": realm_confirmed,
+            "messenger_contacted": False,
+            "trial_confirmed": False,
+            "trial_status": "not_tracked_current_phase",
+        }
+
+    def _slot_purchase_preview(self, profile: CultivationProfile, slot_type: str, next_index: int):
+        required_realm = SLOT_REALMS[min(next_index, len(SLOT_REALMS) - 1)]
+        price = SLOT_PRICES[next_index] if next_index < len(SLOT_PRICES) else SLOT_PRICES[-1] * (2 ** (next_index - len(SLOT_PRICES) + 1))
+        realm_confirmed = self._realm_at_least(profile.realm_key, required_realm)
+        return TechniqueSlotPurchasePreview(
+            next_slot_index=next_index,
+            price=price,
+            required_realm=required_realm,
+            post_purchase_balance=profile.spirit_stones - price,
+            realm_confirmed=realm_confirmed,
+            can_purchase=realm_confirmed and profile.spirit_stones >= price,
+        )
 
     def get_npcs(self, user_id: UUID) -> NpcRelationshipResponse:
         self.seed_world(self.db)

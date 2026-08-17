@@ -31,7 +31,7 @@ const sects = ref([]); const loading = ref(false); const error = ref(null); cons
 const errorMessage = () => error.value?.response?.data?.detail || error.value?.message || '宗门暂时无法读取。'
 async function load() { loading.value = true; error.value = null; try { const response = await cultivationService.getSects(filters); sects.value = Array.isArray(response) ? response.filter((sect) => sect.visible === true) : [] } catch (requestError) { error.value = requestError } finally { loading.value = false } }
 function kindLabel(kind) { return ({ normal: '普通', special: '特殊', hidden: '隐藏' })[kind] || kind || '未知' }
-function eligibilityMessage(sect) { return sect.can_join === true && sect.realm_confirmed === true ? '服务器已确认境界，等待其他入门状态' : '等待服务器确认境界、使者接触与试炼条件' }
+function eligibilityMessage(sect) { return sect.can_join === true && sect.realm_confirmed === true ? '服务器已确认境界，当前阶段可入门' : '等待服务器确认境界；使者与试炼状态当前阶段不追踪' }
 async function join(sect) { if (sect.can_join !== true || sect.visible !== true) return; busyId.value = sect.sect_key; error.value = null; try { const result = await cultivationService.joinSect(sect.id || sect.sect_key); sects.value = sects.value.map((item) => ({ ...item, joined: item.sect_key === result.sect_key })) } catch (requestError) { error.value = requestError } finally { busyId.value = null } }
 onMounted(load)
 </script>

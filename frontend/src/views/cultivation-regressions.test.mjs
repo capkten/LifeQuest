@@ -164,3 +164,30 @@ test('task 7 fixes preserve authoritative state and honest empty/locked states',
   assert.doesNotMatch(sects, /concat\(\[['"]宗主|传功长老|试炼使者/)
   assert.match(slots, /visibleSlots/)
 })
+
+test('technique confirmation uses authoritative server preview values', async () => {
+  const source = await readFile(new URL('./Techniques.vue', import.meta.url), 'utf8')
+
+  assert.match(source, /spirit_stones/)
+  assert.match(source, /next_slot_purchases/)
+  assert.match(source, /post_purchase_balance/)
+  assert.doesNotMatch(source, /const prices\s*=/)
+  assert.doesNotMatch(source, /服务器返回后显示/)
+})
+
+test('sect joining follows server eligibility fields', async () => {
+  const source = await readFile(new URL('./Sects.vue', import.meta.url), 'utf8')
+
+  assert.match(source, /sect\.visible !== true/)
+  assert.match(source, /sect\.can_join !== true/)
+  assert.match(source, /sect\.realm_confirmed === true/)
+})
+
+test('multi-slot techniques assign contiguous purchased slots or show insufficient state', async () => {
+  const source = await readFile(new URL('./Techniques.vue', import.meta.url), 'utf8')
+
+  assert.match(source, /slot_count/)
+  assert.match(source, /slice\([^)]*slot_count/)
+  assert.match(source, /连续|不足|insufficient/i)
+  assert.match(source, /updateLoadout\(assignments\)/)
+})
