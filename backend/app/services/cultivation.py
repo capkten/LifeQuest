@@ -1,6 +1,7 @@
 import math
 import random
 import threading
+from contextlib import nullcontext
 from hashlib import sha256
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
@@ -825,57 +826,63 @@ class CultivationService:
             raise ValueError("User not found")
         if source_key:
             existing_log = self.db.query(CultivationLog).filter(
-                CultivationLog.source_key == source_key
+                CultivationLog.source_key == source_key,
+                CultivationLog.user_id == user_id,
             ).one_or_none()
             if existing_log is not None:
-                return RewardSettlement(
-                    cultivation=existing_log.cultivation_delta,
-                    spirit_stones=existing_log.spirit_stones_delta,
-                    merit=existing_log.merit_delta,
-                    efficiency=1.0,
-                    log_id=existing_log.id,
-                    legacy_exp=existing_log.cultivation_delta,
-                    ready_for_tribulation=False,
+                return self._settlement_from_existing_log(existing_log, user_id)
+        try:
+            # A source-key savepoint contains both the unique claim and all
+            # cultivation mutations, so a losing concurrent session rolls back
+            # without leaving a partial reward behind.
+            with (self.db.begin_nested() if source_key else nullcontext()):
+                profile = self.ensure_profile(user_id)
+                cultivation = max(0, math.floor(
+                    base_exp
+                    * difficulty_factor
+                    * importance
+                    * profile.cultivation_efficiency
+                    * quality
+                ))
+                stones = max(1, math.floor(cultivation * 0.6))
+                profile.cultivation += cultivation
+                if profile.realm_key != ASCENDED_REALM_KEY:
+                    while profile.minor_stage < len(REALM_THRESHOLDS[profile.realm_key]):
+                        next_threshold = self.get_next_stage(
+                            profile.realm_key, profile.minor_stage, profile.cultivation
+                        ).next_threshold
+                        if next_threshold is None or profile.cultivation < next_threshold:
+                            break
+                        profile.cultivation -= next_threshold
+                        profile.minor_stage += 1
+                        if profile.minor_stage == len(REALM_THRESHOLDS[profile.realm_key]):
+                            profile.cultivation += next_threshold
+                            break
+                ready_for_tribulation = (
+                    profile.realm_key != ASCENDED_REALM_KEY
+                    and self._is_final_minor_stage(profile)
                 )
-        profile = self.ensure_profile(user_id)
+                profile.spirit_stones += stones
+                log = CultivationLog(
+                    user_id=user_id,
+                    source=source,
+                    source_key=source_key,
+                    cultivation_delta=cultivation,
+                    spirit_stones_delta=stones,
+                )
+                self.db.add(log)
+                self.db.flush()
+        except IntegrityError:
+            existing_log = self.db.query(CultivationLog).filter(
+                CultivationLog.source_key == source_key,
+                CultivationLog.user_id == user_id,
+            ).one_or_none()
+            if existing_log is None:
+                raise
+            return self._settlement_from_existing_log(existing_log, user_id)
 
-        cultivation = max(0, math.floor(
-            base_exp
-            * difficulty_factor
-            * importance
-            * profile.cultivation_efficiency
-            * quality
-        ))
-        stones = max(1, math.floor(cultivation * 0.6))
-        profile.cultivation += cultivation
-        if profile.realm_key != ASCENDED_REALM_KEY:
-            while profile.minor_stage < len(REALM_THRESHOLDS[profile.realm_key]):
-                next_threshold = self.get_next_stage(
-                    profile.realm_key, profile.minor_stage, profile.cultivation
-                ).next_threshold
-                if next_threshold is None or profile.cultivation < next_threshold:
-                    break
-                profile.cultivation -= next_threshold
-                profile.minor_stage += 1
-                if profile.minor_stage == len(REALM_THRESHOLDS[profile.realm_key]):
-                    profile.cultivation += next_threshold
-                    break
-        ready_for_tribulation = (
-            profile.realm_key != ASCENDED_REALM_KEY
-            and self._is_final_minor_stage(profile)
-        )
-        profile.spirit_stones += stones
-        log = CultivationLog(
-            user_id=user_id,
-            source=source,
-            source_key=source_key,
-            cultivation_delta=cultivation,
-            spirit_stones_delta=stones,
-        )
-        self.db.add(log)
         self.user_repo._update_experience_no_commit(user, cultivation)
         self.user_repo._update_coins_no_commit(user, stones)
-        self.db.flush()
         return RewardSettlement(
             cultivation=cultivation,
             spirit_stones=stones,
@@ -885,6 +892,26 @@ class CultivationService:
             legacy_exp=cultivation,
             ready_for_tribulation=ready_for_tribulation,
         )
+
+    def _settlement_from_existing_log(
+        self, log: CultivationLog, user_id: UUID
+    ) -> RewardSettlement:
+        profile = self.cultivation_repo.get_by_user(user_id)
+        settlement = RewardSettlement(
+            cultivation=log.cultivation_delta,
+            spirit_stones=log.spirit_stones_delta,
+            merit=log.merit_delta,
+            efficiency=profile.cultivation_efficiency if profile else 1.0,
+            log_id=log.id,
+            legacy_exp=log.cultivation_delta,
+            ready_for_tribulation=bool(
+                profile
+                and profile.realm_key != ASCENDED_REALM_KEY
+                and self._is_final_minor_stage(profile)
+            ),
+        )
+        settlement._already_settled = True
+        return settlement
 
     def get_next_stage(
         self, realm_key: str, minor_stage: int, cultivation: int

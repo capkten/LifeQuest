@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 
 class StageProgress(BaseModel):
@@ -15,6 +15,8 @@ class StageProgress(BaseModel):
 
 
 class RewardSettlement(BaseModel):
+    _already_settled: bool = PrivateAttr(default=False)
+
     cultivation: int
     spirit_stones: int
     merit: int

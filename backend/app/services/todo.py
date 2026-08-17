@@ -231,12 +231,15 @@ class TodoService:
         source_key: str | None = None,
     ):
         """Update user coins and experience in a single transaction."""
-        self.user_repo._update_coins_no_commit(user, coins)
         legacy_level = user.level
         legacy_experience = user.experience
         settlement = self.cultivation_service.settle_todo_reward(
             user.id, source, exp, difficulty, importance=importance, source_key=source_key
         )
+        if settlement._already_settled:
+            return settlement
+
+        self.user_repo._update_coins_no_commit(user, coins)
         # Spirit stones are persisted in cultivation, while the legacy todo
         # wallet must retain its pre-cultivation reward semantics.
         user.coins -= settlement.spirit_stones

@@ -65,6 +65,61 @@ def _deduplicate_tribulation_attempts(connection):
             seen.add(key)
 
 
+def _deduplicate_learned_techniques(connection):
+    """Keep the latest learned record for each user/technique pair."""
+    rows = connection.execute(text(
+        "SELECT id, user_id, technique_id, learned_at "
+        "FROM learned_techniques "
+        "WHERE user_id IS NOT NULL AND technique_id IS NOT NULL "
+        "ORDER BY user_id, technique_id, learned_at DESC, id DESC"
+    )).fetchall()
+    seen = set()
+    for learned_id, user_id, technique_id, _learned_at in rows:
+        key = (user_id, technique_id)
+        if key in seen:
+            connection.execute(
+                text("DELETE FROM learned_techniques WHERE id = :id"),
+                {"id": learned_id},
+            )
+        else:
+            seen.add(key)
+
+
+def _migrate_learned_technique_constraint(inspector, connection):
+    """Upgrade legacy learned-technique tables without duplicating fresh DDL."""
+    try:
+        inspector.get_columns("learned_techniques")
+    except (KeyError, NoSuchTableError):
+        return
+
+    _deduplicate_learned_techniques(connection)
+
+    unique_definition_exists = False
+    try:
+        unique_definition_exists = any(
+            constraint.get("column_names") == ["user_id", "technique_id"]
+            for constraint in inspector.get_unique_constraints("learned_techniques")
+        )
+    except (AttributeError, NotImplementedError):
+        pass
+    if not unique_definition_exists:
+        try:
+            unique_definition_exists = any(
+                index.get("unique")
+                and index.get("column_names") == ["user_id", "technique_id"]
+                for index in inspector.get_indexes("learned_techniques")
+            )
+        except (AttributeError, NotImplementedError):
+            pass
+
+    if not unique_definition_exists:
+        connection.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS "
+            "uq_learned_technique_user_technique "
+            "ON learned_techniques (user_id, technique_id)"
+        ))
+
+
 def _deduplicate_npcs(connection):
     """Keep one ordinary disciple and re-parent its events before deleting duplicates."""
     has_events = inspect(connection).has_table("npc_events")
@@ -309,6 +364,7 @@ def _migrate_columns():
                 "ON cultivation_logs (source_key)"
             ))
 
+        _migrate_learned_technique_constraint(inspector, conn)
         _migrate_npc_columns(inspector, conn)
 
         # note_nodes.last_opened_at
