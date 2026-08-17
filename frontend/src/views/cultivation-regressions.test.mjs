@@ -54,7 +54,7 @@ test('cultivation shared states expose accessible stable contracts', async () =>
 
   assert.match(statusBar, /aria-live="polite"/)
   assert.match(realmProgress, /aria-valuenow/)
-  assert.match(resourceSummary, /aria-label/)
+  assert.match(resourceSummary, /aria-labelledby="resource-summary-title"/)
   assert.match(rewardToast, /role="status"/)
   assert.match(rewardToast, /<Close\s*\/>/)
   assert.match(probability, /defineEmits\(\[[^\]]*'attempt'/)
