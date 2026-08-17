@@ -326,8 +326,88 @@ def test_sect_listing_and_join_share_realm_eligibility_rule(db_session, user):
     profile.realm_key = "foundation"
     eligible = next(item for item in service.get_sects(user.id) if item.id == sect.id)
     assert eligible.realm_confirmed is True
-    assert eligible.can_join is True
+    assert eligible.can_join is False
+    service.contact_sect_messenger(user.id, sect.sect_key)
+    service.complete_sect_trial(user.id, sect.sect_key)
     assert service.join_sect(user.id, sect.sect_key).status == "active"
+
+
+def test_sect_prerequisites_are_persisted_and_required_in_order(db_session, user):
+    from app.models.world import Sect, SectAccessProgress
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    service.seed_world(db_session)
+    profile = service.ensure_profile(user.id)
+    profile.realm_key = "foundation"
+    sect = db_session.query(Sect).filter_by(star=1, kind="normal").first()
+
+    initial = next(item for item in service.get_sects(user.id) if item.id == sect.id)
+    assert initial.can_join is False
+    assert initial.realm_confirmed is True
+    assert initial.messenger_contacted is False
+    assert initial.trial_confirmed is False
+    assert initial.trial_status == "awaiting_messenger"
+
+    with pytest.raises(PermissionError, match="messenger contact required"):
+        service.join_sect(user.id, sect.sect_key)
+    with pytest.raises(PermissionError, match="messenger contact required"):
+        service.complete_sect_trial(user.id, sect.sect_key)
+
+    contacted = service.contact_sect_messenger(user.id, sect.sect_key)
+    assert contacted.messenger_contacted is True
+    assert contacted.trial_confirmed is False
+    assert contacted.trial_status == "awaiting_trial"
+
+    completed = service.complete_sect_trial(user.id, sect.sect_key)
+    assert completed.messenger_contacted is True
+    assert completed.trial_confirmed is True
+    assert completed.trial_status == "completed"
+    assert completed.can_join is True
+    assert db_session.query(SectAccessProgress).filter_by(user_id=user.id, sect_id=sect.id).one()
+
+
+def test_sect_prerequisite_endpoints_and_join_bypass_rejection(client, auth_headers):
+    from tests.conftest import TestingSessionLocal
+    from app.models.cultivation import CultivationProfile
+    from app.services.auth import decode_access_token
+    from uuid import UUID
+
+    db = TestingSessionLocal()
+    try:
+        user_id = UUID(decode_access_token(auth_headers["Authorization"].split(" ", 1)[1])["sub"])
+        profile = db.query(CultivationProfile).filter_by(user_id=user_id).first()
+        if profile is None:
+            profile = CultivationProfile(user_id=user_id)
+            db.add(profile)
+        profile.realm_key = "foundation"
+        db.commit()
+    finally:
+        db.close()
+
+    listing = client.get("/api/cultivation/sects", headers=auth_headers)
+    sect = next(item for item in listing.json() if item["star"] == 1 and item["kind"] == "normal")
+    path = f"/api/cultivation/sects/{sect['sect_key']}"
+
+    assert client.post(f"{path}/join", headers=auth_headers).status_code == 409
+    contact = client.post(f"{path}/messenger/contact", headers=auth_headers)
+    assert contact.status_code == 200
+    assert contact.json()["messenger_contacted"] is True
+    assert contact.json()["trial_confirmed"] is False
+    assert contact.json()["trial_status"] == "awaiting_trial"
+
+    trial = client.post(f"{path}/trial/complete", headers=auth_headers)
+    assert trial.status_code == 200
+    assert trial.json()["trial_confirmed"] is True
+    assert trial.json()["can_join"] is True
+
+
+def test_hidden_sect_prerequisites_are_unavailable(client, auth_headers):
+    path = "/api/cultivation/sects/sect-1-hidden-10"
+
+    assert client.post(f"{path}/messenger/contact", headers=auth_headers).status_code == 409
+    assert client.post(f"{path}/trial/complete", headers=auth_headers).status_code == 409
+    assert client.post(f"{path}/join", headers=auth_headers).status_code == 409
 
 
 def test_technique_library_exposes_authoritative_next_slot_previews(db_session, user):
@@ -439,6 +519,8 @@ def test_sect_join_accepts_seeded_sect_uuid_after_unlock(db_session, user):
     profile.realm_key = "foundation"
     sect = db_session.query(Sect).first()
 
+    service.contact_sect_messenger(user.id, sect.sect_key)
+    service.complete_sect_trial(user.id, sect.sect_key)
     membership = service.join_sect(user.id, str(sect.id))
 
     assert membership.sect_id == sect.id

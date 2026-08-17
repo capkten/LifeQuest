@@ -191,6 +191,22 @@ test('sect joining follows server eligibility fields', async () => {
   assert.match(source, /sect\.realm_confirmed === true/)
 })
 
+test('sect prerequisites are exposed in server order and hidden sects stay unavailable', async () => {
+  const [source, service] = await Promise.all([
+    readFile(new URL('./Sects.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../services/cultivation.js', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(service, /messenger\/contact/)
+  assert.match(service, /trial\/complete/)
+  assert.match(source, /messenger_contacted/)
+  assert.match(source, /trial_confirmed/)
+  assert.match(source, /contactMessenger/)
+  assert.match(source, /completeTrial/)
+  assert.match(source, /sect\.visible !== true/)
+  assert.match(source, /sect\.can_join !== true/)
+})
+
 test('multi-slot techniques assign contiguous purchased slots or show insufficient state', async () => {
   const source = await readFile(new URL('./Techniques.vue', import.meta.url), 'utf8')
 

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, Uuid, UniqueConstraint
 
 from app.database import Base
 
@@ -46,6 +46,17 @@ class SectMembership(Base):
     status = Column(String(20), nullable=False, default="active")
     joined_at = Column(DateTime, nullable=False, default=utc_now)
     left_at = Column(DateTime, nullable=True)
+
+
+class SectAccessProgress(Base):
+    __tablename__ = "sect_access_progress"
+    __table_args__ = (UniqueConstraint("user_id", "sect_id", name="uq_sect_access_user_sect"),)
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
+    sect_id = Column(Uuid, ForeignKey("sects.id"), nullable=False, index=True)
+    messenger_contacted = Column(Boolean, nullable=False, default=False)
+    trial_confirmed = Column(Boolean, nullable=False, default=False)
 
 
 class Npc(Base):

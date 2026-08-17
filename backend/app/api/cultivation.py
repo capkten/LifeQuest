@@ -62,6 +62,26 @@ def join_sect(sect_id: str, current_user: User = Depends(get_current_user), db: 
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+@router.post("/sects/{sect_id}/messenger/contact", response_model=SectSummary)
+def contact_sect_messenger(sect_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    try:
+        return _service(db).contact_sect_messenger(current_user.id, sect_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/sects/{sect_id}/trial/complete", response_model=SectSummary)
+def complete_sect_trial(sect_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    try:
+        return _service(db).complete_sect_trial(current_user.id, sect_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.post("/sects/leave")
 def leave_sect(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return _service(db).leave_sect(current_user.id)

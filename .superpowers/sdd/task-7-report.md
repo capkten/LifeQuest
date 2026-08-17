@@ -48,6 +48,56 @@ Command: `git diff --check`
 
 Exact result: no output, exit code `0`.
 
+## Sect Eligibility Resolution
+
+- Added registered `SectAccessProgress` records scoped by user and sect, with persisted `messenger_contacted` and `trial_confirmed` flags defaulting to false.
+- Added authenticated messenger-contact and trial-completion endpoints. Contact and trial enforce visible sect and realm eligibility; trial completion rejects missing messenger contact.
+- `get_sects`, prerequisite responses, and `join_sect` now share the same server-owned eligibility state. Joining requires realm confirmation, messenger contact, and completed trial.
+- Updated `Sects.vue` to expose contact messenger, complete trial, and join actions in order, using returned server state and continuing to exclude hidden sects.
+- Added backend sequence/bypass/hidden tests and static frontend prerequisite tests. Existing slot/loadout work remains unchanged.
+
+## Final Task 7 Verification
+
+Command: `cd backend; pytest -q tests/test_cultivation.py --disable-warnings`
+
+Exact output:
+
+```text
+.............................                                            [100%]
+29 passed, 26 warnings in 8.85s
+```
+
+Command: `cd frontend; node --test src/views/cultivation-regressions.test.mjs`
+
+Exact output:
+
+```text
+ℹ tests 17
+ℹ pass 17
+ℹ fail 0
+```
+
+Command: `cd frontend; npm run build`
+
+Exact output:
+
+```text
+npm warn Unknown user config "always-auth" (//repo.hexops.cn/artifactory/api/npm/npm-public/:always-auth).
+✓ 1954 modules transformed.
+✓ built in 19.03s
+```
+
+The build also emitted the existing two `@vueuse/core` `/* #__PURE__ */` annotation warnings and the existing large-chunk warning.
+
+Command: `git diff --check`
+
+Exact output: no output, exit code `0`.
+
+## Final Concerns
+
+- The build retains existing npm configuration, Vue annotation, and bundle-size warnings; none fail verification.
+- Unrelated worktree changes remain uncommitted: `frontend/components.d.ts`, `.agents/`, `.claude/skills/`, `.codex/`, and `frontend/vite-check.log`.
+
 ## Review Fix Verification
 
 Command: `pytest -q backend/tests/test_cultivation.py --disable-warnings`

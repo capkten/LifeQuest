@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.cultivation import CultivationLog, CultivationProfile, TribulationAttempt
 from app.models.technique import LearnedTechnique, Technique, TechniqueSlot
-from app.models.world import Npc, NpcEvent, Sect, SectMembership, WorldNode
+from app.models.world import Npc, NpcEvent, Sect, SectAccessProgress, SectMembership, WorldNode
 from app.repositories.cultivation import CultivationRepository
 from app.repositories.user import UserRepository
 from app.schemas.cultivation import (
@@ -168,39 +168,43 @@ class CultivationService:
             query = query.filter(Sect.task_preference == task_preference)
         summaries = []
         for sect in query.all():
-            eligibility = self._sect_eligibility(profile, sect)
-            summaries.append(SectSummary(
-                id=sect.id,
-                sect_key=sect.sect_key,
-                name=sect.name,
-                star=sect.star,
-                kind=sect.kind,
-                task_preference=sect.task_preference,
-                entry_realm=sect.entry_realm,
-                world_node_key=self.db.query(WorldNode.node_key).filter(WorldNode.id == sect.world_node_id).scalar(),
-                core_legacy=sect.core_legacy,
-                joined=bool(membership and membership.sect_id == sect.id),
-                **eligibility,
-            ))
+            summaries.append(self._sect_summary(user_id, profile, sect, membership))
         return summaries
+
+    def contact_sect_messenger(self, user_id: UUID, sect_key: str) -> SectSummary:
+        profile = self.ensure_profile(user_id)
+        self.seed_world(self.db)
+        sect = self._get_sect(sect_key)
+        self._require_sect_realm(profile, sect)
+        access = self._get_or_create_sect_access(user_id, sect.id)
+        access.messenger_contacted = True
+        self.db.commit()
+        return self._sect_summary(user_id, profile, sect)
+
+    def complete_sect_trial(self, user_id: UUID, sect_key: str) -> SectSummary:
+        profile = self.ensure_profile(user_id)
+        self.seed_world(self.db)
+        sect = self._get_sect(sect_key)
+        self._require_sect_realm(profile, sect)
+        access = self._get_or_create_sect_access(user_id, sect.id)
+        if not access.messenger_contacted:
+            raise PermissionError("messenger contact required before trial")
+        access.trial_confirmed = True
+        self.db.commit()
+        return self._sect_summary(user_id, profile, sect)
 
     def join_sect(self, user_id: UUID, sect_key: str) -> SectMembershipResponse:
         profile = self.ensure_profile(user_id)
         self.seed_world(self.db)
-        sect = self.db.query(Sect).filter(Sect.sect_key == sect_key).first()
-        if sect is None:
-            try:
-                sect = self.db.query(Sect).filter(Sect.id == UUID(sect_key)).first()
-            except ValueError:
-                sect = None
-        if sect is None:
-            raise LookupError("sect not found")
-        eligibility = self._sect_eligibility(profile, sect)
+        sect = self._get_sect(sect_key)
+        eligibility = self._sect_eligibility(profile, sect, user_id)
         if not eligibility["visible"]:
             raise PermissionError("sect is locked")
-        if not eligibility["can_join"]:
-            required_realm = sect.entry_realm or SECT_ENTRY_REALMS[sect.star]
-            raise PermissionError(f"sect requires {required_realm} realm")
+        self._require_sect_realm(profile, sect)
+        if not eligibility["messenger_contacted"]:
+            raise PermissionError("messenger contact required before trial")
+        if not eligibility["trial_confirmed"]:
+            raise PermissionError("sect trial required")
         current = self.db.query(SectMembership).filter(
             SectMembership.user_id == user_id, SectMembership.status == "active"
         ).first()
@@ -316,17 +320,67 @@ class CultivationService:
         self.db.commit()
         return self.get_techniques(user_id)
 
-    def _sect_eligibility(self, profile: CultivationProfile, sect: Sect):
+    def _get_sect(self, sect_key: str) -> Sect:
+        sect = self.db.query(Sect).filter(Sect.sect_key == sect_key).first()
+        if sect is None:
+            try:
+                sect = self.db.query(Sect).filter(Sect.id == UUID(sect_key)).first()
+            except ValueError:
+                sect = None
+        if sect is None:
+            raise LookupError("sect not found")
+        return sect
+
+    def _get_or_create_sect_access(self, user_id: UUID, sect_id: UUID) -> SectAccessProgress:
+        access = self.db.query(SectAccessProgress).filter_by(user_id=user_id, sect_id=sect_id).first()
+        if access is None:
+            access = SectAccessProgress(user_id=user_id, sect_id=sect_id)
+            self.db.add(access)
+            self.db.flush()
+        return access
+
+    def _require_sect_realm(self, profile: CultivationProfile, sect: Sect):
+        if sect.kind == "hidden":
+            raise PermissionError("sect is locked")
+        if not self._realm_at_least(profile.realm_key, sect.entry_realm or SECT_ENTRY_REALMS[sect.star]):
+            required_realm = sect.entry_realm or SECT_ENTRY_REALMS[sect.star]
+            raise PermissionError(f"sect requires {required_realm} realm")
+
+    def _sect_summary(self, user_id, profile, sect, membership=None):
+        if membership is None:
+            membership = self.db.query(SectMembership).filter(
+                SectMembership.user_id == user_id, SectMembership.status == "active"
+            ).first()
+        return SectSummary(
+            id=sect.id,
+            sect_key=sect.sect_key,
+            name=sect.name,
+            star=sect.star,
+            kind=sect.kind,
+            task_preference=sect.task_preference,
+            entry_realm=sect.entry_realm,
+            world_node_key=self.db.query(WorldNode.node_key).filter(WorldNode.id == sect.world_node_id).scalar(),
+            core_legacy=sect.core_legacy,
+            joined=bool(membership and membership.sect_id == sect.id),
+            **self._sect_eligibility(profile, sect, user_id),
+        )
+
+    def _sect_eligibility(self, profile: CultivationProfile, sect: Sect, user_id=None):
         visible = sect.kind != "hidden"
         required_realm = sect.entry_realm or SECT_ENTRY_REALMS[sect.star]
         realm_confirmed = visible and self._realm_at_least(profile.realm_key, required_realm)
+        access = None
+        if user_id is not None:
+            access = self.db.query(SectAccessProgress).filter_by(user_id=user_id, sect_id=sect.id).first()
+        messenger_contacted = bool(access and access.messenger_contacted)
+        trial_confirmed = bool(access and access.trial_confirmed)
         return {
             "visible": visible,
-            "can_join": realm_confirmed,
+            "can_join": realm_confirmed and messenger_contacted and trial_confirmed,
             "realm_confirmed": realm_confirmed,
-            "messenger_contacted": False,
-            "trial_confirmed": False,
-            "trial_status": "not_tracked_current_phase",
+            "messenger_contacted": messenger_contacted,
+            "trial_confirmed": trial_confirmed,
+            "trial_status": "completed" if trial_confirmed else "awaiting_trial" if messenger_contacted else "awaiting_messenger",
         }
 
     def _slot_purchase_preview(self, profile: CultivationProfile, slot_type: str, next_index: int):

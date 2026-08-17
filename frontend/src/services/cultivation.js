@@ -28,6 +28,16 @@ export const cultivationService = {
     return response.data
   },
 
+  async contactSectMessenger(sectId) {
+    const response = await api.post(`/cultivation/sects/${sectId}/messenger/contact`)
+    return response.data
+  },
+
+  async completeSectTrial(sectId) {
+    const response = await api.post(`/cultivation/sects/${sectId}/trial/complete`)
+    return response.data
+  },
+
   async leaveSect() {
     const response = await api.post('/cultivation/sects/leave')
     return response.data
