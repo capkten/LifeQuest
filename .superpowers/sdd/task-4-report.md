@@ -91,3 +91,43 @@ npm run build
 ```
 
 Exact result: exit code `0`; Vite reported `1936 modules transformed` and `built in 13.28s`. The existing npm `always-auth`, two `@vueuse/core` Rollup annotation, and main chunk-size warnings remained non-fatal.
+## Remaining Review Fixes
+
+- Updated `NpcTimeline` to accept the backend `NpcRelationshipResponse` object through its `npcs` prop, including `fixed_core`, `recently_met`, and `events`. Array input remains supported. Each record now receives a deterministic source/index key, and unlabeled event dictionaries receive nonblank fallback labels.
+- Updated `TribulationProbability` so `aria-busy` includes `loading`, `attempting`, and `submitting`. Retry is disabled while loading or busy, and attempt is disabled during loading and every busy state.
+- Strengthened `cultivation-regressions.test.mjs` to check the service import/baseURL contract and relative cultivation paths, the NPC response fields and array guard, and explicit loading-aware retry/attempt bindings.
+
+## Remaining Review Fix Verification
+
+Focused command:
+
+```text
+cd frontend
+node --test src/views/cultivation-regressions.test.mjs
+```
+
+Exact output:
+
+```text
+✔ cultivation service keeps endpoint paths in one module (6.7028ms)
+✔ settlements update visible deltas and obtain an authoritative overview (1.2426ms)
+✔ realm progress derives its percentage from StageProgress thresholds (1.5992ms)
+✔ cultivation shared states expose accessible stable contracts (4.3056ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 159.9865
+```
+
+Build command:
+
+```text
+cd frontend
+npm run build
+```
+
+Exact result: exit code `0`; Vite reported `1936 modules transformed` and `built in 12.60s`. The existing npm `always-auth`, two `@vueuse/core` Rollup annotation, and main chunk-size warnings remained non-fatal.

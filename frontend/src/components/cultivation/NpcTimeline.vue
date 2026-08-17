@@ -14,18 +14,33 @@
 <script setup>
 import { computed } from 'vue'
 
-const props = defineProps({ npcs: { type: Array, default: () => [] }, events: { type: Array, default: () => [] } })
-const items = computed(() => [
-  ...props.npcs.map((item, index) => normalizeItem(item, 'npc', index, 'Relationship record')),
-  ...props.events.map((item, index) => normalizeItem(item, 'event', index, 'Cultivation event')),
-])
+const props = defineProps({ npcs: { type: [Array, Object], default: () => [] }, events: { type: Array, default: () => [] } })
+const items = computed(() => {
+  const relationship = Array.isArray(props.npcs)
+    ? { fixed_core: props.npcs, recently_met: [], events: props.events }
+    : props.npcs || {}
+
+  return [
+    ...toArray(relationship.fixed_core).map((item, index) => normalizeItem(item, 'core', index, 'NPC record')),
+    ...toArray(relationship.recently_met).map((item, index) => normalizeItem(item, 'recent', index, 'NPC record')),
+    ...toArray(relationship.events).map((item, index) => normalizeItem(item, 'event', index, 'Cultivation event')),
+  ]
+})
+
+function toArray(value) {
+  return Array.isArray(value) ? value : []
+}
 
 function normalizeItem(item, source, index, fallbackDetail) {
-  const label = item?.name || item?.title || item?.event || item?.type || 'Cultivation record'
+  const label = firstText(item?.name, item?.title, item?.event, item?.type, item?.kind) || (source === 'event' ? 'Cultivation event ' : 'NPC record ') + (index + 1)
   return {
-    key: `${source}-${item?.id || item?.event_id || item?.key || index}`,
+    key: source + '-' + index + '-' + (item?.id || item?.event_id || item?.key || 'record'),
     label,
-    detail: item?.role || item?.description || item?.text || item?.message || fallbackDetail,
+    detail: firstText(item?.role, item?.description, item?.text, item?.message) || fallbackDetail,
   }
+}
+
+function firstText(...values) {
+  return values.find((value) => typeof value === 'string' && value.trim())?.trim() || ''
 }
 </script>
