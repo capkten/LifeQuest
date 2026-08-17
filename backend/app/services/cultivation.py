@@ -54,6 +54,8 @@ SECT_ENTRY_REALMS = {
 }
 
 DIFFICULTY_FACTORS = {"easy": 0.8, "medium": 1.0, "hard": 1.35}
+SLOT_PRICES = [0, 100, 300, 800, 2000, 5000, 12000]
+SLOT_REALMS = ["qi_refining", "foundation", "golden_core", "nascent_soul", "spirit_transformation", "void_refining", "body_combination"]
 
 
 class CultivationService:
@@ -150,16 +152,19 @@ class CultivationService:
         nodes = self.db.query(WorldNode).order_by(WorldNode.sort_order).all()
         return WorldResponse(nodes=[WorldNodeResponse.model_validate(node) for node in nodes])
 
-    def get_sects(self, user_id: UUID, star=None, kind=None):
+    def get_sects(self, user_id: UUID, star=None, kind=None, task_preference=None):
         self.seed_world(self.db)
         membership = self.db.query(SectMembership).filter(
             SectMembership.user_id == user_id, SectMembership.status == "active"
         ).first()
+        profile = self.ensure_profile(user_id)
         query = self.db.query(Sect).filter(Sect.kind != "hidden").order_by(Sect.star, Sect.sect_key)
         if star is not None:
             query = query.filter(Sect.star == star)
         if kind is not None:
             query = query.filter(Sect.kind == kind)
+        if task_preference is not None:
+            query = query.filter(Sect.task_preference == task_preference)
         return [SectSummary(
             id=sect.id,
             sect_key=sect.sect_key,
@@ -169,7 +174,14 @@ class CultivationService:
             task_preference=sect.task_preference,
             entry_realm=sect.entry_realm,
             world_node_key=self.db.query(WorldNode.node_key).filter(WorldNode.id == sect.world_node_id).scalar(),
+            core_legacy=sect.core_legacy,
             joined=bool(membership and membership.sect_id == sect.id),
+            visible=True,
+            can_join=False,
+            realm_confirmed=self._realm_meets_entry(profile, sect.star, sect.entry_realm or SECT_ENTRY_REALMS[sect.star]),
+            messenger_contacted=False,
+            trial_confirmed=False,
+            trial_status="awaiting_messenger_and_trial",
         ) for sect in query.all()]
 
     def join_sect(self, user_id: UUID, sect_key: str) -> SectMembershipResponse:
@@ -216,50 +228,77 @@ class CultivationService:
         learned = {row.technique_id for row in self.db.query(LearnedTechnique).filter(LearnedTechnique.user_id == user_id)}
         techniques = self.db.query(Technique).order_by(Technique.technique_key).all()
         slots = self.db.query(TechniqueSlot).filter(TechniqueSlot.user_id == user_id).order_by(TechniqueSlot.slot_type, TechniqueSlot.slot_index).all()
-        loadout = {slot.slot_type: slot.technique_id for slot in slots}
+        loadout = {}
+        slot_assignments = {}
+        for slot in slots:
+            loadout.setdefault(slot.slot_type, slot.technique_id)
+            slot_assignments.setdefault(slot.slot_type, []).append(slot.technique_id)
         return TechniqueLibraryResponse(
             techniques=[TechniqueSummary(
                 id=t.id, technique_key=t.technique_key, name=t.name,
                 description=t.description, technique_type=t.technique_type,
                 required_realm=t.required_realm, spirit_stone_cost=t.spirit_stone_cost,
                 slot_count=t.slot_count, learned=t.id in learned,
+                realm_confirmed=not t.required_realm or self._realm_at_least(self.ensure_profile(user_id).realm_key, t.required_realm),
             ) for t in techniques],
             slots=[TechniqueSlotResponse(slot_type=s.slot_type, slot_index=s.slot_index, technique_id=s.technique_id) for s in slots],
             loadout=loadout,
+            slot_assignments=slot_assignments,
         )
 
     def purchase_slot(self, user_id: UUID, slot_type: str):
         if slot_type not in {"main", "auxiliary", "mind", "body"}:
-            raise ValueError("invalid slot type")
+            raise ValueError("INVALID_SLOT_TYPE")
+        profile = self.ensure_profile(user_id)
         existing = self.db.query(TechniqueSlot).filter(
             TechniqueSlot.user_id == user_id, TechniqueSlot.slot_type == slot_type
         ).order_by(TechniqueSlot.slot_index).all()
-        if not existing:
-            self.db.add(TechniqueSlot(user_id=user_id, slot_type=slot_type, slot_index=0))
-            self.db.commit()
-        return {"slot_type": slot_type, "slot_count": max(1, len(existing))}
+        next_index = len(existing)
+        required_realm = SLOT_REALMS[min(next_index, len(SLOT_REALMS) - 1)]
+        if not self._realm_at_least(profile.realm_key, required_realm):
+            raise PermissionError(f"SLOT_REALM_REQUIRED:{required_realm}")
+        price = SLOT_PRICES[next_index] if next_index < len(SLOT_PRICES) else SLOT_PRICES[-1] * (2 ** (next_index - len(SLOT_PRICES) + 1))
+        if profile.spirit_stones < price:
+            raise PermissionError(f"INSUFFICIENT_SPIRIT_STONES:{price}:{profile.spirit_stones}")
+        profile.spirit_stones -= price
+        self.db.add(TechniqueSlot(user_id=user_id, slot_type=slot_type, slot_index=next_index))
+        self.db.commit()
+        return {"slot_type": slot_type, "slot_index": next_index, "slot_count": next_index + 1, "price": price, "balance": profile.spirit_stones, "required_realm": required_realm}
 
     def update_loadout(self, user_id: UUID, loadout):
         profile = self.ensure_profile(user_id)
         updates = []
+        occupied = {}
         for slot_type, technique_id in loadout.items():
-            if technique_id is None:
-                continue
-            slot = self.db.query(TechniqueSlot).filter(
+            ids = technique_id if isinstance(technique_id, list) else [technique_id]
+            slots = self.db.query(TechniqueSlot).filter(
                 TechniqueSlot.user_id == user_id, TechniqueSlot.slot_type == slot_type
-            ).first()
-            technique = self.db.query(Technique).filter(Technique.id == technique_id).first()
-            if slot is None or technique is None:
-                raise LookupError("technique or slot not found")
-            learned = self.db.query(LearnedTechnique).filter(
-                LearnedTechnique.user_id == user_id,
-                LearnedTechnique.technique_id == technique.id,
-            ).first()
-            if learned is None:
-                raise LookupError("technique not learned")
-            if technique.required_realm and not self._realm_at_least(profile.realm_key, technique.required_realm):
-                raise PermissionError(f"technique requires {technique.required_realm} realm")
-            updates.append((slot, technique.id))
+            ).order_by(TechniqueSlot.slot_index).all()
+            if len(ids) > len(slots):
+                raise LookupError("SLOT_NOT_PURCHASED:slot not purchased")
+            for index, value in enumerate(ids):
+                if value is None:
+                    continue
+                slot = slots[index]
+                technique = self.db.query(Technique).filter(Technique.id == value).first()
+                if technique is None:
+                    raise LookupError("TECHNIQUE_NOT_FOUND:technique or slot not found")
+                learned = self.db.query(LearnedTechnique).filter(
+                    LearnedTechnique.user_id == user_id,
+                    LearnedTechnique.technique_id == technique.id,
+                ).first()
+                if learned is None:
+                    raise LookupError("TECHNIQUE_NOT_LEARNED:technique not learned")
+                if technique.required_realm and not self._realm_at_least(profile.realm_key, technique.required_realm):
+                    raise PermissionError(f"TECHNIQUE_REALM_REQUIRED:technique requires {technique.required_realm} realm")
+                occupied.setdefault(technique.id, []).append((slot_type, index))
+                updates.append((slot, technique.id))
+        for technique_id, locations in occupied.items():
+            technique = self.db.query(Technique).filter(Technique.id == technique_id).one()
+            if len(locations) > 1 and technique.slot_count <= 1:
+                raise ValueError("SLOT_CONFLICT:DUPLICATE_TECHNIQUE")
+            if len(locations) != technique.slot_count:
+                raise ValueError("SLOT_CONFLICT:OCCUPANCY")
         for slot, technique_id in updates:
             slot.technique_id = technique_id
         self.db.commit()

@@ -153,7 +153,30 @@ def test_world_and_fixed_npcs_are_available(client, auth_headers):
     assert len(npcs.json()["fixed_core"]) == 270
 
 
-def test_technique_slot_purchase_and_loadout_are_idempotent(client, auth_headers):
+def test_technique_slot_purchase_progresses_indices_and_charges_profile(client, auth_headers):
+    from app.database import Base
+    from tests.conftest import TestingSessionLocal
+    from app.models.cultivation import CultivationProfile
+
+    first = client.post(
+        "/api/cultivation/technique-slots/purchase",
+        json={"slot_type": "main"},
+        headers=auth_headers,
+    )
+    assert first.status_code == 200
+    assert first.json()["slot_index"] == 0
+    assert first.json()["slot_count"] == 1
+    assert first.json()["price"] == 0
+
+    db = TestingSessionLocal()
+    try:
+        profile = db.query(CultivationProfile).one()
+        profile.spirit_stones = 500
+        profile.realm_key = "golden_core"
+        db.commit()
+    finally:
+        db.close()
+
     purchase = client.post(
         "/api/cultivation/technique-slots/purchase",
         json={"slot_type": "main"},
@@ -166,7 +189,24 @@ def test_technique_slot_purchase_and_loadout_are_idempotent(client, auth_headers
     )
 
     assert purchase.status_code == repeat.status_code == 200
-    assert purchase.json()["slot_count"] == repeat.json()["slot_count"]
+    assert purchase.json()["slot_index"] == 1
+    assert purchase.json()["slot_count"] == 2
+    assert purchase.json()["price"] == 100
+    assert purchase.json()["balance"] == 400
+    assert repeat.json()["slot_index"] == 2
+    assert repeat.json()["slot_count"] == 3
+    assert repeat.json()["price"] == 300
+    assert repeat.json()["balance"] == 100
+
+
+def test_purchase_slot_rejects_insufficient_stones_with_stable_error(db_session, user):
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    service.ensure_profile(user.id).realm_key = "foundation"
+    service.purchase_slot(user.id, "main")
+    with pytest.raises(PermissionError, match="INSUFFICIENT_SPIRIT_STONES"):
+        service.purchase_slot(user.id, "main")
 
 
 def test_tribulation_attempt_rejects_server_controlled_fields(client, auth_headers):
@@ -289,6 +329,30 @@ def test_update_loadout_requires_owned_learned_technique_and_realm(db_session, u
     with pytest.raises(PermissionError, match="technique requires golden_core realm"):
         service.update_loadout(user.id, {"main": high_technique.id})
     assert slot.technique_id is None
+
+
+def test_update_loadout_rejects_multi_slot_conflict_and_returns_all_assignments(db_session, user):
+    from app.models.technique import LearnedTechnique, Technique, TechniqueSlot
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    service.seed_world(db_session)
+    service.ensure_profile(user.id).realm_key = "foundation"
+    db_session.add_all([
+        TechniqueSlot(user_id=user.id, slot_type="main", slot_index=0),
+        TechniqueSlot(user_id=user.id, slot_type="main", slot_index=1),
+        TechniqueSlot(user_id=user.id, slot_type="auxiliary", slot_index=0),
+    ])
+    technique = db_session.query(Technique).filter_by(technique_key="stone-channel").one()
+    technique.slot_count = 2
+    db_session.add(LearnedTechnique(user_id=user.id, technique_id=technique.id))
+    db_session.commit()
+
+    response = service.update_loadout(user.id, {"main": [technique.id, technique.id]})
+    assert response.slot_assignments["main"] == [technique.id, technique.id]
+
+    with pytest.raises(ValueError, match="SLOT_CONFLICT"):
+        service.update_loadout(user.id, {"main": [technique.id, technique.id], "auxiliary": [technique.id]})
 
 
 def test_sect_join_accepts_seeded_sect_uuid_after_unlock(db_session, user):

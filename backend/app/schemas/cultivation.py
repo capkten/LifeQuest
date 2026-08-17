@@ -63,7 +63,14 @@ class SectSummary(BaseModel):
     task_preference: Optional[str] = None
     entry_realm: Optional[str] = None
     world_node_key: Optional[str] = None
+    core_legacy: Optional[str] = None
     joined: bool = False
+    visible: bool = True
+    can_join: bool = False
+    realm_confirmed: bool = False
+    messenger_contacted: bool = False
+    trial_confirmed: bool = False
+    trial_status: str = "awaiting"
 
 
 class SectMembershipResponse(BaseModel):
@@ -83,6 +90,7 @@ class TechniqueSummary(BaseModel):
     spirit_stone_cost: int
     slot_count: int
     learned: bool = False
+    realm_confirmed: bool = True
 
 
 class TechniqueSlotResponse(BaseModel):
@@ -95,6 +103,7 @@ class TechniqueLibraryResponse(BaseModel):
     techniques: List[TechniqueSummary]
     slots: List[TechniqueSlotResponse]
     loadout: Dict[str, Optional[UUID]]
+    slot_assignments: Dict[str, List[Optional[UUID]]] = Field(default_factory=dict)
 
 
 class TechniqueSlotPurchaseRequest(BaseModel):
@@ -104,7 +113,7 @@ class TechniqueSlotPurchaseRequest(BaseModel):
 
 class LoadoutRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    loadout: Dict[str, Optional[UUID]]
+    loadout: Dict[str, Any]
 
 
 class NpcSummary(BaseModel):

@@ -7,9 +7,9 @@
       <button type="button" class="cultivation-action" :disabled="busy" @click="$emit('retry')">Retry</button>
     </div>
     <div v-else class="cultivation-slot-grid">
-      <button v-for="slot in visibleSlots" :key="`${slot.slot_type}-${slot.slot_index}`" type="button" class="cultivation-slot" :class="{ 'cultivation-slot--conflict': slot.conflict }" :aria-label="`${slotLabel(slot.slot_type)}第${slot.slot_index + 1}格`" :disabled="busy" @click="$emit('select', slot)">
+      <button v-for="slot in visibleSlots" :key="`${slot.slot_type}-${slot.slot_index}`" type="button" class="cultivation-slot" :class="{ 'cultivation-slot--conflict': slot.conflict, 'cultivation-slot--next': slot.isNext }" :aria-label="`${slotLabel(slot.slot_type)}第${slot.slot_index + 1}格`" :disabled="busy" @click="$emit('select', slot)">
         <span class="cultivation-slot__type">{{ slotLabel(slot.slot_type) }}</span>
-        <strong>{{ slot.techniqueName || (slot.technique_id ? '已装备' : '未购买') }}</strong>
+        <strong>{{ slot.isNext ? '购买下一格' : (slot.techniqueName || (slot.technique_id ? '已装备' : '空置')) }}</strong>
         <span v-if="slot.conflict" class="cultivation-slot__conflict">⚠ 冲突</span>
       </button>
     </div>
@@ -28,6 +28,6 @@ const props = defineProps({
 })
 defineEmits(['select', 'retry'])
 const errorMessage = computed(() => props.error?.message || 'No technique slots available.')
-const visibleSlots = computed(() => props.slotTypes.map((slotType) => props.slots.find((slot) => slot.slot_type === slotType) || { slot_type: slotType, slot_index: 0 }))
+const visibleSlots = computed(() => props.slotTypes.flatMap((slotType) => props.slots.filter((slot) => slot.slot_type === slotType)))
 function slotLabel(slotType) { return ({ main: '主修', auxiliary: '辅修', mind: '心法', body: '身法' })[slotType] || slotType }
 </script>

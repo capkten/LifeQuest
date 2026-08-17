@@ -43,10 +43,11 @@ def world(current_user: User = Depends(get_current_user), db: Session = Depends(
 def sects(
     star: Optional[int] = Query(default=None, ge=1, le=9),
     kind: Optional[str] = Query(default=None),
+    task_preference: Optional[str] = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return _service(db).get_sects(current_user.id, star=star, kind=kind)
+    return _service(db).get_sects(current_user.id, star=star, kind=kind, task_preference=task_preference)
 
 
 @router.post("/sects/{sect_id}/join", response_model=SectMembershipResponse)
@@ -75,6 +76,8 @@ def techniques(current_user: User = Depends(get_current_user), db: Session = Dep
 def purchase_slot(payload: TechniqueSlotPurchaseRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         return _service(db).purchase_slot(current_user.id, payload.slot_type)
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -87,6 +90,8 @@ def update_loadout(payload: LoadoutRequest, current_user: User = Depends(get_cur
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/npcs", response_model=NpcRelationshipResponse)

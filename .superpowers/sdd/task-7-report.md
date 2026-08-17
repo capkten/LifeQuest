@@ -50,6 +50,46 @@ Exact result: no output, exit code `0`.
 
 ## Concerns
 
-- The current backend sect summary schema does not expose all eligibility/NPC/legacy fields described by the brief. The page therefore keeps joining disabled until explicit server flags confirm realm, messenger contact, and trial eligibility, and displays server-provided values when available.
-- The current backend slot purchase response does not return balance or realm metadata; the page displays those fields when returned and uses the specified client-side price sequence as a fallback.
+- The current domain has no persisted messenger-contact or trial-completion records, so the server truthfully returns those statuses as awaiting and keeps `can_join` false until such data exists.
+- The existing backend NPC endpoint still serves its legacy generated NPC dataset for the separate NPC page; sect cards no longer fabricate NPC names when sect summary data lacks NPC records.
 - Existing unrelated worktree changes were left untouched: `frontend/components.d.ts`, `.agents/`, `.claude/skills/`, `.codex/`, and `frontend/vite-check.log`.
+
+## Review Fixes
+
+- Slot purchases now create the next index, debit `CultivationProfile.spirit_stones`, enforce server realm and stone checks, and return `slot_index`, `slot_count`, `price`, `balance`, and `required_realm`.
+- Loadout responses now replace frontend library and assignment state authoritatively; multi-slot arrays are validated for learned ownership, realm requirements, purchased capacity, and occupancy conflicts.
+- Sect summaries now expose server-derived `visible`, `can_join`, `realm_confirmed`, messenger/trial status, and core legacy data. Hidden sects remain excluded, and absent NPC data renders as empty rather than fabricated names.
+- Technique UI renders all purchased slots plus one next-slot target per category, with empty, locked, operation, error, realm, and conflict states.
+
+## Final Verification
+
+Command: `cd frontend; node --test src/views/cultivation-regressions.test.mjs`
+
+Exact result:
+
+```text
+ℹ tests 12
+ℹ pass 12
+ℹ fail 0
+```
+
+Command: `cd frontend; npm run build`
+
+Exact result:
+
+```text
+✓ 1954 modules transformed.
+✓ built in 21.03s
+```
+
+Command: `pytest -q backend/tests/test_cultivation.py --disable-warnings`
+
+Exact result:
+
+```text
+23 passed, 18 warnings in 10.93s
+```
+
+Command: `git diff --check`
+
+Exact result: no output, exit code `0`.

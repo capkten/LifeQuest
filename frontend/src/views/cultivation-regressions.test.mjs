@@ -145,3 +145,22 @@ test('technique page shows price and conflict without relying on color', async (
   assert.match(source, /冲突/)
   assert.match(source, /TechniqueSlotGrid/)
 })
+
+test('task 7 fixes preserve authoritative state and honest empty/locked states', async () => {
+  const [techniques, sects, slots] = await Promise.all([
+    readFile(new URL('./Techniques.vue', import.meta.url), 'utf8'),
+    readFile(new URL('./Sects.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../components/cultivation/TechniqueSlotGrid.vue', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(techniques, /techniques\.value\s*=\s*response\?\.techniques\s*\|\|\s*\[\]/)
+  assert.match(techniques, /purchaseSlot\([^)]*slot_type/)
+  assert.match(techniques, /technique\.learned/)
+  assert.match(techniques, /slot_count/)
+  assert.match(techniques, /conflict/)
+  assert.match(techniques, /暂无已学功法|功法库为空|empty/i)
+  assert.match(sects, /can_join/)
+  assert.match(sects, /visible === true/)
+  assert.doesNotMatch(sects, /concat\(\[['"]宗主|传功长老|试炼使者/)
+  assert.match(slots, /visibleSlots/)
+})
