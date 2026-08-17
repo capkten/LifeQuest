@@ -2,7 +2,7 @@ import math
 from datetime import date
 
 import pytest
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 
 def _register_and_login(client, username=None):
@@ -43,6 +43,18 @@ def user(db_session):
     return user
 
 
+def _prepare_npc_meeting(service, user_id):
+    from app.models.world import SectAccessProgress
+
+    service.seed_world(service.db)
+    service.set_realm(user_id, "foundation", 1, 0)
+    sect = service._get_sect("sect-1-normal-1")
+    access = service.db.query(SectAccessProgress).filter_by(user_id=user_id, sect_id=sect.id).first()
+    if access is None:
+        service.db.add(SectAccessProgress(user_id=user_id, sect_id=sect.id, messenger_contacted=True))
+        service.db.commit()
+
+
 def test_cultivation_tables_are_registered(db_session):
     from app.models.cultivation import CultivationProfile, CultivationLog
     from app.models.technique import TechniqueSlot
@@ -62,6 +74,7 @@ def test_meeting_same_disciple_is_permanent_and_stable(db_session, user):
     from app.services.cultivation import CultivationService
 
     service = CultivationService(db_session)
+    _prepare_npc_meeting(service, user.id)
     first = service.meet_npc(user.id, "sect-1-normal-1", 7)
     second = service.meet_npc(user.id, "sect-1-normal-1", 7)
 
@@ -75,6 +88,7 @@ def test_npc_cultivation_updates_once_per_natural_day(db_session, user):
     from app.services.cultivation import CultivationService
 
     service = CultivationService(db_session)
+    _prepare_npc_meeting(service, user.id)
     npc = service.meet_npc(user.id, "sect-1-normal-1", 2)
     before = npc.cultivation
 
@@ -91,6 +105,7 @@ def test_npc_cultivation_uses_utc_day_across_midnight_and_is_idempotent(db_sessi
     from app.services.cultivation import CultivationService
 
     service = CultivationService(db_session)
+    _prepare_npc_meeting(service, user.id)
     utc_days = iter((date(2026, 8, 17), date(2026, 8, 18), date(2026, 8, 18)))
     monkeypatch.setattr(service, "_utc_today", lambda: next(utc_days))
     npc = service.meet_npc(user.id, "sect-1-normal-1", 4)
@@ -113,6 +128,8 @@ def test_npc_population_is_stable_but_isolated_between_users(db_session, user):
     db_session.add(other)
     db_session.commit()
     service = CultivationService(db_session)
+    _prepare_npc_meeting(service, user.id)
+    _prepare_npc_meeting(service, other.id)
 
     first = service.meet_npc(user.id, "sect-1-normal-1", 3)
     second = service.meet_npc(other.id, "sect-1-normal-1", 3)
@@ -126,12 +143,14 @@ def test_npc_population_is_stable_but_isolated_between_users(db_session, user):
 def test_mortal_npcs_return_core_and_recent_disciples_without_ascended_data(db_session, user):
     from app.services.cultivation import CultivationService
 
-    response = CultivationService(db_session).get_npcs(user.id)
+    service = CultivationService(db_session)
+    _prepare_npc_meeting(service, user.id)
+    response = service.get_npcs(user.id)
 
     assert len(response.fixed_core) == 0
     assert response.recently_met == []
-    disciple = CultivationService(db_session).meet_npc(user.id, "sect-1-normal-1", 1)
-    response = CultivationService(db_session).get_npcs(user.id)
+    disciple = service.meet_npc(user.id, "sect-1-normal-1", 1)
+    response = service.get_npcs(user.id)
     assert [item.id for item in response.recently_met] == [disciple.id]
 
 
@@ -144,6 +163,8 @@ def test_npc_events_and_relationships_are_strictly_user_scoped(db_session, user)
     db_session.add(other)
     db_session.commit()
     service = CultivationService(db_session)
+    _prepare_npc_meeting(service, user.id)
+    _prepare_npc_meeting(service, other.id)
     own_npc = service.meet_npc(user.id, "sect-1-normal-1", 11)
     other_npc = service.meet_npc(other.id, "sect-1-normal-1", 11)
     db_session.add(NpcEvent(user_id=user.id, npc_id=other_npc.id, event_key="forged", summary="must not leak"))
@@ -154,46 +175,178 @@ def test_npc_events_and_relationships_are_strictly_user_scoped(db_session, user)
 
     assert [item.id for item in response.recently_met] == [own_npc.id]
     assert response.events
-    assert all(event["npc_id"] == str(own_npc.id) for event in response.events)
-    assert all(event["event_key"] != "forged" for event in response.events)
+    assert all(event.npc_id == own_npc.id for event in response.events)
+    assert all(event.event_key != "forged" for event in response.events)
 
 
-def test_meeting_npc_recovers_from_first_creation_unique_conflict(db_session, user, monkeypatch):
-    from app.models.world import Npc
+def test_concurrent_meet_npc_with_independent_sessions_returns_one_npc(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.database import Base
+    from app.models.user import User
+    from app.models.world import SectAccessProgress
     from app.services.cultivation import CultivationService
 
+    concurrent_engine = create_engine(
+        f"sqlite:///{tmp_path / 'concurrent-meet.sqlite'}",
+        connect_args={"check_same_thread": False, "timeout": 10},
+    )
+    Base.metadata.create_all(bind=concurrent_engine)
+    Sessions = sessionmaker(autocommit=False, autoflush=False, bind=concurrent_engine)
+    setup = Sessions()
+    try:
+        user = User(
+            username=f"concurrent-{uuid4().hex}",
+            email=f"{uuid4().hex}@example.com",
+            password_hash="hashed",
+        )
+        setup.add(user)
+        setup.commit()
+        setup.refresh(user)
+        service = CultivationService(setup)
+        service.seed_world(setup)
+        service.ensure_profile(user.id)
+        service.set_realm(user.id, "foundation", 1, 0)
+        sect = service._get_sect("sect-1-normal-1")
+        setup.add(SectAccessProgress(user_id=user.id, sect_id=sect.id, messenger_contacted=True))
+        setup.commit()
+        user_id = user.id
+    finally:
+        setup.close()
+
+    barrier = Barrier(2)
+
+    def meet_in_own_session():
+        session = Sessions()
+        try:
+            barrier.wait()
+            return CultivationService(session).meet_npc(user_id, "sect-1-normal-1", 12)
+        finally:
+            session.close()
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(lambda _index: meet_in_own_session(), range(2)))
+        assert results[0].id == results[1].id
+        verify = Sessions()
+        try:
+            from app.models.world import Npc, NpcEvent
+
+            assert verify.query(Npc).filter_by(user_id=user_id, population_index=12).count() == 1
+            assert verify.query(NpcEvent).filter_by(user_id=user_id).count() == 2
+        finally:
+            verify.close()
+    finally:
+        concurrent_engine.dispose()
+
+
+def test_meet_npc_requires_visible_contacted_sect_and_stable_api_errors(client, auth_headers, db_session):
+    from app.models.world import Sect
+    from app.services.cultivation import CultivationService
+
+    current_user = client.get("/api/users/me", headers=auth_headers).json()
     service = CultivationService(db_session)
-    original_flush = db_session.flush
-    conflict_injected = False
+    service.set_realm(UUID(current_user["id"]), "foundation", 1, 0)
 
-    def flush_with_conflict(*args, **kwargs):
-        nonlocal conflict_injected
-        if not conflict_injected and any(isinstance(item, Npc) and item.is_generated for item in db_session.new):
-            conflict_injected = True
-            sect = service._get_sect("sect-1-normal-1")
-            db_session.add(Npc(
-                user_id=user.id,
-                sect_id=sect.id,
-                name="conflict",
-                is_core=False,
-                population_index=12,
-                is_generated=True,
-            ))
-        return original_flush(*args, **kwargs)
+    db_session.add(Sect(
+        sect_key="hidden-review-sect",
+        name="Hidden Review Sect",
+        star=1,
+        kind="hidden",
+        entry_realm="qi_refining",
+    ))
+    db_session.commit()
 
-    monkeypatch.setattr(db_session, "flush", flush_with_conflict)
-    result = service.meet_npc(user.id, "sect-1-normal-1", 12)
+    missing = client.post(
+        "/api/cultivation/npcs/meet",
+        json={"sect_key": "missing-review-sect", "population_index": 0},
+        headers=auth_headers,
+    )
+    hidden = client.post(
+        "/api/cultivation/npcs/meet",
+        json={"sect_key": "hidden-review-sect", "population_index": 0},
+        headers=auth_headers,
+    )
+    uncontacted = client.post(
+        "/api/cultivation/npcs/meet",
+        json={"sect_key": "sect-1-normal-1", "population_index": 0},
+        headers=auth_headers,
+    )
 
-    assert conflict_injected is True
-    assert result.population_index == 12
-    assert db_session.query(Npc).filter(
-        Npc.user_id == user.id,
-        Npc.population_index == 12,
-        Npc.is_generated.is_(True),
-    ).count() == 1
+    assert missing.status_code == 404
+    assert hidden.status_code == 409
+    assert uncontacted.status_code == 409
+    assert "messenger contact required" in uncontacted.json()["detail"]
 
 
-def test_meet_npc_api_creates_a_user_scoped_event(client, auth_headers):
+def test_npc_event_response_uses_explicit_schema(db_session, user):
+    from typing import get_args
+
+    from app.schemas.cultivation import NpcEventSummary, NpcRelationshipResponse
+
+    assert set(NpcEventSummary.model_fields) == {"event_id", "npc_id", "event_key", "summary", "created_at"}
+    assert get_args(NpcRelationshipResponse.model_fields["events"].annotation) == (NpcEventSummary,)
+
+
+def test_npc_migration_moves_events_before_deleting_duplicate_npcs(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine, inspect, text
+
+    from app import main as main_module
+    from app.database import Base
+
+    legacy_engine = create_engine(f"sqlite:///{tmp_path / 'duplicate-npcs.sqlite'}")
+    Base.metadata.create_all(bind=legacy_engine)
+    with legacy_engine.connect() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        connection.commit()
+    with legacy_engine.begin() as connection:
+        connection.execute(text("DROP TABLE npcs"))
+        connection.execute(text(
+            "CREATE TABLE npcs ("
+            "id VARCHAR(36) PRIMARY KEY, user_id VARCHAR(36) NOT NULL, sect_id VARCHAR(36), "
+            "name VARCHAR(100) NOT NULL, role VARCHAR(64), description TEXT, "
+            "is_core BOOLEAN NOT NULL DEFAULT 0, population_index INTEGER, "
+            "is_generated BOOLEAN NOT NULL DEFAULT 1, cultivation INTEGER NOT NULL DEFAULT 0, "
+            "cultivation_updated_on DATE, cultivation_locked BOOLEAN NOT NULL DEFAULT 0)"
+        ))
+        connection.execute(text(
+            "INSERT INTO npcs (id, user_id, sect_id, name, population_index) VALUES "
+            "('a-keeper', 'user', 'sect', 'Keeper', 4), ('b-duplicate', 'user', 'sect', 'Duplicate', 4)"
+        ))
+        connection.execute(text(
+            "INSERT INTO npc_events (id, user_id, npc_id, event_key, summary, created_at) VALUES "
+            "('event-keeper', 'user', 'a-keeper', 'met', 'keeper event', '2026-08-17 00:00:00'), "
+            "('event-duplicate', 'user', 'b-duplicate', 'met', 'duplicate event', '2026-08-17 00:00:01')"
+        ))
+    with legacy_engine.connect() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+        assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
+
+    monkeypatch.setattr(main_module, "engine", legacy_engine)
+    main_module._migrate_columns()
+    main_module._migrate_columns()
+
+    with legacy_engine.connect() as connection:
+        rows = connection.execute(text(
+            "SELECT id, npc_id FROM npc_events ORDER BY id"
+        )).fetchall()
+        npcs = connection.execute(text("SELECT id FROM npcs")).fetchall()
+    assert rows == [("event-duplicate", "a-keeper"), ("event-keeper", "a-keeper")]
+    assert npcs == [("a-keeper",)]
+    legacy_engine.dispose()
+
+
+def test_meet_npc_api_creates_a_user_scoped_event(client, auth_headers, db_session):
+    from uuid import UUID
+
+    from app.services.cultivation import CultivationService
+
+    current_user = client.get("/api/users/me", headers=auth_headers).json()
+    _prepare_npc_meeting(CultivationService(db_session), UUID(current_user["id"]))
     response = client.post(
         "/api/cultivation/npcs/meet",
         json={"sect_key": "sect-1-normal-1", "population_index": 13},

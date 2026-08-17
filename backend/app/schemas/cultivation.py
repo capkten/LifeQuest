@@ -152,10 +152,19 @@ class NpcMeetRequest(BaseModel):
     population_index: int = Field(ge=0)
 
 
+class NpcEventSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    event_id: UUID
+    npc_id: UUID
+    event_key: str
+    summary: Optional[str] = None
+    created_at: datetime
+
+
 class NpcRelationshipResponse(BaseModel):
     fixed_core: List[NpcSummary]
     recently_met: List[NpcSummary] = Field(default_factory=list)
-    events: List[Dict[str, Any]] = Field(default_factory=list)
+    events: List[NpcEventSummary] = Field(default_factory=list)
 
 
 class TribulationAttemptRequest(BaseModel):

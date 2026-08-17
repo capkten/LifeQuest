@@ -128,6 +128,8 @@ def npcs(current_user: User = Depends(get_current_user), db: Session = Depends(g
 def meet_npc(payload: NpcMeetRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         return _service(db).meet_npc(current_user.id, payload.sect_key, payload.population_index)
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:

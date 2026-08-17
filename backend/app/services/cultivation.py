@@ -16,6 +16,7 @@ from app.repositories.cultivation import CultivationRepository
 from app.repositories.user import UserRepository
 from app.schemas.cultivation import (
     CultivationOverview,
+    NpcEventSummary,
     NpcRelationshipResponse,
     NpcSummary,
     RewardSettlement,
@@ -460,14 +461,13 @@ class CultivationService:
         seen = set()
         events = []
         for event, npc in event_rows:
-            events.append({
-                "event_id": str(event.id),
-                "npc_id": str(npc.id),
-                "name": npc.name,
-                "event_key": event.event_key,
-                "message": event.summary,
-                "created_at": event.created_at.isoformat() if event.created_at else None,
-            })
+            events.append(NpcEventSummary(
+                event_id=event.id,
+                npc_id=npc.id,
+                event_key=event.event_key,
+                summary=event.summary,
+                created_at=event.created_at,
+            ))
             if npc.id in seen:
                 continue
             self.refresh_npc_cultivation(npc)
@@ -484,6 +484,15 @@ class CultivationService:
             raise ValueError("population_index must be non-negative")
         self.seed_world(self.db)
         sect = self._get_sect(sect_key)
+        profile = self.ensure_profile(user_id)
+        eligibility = self._sect_eligibility(profile, sect, user_id)
+        if not eligibility["visible"]:
+            raise PermissionError("sect is locked")
+        if not eligibility["realm_confirmed"]:
+            required_realm = sect.entry_realm or SECT_ENTRY_REALMS[sect.star]
+            raise PermissionError(f"sect requires {required_realm} realm")
+        if not eligibility["messenger_contacted"]:
+            raise PermissionError("messenger contact required before meeting NPC")
         for _attempt in range(2):
             npc = self.db.query(Npc).filter(
                 Npc.user_id == user_id,

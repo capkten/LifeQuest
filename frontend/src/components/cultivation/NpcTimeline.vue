@@ -33,11 +33,11 @@ function toArray(value) {
 }
 
 function normalizeItem(item, source, index, fallbackDetail) {
-  const label = firstText(item?.name, item?.title, item?.event, item?.type, item?.kind) || (source === 'event' ? 'Cultivation event ' : 'NPC record ') + (index + 1)
+  const label = firstText(item?.name, item?.title, item?.event, item?.event_key, item?.type, item?.kind) || (source === 'event' ? 'Cultivation event ' : 'NPC record ') + (index + 1)
   return {
     key: source + '-' + index + '-' + (item?.id || item?.event_id || item?.key || 'record'),
     label,
-    detail: firstText(item?.role, item?.description, item?.text, item?.message) || fallbackDetail,
+    detail: firstText(item?.role, item?.description, item?.text, item?.summary, item?.message) || fallbackDetail,
     date: firstText(item?.date, item?.created_at, item?.occurred_at),
   }
 }

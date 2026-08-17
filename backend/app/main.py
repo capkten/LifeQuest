@@ -66,22 +66,28 @@ def _deduplicate_tribulation_attempts(connection):
 
 
 def _deduplicate_npcs(connection):
-    """Keep the first ordinary disciple before adding its population index guard."""
+    """Keep one ordinary disciple and re-parent its events before deleting duplicates."""
+    has_events = inspect(connection).has_table("npc_events")
     rows = connection.execute(text(
         "SELECT id, user_id, sect_id, population_index "
         "FROM npcs WHERE population_index IS NOT NULL "
         "ORDER BY user_id, sect_id, population_index, id"
     )).fetchall()
-    seen = set()
+    seen = {}
     for npc_id, user_id, sect_id, population_index in rows:
         key = (user_id, sect_id, population_index)
         if key in seen:
+            if has_events:
+                connection.execute(
+                    text("UPDATE npc_events SET npc_id = :keeper_id WHERE npc_id = :duplicate_id"),
+                    {"keeper_id": seen[key], "duplicate_id": npc_id},
+                )
             connection.execute(
                 text("DELETE FROM npcs WHERE id = :id"),
                 {"id": npc_id},
             )
         else:
-            seen.add(key)
+            seen[key] = npc_id
 
 
 def _migrate_npc_columns(inspector, connection):

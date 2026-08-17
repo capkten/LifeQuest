@@ -137,11 +137,11 @@
         </svg>
         <span v-if="!isCollapsed">功法</span>
       </router-link>
-      <router-link v-if="cultivationUnlocked && isAscended" to="/npcs" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '仙官' : ''">
+      <router-link v-if="cultivationUnlocked" to="/npcs" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? (isAscended ? '仙官' : '凡界 NPC') : ''">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <circle cx="12" cy="7" r="4" /><path d="M4 21a8 8 0 0 1 16 0" />
         </svg>
-        <span v-if="!isCollapsed">仙官</span>
+        <span v-if="!isCollapsed">{{ isAscended ? '仙官' : '凡界 NPC' }}</span>
       </router-link>
       <router-link v-if="cultivationUnlocked" to="/tribulations" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '渡劫' : ''">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">

@@ -201,6 +201,28 @@ test('npcs route exposes mortal disciples without ascended-only officials', asyn
   assert.match(service, /is_generated\.is_\(True\)/)
 })
 
+test('sidebar exposes mortal NPCs while reserving official label for ascended users', async () => {
+  const sidebar = await readFile(new URL('../components/layout/Sidebar.vue', import.meta.url), 'utf8')
+
+  assert.match(sidebar, /v-if="cultivationUnlocked" to="\/npcs"/)
+  assert.match(sidebar, /isAscended \? ['"]仙官['"] : ['"]凡界 NPC['"]|['"]凡界 NPC['"]|isAscended.*仙官/)
+  assert.doesNotMatch(sidebar, /v-if="cultivationUnlocked && isAscended" to="\/npcs"/)
+})
+
+test('sects page consumes server NPC relationship state and links to real records', async () => {
+  const [page, service] = await Promise.all([
+    readFile(new URL('./Sects.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../services/cultivation.js', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(service, /getNpcs\(\)/)
+  assert.match(page, /getNpcs/)
+  assert.match(page, /recently_met/)
+  assert.match(page, /npc\.name|item\.name/)
+  assert.match(page, /to="\/npcs"/)
+  assert.doesNotMatch(page, /宗主|传功长老|试炼使者/)
+})
+
 test('cultivation state is cleared across auth identity changes', async () => {
   const auth = await readFile(new URL('../stores/auth.js', import.meta.url), 'utf8')
   const cultivation = await readFile(new URL('../stores/cultivation.js', import.meta.url), 'utf8')
