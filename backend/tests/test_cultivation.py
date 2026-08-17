@@ -419,6 +419,41 @@ def test_ascended_profile_remains_valid_for_progression_endpoints(db_session, us
     assert slot["slot_index"] == 0
 
 
+def test_overview_exposes_explicit_ascended_state(db_session, user):
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    mortal = service.get_overview(user.id)
+    service.set_realm(user.id, "ascended", 1, 0)
+    ascended = service.get_overview(user.id)
+
+    assert mortal.ascended is False
+    assert ascended.realm_key == "ascended"
+    assert ascended.ascended is True
+
+
+def test_non_daily_integrity_error_is_not_reported_as_cooldown(db_session, user, monkeypatch):
+    from sqlalchemy.exc import IntegrityError
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    profile = service.ensure_profile(user.id)
+    profile.realm_key = "foundation"
+    profile.minor_stage = 4
+    profile.cultivation = 950
+    db_session.commit()
+    monkeypatch.setattr(service, "roll", lambda probability: True)
+    original_commit = db_session.commit
+
+    def raise_other_integrity_error():
+        raise IntegrityError("INSERT", {}, Exception("UNIQUE constraint failed: unrelated_table.key"))
+
+    monkeypatch.setattr(db_session, "commit", raise_other_integrity_error)
+    with pytest.raises(IntegrityError, match="unrelated_table.key"):
+        service.attempt_tribulation(user.id, 0)
+    monkeypatch.setattr(db_session, "commit", original_commit)
+
+
 def test_failed_tribulation_keeps_realm_and_techniques(db_session, user, monkeypatch):
     from app.services.cultivation import CultivationService
 

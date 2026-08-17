@@ -45,6 +45,26 @@ def _generic_note_migration_lock(connection):
     connection.execute(lock_row.with_for_update())
 
 
+def _deduplicate_tribulation_attempts(connection):
+    """Keep the latest attempt for each user/day before adding the unique index."""
+    rows = connection.execute(text(
+        "SELECT id, user_id, attempted_date, attempted_at "
+        "FROM tribulation_attempts "
+        "WHERE attempted_date IS NOT NULL "
+        "ORDER BY user_id, attempted_date, attempted_at DESC, id DESC"
+    )).fetchall()
+    seen = set()
+    for attempt_id, user_id, attempted_date, _attempted_at in rows:
+        key = (user_id, attempted_date)
+        if key in seen:
+            connection.execute(
+                text("DELETE FROM tribulation_attempts WHERE id = :id"),
+                {"id": attempt_id},
+            )
+        else:
+            seen.add(key)
+
+
 @contextmanager
 def _note_migration_lock(db_engine):
     """Hold a database-backed mutex across the complete note migration."""
@@ -209,6 +229,7 @@ def _migrate_columns():
                 conn.execute(text("ALTER TABLE tribulation_attempts ADD COLUMN attempted_date DATE"))
                 conn.execute(text("UPDATE tribulation_attempts SET attempted_date = DATE(attempted_at) WHERE attempted_date IS NULL"))
                 logger.info("Migration: added tribulation_attempts.attempted_date")
+            _deduplicate_tribulation_attempts(conn)
             conn.execute(text(
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_tribulation_attempt_user_day "
                 "ON tribulation_attempts (user_id, attempted_date)"

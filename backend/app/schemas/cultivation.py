@@ -35,6 +35,7 @@ class CultivationOverview(BaseModel):
     mind_state: int
     aptitude_points: int
     cultivation_efficiency: float
+    ascended: bool = False
     next_stage: StageProgress
     realm: Optional[Dict[str, Any]] = None
 

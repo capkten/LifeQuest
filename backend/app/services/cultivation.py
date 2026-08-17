@@ -105,6 +105,7 @@ class CultivationService:
             mind_state=profile.mind_state,
             aptitude_points=profile.aptitude_points,
             cultivation_efficiency=profile.cultivation_efficiency,
+            ascended=profile.realm_key == ASCENDED_REALM_KEY,
             next_stage=progress,
             realm={"key": profile.realm_key, "minor_stage": profile.minor_stage},
         )
@@ -527,7 +528,9 @@ class CultivationService:
             self.db.commit()
         except IntegrityError as exc:
             self.db.rollback()
-            raise PermissionError("tribulation cooldown active") from exc
+            if self._is_daily_attempt_conflict(exc):
+                raise PermissionError("tribulation cooldown active") from exc
+            raise
         return TribulationResult(success=success, realm_key=profile.realm_key, target_realm=preview.target_realm, cultivation_loss=loss, log_id=attempt.id, cooldown_until=self._cooldown_until(user_id), terminal=success and preview.target_realm == "ascension")
 
     def roll(self, probability: float):
@@ -574,6 +577,20 @@ class CultivationService:
     @staticmethod
     def _utc_today():
         return datetime.now(timezone.utc).date()
+
+    @staticmethod
+    def _is_daily_attempt_conflict(exc: IntegrityError) -> bool:
+        original = getattr(exc, "orig", None)
+        diagnostic = getattr(original, "diag", None)
+        constraint_name = getattr(diagnostic, "constraint_name", "")
+        if constraint_name == "uq_tribulation_attempt_user_day":
+            return True
+        error_text = str(original or exc).lower()
+        return (
+            "tribulation_attempts" in error_text
+            and "user_id" in error_text
+            and "attempted_date" in error_text
+        )
 
     @staticmethod
     def _realm_at_least(current_realm: str, required_realm: str) -> bool:

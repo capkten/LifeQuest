@@ -140,6 +140,13 @@ test('world page has lock and selection semantics', async () => {
   assert.doesNotMatch(source, /node\.is_current|node\.status === ['"]current['"]|node\.completed/)
 })
 
+test('sidebar uses the explicit API ascended state', async () => {
+  const sidebar = await readFile(new URL('../components/layout/Sidebar.vue', import.meta.url), 'utf8')
+  const schema = await readFile(new URL('../../../backend/app/schemas/cultivation.py', import.meta.url), 'utf8')
+  assert.match(sidebar, /cultivationOverview\.value\?\.ascended\s*===\s*true/)
+  assert.match(schema, /ascended:\s*bool\s*=\s*False/)
+})
+
 test('recent rewards preserve descriptions before numeric fallback', async () => {
   const source = await readFile(new URL('./Cultivation.vue', import.meta.url), 'utf8')
 
