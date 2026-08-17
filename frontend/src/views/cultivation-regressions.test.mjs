@@ -96,3 +96,11 @@ test('cultivation shared states expose accessible stable contracts', async () =>
   assert.match(npcTimeline, /Cultivation event|NPC record|Relationship record/)
   assert.match([mapNode, npcTimeline].join('\n'), /aria-label/)
 })
+
+test('world page has lock and selection semantics', async () => {
+  const source = await readFile(new URL('./World.vue', import.meta.url), 'utf8')
+
+  assert.match(source, /锁定|解锁条件/)
+  assert.match(source, /aria-selected|aria-expanded/)
+  assert.match(source, /MapNode/)
+})

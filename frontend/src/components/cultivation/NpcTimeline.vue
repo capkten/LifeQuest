@@ -1,13 +1,14 @@
 <template>
   <section class="cultivation-npc-timeline stitch-surface" aria-labelledby="npc-timeline-title">
-    <h2 id="npc-timeline-title">NPC timeline</h2>
+    <h2 id="npc-timeline-title">关系时间线</h2>
     <ol v-if="items.length" class="cultivation-npc-timeline__list">
       <li v-for="item in items" :key="item.key">
         <strong>{{ item.label }}</strong>
         <span>{{ item.detail }}</span>
+        <time v-if="item.date" :datetime="item.date">{{ item.date }}</time>
       </li>
     </ol>
-    <p v-else class="cultivation-empty-state">No relationship records yet.</p>
+    <p v-else class="cultivation-empty-state">暂无关系事件</p>
   </section>
 </template>
 
@@ -37,6 +38,7 @@ function normalizeItem(item, source, index, fallbackDetail) {
     key: source + '-' + index + '-' + (item?.id || item?.event_id || item?.key || 'record'),
     label,
     detail: firstText(item?.role, item?.description, item?.text, item?.message) || fallbackDetail,
+    date: firstText(item?.date, item?.created_at, item?.occurred_at),
   }
 }
 
