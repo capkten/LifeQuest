@@ -276,6 +276,116 @@ def test_tribulation_probability_is_clamped_and_public(db_session, user):
     }
 
 
+def test_great_vehicle_to_tribulation_uses_25_percent_base_rate(db_session, user):
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    profile = service.ensure_profile(user.id)
+    profile.realm_key = "great_vehicle"
+    profile.minor_stage = 4
+    profile.cultivation = 30000
+
+    preview = service.get_tribulation_preview(user.id)
+
+    assert preview.target_realm == "tribulation"
+    assert preview.base_probability == 25
+    assert preview.failure_loss_percent == 25
+
+
+def test_tribulation_to_ascension_has_explicit_terminal_target(db_session, user, monkeypatch):
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    profile = service.ensure_profile(user.id)
+    profile.realm_key = "tribulation"
+    profile.minor_stage = 4
+    profile.cultivation = 49000
+    monkeypatch.setattr(service, "roll", lambda probability: True)
+
+    preview = service.get_tribulation_preview(user.id)
+    result = service.attempt_tribulation(user.id, 0)
+
+    assert preview.target_realm == "ascension"
+    assert preview.base_probability == 20
+    assert result.realm_key == "ascended"
+    assert result.target_realm == "ascension"
+    assert result.terminal is True
+
+
+def test_failed_final_tribulation_is_not_marked_as_completed(db_session, user, monkeypatch):
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    profile = service.ensure_profile(user.id)
+    profile.realm_key = "tribulation"
+    profile.minor_stage = 4
+    profile.cultivation = 49000
+    monkeypatch.setattr(service, "roll", lambda probability: False)
+
+    result = service.attempt_tribulation(user.id, 0)
+
+    assert result.success is False
+    assert result.realm_key == "tribulation"
+    assert result.terminal is False
+
+
+def test_readiness_normalizes_naive_habit_time_and_derives_trial_and_compatibility(db_session, user):
+    from datetime import datetime, timedelta, timezone
+    from app.models.technique import LearnedTechnique, Technique
+    from app.models.todo import Habit
+    from app.models.world import Sect, SectAccessProgress, SectMembership
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    profile = service.ensure_profile(user.id)
+    habit = Habit(user_id=user.id, title="Daily", last_completed_at=datetime.now() - timedelta(days=1))
+    db_session.add(habit)
+    service.seed_world(db_session)
+    sect = db_session.query(Sect).first()
+    db_session.add_all([
+        SectMembership(user_id=user.id, sect_id=sect.id),
+        SectAccessProgress(user_id=user.id, sect_id=sect.id, trial_confirmed=True),
+    ])
+    technique = db_session.query(Technique).first()
+    db_session.add(LearnedTechnique(user_id=user.id, technique_id=technique.id))
+    db_session.commit()
+
+    breakdown = service.get_tribulation_preview(user.id).readiness_breakdown
+
+    assert breakdown["habit"] == 100
+    assert breakdown["trial"] == 100
+    assert breakdown["compatibility"] == 100
+
+
+def test_concurrent_tribulation_attempts_allow_only_one_daily_attempt(db_session, user, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from tests.conftest import TestingSessionLocal
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    profile = service.ensure_profile(user.id)
+    profile.realm_key = "foundation"
+    profile.minor_stage = 4
+    profile.cultivation = 950
+    db_session.commit()
+    monkeypatch.setattr(CultivationService, "roll", lambda self, probability: True)
+
+    def attempt():
+        session = TestingSessionLocal()
+        try:
+            return CultivationService(session).attempt_tribulation(user.id, 0)
+        except Exception as exc:
+            return exc
+        finally:
+            session.close()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: attempt(), range(2)))
+
+    assert sum(not isinstance(result, Exception) for result in results) == 1
+    assert sum(isinstance(result, PermissionError) for result in results) == 1
+
+
 def test_failed_tribulation_keeps_realm_and_techniques(db_session, user, monkeypatch):
     from app.services.cultivation import CultivationService
 

@@ -158,7 +158,10 @@ class TribulationPreview(BaseModel):
     pill_bonus: float
     final_probability: float
     failure_loss_percent: float
+    failure_loss: int = 0
     cooldown_until: Optional[datetime] = None
+    terminal: bool = False
+    available: bool = True
 
 
 class TribulationResult(BaseModel):
@@ -170,3 +173,4 @@ class TribulationResult(BaseModel):
     lost_techniques: bool = False
     log_id: Optional[UUID] = None
     cooldown_until: Optional[datetime] = None
+    terminal: bool = False

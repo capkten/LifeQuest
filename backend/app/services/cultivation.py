@@ -1,5 +1,6 @@
 import math
 import random
+import threading
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -43,26 +44,19 @@ REALM_THRESHOLDS = {
 }
 
 REALM_ORDER = list(REALM_THRESHOLDS)
-TRIBULATION_BASE_PROBABILITIES = {
-    "foundation": 90,
-    "golden_core": 80,
-    "nascent_soul": 70,
-    "spirit_transformation": 60,
-    "void_refining": 50,
-    "body_combination": 40,
-    "great_vehicle": 30,
-    "tribulation": 20,
+TRIBULATION_RULES = {
+    ("qi_refining", "foundation"): (90, 10),
+    ("foundation", "golden_core"): (80, 10),
+    ("golden_core", "nascent_soul"): (70, 12),
+    ("nascent_soul", "spirit_transformation"): (60, 15),
+    ("spirit_transformation", "void_refining"): (50, 18),
+    ("void_refining", "body_combination"): (40, 20),
+    ("body_combination", "great_vehicle"): (30, 22),
+    ("great_vehicle", "tribulation"): (25, 25),
+    ("tribulation", "ascension"): (20, 25),
 }
-TRIBULATION_FAILURE_LOSS = {
-    "foundation": 10,
-    "golden_core": 10,
-    "nascent_soul": 12,
-    "spirit_transformation": 15,
-    "void_refining": 18,
-    "body_combination": 20,
-    "great_vehicle": 22,
-    "tribulation": 25,
-}
+ASCENDED_REALM_KEY = "ascended"
+_TRIBULATION_ATTEMPT_LOCK = threading.Lock()
 SECT_ENTRY_REALMS = {
     1: "foundation",
     2: "golden_core",
@@ -94,6 +88,14 @@ class CultivationService:
 
     def get_overview(self, user_id: UUID) -> CultivationOverview:
         profile = self.ensure_profile(user_id)
+        progress = StageProgress(
+            realm_key=profile.realm_key,
+            minor_stage=profile.minor_stage,
+            cultivation=profile.cultivation,
+            current_threshold=0,
+            next_threshold=None,
+            remaining=0,
+        ) if profile.realm_key == ASCENDED_REALM_KEY else self.get_next_stage(profile.realm_key, profile.minor_stage, profile.cultivation)
         return CultivationOverview(
             realm_key=profile.realm_key,
             minor_stage=profile.minor_stage,
@@ -104,9 +106,7 @@ class CultivationService:
             mind_state=profile.mind_state,
             aptitude_points=profile.aptitude_points,
             cultivation_efficiency=profile.cultivation_efficiency,
-            next_stage=self.get_next_stage(
-                profile.realm_key, profile.minor_stage, profile.cultivation
-            ),
+            next_stage=progress,
             realm={"key": profile.realm_key, "minor_stage": profile.minor_stage},
         )
 
@@ -444,9 +444,24 @@ class CultivationService:
 
     def get_tribulation_preview(self, user_id: UUID, pill_count=0) -> TribulationPreview:
         profile = self.ensure_profile(user_id)
+        if profile.realm_key == ASCENDED_REALM_KEY:
+            return TribulationPreview(
+                target_realm=ASCENDED_REALM_KEY,
+                base_probability=0,
+                readiness_score=0,
+                readiness_breakdown={key: 0 for key in ("mind_state", "habit", "task_quality", "trial", "compatibility")},
+                readiness_bonus=0,
+                pill_count=0,
+                pill_bonus=0,
+                final_probability=0,
+                failure_loss_percent=0,
+                failure_loss=0,
+                terminal=True,
+                available=False,
+            )
         index = REALM_ORDER.index(profile.realm_key)
-        target = REALM_ORDER[min(index + 1, len(REALM_ORDER) - 1)]
-        base = TRIBULATION_BASE_PROBABILITIES[target]
+        target = "ascension" if profile.realm_key == "tribulation" else REALM_ORDER[index + 1]
+        base, failure_loss_percent = TRIBULATION_RULES[(profile.realm_key, target)]
         readiness_breakdown = self._readiness_breakdown(profile)
         readiness = round(
             readiness_breakdown["mind_state"] * 0.25
@@ -469,13 +484,22 @@ class CultivationService:
             pill_count=bounded_pills,
             pill_bonus=pill_bonus,
             final_probability=max(20, min(95, base + readiness_bonus + pill_bonus)),
-            failure_loss_percent=TRIBULATION_FAILURE_LOSS[target],
+            failure_loss_percent=failure_loss_percent,
+            failure_loss=math.floor(REALM_THRESHOLDS[profile.realm_key][-1] * failure_loss_percent / 100),
             cooldown_until=cooldown_until,
         )
 
     def attempt_tribulation(self, user_id: UUID, pill_count: int) -> TribulationResult:
+        with _TRIBULATION_ATTEMPT_LOCK:
+            return self._attempt_tribulation(user_id, pill_count)
+
+    def _attempt_tribulation(self, user_id: UUID, pill_count: int) -> TribulationResult:
+        profile = self.db.query(CultivationProfile).with_for_update().filter_by(user_id=user_id).one_or_none()
+        if profile is None:
+            profile = self.ensure_profile(user_id)
         preview = self.get_tribulation_preview(user_id, pill_count)
-        profile = self.ensure_profile(user_id)
+        if preview.terminal or not preview.available:
+            raise PermissionError("tribulation already complete")
         if preview.cooldown_until is not None:
             raise PermissionError("tribulation cooldown active")
         if not self._is_final_minor_stage(profile):
@@ -489,7 +513,7 @@ class CultivationService:
         if not success:
             profile.cultivation = max(0, profile.cultivation - loss)
         else:
-            profile.realm_key = preview.target_realm
+            profile.realm_key = ASCENDED_REALM_KEY if preview.target_realm == "ascension" else preview.target_realm
             profile.minor_stage = 1
             profile.cultivation = 0
         attempt = TribulationAttempt(
@@ -501,7 +525,7 @@ class CultivationService:
         )
         self.db.add(attempt)
         self.db.commit()
-        return TribulationResult(success=success, realm_key=profile.realm_key, target_realm=preview.target_realm, cultivation_loss=loss, log_id=attempt.id, cooldown_until=self._cooldown_until(user_id))
+        return TribulationResult(success=success, realm_key=profile.realm_key, target_realm=preview.target_realm, cultivation_loss=loss, log_id=attempt.id, cooldown_until=self._cooldown_until(user_id), terminal=success and preview.target_realm == "ascension")
 
     def roll(self, probability: float):
         roll = random.random() * 100
@@ -513,16 +537,26 @@ class CultivationService:
         week_ago = now - timedelta(days=7)
         habits = self.db.query(Habit).filter(Habit.user_id == profile.user_id, Habit.is_active.is_(True)).all()
         recent_tasks = self.db.query(Task).filter(Task.user_id == profile.user_id, Task.completed_at >= week_ago).all()
-        habit_score = 50.0 if not habits else round(sum(1 for habit in habits if habit.last_completed_at and habit.last_completed_at >= week_ago) / len(habits) * 100, 2)
+        habit_score = 50.0 if not habits else round(sum(1 for habit in habits if habit.last_completed_at and self._as_utc(habit.last_completed_at) >= week_ago) / len(habits) * 100, 2)
         task_weights = {"easy": 60, "medium": 80, "hard": 100}
         task_score = 50.0 if not recent_tasks else round(sum(task_weights.get(task.difficulty, 80) for task in recent_tasks) / len(recent_tasks), 2)
+        trial_score = 100.0 if self.db.query(SectAccessProgress).filter(SectAccessProgress.user_id == profile.user_id, SectAccessProgress.trial_confirmed.is_(True)).count() else 0.0
+        has_membership = self.db.query(SectMembership).filter(SectMembership.user_id == profile.user_id, SectMembership.status == "active").count() > 0
+        has_technique = self.db.query(LearnedTechnique).filter(LearnedTechnique.user_id == profile.user_id).count() > 0
+        compatibility_score = 100.0 if has_membership and has_technique else 60.0 if has_membership or has_technique else 0.0
         return {
             "mind_state": max(0, min(100, float(profile.mind_state))),
             "habit": habit_score,
             "task_quality": task_score,
-            "trial": 50.0,
-            "compatibility": 50.0,
+            "trial": trial_score,
+            "compatibility": compatibility_score,
         }
+
+    @staticmethod
+    def _as_utc(value):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     def _cooldown_until(self, user_id: UUID):
         last_attempt = self.db.query(TribulationAttempt).filter_by(user_id=user_id).order_by(TribulationAttempt.attempted_at.desc()).first()

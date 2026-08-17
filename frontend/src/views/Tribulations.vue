@@ -6,7 +6,7 @@
     <template v-else>
       <section class="tribulations-layout">
         <div class="tribulations-main">
-          <section class="tribulation-surface" aria-labelledby="current-realm-title"><div class="tribulation-heading"><h2 id="current-realm-title">当前境界</h2><strong>{{ realmLabel }}</strong></div><p class="tribulation-warning">失败只损失当前小境界修为的 {{ preview.failure_loss_percent }}%，不会降低境界名称或删除功法、装备、格子、宗门记录和 NPC 关系。</p></section>
+          <section class="tribulation-surface" aria-labelledby="current-realm-title"><div class="tribulation-heading"><h2 id="current-realm-title">当前境界</h2><strong>{{ realmLabel }}</strong></div><p class="tribulation-cultivation">当前小境界修为：<strong>{{ overview.cultivation }}</strong></p><p class="tribulation-warning">失败损失：{{ preview.failure_loss }} 点修为（{{ preview.failure_loss_percent }}%）。不会降低境界名称或删除功法、装备、格子、宗门记录和 NPC 关系。</p></section>
           <TribulationProbability :preview="preview" :loading="loading" :error="error" :attempting="attempting" @attempt="attempt" @retry="load" />
         </div>
         <aside class="tribulations-side">
@@ -14,32 +14,46 @@
           <section class="tribulation-surface" aria-labelledby="pill-title"><div class="tribulation-heading"><h2 id="pill-title">渡劫丹</h2><span>每颗 +5%</span></div><label for="pill-count">本次使用数量（最多 15 颗）</label><input id="pill-count" v-model.number="pillCount" type="number" min="0" max="15" step="1" :disabled="attempting" aria-describedby="pill-help"><p id="pill-help" class="tribulation-help">数量变化后，服务端会重新计算预览。</p></section>
         </aside>
       </section>
-      <section v-if="result" class="tribulation-result" :class="result.success ? 'tribulation-result--success' : 'tribulation-result--failure'" role="status" aria-live="polite"><strong>{{ result.success ? '渡劫成功' : '渡劫失败' }}</strong><span>{{ result.success ? `已进入${result.target_realm}初期。` : `当前境界保留，损失 ${result.cultivation_loss} 点修为。` }}</span><small>结果日志：{{ result.log_id || '已记录' }} · {{ result.cooldown_until ? '次日可再次尝试' : '现在可再次尝试' }}</small></section>
+      <section v-if="result" class="tribulation-result" :class="result.success ? 'tribulation-result--success' : 'tribulation-result--failure'" role="status" aria-live="polite"><strong>{{ result.success ? '渡劫成功' : '渡劫失败' }}</strong><span>{{ result.success ? (result.terminal ? '已完成渡劫并进入飞升终点状态。' : `已进入${result.target_realm}初期。`) : `当前境界保留，损失 ${result.cultivation_loss} 点修为。` }}</span><small>结果日志：{{ result.log_id || '已记录' }} · {{ result.cooldown_until ? '次日可再次尝试' : '现在可再次尝试' }}</small></section>
     </template>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import TribulationProbability from '../components/cultivation/TribulationProbability.vue'
 import { cultivationService } from '../services/cultivation'
 
 const preview = ref(null), overview = ref(null), result = ref(null), error = ref(null), loading = ref(false), attempting = ref(false), pillCount = ref(0)
+let previewRequestId = 0
+let previewController = null
 const readinessItems = [{ key: 'mind_state', label: '心境状态' }, { key: 'habit', label: '最近 7 天习惯' }, { key: 'task_quality', label: '最近 7 天任务质量' }, { key: 'trial', label: '渡劫试炼质量' }, { key: 'compatibility', label: '功法宗门契合度' }]
 const realmLabel = computed(() => `${overview.value?.realm_key || '未知境界'} ${overview.value?.minor_stage || ''}`.trim())
 const errorMessage = computed(() => error.value?.message || '渡劫状态暂时无法读取。')
 
+async function loadPreview() {
+  const requestId = ++previewRequestId
+  previewController?.abort()
+  previewController = new AbortController()
+  try {
+    const nextPreview = await cultivationService.getTribulationPreview(pillCount.value, { signal: previewController.signal })
+    if (requestId === previewRequestId) preview.value = nextPreview
+  } catch (cause) {
+    if (cause?.code !== 'ERR_CANCELED' && cause?.name !== 'CanceledError' && requestId === previewRequestId) error.value = cause
+  }
+}
 async function load() {
   loading.value = true; error.value = null
-  try { [overview.value, preview.value] = await Promise.all([cultivationService.getOverview(), cultivationService.getTribulationPreview(pillCount.value)]) } catch (cause) { error.value = cause } finally { loading.value = false }
+  try { overview.value = await cultivationService.getOverview(); await loadPreview() } catch (cause) { error.value = cause } finally { loading.value = false }
 }
 async function attempt() {
   if (attempting.value || preview.value?.cooldown_until) return
   attempting.value = true; error.value = null
   try { result.value = await cultivationService.attemptTribulation({ pill_count: pillCount.value }); await load() } catch (cause) { error.value = cause } finally { attempting.value = false }
 }
-watch(pillCount, (value) => { const bounded = Math.max(0, Math.min(15, Number(value) || 0)); if (bounded !== value) pillCount.value = bounded; if (!attempting.value) load() })
+watch(pillCount, (value) => { const bounded = Math.max(0, Math.min(15, Number(value) || 0)); if (bounded !== value) pillCount.value = bounded; if (!attempting.value) loadPreview() })
 onMounted(load)
+onBeforeUnmount(() => previewController?.abort())
 </script>
 
 <style scoped>
