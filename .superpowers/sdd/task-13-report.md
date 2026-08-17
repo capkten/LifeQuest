@@ -75,4 +75,4 @@ git diff --check
 ## Commits
 
 - 实现提交：`431800b` (`fix(cultivation): harden persistence and overview data`)
-- 报告提交：待本报告提交后记录在最终回复中。
+- 报告首次纳入版本控制的提交：`0a8de07` (`docs(task-13): record verification report`)
