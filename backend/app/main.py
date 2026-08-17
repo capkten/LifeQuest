@@ -441,7 +441,10 @@ def _deduplicate_sect_access_rows(connection):
 
 
 def _migrate_sect_access_constraint(connection):
-    if not inspect(connection).has_table("sect_access_progress"):
+    inspector = inspect(connection)
+    try:
+        inspector.get_columns("sect_access_progress")
+    except (KeyError, NoSuchTableError):
         return
     _deduplicate_sect_access_rows(connection)
     _ensure_unique_index(
