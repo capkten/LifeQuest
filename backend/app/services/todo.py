@@ -27,6 +27,7 @@ from app.models.coin_transaction import CoinSource, CoinType
 from app.repositories.coin_transaction import CoinTransactionRepository
 from app.services.achievement import AchievementService
 from app.services.title import TitleService
+from app.services.cultivation import CultivationService
 
 
 class TodoService:
@@ -40,6 +41,7 @@ class TodoService:
         self.coin_repo = CoinTransactionRepository(db)
         self.achievement_service = AchievementService(db)
         self.title_service = TitleService(db)
+        self.cultivation_service = CultivationService(db)
 
     # --- Ownership verification (returns object or raises HTTPException) ---
     def get_habit_for_user(self, habit_id: UUID, user_id: UUID) -> Habit:
@@ -105,7 +107,7 @@ class TodoService:
 
         user = self.user_repo.get_by_id(user_id)
         if user:
-            self._update_rewards(user, habit.coins_reward, habit.exp_reward, CoinSource.HABIT)
+            self._update_rewards(user, habit.coins_reward, habit.exp_reward, CoinSource.HABIT, habit.difficulty)
             self._check_achievements(user)
             self.db.commit()
 
@@ -142,7 +144,7 @@ class TodoService:
 
         user = self.user_repo.get_by_id(user_id)
         if user:
-            self._update_rewards(user, task.coins_reward, task.exp_reward, CoinSource.TASK)
+            self._update_rewards(user, task.coins_reward, task.exp_reward, CoinSource.TASK, task.difficulty)
             self._check_achievements(user)
             self.db.commit()
 
@@ -174,16 +176,27 @@ class TodoService:
 
         user = self.user_repo.get_by_id(user_id)
         if user:
-            self._update_rewards(user, goal.coins_reward, goal.exp_reward, CoinSource.GOAL)
+            self._update_rewards(user, goal.coins_reward, goal.exp_reward, CoinSource.GOAL, goal.difficulty)
             self._check_achievements(user)
             self.db.commit()
 
         self.goal_repo.db.refresh(goal)
         return goal
 
-    def _update_rewards(self, user, coins: int, exp: int, source: str) -> None:
+    def _update_rewards(self, user, coins: int, exp: int, source: str, difficulty: str = "medium") -> None:
         """Update user coins and experience in a single transaction."""
         self.user_repo._update_coins_no_commit(user, coins)
+        legacy_level = user.level
+        legacy_experience = user.experience
+        settlement = self.cultivation_service.settle_todo_reward(
+            user.id, source, exp, difficulty
+        )
+        # Spirit stones are persisted in cultivation, while the legacy todo
+        # wallet must retain its pre-cultivation reward semantics.
+        user.coins -= settlement.spirit_stones
+        user.total_coins_earned -= settlement.spirit_stones
+        user.level = legacy_level
+        user.experience = legacy_experience
         self.user_repo._update_experience_no_commit(user, exp)
         self.coin_repo._create_no_commit(
             {

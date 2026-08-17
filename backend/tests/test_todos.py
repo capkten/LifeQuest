@@ -205,6 +205,49 @@ def test_complete_task_idempotent(client):
     assert user_after_second["experience"] == user_after_first["experience"]
 
 
+def test_complete_task_creates_one_cultivation_log_and_keeps_legacy_rewards(client):
+    headers = _register_and_login(client)
+
+    create_response = client.post(
+        "/api/todos/tasks",
+        json={
+            "title": "Cultivation integration",
+            "difficulty": "hard",
+            "coins_reward": 20,
+            "exp_reward": 15,
+        },
+        headers=headers,
+    )
+    task_id = create_response.json()["id"]
+
+    first = client.post(f"/api/todos/tasks/{task_id}/complete", headers=headers)
+    second = client.post(f"/api/todos/tasks/{task_id}/complete", headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+    from app.models.cultivation import CultivationLog
+    from app.models.cultivation import CultivationProfile
+    from app.models.user import User
+    from tests.conftest import TestingSessionLocal
+
+    db = TestingSessionLocal()
+    try:
+        user = db.query(User).filter(User.username == "testuser").one()
+        logs = db.query(CultivationLog).filter(CultivationLog.user_id == user.id).all()
+        assert len(logs) == 1
+        assert logs[0].source == "task"
+        profile = db.query(CultivationProfile).filter(
+            CultivationProfile.user_id == user.id
+        ).one()
+        assert user.experience == 15
+        assert user.coins == 70
+        assert profile.cultivation == 21
+        assert profile.spirit_stones == 12
+    finally:
+        db.close()
+
+
 def test_complete_goal_idempotent(client):
     """Completing a goal twice should only award rewards once."""
     headers = _register_and_login(client)
