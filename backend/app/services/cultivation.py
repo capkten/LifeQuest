@@ -1,12 +1,13 @@
 import math
 import random
+import time
 import threading
 from contextlib import nullcontext
 from hashlib import sha256
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.models.cultivation import CultivationLog, CultivationProfile, TribulationAttempt
@@ -49,6 +50,8 @@ REALM_THRESHOLDS = {
 }
 
 REALM_ORDER = list(REALM_THRESHOLDS) + ["ascended"]
+SOURCE_KEY_RETRY_COUNT = 3
+SOURCE_KEY_RETRY_DELAY_SECONDS = 0.05
 TRIBULATION_RULES = {
     ("qi_refining", "foundation"): (90, 10),
     ("foundation", "golden_core"): (80, 10),
@@ -790,6 +793,19 @@ class CultivationService:
         )
 
     @staticmethod
+    def _is_source_key_lock_error(exc: OperationalError) -> bool:
+        original = getattr(exc, "orig", None)
+        error_text = str(original or exc).lower()
+        return any(
+            marker in error_text
+            for marker in (
+                "database is locked",
+                "database table is locked",
+                "database schema is locked",
+            )
+        )
+
+    @staticmethod
     def _realm_at_least(current_realm: str, required_realm: str) -> bool:
         return REALM_ORDER.index(current_realm) >= REALM_ORDER.index(required_realm)
 
@@ -831,67 +847,95 @@ class CultivationService:
             ).one_or_none()
             if existing_log is not None:
                 return self._settlement_from_existing_log(existing_log, user_id)
-        try:
-            # A source-key savepoint contains both the unique claim and all
-            # cultivation mutations, so a losing concurrent session rolls back
-            # without leaving a partial reward behind.
-            with (self.db.begin_nested() if source_key else nullcontext()):
-                profile = self.ensure_profile(user_id)
-                cultivation = max(0, math.floor(
-                    base_exp
-                    * difficulty_factor
-                    * importance
-                    * profile.cultivation_efficiency
-                    * quality
-                ))
-                stones = max(1, math.floor(cultivation * 0.6))
-                profile.cultivation += cultivation
-                if profile.realm_key != ASCENDED_REALM_KEY:
-                    while profile.minor_stage < len(REALM_THRESHOLDS[profile.realm_key]):
-                        next_threshold = self.get_next_stage(
-                            profile.realm_key, profile.minor_stage, profile.cultivation
-                        ).next_threshold
-                        if next_threshold is None or profile.cultivation < next_threshold:
-                            break
-                        profile.cultivation -= next_threshold
-                        profile.minor_stage += 1
-                        if profile.minor_stage == len(REALM_THRESHOLDS[profile.realm_key]):
-                            profile.cultivation += next_threshold
-                            break
-                ready_for_tribulation = (
-                    profile.realm_key != ASCENDED_REALM_KEY
-                    and self._is_final_minor_stage(profile)
-                )
-                profile.spirit_stones += stones
-                log = CultivationLog(
-                    user_id=user_id,
-                    source=source,
-                    source_key=source_key,
-                    cultivation_delta=cultivation,
-                    spirit_stones_delta=stones,
-                )
-                self.db.add(log)
-                self.db.flush()
-        except IntegrityError:
-            existing_log = self.db.query(CultivationLog).filter(
-                CultivationLog.source_key == source_key,
-                CultivationLog.user_id == user_id,
-            ).one_or_none()
-            if existing_log is None:
-                raise
-            return self._settlement_from_existing_log(existing_log, user_id)
+        for attempt in range(SOURCE_KEY_RETRY_COUNT):
+            if source_key:
+                existing_log = self.db.query(CultivationLog).filter(
+                    CultivationLog.source_key == source_key,
+                    CultivationLog.user_id == user_id,
+                ).one_or_none()
+                if existing_log is not None:
+                    return self._settlement_from_existing_log(existing_log, user_id)
+            try:
+                # A source-key savepoint contains both the unique claim and all
+                # cultivation mutations, so a losing concurrent session rolls back
+                # without leaving a partial reward behind.
+                with (self.db.begin_nested() if source_key else nullcontext()):
+                    profile = self.ensure_profile(user_id)
+                    cultivation = max(0, math.floor(
+                        base_exp
+                        * difficulty_factor
+                        * importance
+                        * profile.cultivation_efficiency
+                        * quality
+                    ))
+                    stones = max(1, math.floor(cultivation * 0.6))
+                    profile.cultivation += cultivation
+                    if profile.realm_key != ASCENDED_REALM_KEY:
+                        while profile.minor_stage < len(REALM_THRESHOLDS[profile.realm_key]):
+                            next_threshold = self.get_next_stage(
+                                profile.realm_key, profile.minor_stage, profile.cultivation
+                            ).next_threshold
+                            if next_threshold is None or profile.cultivation < next_threshold:
+                                break
+                            profile.cultivation -= next_threshold
+                            profile.minor_stage += 1
+                            if profile.minor_stage == len(REALM_THRESHOLDS[profile.realm_key]):
+                                profile.cultivation += next_threshold
+                                break
+                    ready_for_tribulation = (
+                        profile.realm_key != ASCENDED_REALM_KEY
+                        and self._is_final_minor_stage(profile)
+                    )
+                    profile.spirit_stones += stones
+                    log = CultivationLog(
+                        user_id=user_id,
+                        source=source,
+                        source_key=source_key,
+                        cultivation_delta=cultivation,
+                        spirit_stones_delta=stones,
+                    )
+                    self.db.add(log)
+                    self.db.flush()
+            except IntegrityError:
+                existing_log = self.db.query(CultivationLog).filter(
+                    CultivationLog.source_key == source_key,
+                    CultivationLog.user_id == user_id,
+                ).one_or_none()
+                if existing_log is None:
+                    raise
+                return self._settlement_from_existing_log(existing_log, user_id)
+            except OperationalError as exc:
+                if not source_key or not self._is_source_key_lock_error(exc):
+                    raise
+                # The nested transaction has rolled back the failed write. Clear
+                # the failed session transaction and expired ORM state before the
+                # bounded retry can re-read the winner.
+                self.db.rollback()
+                self.db.expire_all()
+                if attempt == SOURCE_KEY_RETRY_COUNT - 1:
+                    existing_log = self.db.query(CultivationLog).filter(
+                        CultivationLog.source_key == source_key,
+                        CultivationLog.user_id == user_id,
+                    ).one_or_none()
+                    if existing_log is not None:
+                        return self._settlement_from_existing_log(existing_log, user_id)
+                    raise
+                time.sleep(SOURCE_KEY_RETRY_DELAY_SECONDS)
+                continue
 
-        self.user_repo._update_experience_no_commit(user, cultivation)
-        self.user_repo._update_coins_no_commit(user, stones)
-        return RewardSettlement(
-            cultivation=cultivation,
-            spirit_stones=stones,
-            merit=0,
-            efficiency=profile.cultivation_efficiency,
-            log_id=log.id,
-            legacy_exp=cultivation,
-            ready_for_tribulation=ready_for_tribulation,
-        )
+            self.user_repo._update_experience_no_commit(user, cultivation)
+            self.user_repo._update_coins_no_commit(user, stones)
+            return RewardSettlement(
+                cultivation=cultivation,
+                spirit_stones=stones,
+                merit=0,
+                efficiency=profile.cultivation_efficiency,
+                log_id=log.id,
+                legacy_exp=cultivation,
+                ready_for_tribulation=ready_for_tribulation,
+            )
+
+        raise RuntimeError("source-key settlement retry loop exhausted")
 
     def _settlement_from_existing_log(
         self, log: CultivationLog, user_id: UUID

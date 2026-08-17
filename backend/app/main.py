@@ -94,6 +94,17 @@ def _migrate_learned_technique_constraint(inspector, connection):
 
     _deduplicate_learned_techniques(connection)
 
+    target_index_name = "uq_learned_technique_user_technique"
+    try:
+        learned_indexes = inspector.get_indexes("learned_techniques")
+    except (AttributeError, NotImplementedError):
+        learned_indexes = []
+    for index in learned_indexes:
+        if index.get("name") == target_index_name and not index.get("unique"):
+            connection.execute(text(
+                f'DROP INDEX "{target_index_name}"'
+            ))
+
     unique_definition_exists = False
     try:
         unique_definition_exists = any(
@@ -115,7 +126,7 @@ def _migrate_learned_technique_constraint(inspector, connection):
     if not unique_definition_exists:
         connection.execute(text(
             "CREATE UNIQUE INDEX IF NOT EXISTS "
-            "uq_learned_technique_user_technique "
+            f"{target_index_name} "
             "ON learned_techniques (user_id, technique_id)"
         ))
 

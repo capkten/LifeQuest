@@ -1,6 +1,12 @@
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
+from time import sleep
+import sqlite3
 from uuid import uuid4
 
-from sqlalchemy import create_engine, inspect, text
+import pytest
+from sqlalchemy import create_engine, event, inspect, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
@@ -71,6 +77,41 @@ def test_fresh_learned_techniques_have_one_composite_unique_definition(tmp_path)
 
     assert len(unique_indexes) + len(unique_constraints) == 1
     fresh_engine.dispose()
+
+
+def test_same_named_non_unique_learned_technique_index_is_replaced(tmp_path, monkeypatch):
+    from app import main as main_module
+
+    legacy_engine = create_engine(f"sqlite:///{tmp_path / 'same-named-index.sqlite'}")
+    Base.metadata.create_all(bind=legacy_engine)
+    with legacy_engine.begin() as connection:
+        connection.execute(text("DROP TABLE learned_techniques"))
+        connection.execute(text(
+            "CREATE TABLE learned_techniques ("
+            "id VARCHAR(36) PRIMARY KEY, user_id VARCHAR(36) NOT NULL, "
+            "technique_id VARCHAR(36) NOT NULL, learned_at DATETIME NOT NULL, "
+            "level INTEGER NOT NULL DEFAULT 1)"
+        ))
+        connection.execute(text(
+            "CREATE INDEX uq_learned_technique_user_technique "
+            "ON learned_techniques (user_id, technique_id)"
+        ))
+        connection.execute(text(
+            "INSERT INTO learned_techniques "
+            "(id, user_id, technique_id, learned_at, level) VALUES "
+            "('only', 'user-1', 'technique-1', '2026-08-17 09:00:00', 1)"
+        ))
+
+    monkeypatch.setattr(main_module, "engine", legacy_engine)
+    main_module._migrate_columns()
+    main_module._migrate_columns()
+
+    indexes = {
+        index["name"]: index
+        for index in inspect(legacy_engine).get_indexes("learned_techniques")
+    }
+    assert bool(indexes["uq_learned_technique_user_technique"]["unique"]) is True
+    legacy_engine.dispose()
 
 
 def test_task_reward_replay_after_reset_returns_original_settlement_without_duplicates(
@@ -158,6 +199,7 @@ def test_source_key_conflict_in_independent_sessions_returns_original_settlement
         ).one()
         first_state = (
             first_user.coins,
+            first_user.total_coins_earned,
             first_user.experience,
             first_profile.cultivation,
             first_profile.spirit_stones,
@@ -177,11 +219,129 @@ def test_source_key_conflict_in_independent_sessions_returns_original_settlement
             CoinTransaction.user_id == user.id,
             CoinTransaction.source == "task",
         ).count() == 1
+        assert second_session.query(CultivationLog).filter(
+            CultivationLog.source_key == "todo:task:conflict"
+        ).count() == 1
         profile = second_session.query(CultivationProfile).filter(
             CultivationProfile.user_id == user.id
         ).one()
-        assert (second_user.coins, second_user.experience, profile.cultivation, profile.spirit_stones) == first_state
+        assert (
+            second_user.coins,
+            second_user.total_coins_earned,
+            second_user.experience,
+            profile.cultivation,
+            profile.spirit_stones,
+        ) == first_state
     finally:
         first_session.close()
         second_session.close()
         engine.dispose()
+
+
+def test_locked_source_key_session_reloads_committed_settlement_without_duplicates(tmp_path):
+    from app.services.todo import TodoService
+
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'source-key-locked.sqlite'}",
+        connect_args={"check_same_thread": False, "timeout": 0.01},
+    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    setup = session_factory()
+    winner_session = session_factory()
+    loser_session = session_factory()
+    lock_errors = []
+
+    def record_lock_error(error_context):
+        original = error_context.original_exception
+        if "locked" in str(original).lower():
+            lock_errors.append(original)
+
+    event.listen(engine, "handle_error", record_lock_error)
+    try:
+        user = User(
+            username=f"locked-{uuid4().hex}",
+            email=f"locked-{uuid4().hex}@example.com",
+            password_hash="hashed",
+        )
+        setup.add(user)
+        setup.commit()
+        user_id = user.id
+
+        loser_user = loser_session.get(User, user_id)
+
+        winner_user = winner_session.get(User, user_id)
+        winner_service = TodoService(winner_session)
+        # Start a real outer write transaction so the loser receives SQLITE_BUSY
+        # while the winner's source-key settlement is still uncommitted.
+        winner_session.execute(
+            text("UPDATE users SET coins = coins WHERE id = :id"),
+            {"id": str(user_id)},
+        )
+        winner_session.flush()
+        winner_result = winner_service._update_rewards(
+            winner_user, 20, 15, "task", source_key="todo:task:locked"
+        )
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            winner_commit = executor.submit(lambda: (sleep(0.08), winner_session.commit()))
+            loser_result = TodoService(loser_session)._update_rewards(
+                loser_user, 20, 15, "task", source_key="todo:task:locked"
+            )
+            winner_commit.result(timeout=2)
+        loser_session.commit()
+
+        assert lock_errors
+        assert loser_result.model_dump() == winner_result.model_dump()
+        verify = session_factory()
+        try:
+            stored_user = verify.get(User, user_id)
+            profile = verify.query(CultivationProfile).filter_by(user_id=user_id).one()
+            assert (stored_user.coins, stored_user.total_coins_earned, stored_user.experience) == (20, 20, 15)
+            assert (profile.cultivation, profile.spirit_stones) == (
+                winner_result.cultivation,
+                winner_result.spirit_stones,
+            )
+            assert verify.query(CultivationLog).filter_by(source_key="todo:task:locked").count() == 1
+            assert verify.query(CoinTransaction).filter_by(user_id=user_id, source="task").count() == 1
+        finally:
+            verify.close()
+    finally:
+        event.remove(engine, "handle_error", record_lock_error)
+        setup.close()
+        winner_session.close()
+        loser_session.close()
+        engine.dispose()
+
+
+def test_non_lock_operational_error_is_reraised_unchanged(client, db_session, monkeypatch):
+    from app.services.cultivation import CultivationService
+
+    user = User(
+        username=f"non-lock-{uuid4().hex}",
+        email=f"non-lock-{uuid4().hex}@example.com",
+        password_hash="hashed",
+    )
+    db_session.add(user)
+    db_session.commit()
+    expected = OperationalError(
+        "INSERT INTO cultivation_profiles",
+        {},
+        sqlite3.OperationalError("no such table: cultivation_profiles"),
+    )
+
+    def raise_non_lock_error(_service, _user_id):
+        raise expected
+
+    monkeypatch.setattr(CultivationService, "ensure_profile", raise_non_lock_error)
+
+    with pytest.raises(OperationalError) as caught:
+        CultivationService(db_session).settle_todo_reward(
+            user.id,
+            "task",
+            15,
+            "medium",
+            source_key="todo:task:non-lock-error",
+        )
+
+    assert caught.value is expected
