@@ -63,13 +63,13 @@ export const cultivationService = {
     return response.data
   },
 
-  async getTribulationPreview() {
-    const response = await api.get('/cultivation/tribulation/preview')
+  async getTribulationPreview(pillCount = 0) {
+    const response = await api.get('/cultivation/tribulation/preview', { params: { pill_count: pillCount } })
     return response.data
   },
 
-  async attemptTribulation(payload) {
-    const response = await api.post('/cultivation/tribulation/attempt', payload)
+  async attemptTribulation({ pill_count }) {
+    const response = await api.post('/cultivation/tribulation/attempt', { pill_count })
     return response.data
   },
 }

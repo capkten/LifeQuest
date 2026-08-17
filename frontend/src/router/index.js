@@ -94,7 +94,7 @@ const routes = [
       {
         path: 'tribulations',
         name: 'Tribulations',
-        component: cultivationRouteComponent
+        component: () => import('../views/Tribulations.vue')
       },
       {
         path: 'shop',

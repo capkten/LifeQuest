@@ -264,6 +264,76 @@ def test_tribulation_persists_the_actual_random_roll_and_keeps_failure_loss(db_s
     assert result.cultivation_loss == math.floor(235 * 0.1)
 
 
+def test_tribulation_probability_is_clamped_and_public(db_session, user):
+    from app.services.cultivation import CultivationService
+
+    preview = CultivationService(db_session).get_tribulation_preview(user.id)
+
+    assert 20 <= preview.final_probability <= 95
+    assert preview.base_probability >= 20
+    assert set(preview.readiness_breakdown) == {
+        "mind_state", "habit", "task_quality", "trial", "compatibility"
+    }
+
+
+def test_failed_tribulation_keeps_realm_and_techniques(db_session, user, monkeypatch):
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    profile = service.ensure_profile(user.id)
+    profile.realm_key = "foundation"
+    profile.minor_stage = 4
+    profile.cultivation = 950
+    monkeypatch.setattr(service, "roll", lambda probability: False)
+
+    result = service.attempt_tribulation(user.id, 0)
+
+    assert result.success is False
+    assert result.realm_key == "foundation"
+    assert result.lost_realm is False
+    assert result.lost_techniques is False
+    assert result.cultivation_loss == 95
+    assert result.cooldown_until is not None
+
+
+def test_tribulation_cooldown_blocks_second_attempt_same_day(db_session, user, monkeypatch):
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    profile = service.ensure_profile(user.id)
+    profile.realm_key = "foundation"
+    profile.minor_stage = 4
+    profile.cultivation = 950
+    monkeypatch.setattr(service, "roll", lambda probability: True)
+
+    first = service.attempt_tribulation(user.id, 0)
+    preview = service.get_tribulation_preview(user.id)
+
+    assert first.cooldown_until is not None
+    assert preview.cooldown_until == first.cooldown_until
+    with pytest.raises(PermissionError, match="tribulation cooldown"):
+        service.attempt_tribulation(user.id, 0)
+
+
+def test_tribulation_persists_the_roll_used_for_the_decision(db_session, user, monkeypatch):
+    from app.models.cultivation import TribulationAttempt
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    profile = service.ensure_profile(user.id)
+    profile.realm_key = "foundation"
+    profile.minor_stage = 4
+    profile.cultivation = 950
+    rolls = iter([0.91])
+    monkeypatch.setattr("app.services.cultivation.random.random", lambda: next(rolls))
+
+    result = service.attempt_tribulation(user.id, 0)
+    attempt = db_session.query(TribulationAttempt).filter_by(user_id=user.id).one()
+
+    assert result.success is False
+    assert attempt.roll == 91.0
+
+
 def test_sect_listing_hides_hidden_sects_and_uses_star_entry_realms(db_session, user):
     from collections import Counter
     from app.models.world import Sect

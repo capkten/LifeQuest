@@ -30,10 +30,29 @@ test('cultivation service keeps endpoint paths in one module', async () => {
   assert.match(source, /['"]\/cultivation\/overview['"]\)/)
   assert.match(source, /['"]\/cultivation\/world['"]\)/)
   assert.match(source, /['"]\/cultivation\/npcs['"]\)/)
-  assert.match(source, /['"]\/cultivation\/tribulation\/preview['"]\)/)
+  assert.match(source, /['"]\/cultivation\/tribulation\/preview['"](?:\)|,)/)
   assert.ok(source.includes("'/cultivation/tribulation/attempt'"))
   assert.doesNotMatch(source, /['"]\/api\/cultivation\//)
   assert.doesNotMatch(source, /final_probability|roll/)
+  assert.match(source, /attemptTribulation\(\{\s*pill_count\s*\}\)/)
+})
+
+test('tribulation page exposes transparent risk order and authoritative result states', async () => {
+  const [page, probability, router] = await Promise.all([
+    readFile(new URL('./Tribulations.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../components/cultivation/TribulationProbability.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../router/index.js', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(router, /path: ['"]tribulations['"][\s\S]*import\(['"]\.\.\/views\/Tribulations\.vue['"]\)/)
+  for (const label of ['当前境界', '失败损失', '准备度', '基础成功率', '渡劫丹加成', '最终成功率', '冷却']) {
+    assert.match(page + probability, new RegExp(label))
+  }
+  assert.match(page, /pill_count/)
+  assert.match(page + probability, /开始渡劫/)
+  assert.match(page, /success|失败|成功/)
+  assert.match(probability, /:disabled="[^"]*operationBusy/)
+  assert.match(probability, /aria-live="polite"/)
 })
 
 test('settlements update visible deltas and obtain an authoritative overview', async () => {

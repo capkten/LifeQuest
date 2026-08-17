@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.cultivation import CultivationLog, CultivationProfile, TribulationAttempt
 from app.models.technique import LearnedTechnique, Technique, TechniqueSlot
+from app.models.todo import Habit, Task
 from app.models.world import Npc, NpcEvent, Sect, SectAccessProgress, SectMembership, WorldNode
 from app.repositories.cultivation import CultivationRepository
 from app.repositories.user import UserRepository
@@ -42,6 +43,26 @@ REALM_THRESHOLDS = {
 }
 
 REALM_ORDER = list(REALM_THRESHOLDS)
+TRIBULATION_BASE_PROBABILITIES = {
+    "foundation": 90,
+    "golden_core": 80,
+    "nascent_soul": 70,
+    "spirit_transformation": 60,
+    "void_refining": 50,
+    "body_combination": 40,
+    "great_vehicle": 30,
+    "tribulation": 20,
+}
+TRIBULATION_FAILURE_LOSS = {
+    "foundation": 10,
+    "golden_core": 10,
+    "nascent_soul": 12,
+    "spirit_transformation": 15,
+    "void_refining": 18,
+    "body_combination": 20,
+    "great_vehicle": 22,
+    "tribulation": 25,
+}
 SECT_ENTRY_REALMS = {
     1: "foundation",
     2: "golden_core",
@@ -411,35 +432,60 @@ class CultivationService:
         rows = self.db.query(Npc).filter(Npc.user_id == user_id, Npc.is_core.is_(True)).order_by(Npc.name).all()
         return NpcRelationshipResponse(fixed_core=[NpcSummary.model_validate(row) for row in rows])
 
+    def set_realm(self, user_id: UUID, realm_key: str, minor_stage: int, cultivation: int):
+        profile = self.ensure_profile(user_id)
+        if realm_key not in REALM_THRESHOLDS:
+            raise ValueError("Unknown realm")
+        profile.realm_key = realm_key
+        profile.minor_stage = minor_stage
+        profile.cultivation = max(0, cultivation)
+        self.db.commit()
+        return profile
+
     def get_tribulation_preview(self, user_id: UUID, pill_count=0) -> TribulationPreview:
         profile = self.ensure_profile(user_id)
-        realm_order = REALM_ORDER
-        index = realm_order.index(profile.realm_key)
-        target = realm_order[min(index + 1, len(realm_order) - 1)]
-        base = max(20, 90 - index * 10)
-        readiness = float(profile.mind_state)
-        readiness_bonus = round((readiness - 50) / 5, 2)
-        pill_bonus = max(0, pill_count) * 5
+        index = REALM_ORDER.index(profile.realm_key)
+        target = REALM_ORDER[min(index + 1, len(REALM_ORDER) - 1)]
+        base = TRIBULATION_BASE_PROBABILITIES[target]
+        readiness_breakdown = self._readiness_breakdown(profile)
+        readiness = round(
+            readiness_breakdown["mind_state"] * 0.25
+            + readiness_breakdown["habit"] * 0.20
+            + readiness_breakdown["task_quality"] * 0.20
+            + readiness_breakdown["trial"] * 0.20
+            + readiness_breakdown["compatibility"] * 0.15,
+            2,
+        )
+        readiness_bonus = round((readiness - 50) / 5)
+        bounded_pills = min(15, max(0, int(pill_count or 0)))
+        pill_bonus = bounded_pills * 5
+        cooldown_until = self._cooldown_until(user_id)
         return TribulationPreview(
             target_realm=target,
             base_probability=base,
             readiness_score=readiness,
-            readiness_breakdown={"mind_state": readiness, "habit": 0, "task_quality": 0, "trial": 0, "compatibility": 0},
+            readiness_breakdown=readiness_breakdown,
             readiness_bonus=readiness_bonus,
-            pill_count=max(0, pill_count),
+            pill_count=bounded_pills,
             pill_bonus=pill_bonus,
             final_probability=max(20, min(95, base + readiness_bonus + pill_bonus)),
-            failure_loss_percent=10,
+            failure_loss_percent=TRIBULATION_FAILURE_LOSS[target],
+            cooldown_until=cooldown_until,
         )
 
     def attempt_tribulation(self, user_id: UUID, pill_count: int) -> TribulationResult:
         preview = self.get_tribulation_preview(user_id, pill_count)
         profile = self.ensure_profile(user_id)
+        if preview.cooldown_until is not None:
+            raise PermissionError("tribulation cooldown active")
         if not self._is_final_minor_stage(profile):
             raise PermissionError("tribulation requires final minor stage threshold")
-        roll = random.random() * 100
-        success = roll < preview.final_probability
-        loss = 0 if success else max(0, math.floor(profile.cultivation * preview.failure_loss_percent / 100))
+        success = self.roll(preview.final_probability)
+        roll = getattr(self, "_last_roll", None)
+        if roll is None:
+            roll = random.random() * 100
+        threshold = REALM_THRESHOLDS[profile.realm_key][-1]
+        loss = 0 if success else max(0, math.floor(threshold * preview.failure_loss_percent / 100))
         if not success:
             profile.cultivation = max(0, profile.cultivation - loss)
         else:
@@ -455,7 +501,38 @@ class CultivationService:
         )
         self.db.add(attempt)
         self.db.commit()
-        return TribulationResult(success=success, realm_key=profile.realm_key, target_realm=preview.target_realm, cultivation_loss=loss, log_id=attempt.id)
+        return TribulationResult(success=success, realm_key=profile.realm_key, target_realm=preview.target_realm, cultivation_loss=loss, log_id=attempt.id, cooldown_until=self._cooldown_until(user_id))
+
+    def roll(self, probability: float):
+        roll = random.random() * 100
+        self._last_roll = roll
+        return roll < probability
+
+    def _readiness_breakdown(self, profile: CultivationProfile):
+        now = datetime.now(timezone.utc)
+        week_ago = now - timedelta(days=7)
+        habits = self.db.query(Habit).filter(Habit.user_id == profile.user_id, Habit.is_active.is_(True)).all()
+        recent_tasks = self.db.query(Task).filter(Task.user_id == profile.user_id, Task.completed_at >= week_ago).all()
+        habit_score = 50.0 if not habits else round(sum(1 for habit in habits if habit.last_completed_at and habit.last_completed_at >= week_ago) / len(habits) * 100, 2)
+        task_weights = {"easy": 60, "medium": 80, "hard": 100}
+        task_score = 50.0 if not recent_tasks else round(sum(task_weights.get(task.difficulty, 80) for task in recent_tasks) / len(recent_tasks), 2)
+        return {
+            "mind_state": max(0, min(100, float(profile.mind_state))),
+            "habit": habit_score,
+            "task_quality": task_score,
+            "trial": 50.0,
+            "compatibility": 50.0,
+        }
+
+    def _cooldown_until(self, user_id: UUID):
+        last_attempt = self.db.query(TribulationAttempt).filter_by(user_id=user_id).order_by(TribulationAttempt.attempted_at.desc()).first()
+        if last_attempt is None:
+            return None
+        attempted_at = last_attempt.attempted_at
+        if attempted_at.tzinfo is None:
+            attempted_at = attempted_at.replace(tzinfo=timezone.utc)
+        next_day = (attempted_at + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        return next_day if next_day > datetime.now(timezone.utc) else None
 
     @staticmethod
     def _realm_at_least(current_realm: str, required_realm: str) -> bool:

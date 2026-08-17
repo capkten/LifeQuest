@@ -120,8 +120,12 @@ def npcs(current_user: User = Depends(get_current_user), db: Session = Depends(g
 
 
 @router.get("/tribulation/preview", response_model=TribulationPreview)
-def tribulation_preview(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return _service(db).get_tribulation_preview(current_user.id)
+def tribulation_preview(
+    pill_count: int = Query(default=0, ge=0, le=15),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return _service(db).get_tribulation_preview(current_user.id, pill_count)
 
 
 @router.post("/tribulation/attempt", response_model=TribulationResult)
