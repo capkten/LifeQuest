@@ -73,3 +73,48 @@ Output: no output; exit code `0`.
 - The full backend suite and frontend build emit existing deprecation, npm configuration, and large-chunk warnings; none are Task 8 failures.
 - Habit and task readiness are calculated from currently persisted seven-day data. The repository has no persisted quality/history model for trial quality or cultivation-style compatibility, so those two components use the documented neutral score of `50.0` until those upstream data sources exist.
 - No browser screenshot/manual session was run; frontend verification is static regression coverage plus the production build.
+
+## Review Fixes
+
+1. Probability transitions now use an explicit `(current_realm, target_realm)` rule table. `great_vehicle -> tribulation` is 25%, while `tribulation -> ascension` is 20%; both transitions have explicit failure-loss percentages. Added regression coverage.
+2. `tribulation -> ascension` now settles success as `realm_key=ascended`, marks the result terminal, and exposes an unavailable terminal preview. The frontend shows a terminal state without adding an仙界空页面.
+3. Habit timestamps are normalized to UTC before Python comparisons, covering persisted naive timestamps.
+4. Daily attempt check and write are protected by a process lock plus `SELECT ... FOR UPDATE` on the cultivation profile. Added a concurrent two-worker test proving one attempt succeeds and the duplicate is rejected.
+5. Trial readiness derives from confirmed `SectAccessProgress`; compatibility derives from active sect membership and learned techniques. Added stateful readiness coverage.
+6. The tribulation page now displays current minor-stage cultivation and the actual loss amount from the server.
+7. The probability panel formats and displays the concrete `cooldown_until` timestamp.
+8. Pill preview refreshes use an incrementing request id and `AbortController`, preventing stale responses from overwriting the latest pill count.
+
+Review-fix verification commands and actual output:
+
+```powershell
+cd backend; $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; pytest tests/test_cultivation.py -q
+```
+
+Output: `38 passed, 26 warnings in 9.32s`
+
+```powershell
+cd frontend; node --test src/views/cultivation-regressions.test.mjs
+```
+
+Output: `18 passed, 0 failed`
+
+```powershell
+cd backend; $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; pytest -q
+```
+
+Output: `146 passed, 376 warnings in 88.95s (0:01:28)`
+
+```powershell
+cd frontend; npm run build
+```
+
+Output: exit code `0`; Vite production build completed successfully.
+
+```powershell
+git diff --check
+```
+
+Output: no output; exit code `0`.
+
+Final review-fix commit: `f4dd7250d435105bacbb333b00a0c4573b2a52f3`
