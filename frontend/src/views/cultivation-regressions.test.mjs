@@ -58,6 +58,22 @@ test('cultivation service keeps endpoint paths in one module', async () => {
   assert.match(source, /attemptTribulation\(\{\s*pill_count\s*\}\)/)
 })
 
+test('npc page exposes the authenticated meet entry and event timeline', async () => {
+  const [service, page] = await Promise.all([
+    readFile(new URL('../services/cultivation.js', import.meta.url), 'utf8'),
+    readFile(new URL('./Npcs.vue', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(service, /meetNpc[\s\S]*npcs\/meet/)
+  assert.match(service, /sect_key|sectKey/)
+  assert.match(service, /population_index|populationIndex/)
+  assert.match(page, /@submit\.prevent/)
+  assert.match(page, /sect_key|sectKey/)
+  assert.match(page, /population_index|populationIndex/)
+  assert.match(page, /meetNpc/)
+  assert.match(page, /events/)
+})
+
 test('tribulation page exposes transparent risk order and authoritative result states', async () => {
   const [page, probability, router] = await Promise.all([
     readFile(new URL('./Tribulations.vue', import.meta.url), 'utf8'),

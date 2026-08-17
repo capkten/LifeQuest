@@ -87,6 +87,24 @@ def test_npc_cultivation_updates_once_per_natural_day(db_session, user):
     assert npc.cultivation_updated_on == date(2026, 8, 17)
 
 
+def test_npc_cultivation_uses_utc_day_across_midnight_and_is_idempotent(db_session, user, monkeypatch):
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    utc_days = iter((date(2026, 8, 17), date(2026, 8, 18), date(2026, 8, 18)))
+    monkeypatch.setattr(service, "_utc_today", lambda: next(utc_days))
+    npc = service.meet_npc(user.id, "sect-1-normal-1", 4)
+    before = npc.cultivation
+
+    service.refresh_npc_cultivation(npc)
+    after_crossing_utc_day = npc.cultivation
+    service.refresh_npc_cultivation(npc)
+
+    assert after_crossing_utc_day > before
+    assert npc.cultivation == after_crossing_utc_day
+    assert npc.cultivation_updated_on == date(2026, 8, 18)
+
+
 def test_npc_population_is_stable_but_isolated_between_users(db_session, user):
     from app.models.user import User
     from app.services.cultivation import CultivationService
@@ -115,6 +133,112 @@ def test_mortal_npcs_return_core_and_recent_disciples_without_ascended_data(db_s
     disciple = CultivationService(db_session).meet_npc(user.id, "sect-1-normal-1", 1)
     response = CultivationService(db_session).get_npcs(user.id)
     assert [item.id for item in response.recently_met] == [disciple.id]
+
+
+def test_npc_events_and_relationships_are_strictly_user_scoped(db_session, user):
+    from app.models.user import User
+    from app.models.world import NpcEvent
+    from app.services.cultivation import CultivationService
+
+    other = User(username=f"other-events-{uuid4().hex}", email=f"{uuid4().hex}@example.com", password_hash="hashed")
+    db_session.add(other)
+    db_session.commit()
+    service = CultivationService(db_session)
+    own_npc = service.meet_npc(user.id, "sect-1-normal-1", 11)
+    other_npc = service.meet_npc(other.id, "sect-1-normal-1", 11)
+    db_session.add(NpcEvent(user_id=user.id, npc_id=other_npc.id, event_key="forged", summary="must not leak"))
+    db_session.add(NpcEvent(user_id=other.id, npc_id=own_npc.id, event_key="other-user", summary="must not leak"))
+    db_session.commit()
+
+    response = service.get_npcs(user.id)
+
+    assert [item.id for item in response.recently_met] == [own_npc.id]
+    assert response.events
+    assert all(event["npc_id"] == str(own_npc.id) for event in response.events)
+    assert all(event["event_key"] != "forged" for event in response.events)
+
+
+def test_meeting_npc_recovers_from_first_creation_unique_conflict(db_session, user, monkeypatch):
+    from app.models.world import Npc
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    original_flush = db_session.flush
+    conflict_injected = False
+
+    def flush_with_conflict(*args, **kwargs):
+        nonlocal conflict_injected
+        if not conflict_injected and any(isinstance(item, Npc) and item.is_generated for item in db_session.new):
+            conflict_injected = True
+            sect = service._get_sect("sect-1-normal-1")
+            db_session.add(Npc(
+                user_id=user.id,
+                sect_id=sect.id,
+                name="conflict",
+                is_core=False,
+                population_index=12,
+                is_generated=True,
+            ))
+        return original_flush(*args, **kwargs)
+
+    monkeypatch.setattr(db_session, "flush", flush_with_conflict)
+    result = service.meet_npc(user.id, "sect-1-normal-1", 12)
+
+    assert conflict_injected is True
+    assert result.population_index == 12
+    assert db_session.query(Npc).filter(
+        Npc.user_id == user.id,
+        Npc.population_index == 12,
+        Npc.is_generated.is_(True),
+    ).count() == 1
+
+
+def test_meet_npc_api_creates_a_user_scoped_event(client, auth_headers):
+    response = client.post(
+        "/api/cultivation/npcs/meet",
+        json={"sect_key": "sect-1-normal-1", "population_index": 13},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["population_index"] == 13
+    timeline = client.get("/api/cultivation/npcs", headers=auth_headers)
+    assert timeline.status_code == 200
+    assert timeline.json()["events"]
+
+
+def test_npc_startup_migration_adds_legacy_columns_and_reuses_unique_index(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine, inspect, text
+
+    from app import main as main_module
+    from app.database import Base
+
+    legacy_engine = create_engine(f"sqlite:///{tmp_path / 'legacy-npcs.sqlite'}")
+    Base.metadata.create_all(bind=legacy_engine)
+    with legacy_engine.begin() as connection:
+        connection.execute(text("DROP TABLE npcs"))
+        connection.execute(text(
+            "CREATE TABLE npcs ("
+            "id VARCHAR(36) PRIMARY KEY, user_id VARCHAR(36) NOT NULL, sect_id VARCHAR(36), "
+            "name VARCHAR(100) NOT NULL, role VARCHAR(64), description TEXT, "
+            "is_core BOOLEAN NOT NULL DEFAULT 0)"
+        ))
+
+    monkeypatch.setattr(main_module, "engine", legacy_engine)
+    main_module._migrate_columns()
+    main_module._migrate_columns()
+
+    inspector = inspect(legacy_engine)
+    columns = {column["name"] for column in inspector.get_columns("npcs")}
+    indexes = {
+        index["name"]: index
+        for index in inspector.get_indexes("npcs")
+        if index["name"] == "uq_npc_user_sect_population"
+    }
+    assert {"population_index", "is_generated", "cultivation", "cultivation_updated_on", "cultivation_locked"} <= columns
+    assert indexes["uq_npc_user_sect_population"]["unique"]
+    assert len(inspector.get_indexes("npcs")) == len({index["name"] for index in inspector.get_indexes("npcs")})
+    legacy_engine.dispose()
 
 
 def test_reward_uses_difficulty_and_never_writes_negative_resources(db_session, user):

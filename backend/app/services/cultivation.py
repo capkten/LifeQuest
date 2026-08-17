@@ -449,24 +449,34 @@ class CultivationService:
         profile = self.ensure_profile(user_id)
         self.seed_world(self.db)
         fixed_core = self._ensure_fixed_core_npcs(user_id) if profile.realm_key == ASCENDED_REALM_KEY else []
-        recent_ids = [row[0] for row in self.db.query(NpcEvent.npc_id).join(
+        event_rows = self.db.query(NpcEvent, Npc).join(
             Npc, Npc.id == NpcEvent.npc_id
         ).filter(
-            NpcEvent.user_id == user_id, Npc.is_generated.is_(True)
-        ).order_by(NpcEvent.created_at.desc()).limit(20).all()]
+            NpcEvent.user_id == user_id,
+            Npc.user_id == user_id,
+            Npc.is_generated.is_(True),
+        ).order_by(NpcEvent.created_at.desc()).limit(20).all()
         recent = []
         seen = set()
-        for npc_id in recent_ids:
-            if npc_id in seen:
+        events = []
+        for event, npc in event_rows:
+            events.append({
+                "event_id": str(event.id),
+                "npc_id": str(npc.id),
+                "name": npc.name,
+                "event_key": event.event_key,
+                "message": event.summary,
+                "created_at": event.created_at.isoformat() if event.created_at else None,
+            })
+            if npc.id in seen:
                 continue
-            npc = self.db.get(Npc, npc_id)
-            if npc is not None:
-                self.refresh_npc_cultivation(npc, date.today())
-                recent.append(npc)
-                seen.add(npc_id)
+            self.refresh_npc_cultivation(npc)
+            recent.append(npc)
+            seen.add(npc.id)
         return NpcRelationshipResponse(
             fixed_core=[NpcSummary.model_validate(row) for row in fixed_core],
             recently_met=[NpcSummary.model_validate(row) for row in recent],
+            events=events,
         )
 
     def meet_npc(self, user_id: UUID, sect_key: str, population_index: int) -> NpcSummary:
@@ -474,13 +484,15 @@ class CultivationService:
             raise ValueError("population_index must be non-negative")
         self.seed_world(self.db)
         sect = self._get_sect(sect_key)
-        npc = self.db.query(Npc).filter(
-            Npc.user_id == user_id,
-            Npc.sect_id == sect.id,
-            Npc.population_index == population_index,
-            Npc.is_generated.is_(True),
-        ).first()
-        if npc is None:
+        for _attempt in range(2):
+            npc = self.db.query(Npc).filter(
+                Npc.user_id == user_id,
+                Npc.sect_id == sect.id,
+                Npc.population_index == population_index,
+            ).first()
+            if npc is not None:
+                break
+
             seed = self._npc_seed(str(sect.id), population_index)
             npc = Npc(
                 user_id=user_id,
@@ -492,17 +504,26 @@ class CultivationService:
                 population_index=population_index,
                 is_generated=True,
                 cultivation=20 + seed % 81,
-                cultivation_updated_on=date.today(),
+                cultivation_updated_on=self._utc_today(),
                 cultivation_locked=False,
             )
             self.db.add(npc)
-            self.db.flush()
+            try:
+                self.db.flush()
+            except IntegrityError:
+                self.db.rollback()
+                continue
+            break
+        else:
+            raise RuntimeError("NPC creation conflict could not be resolved")
+
         self.db.add(NpcEvent(user_id=user_id, npc_id=npc.id, event_key="met", summary="Met ordinary disciple"))
         self.db.commit()
         self.db.refresh(npc)
         return NpcSummary.model_validate(npc)
 
-    def refresh_npc_cultivation(self, npc: Npc, today: date) -> Npc:
+    def refresh_npc_cultivation(self, npc: Npc, today: date = None) -> Npc:
+        today = today or self._utc_today()
         if npc.cultivation_locked or npc.cultivation_updated_on is None or today <= npc.cultivation_updated_on:
             return npc
         days = (today - npc.cultivation_updated_on).days
@@ -511,6 +532,10 @@ class CultivationService:
         npc.cultivation_updated_on = today
         self.db.commit()
         return npc
+
+    @staticmethod
+    def _utc_today() -> date:
+        return datetime.now(timezone.utc).date()
 
     def _ensure_fixed_core_npcs(self, user_id: UUID):
         roles = (("sect master", "玄衡宗主"), ("transmission elder", "传法长老"), ("trial envoy", "入门使者"))

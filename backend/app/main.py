@@ -65,6 +65,59 @@ def _deduplicate_tribulation_attempts(connection):
             seen.add(key)
 
 
+def _deduplicate_npcs(connection):
+    """Keep the first ordinary disciple before adding its population index guard."""
+    rows = connection.execute(text(
+        "SELECT id, user_id, sect_id, population_index "
+        "FROM npcs WHERE population_index IS NOT NULL "
+        "ORDER BY user_id, sect_id, population_index, id"
+    )).fetchall()
+    seen = set()
+    for npc_id, user_id, sect_id, population_index in rows:
+        key = (user_id, sect_id, population_index)
+        if key in seen:
+            connection.execute(
+                text("DELETE FROM npcs WHERE id = :id"),
+                {"id": npc_id},
+            )
+        else:
+            seen.add(key)
+
+
+def _migrate_npc_columns(inspector, connection):
+    """Upgrade legacy NPC tables and make ordinary population creation idempotent."""
+    try:
+        npc_cols = {column["name"] for column in inspector.get_columns("npcs")}
+    except (KeyError, NoSuchTableError):
+        return
+
+    new_npc_columns = {
+        "population_index": "INTEGER",
+        "is_generated": "BOOLEAN NOT NULL DEFAULT 0",
+        "cultivation": "INTEGER NOT NULL DEFAULT 0",
+        "cultivation_updated_on": "DATE",
+        "cultivation_locked": "BOOLEAN NOT NULL DEFAULT 0",
+    }
+    for column_name, column_definition in new_npc_columns.items():
+        if column_name in npc_cols:
+            continue
+        try:
+            connection.execute(text(
+                f"ALTER TABLE npcs ADD COLUMN {column_name} {column_definition}"
+            ))
+        except OperationalError as exc:
+            error_text = str(getattr(exc, "orig", exc)).lower()
+            if "duplicate column" not in error_text or column_name not in error_text:
+                raise
+        logger.info("Migration: added npcs.%s", column_name)
+
+    _deduplicate_npcs(connection)
+    connection.execute(text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_npc_user_sect_population "
+        "ON npcs (user_id, sect_id, population_index)"
+    ))
+
+
 @contextmanager
 def _note_migration_lock(db_engine):
     """Hold a database-backed mutex across the complete note migration."""
@@ -234,6 +287,8 @@ def _migrate_columns():
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_tribulation_attempt_user_day "
                 "ON tribulation_attempts (user_id, attempted_date)"
             ))
+
+        _migrate_npc_columns(inspector, conn)
 
         # note_nodes.last_opened_at
         note_node_cols = {c["name"] for c in inspector.get_columns("note_nodes")}

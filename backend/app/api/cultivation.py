@@ -10,7 +10,9 @@ from app.models.user import User
 from app.schemas.cultivation import (
     CultivationOverview,
     LoadoutRequest,
+    NpcMeetRequest,
     NpcRelationshipResponse,
+    NpcSummary,
     SectMembershipResponse,
     SectSummary,
     TechniqueLibraryResponse,
@@ -119,6 +121,16 @@ def npcs(current_user: User = Depends(get_current_user), db: Session = Depends(g
     try:
         return _service(db).get_npcs(current_user.id)
     except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/npcs/meet", response_model=NpcSummary)
+def meet_npc(payload: NpcMeetRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    try:
+        return _service(db).meet_npc(current_user.id, payload.sect_key, payload.population_index)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 

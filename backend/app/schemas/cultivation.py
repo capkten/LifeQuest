@@ -146,6 +146,12 @@ class NpcSummary(BaseModel):
     cultivation_locked: bool = False
 
 
+class NpcMeetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    sect_key: str = Field(min_length=1)
+    population_index: int = Field(ge=0)
+
+
 class NpcRelationshipResponse(BaseModel):
     fixed_core: List[NpcSummary]
     recently_met: List[NpcSummary] = Field(default_factory=list)

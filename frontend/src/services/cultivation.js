@@ -63,6 +63,11 @@ export const cultivationService = {
     return response.data
   },
 
+  async meetNpc({ sect_key, population_index }) {
+    const response = await api.post('/cultivation/npcs/meet', { sect_key, population_index })
+    return response.data
+  },
+
   async getTribulationPreview(pillCount = 0, config = {}) {
     const response = await api.get('/cultivation/tribulation/preview', { ...config, params: { pill_count: pillCount } })
     return response.data
