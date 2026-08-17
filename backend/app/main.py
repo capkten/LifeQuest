@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import engine, Base, SessionLocal
+from app import models  # noqa: F401  # Register all ORM models before create_all.
 from app.services.note import NoteService
 from app.api import auth, users, notes, todos, shop, backpack, achievements, checkin, titles, coins, calendar, stats, finance, projects
 

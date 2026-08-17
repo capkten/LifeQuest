@@ -18,6 +18,9 @@ from app.models.budget import Budget, BudgetPeriod
 from app.models.recurring_transaction import RecurringTransaction, RecurFrequency
 from app.models.debt import Debt, DebtPayment, DebtType, DebtStatus
 from app.models.project import Project, ProjectPhase, ProjectMilestone, ProjectStatus, PhaseStatus, MilestoneStatus
+from app.models.cultivation import CultivationProfile, CultivationLog, TribulationAttempt
+from app.models.world import WorldNode, Sect, SectMembership, Npc, NpcEvent
+from app.models.technique import Technique, TechniqueSlot, LearnedTechnique
 
 __all__ = [
     "User",
@@ -37,4 +40,7 @@ __all__ = [
     "RecurringTransaction", "RecurFrequency",
     "Debt", "DebtPayment", "DebtType", "DebtStatus",
     "Project", "ProjectPhase", "ProjectMilestone", "ProjectStatus", "PhaseStatus", "MilestoneStatus",
+    "CultivationProfile", "CultivationLog", "TribulationAttempt",
+    "WorldNode", "Sect", "SectMembership", "Npc", "NpcEvent",
+    "Technique", "TechniqueSlot", "LearnedTechnique",
 ]
