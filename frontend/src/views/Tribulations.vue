@@ -3,10 +3,11 @@
     <header class="tribulations-header"><div><p class="cultivation-eyebrow">CULTIVATION / TRIBULATION</p><h1>渡劫准备</h1><p>所有判定由服务器执行，先确认风险，再决定是否开始。</p></div></header>
     <div v-if="loading && !preview" class="cultivation-state" aria-live="polite">正在读取渡劫状态...</div>
     <div v-else-if="error && !preview" class="cultivation-state cultivation-state--error" role="alert"><span>{{ errorMessage }}</span><button type="button" class="cultivation-action" @click="load">重试</button></div>
+    <div v-else-if="!preview" class="cultivation-state" aria-live="polite">正在准备渡劫预览...</div>
     <template v-else>
       <section class="tribulations-layout">
         <div class="tribulations-main">
-          <section class="tribulation-surface" aria-labelledby="current-realm-title"><div class="tribulation-heading"><h2 id="current-realm-title">当前境界</h2><strong>{{ realmLabel }}</strong></div><p class="tribulation-cultivation">当前小境界修为：<strong>{{ overview.cultivation }}</strong></p><p class="tribulation-warning">失败损失：{{ preview.failure_loss }} 点修为（{{ preview.failure_loss_percent }}%）。不会降低境界名称或删除功法、装备、格子、宗门记录和 NPC 关系。</p></section>
+      <section class="tribulation-surface" aria-labelledby="current-realm-title"><div class="tribulation-heading"><h2 id="current-realm-title">当前境界</h2><strong>{{ realmLabel }}</strong></div><p class="tribulation-cultivation">当前小境界修为：<strong>{{ overview?.cultivation ?? 0 }}</strong></p><p class="tribulation-warning">失败损失：{{ preview.failure_loss }} 点修为（{{ preview.failure_loss_percent }}%）。不会降低境界名称或删除功法、装备、格子、宗门记录和 NPC 关系。</p></section>
       <TribulationProbability :preview="preview" :loading="loading" :error="error" :attempting="attempting" @attempt="attempt" @retry="syncAndLoad" />
         </div>
         <aside class="tribulations-side">
