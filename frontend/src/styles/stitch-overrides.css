@@ -20,6 +20,255 @@
   color: var(--color-text);
 }
 
+/* Cultivation shared surfaces reserve space for server-backed states. */
+.cultivation-status-bar,
+.cultivation-realm-progress,
+.cultivation-resource-summary,
+.cultivation-reward-toast,
+.cultivation-tribulation-probability,
+.cultivation-technique-slot-grid,
+.cultivation-npc-timeline {
+  display: grid;
+  gap: var(--spacing-md);
+  min-width: 0;
+  padding: var(--surface-padding);
+}
+
+.cultivation-status-bar {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 112px;
+}
+
+.cultivation-status-bar__metrics,
+.cultivation-probability-details,
+.cultivation-resource-summary__list {
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.cultivation-status-bar__metrics {
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  justify-content: end;
+}
+
+.cultivation-status-bar__metrics span,
+.cultivation-section-heading span,
+.cultivation-eyebrow,
+.cultivation-probability-details dt,
+.cultivation-resource-summary dt,
+.cultivation-npc-timeline li span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.cultivation-status-bar__metrics strong,
+.cultivation-probability-value,
+.cultivation-resource-summary dd {
+  color: var(--color-primary-dark);
+  font-weight: 700;
+}
+
+.cultivation-section-heading,
+.cultivation-probability-details div,
+.cultivation-resource-summary__list div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.cultivation-progress-track {
+  height: 10px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-tertiary);
+}
+
+.cultivation-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
+  transition: width var(--transition-base);
+}
+
+.cultivation-progress-skeleton,
+.cultivation-status-bar__skeleton,
+.cultivation-resource-summary__skeleton,
+.cultivation-probability-skeleton,
+.cultivation-slot--skeleton {
+  min-height: 48px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-tertiary);
+}
+
+.cultivation-status-bar__skeleton {
+  grid-column: 1 / -1;
+  min-height: 64px;
+}
+
+.cultivation-probability-value {
+  min-height: 64px;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-tertiary);
+  font-size: var(--font-size-3xl);
+}
+
+.cultivation-action,
+.cultivation-icon-button,
+.cultivation-slot,
+.cultivation-map-node {
+  cursor: pointer;
+  transition: background var(--transition-base), border-color var(--transition-base), color var(--transition-base);
+}
+
+.cultivation-action {
+  min-height: var(--touch-target-min);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  padding: 0.625rem 1rem;
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 700;
+}
+
+.cultivation-action:hover:not(:disabled),
+.cultivation-action:focus-visible:not(:disabled) {
+  background: var(--color-primary-dark);
+}
+
+.cultivation-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.cultivation-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  min-height: 64px;
+}
+
+.cultivation-state--error {
+  color: var(--color-error-dark);
+}
+
+.cultivation-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: minmax(112px, 1fr);
+  gap: var(--spacing-sm);
+  min-height: 112px;
+}
+
+.cultivation-slot,
+.cultivation-map-node {
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-card);
+  color: var(--color-text);
+  text-align: left;
+}
+
+.cultivation-slot {
+  display: grid;
+  align-content: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm);
+}
+
+.cultivation-slot:hover,
+.cultivation-slot:focus-visible,
+.cultivation-map-node:hover,
+.cultivation-map-node:focus-visible {
+  border-color: var(--color-primary);
+  background: var(--color-bg-tertiary);
+}
+
+.cultivation-map-node {
+  display: grid;
+  gap: var(--spacing-2xs);
+  width: 100%;
+  min-height: 96px;
+  padding: var(--spacing-md);
+}
+
+.cultivation-map-node__name {
+  font-weight: 700;
+}
+
+.cultivation-reward-toast {
+  position: relative;
+  grid-template-columns: 1fr auto;
+  min-height: 64px;
+  border: 1px solid var(--color-success-light);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-secondary);
+  box-shadow: var(--shadow-md);
+}
+
+.cultivation-reward-toast span {
+  color: var(--color-success-dark);
+}
+
+.cultivation-icon-button {
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 1.25rem;
+}
+
+.cultivation-npc-timeline__list {
+  display: grid;
+  gap: var(--spacing-sm);
+  padding-left: 1.25rem;
+}
+
+.cultivation-npc-timeline li {
+  display: grid;
+  gap: var(--spacing-2xs);
+  min-height: 56px;
+}
+
+.cultivation-map-node:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+@media (max-width: 767px) {
+  .cultivation-status-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .cultivation-status-bar__metrics {
+    grid-auto-flow: row;
+    justify-content: stretch;
+  }
+
+  .cultivation-slot-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cultivation-progress-track span,
+  .cultivation-action,
+  .cultivation-icon-button,
+  .cultivation-slot,
+  .cultivation-map-node {
+    transition: none;
+  }
+}
+
 :where(
   .todos-page,
   .projects-page,
