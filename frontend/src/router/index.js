@@ -1,6 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
+// Task 5 exposes authenticated destinations; feature pages are delivered in Tasks 6-8.
+const cultivationRouteComponent = () => import('../components/cultivation/CultivationStatusBar.vue')
+
 const routes = [
   {
     path: '/login',
@@ -63,6 +66,36 @@ const routes = [
         path: 'todos',
         name: 'Todos',
         component: () => import('../views/Todos.vue')
+      },
+      {
+        path: 'cultivation',
+        name: 'Cultivation',
+        component: cultivationRouteComponent
+      },
+      {
+        path: 'world',
+        name: 'World',
+        component: cultivationRouteComponent
+      },
+      {
+        path: 'sects',
+        name: 'Sects',
+        component: cultivationRouteComponent
+      },
+      {
+        path: 'techniques',
+        name: 'Techniques',
+        component: cultivationRouteComponent
+      },
+      {
+        path: 'npcs',
+        name: 'Npcs',
+        component: cultivationRouteComponent
+      },
+      {
+        path: 'tribulations',
+        name: 'Tribulations',
+        component: cultivationRouteComponent
       },
       {
         path: 'shop',

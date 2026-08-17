@@ -29,8 +29,8 @@
             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
           </svg>
         </span>
-        <span class="stat-label">等级</span>
-        <span class="stat-value">{{ user?.level || 1 }}</span>
+        <span class="stat-label">{{ cultivationOverview ? '境界' : '等级' }}</span>
+        <span class="stat-value">{{ cultivationOverview ? `${cultivationOverview.realm_key} ${cultivationOverview.minor_stage}` : (user?.level || 1) }}</span>
       </div>
       <div class="stat-item">
         <span class="stat-icon">
@@ -39,12 +39,12 @@
             <path d="M12 6v12M6 12h12" />
           </svg>
         </span>
-        <span class="stat-label">金币</span>
-        <span class="stat-value">{{ user?.coins || 0 }}</span>
+        <span class="stat-label">{{ cultivationOverview ? '灵石' : '金币' }}</span>
+        <span class="stat-value">{{ cultivationOverview ? cultivationOverview.spirit_stones : (user?.coins || 0) }}</span>
       </div>
     </div>
 
-    <div v-if="!isCollapsed" class="exp-bar-container">
+    <div v-if="!isCollapsed && !cultivationOverview" class="exp-bar-container">
       <div class="exp-bar-label">
         <span>EXP</span>
         <span>{{ expPercent }}%</span>
@@ -58,6 +58,16 @@
         :aria-label="`Experience progress: ${expPercent}% toward next level`"
       >
         <div class="exp-bar-fill" :style="{ width: expPercent + '%' }"></div>
+      </div>
+    </div>
+
+    <div v-else-if="!isCollapsed" class="exp-bar-container">
+      <div class="exp-bar-label">
+        <span>修为</span>
+        <span>{{ cultivationPercent }}%</span>
+      </div>
+      <div class="exp-bar" role="progressbar" :aria-valuenow="cultivationPercent" aria-valuemin="0" aria-valuemax="100" aria-label="修为进度">
+        <div class="exp-bar-fill" :style="{ width: cultivationPercent + '%' }"></div>
       </div>
     </div>
 
@@ -101,6 +111,43 @@
           <polyline points="10 9 9 9 8 9" />
         </svg>
         <span v-if="!isCollapsed">笔记</span>
+      </router-link>
+      <span v-if="!isCollapsed && cultivationUnlocked" class="nav-section-label">CULTIVATION</span>
+      <router-link v-if="cultivationUnlocked" to="/cultivation" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '修炼' : ''">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M12 3v18M5 8h14M7 16h10" />
+        </svg>
+        <span v-if="!isCollapsed">修炼</span>
+      </router-link>
+      <router-link v-if="cultivationUnlocked && isAscended" to="/world" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '仙界' : ''">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+        </svg>
+        <span v-if="!isCollapsed">仙界</span>
+      </router-link>
+      <router-link v-if="cultivationUnlocked" to="/sects" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '宗门' : ''">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6" />
+        </svg>
+        <span v-if="!isCollapsed">宗门</span>
+      </router-link>
+      <router-link v-if="cultivationUnlocked" to="/techniques" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '功法' : ''">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M4 5a3 3 0 0 1 3-3h13v18H7a3 3 0 0 0-3 3z" /><path d="M7 2v18" />
+        </svg>
+        <span v-if="!isCollapsed">功法</span>
+      </router-link>
+      <router-link v-if="cultivationUnlocked && isAscended" to="/npcs" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '仙官' : ''">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="7" r="4" /><path d="M4 21a8 8 0 0 1 16 0" />
+        </svg>
+        <span v-if="!isCollapsed">仙官</span>
+      </router-link>
+      <router-link v-if="cultivationUnlocked" to="/tribulations" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '渡劫' : ''">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+        </svg>
+        <span v-if="!isCollapsed">渡劫</span>
       </router-link>
       <span v-if="!isCollapsed" class="nav-section-label">REWARDS</span>
       <router-link to="/shop" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '商城' : ''">
@@ -149,7 +196,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStats } from '../../composables/useUserStats'
 import { useResolvedImage } from '../../composables/useResolvedImage'
@@ -167,8 +214,22 @@ defineProps({
   }
 })
 
-const { user, expPercent } = useUserStats()
+const {
+  user,
+  expPercent,
+  cultivationOverview,
+  cultivationPercent,
+  loadCultivation
+} = useUserStats()
 const avatarSrc = useResolvedImage(computed(() => user.value?.avatar))
+const cultivationUnlocked = computed(() => Boolean(cultivationOverview.value && cultivationOverview.value.unlocked !== false))
+const isAscended = computed(() => cultivationOverview.value?.ascended === true)
+
+onMounted(() => {
+  if (!cultivationOverview.value) {
+    loadCultivation().catch(() => {})
+  }
+})
 
 // Check if current route is exactly home
 const isHomeActive = computed(() => route.path === '/')

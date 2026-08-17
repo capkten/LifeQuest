@@ -43,12 +43,12 @@
         </svg>
         <span>商城</span>
       </router-link>
-      <router-link to="/profile" class="bottom-nav-item" active-class="bottom-nav-item--active">
+      <router-link to="/cultivation" class="bottom-nav-item" active-class="bottom-nav-item--active">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
           <circle cx="12" cy="7" r="4" />
         </svg>
-        <span>个人</span>
+        <span>修炼</span>
       </router-link>
     </nav>
 
@@ -129,7 +129,13 @@ const pageTitle = computed(() => {
     NotebookFileManage: '笔记本',
     Shop: '商城',
     Backpack: '背包',
-    Profile: '个人'
+    Profile: '个人',
+    Cultivation: '修炼',
+    World: '仙界',
+    Sects: '宗门',
+    Techniques: '功法',
+    Npcs: '仙官',
+    Tribulations: '渡劫'
   }
   return titles[route.name] || 'LifeQuest'
 })

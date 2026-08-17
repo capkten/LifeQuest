@@ -59,6 +59,13 @@
       </div>
     </section>
 
+    <CultivationStatusBar
+      :overview="cultivationOverview"
+      :loading="cultivationLoading"
+      :error="cultivationError"
+      @retry="loadCultivation"
+    />
+
     <div class="daily-card">
       <div class="daily-header">
         <div class="daily-header-left">
@@ -306,10 +313,17 @@ import { todoService } from '../services/todo'
 import { checkinService } from '../services/checkin'
 import { useToast } from '../composables/useToast'
 import { useUserStats } from '../composables/useUserStats'
+import CultivationStatusBar from '../components/cultivation/CultivationStatusBar.vue'
 
 const authStore = useAuthStore()
 const user = computed(() => authStore.user)
-const { expPercent } = useUserStats()
+const {
+  expPercent,
+  cultivationOverview,
+  cultivationLoading,
+  cultivationError,
+  loadCultivation
+} = useUserStats()
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
 const checkinStatus = ref(null)
@@ -416,6 +430,7 @@ function isOverdue(deadline) {
 }
 
 onMounted(() => {
+  loadCultivation().catch(() => {})
   fetchCheckinStatus()
   fetchTasks()
   fetchGoals()

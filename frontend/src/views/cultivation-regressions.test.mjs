@@ -4,6 +4,21 @@ import test from 'node:test'
 
 const srcDirectory = new URL('../', import.meta.url)
 
+test('router includes authenticated cultivation routes', async () => {
+  const source = await readFile(new URL('../router/index.js', import.meta.url), 'utf8')
+
+  assert.match(source, /path: ['"]cultivation['"]/, 'cultivation route is missing')
+  assert.match(source, /path: ['"]tribulations['"]/, 'tribulations route is missing')
+})
+
+test('todo page keeps the legacy reward fallback', async () => {
+  const source = await readFile(new URL('./Todos.vue', import.meta.url), 'utf8')
+
+  assert.match(source, /coins_reward/)
+  assert.match(source, /exp_reward/)
+  assert.match(source, /cultivation|修为/)
+})
+
 test('cultivation service keeps endpoint paths in one module', async () => {
   const source = await readFile(new URL('../services/cultivation.js', import.meta.url), 'utf8')
   const apiSource = await readFile(new URL('../services/api.js', import.meta.url), 'utf8')
