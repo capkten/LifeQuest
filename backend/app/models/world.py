@@ -52,7 +52,7 @@ class Npc(Base):
     __tablename__ = "npcs"
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    user_id = Column(Uuid, ForeignKey("users.id"), nullable=True, index=True)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
     sect_id = Column(Uuid, ForeignKey("sects.id"), nullable=True, index=True)
     name = Column(String(100), nullable=False)
     role = Column(String(64), nullable=True)
