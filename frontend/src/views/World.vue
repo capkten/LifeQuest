@@ -8,13 +8,13 @@
       <div class="world-node-list" role="listbox" aria-label="世界节点">
         <MapNode v-for="node in nodes" :key="node.node_key" :node="node" :status="nodeStatus(node)" :locked="nodeStatus(node) === 'locked'" :selected="selectedNode?.node_key === node.node_key" @select="selectNode" />
       </div>
-      <article v-if="selectedNode" class="world-detail cultivation-surface" :aria-expanded="true" aria-labelledby="world-detail-title">
+      <article v-if="selectedNode" class="world-detail cultivation-surface" aria-labelledby="world-detail-title">
         <div class="world-detail__status"><span aria-hidden="true">{{ statusIcon(nodeStatus(selectedNode)) }}</span>{{ statusLabel(nodeStatus(selectedNode)) }}</div>
         <h2 id="world-detail-title">{{ selectedNode.name }}</h2>
         <p>{{ selectedNode.description || '这个节点的详细记录尚未建立。' }}</p>
         <dl><div><dt>节点状态</dt><dd>{{ statusLabel(nodeStatus(selectedNode)) }}</dd></div><div><dt>解锁条件</dt><dd>{{ selectedNode.required_realm || '无需额外境界' }}</dd></div></dl>
       </article>
-      <p v-else class="world-detail cultivation-surface" :aria-expanded="false">选择一个节点查看详情。</p>
+      <p v-else class="world-detail cultivation-surface">选择一个节点查看详情。</p>
     </section>
   </div>
 </template>
@@ -39,18 +39,33 @@ async function load() {
     if (!overview.value) await store.loadOverview()
     const response = await cultivationService.getWorld()
     nodes.value = Array.isArray(response) ? response : (response?.nodes || [])
-    selectedNode.value = nodes.value.find((node) => node.is_current || node.status === 'current') || nodes.value[0] || null
+    selectedNode.value = currentNode(nodes.value) || nodes.value[0] || null
   } catch (requestError) { error.value = requestError } finally { loading.value = false }
 }
 
 function selectNode(node) { if (nodeStatus(node) !== 'locked') selectedNode.value = node }
 function nodeStatus(node) {
   if (node?.is_hidden || node?.locked || node?.is_locked) return 'locked'
-  if (node?.status === 'completed' || node?.completed) return 'completed'
-  if (node?.is_current || node?.status === 'current') return 'current'
-  const currentRealm = realmOrder.indexOf(overview.value?.realm_key || overview.value?.realm?.key)
-  const requiredRealm = realmOrder.indexOf(node?.required_realm)
-  return requiredRealm > currentRealm && requiredRealm >= 0 ? 'locked' : 'available'
+  const orderedNodes = [...nodes.value].sort((left, right) => left.sort_order - right.sort_order)
+  const current = currentNode(orderedNodes)
+  const currentRealm = currentRealmIndex()
+  const requiredRealm = realmIndex(node?.required_realm)
+  if (requiredRealm > currentRealm) return 'locked'
+  if (current?.node_key === node?.node_key) return 'current'
+  return orderedNodes.indexOf(node) < orderedNodes.indexOf(current) ? 'completed' : 'available'
+}
+function currentNode(nodeList = nodes.value) {
+  const currentRealm = currentRealmIndex()
+  return [...nodeList]
+    .sort((left, right) => left.sort_order - right.sort_order)
+    .find((node) => !node.is_hidden && realmIndex(node.required_realm) === currentRealm) ||
+    [...nodeList].sort((left, right) => left.sort_order - right.sort_order).find((node) => !node.is_hidden && realmIndex(node.required_realm) <= currentRealm)
+}
+function currentRealmIndex() { return realmIndex(overview.value?.realm_key || overview.value?.realm?.key) }
+function realmIndex(realm) {
+  if (!realm) return 0
+  const index = realmOrder.indexOf(realm)
+  return index === -1 ? 0 : index
 }
 function statusLabel(status) { return ({ current: '当前所在', available: '可进入', completed: '已完成', locked: '已锁定' })[status] || '可进入' }
 function statusIcon(status) { return ({ current: '●', available: '○', completed: '✓', locked: '锁' })[status] || '○' }

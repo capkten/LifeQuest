@@ -9,6 +9,8 @@ test('router includes authenticated cultivation routes', async () => {
 
   assert.match(source, /path: ['"]cultivation['"]/, 'cultivation route is missing')
   assert.match(source, /path: ['"]tribulations['"]/, 'tribulations route is missing')
+  assert.match(source, /const cultivationRouteComponent\s*=\s*\(\)\s*=>\s*import\(/)
+  assert.doesNotMatch(source, /component:\s*cultivationRouteComponent[\s\S]*undefined/)
 })
 
 test('todo page keeps the legacy reward fallback', async () => {
@@ -98,9 +100,31 @@ test('cultivation shared states expose accessible stable contracts', async () =>
 })
 
 test('world page has lock and selection semantics', async () => {
-  const source = await readFile(new URL('./World.vue', import.meta.url), 'utf8')
+  const [source, mapNode] = await Promise.all([
+    readFile(new URL('./World.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../components/cultivation/MapNode.vue', import.meta.url), 'utf8'),
+  ])
 
   assert.match(source, /锁定|解锁条件/)
-  assert.match(source, /aria-selected|aria-expanded/)
+  assert.match(mapNode, /aria-selected/)
   assert.match(source, /MapNode/)
+  assert.match(source, /required_realm/)
+  assert.match(source, /sort_order/)
+  assert.match(source, /completed/)
+  assert.match(source, /:disabled|locked/)
+  assert.doesNotMatch(source, /node\.is_current|node\.status === ['"]current['"]|node\.completed/)
+})
+
+test('recent rewards preserve descriptions before numeric fallback', async () => {
+  const source = await readFile(new URL('./Cultivation.vue', import.meta.url), 'utf8')
+
+  assert.match(source, /reward\.description\s*\|\|\s*reward\.detail\s*\|\|\s*\(\s*reward\.cultivation\s*\?\s*`\+\$\{reward\.cultivation\}/)
+  assert.doesNotMatch(source, /reward\.description\s*\|\|\s*reward\.detail\s*\|\|\s*reward\.cultivation\s*\?/)
+})
+
+test('static world detail does not claim expansion state', async () => {
+  const source = await readFile(new URL('./World.vue', import.meta.url), 'utf8')
+
+  assert.doesNotMatch(source, /<article[^>]+aria-expanded/)
+  assert.doesNotMatch(source, /<p[^>]+aria-expanded/)
 })

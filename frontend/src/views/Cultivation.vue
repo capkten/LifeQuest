@@ -35,7 +35,7 @@
             <div class="cultivation-section-heading"><h2 id="rewards-title">最近奖励</h2><span>{{ recentRewards.length }} 条</span></div>
             <ul v-if="recentRewards.length" class="cultivation-list cultivation-list--compact">
               <li v-for="reward in recentRewards" :key="reward.id || reward.log_id || reward.label">
-                <span><strong>{{ reward.label || reward.title || '修炼奖励' }}</strong><small>{{ reward.description || reward.detail || reward.cultivation ? `+${reward.cultivation || 0} 修为` : '已获得' }}</small></span>
+                <span><strong>{{ reward.label || reward.title || '修炼奖励' }}</strong><small>{{ reward.description || reward.detail || (reward.cultivation ? `+${reward.cultivation} 修为` : '已获得') }}</small></span>
               </li>
             </ul>
             <p v-else class="cultivation-fixed-state">暂无最近奖励。</p>
