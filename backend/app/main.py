@@ -85,6 +85,45 @@ def _deduplicate_learned_techniques(connection):
             seen.add(key)
 
 
+def _has_unique_definition(inspector, table_name, column_names):
+    column_names = list(column_names)
+    try:
+        if any(
+            constraint.get("column_names") == column_names
+            for constraint in inspector.get_unique_constraints(table_name)
+        ):
+            return True
+    except (AttributeError, NotImplementedError, NoSuchTableError):
+        pass
+    try:
+        return any(
+            index.get("unique") and index.get("column_names") == column_names
+            for index in inspector.get_indexes(table_name)
+        )
+    except (AttributeError, NotImplementedError, NoSuchTableError):
+        return False
+
+
+def _create_unique_index(connection, table_name, index_name, column_names):
+    dialect = getattr(connection, "dialect", None)
+    dialect_name = (getattr(dialect, "name", "") or "").lower()
+    columns = ", ".join(column_names)
+    if dialect_name in {"sqlite", "postgresql"}:
+        statement = (
+            "CREATE UNIQUE INDEX IF NOT EXISTS "
+            f"{index_name} ON {table_name} ({columns})"
+        )
+    elif dialect_name in {"mssql", "sql server"}:
+        statement = (
+            "IF NOT EXISTS (SELECT 1 FROM sys.indexes "
+            f"WHERE name = N'{index_name}' AND object_id = OBJECT_ID(N'{table_name}')) "
+            f"CREATE UNIQUE INDEX {index_name} ON {table_name} ({columns})"
+        )
+    else:
+        statement = f"CREATE UNIQUE INDEX {index_name} ON {table_name} ({columns})"
+    connection.execute(text(statement))
+
+
 def _migrate_learned_technique_constraint(inspector, connection):
     """Upgrade legacy learned-technique tables without duplicating fresh DDL."""
     try:
@@ -105,30 +144,13 @@ def _migrate_learned_technique_constraint(inspector, connection):
                 f'DROP INDEX "{target_index_name}"'
             ))
 
-    unique_definition_exists = False
-    try:
-        unique_definition_exists = any(
-            constraint.get("column_names") == ["user_id", "technique_id"]
-            for constraint in inspector.get_unique_constraints("learned_techniques")
+    if not _has_unique_definition(inspector, "learned_techniques", ["user_id", "technique_id"]):
+        _create_unique_index(
+            connection,
+            "learned_techniques",
+            target_index_name,
+            ["user_id", "technique_id"],
         )
-    except (AttributeError, NotImplementedError):
-        pass
-    if not unique_definition_exists:
-        try:
-            unique_definition_exists = any(
-                index.get("unique")
-                and index.get("column_names") == ["user_id", "technique_id"]
-                for index in inspector.get_indexes("learned_techniques")
-            )
-        except (AttributeError, NotImplementedError):
-            pass
-
-    if not unique_definition_exists:
-        connection.execute(text(
-            "CREATE UNIQUE INDEX IF NOT EXISTS "
-            f"{target_index_name} "
-            "ON learned_techniques (user_id, technique_id)"
-        ))
 
 
 def _deduplicate_npcs(connection):
@@ -184,10 +206,60 @@ def _migrate_npc_columns(inspector, connection):
         logger.info("Migration: added npcs.%s", column_name)
 
     _deduplicate_npcs(connection)
-    connection.execute(text(
-        "CREATE UNIQUE INDEX IF NOT EXISTS uq_npc_user_sect_population "
-        "ON npcs (user_id, sect_id, population_index)"
-    ))
+    if not _has_unique_definition(
+        inspector,
+        "npcs",
+        ["user_id", "sect_id", "population_index"],
+    ):
+        _create_unique_index(
+            connection,
+            "npcs",
+            "uq_npc_user_sect_population",
+            ["user_id", "sect_id", "population_index"],
+        )
+
+
+def _deduplicate_unique_key_rows(connection, table_name, key_column, references=()):
+    rows = connection.execute(text(
+        f"SELECT id, {key_column} FROM {table_name} "
+        f"WHERE {key_column} IS NOT NULL ORDER BY {key_column}, id"
+    )).fetchall()
+    seen = {}
+    existing_tables = inspect(connection)
+    for row_id, key_value in rows:
+        keeper_id = seen.get(key_value)
+        if keeper_id is None:
+            seen[key_value] = row_id
+            continue
+        for reference_table, reference_column in references:
+            if existing_tables.has_table(reference_table):
+                connection.execute(text(
+                    f"UPDATE {reference_table} SET {reference_column} = :keeper_id "
+                    f"WHERE {reference_column} = :duplicate_id"
+                ), {"keeper_id": keeper_id, "duplicate_id": row_id})
+        connection.execute(
+            text(f"DELETE FROM {table_name} WHERE id = :id"),
+            {"id": row_id},
+        )
+
+
+def _migrate_unique_key_table(inspector, connection, table_name, key_column, index_name, references=()):
+    try:
+        columns = {column["name"] for column in inspector.get_columns(table_name)}
+    except (KeyError, NoSuchTableError):
+        return
+    if key_column not in columns or _has_unique_definition(inspector, table_name, [key_column]):
+        return
+    _deduplicate_unique_key_rows(connection, table_name, key_column, references)
+    _create_unique_index(connection, table_name, index_name, [key_column])
+
+
+def _attempted_date_expression(connection):
+    dialect = getattr(connection, "dialect", None)
+    dialect_name = (getattr(dialect, "name", "") or "").lower()
+    if dialect_name in {"sqlite", "mysql", "mariadb"}:
+        return "DATE(attempted_at)"
+    return "CAST(attempted_at AS DATE)"
 
 
 @contextmanager
@@ -352,13 +424,23 @@ def _migrate_columns():
         if tribulation_cols is not None:
             if "attempted_date" not in tribulation_cols:
                 conn.execute(text("ALTER TABLE tribulation_attempts ADD COLUMN attempted_date DATE"))
-                conn.execute(text("UPDATE tribulation_attempts SET attempted_date = DATE(attempted_at) WHERE attempted_date IS NULL"))
+                conn.execute(text(
+                    "UPDATE tribulation_attempts SET attempted_date = "
+                    f"{_attempted_date_expression(conn)} WHERE attempted_date IS NULL"
+                ))
                 logger.info("Migration: added tribulation_attempts.attempted_date")
             _deduplicate_tribulation_attempts(conn)
-            conn.execute(text(
-                "CREATE UNIQUE INDEX IF NOT EXISTS uq_tribulation_attempt_user_day "
-                "ON tribulation_attempts (user_id, attempted_date)"
-            ))
+            if not _has_unique_definition(
+                inspector,
+                "tribulation_attempts",
+                ["user_id", "attempted_date"],
+            ):
+                _create_unique_index(
+                    conn,
+                    "tribulation_attempts",
+                    "uq_tribulation_attempt_user_day",
+                    ["user_id", "attempted_date"],
+                )
 
         # Task 12 reward event identity. Nullable keys preserve legacy logs;
         # todo completions use a stable non-null key going forward.
@@ -367,16 +449,41 @@ def _migrate_columns():
         except (KeyError, NoSuchTableError):
             cultivation_log_cols = None
         if cultivation_log_cols is not None:
+            source_key_added = False
             if "source_key" not in cultivation_log_cols:
                 conn.execute(text("ALTER TABLE cultivation_logs ADD COLUMN source_key VARCHAR(128)"))
+                source_key_added = True
                 logger.info("Migration: added cultivation_logs.source_key")
-            conn.execute(text(
-                "CREATE UNIQUE INDEX IF NOT EXISTS uq_cultivation_log_source_key "
-                "ON cultivation_logs (source_key)"
-            ))
+            if source_key_added or not _has_unique_definition(
+                inspector,
+                "cultivation_logs",
+                ["source_key"],
+            ):
+                _create_unique_index(
+                    conn,
+                    "cultivation_logs",
+                    "uq_cultivation_log_source_key",
+                    ["source_key"],
+                )
 
         _migrate_learned_technique_constraint(inspector, conn)
         _migrate_npc_columns(inspector, conn)
+        _migrate_unique_key_table(
+            inspector,
+            conn,
+            "techniques",
+            "technique_key",
+            "uq_techniques_technique_key",
+            (("learned_techniques", "technique_id"), ("technique_slots", "technique_id")),
+        )
+        _migrate_unique_key_table(
+            inspector,
+            conn,
+            "sects",
+            "sect_key",
+            "uq_sects_sect_key",
+            (("sect_access_progress", "sect_id"), ("sect_memberships", "sect_id"), ("npcs", "sect_id")),
+        )
 
         # note_nodes.last_opened_at
         note_node_cols = {c["name"] for c in inspector.get_columns("note_nodes")}

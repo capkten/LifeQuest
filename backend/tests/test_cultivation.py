@@ -64,6 +64,129 @@ def test_cultivation_tables_are_registered(db_session):
     assert TechniqueSlot.__tablename__ == "technique_slots"
 
 
+def test_concurrent_first_profile_creation_keeps_one_profile(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.database import Base
+    from app.models.user import User
+    from app.services.cultivation import CultivationService
+
+    concurrent_engine = create_engine(
+        f"sqlite:///{tmp_path / 'concurrent-profile.sqlite'}",
+        connect_args={"check_same_thread": False, "timeout": 10},
+    )
+    Base.metadata.create_all(bind=concurrent_engine)
+    Sessions = sessionmaker(autocommit=False, autoflush=False, bind=concurrent_engine)
+    setup = Sessions()
+    try:
+        user = User(
+            username=f"profile-race-{uuid4().hex}",
+            email=f"{uuid4().hex}@example.com",
+            password_hash="hashed",
+        )
+        setup.add(user)
+        setup.commit()
+        user_id = user.id
+    finally:
+        setup.close()
+
+    barrier = Barrier(2)
+
+    def create_profile():
+        session = Sessions()
+        try:
+            barrier.wait()
+            profile = CultivationService(session).ensure_profile(user_id)
+            session.commit()
+            return profile.id
+        finally:
+            session.close()
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            profile_ids = list(executor.map(lambda _index: create_profile(), range(2)))
+        verify = Sessions()
+        try:
+            from app.models.cultivation import CultivationProfile
+
+            assert profile_ids[0] == profile_ids[1]
+            assert verify.query(CultivationProfile).filter_by(user_id=user_id).count() == 1
+        finally:
+            verify.close()
+    finally:
+        concurrent_engine.dispose()
+
+
+def test_concurrent_todo_settlement_with_same_source_key_is_applied_once(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.database import Base
+    from app.models.cultivation import CultivationLog, CultivationProfile
+    from app.models.user import User
+    from app.services.cultivation import CultivationService
+
+    concurrent_engine = create_engine(
+        f"sqlite:///{tmp_path / 'concurrent-settlement.sqlite'}",
+        connect_args={"check_same_thread": False, "timeout": 10},
+    )
+    Base.metadata.create_all(bind=concurrent_engine)
+    Sessions = sessionmaker(autocommit=False, autoflush=False, bind=concurrent_engine)
+    setup = Sessions()
+    try:
+        user = User(
+            username=f"settlement-race-{uuid4().hex}",
+            email=f"{uuid4().hex}@example.com",
+            password_hash="hashed",
+        )
+        setup.add(user)
+        setup.commit()
+        user_id = user.id
+        CultivationService(setup).ensure_profile(user_id)
+        setup.commit()
+    finally:
+        setup.close()
+
+    barrier = Barrier(2)
+    source_key = "todo:task:concurrent-settlement"
+
+    def settle():
+        session = Sessions()
+        try:
+            barrier.wait()
+            result = CultivationService(session).settle_todo_reward(
+                user_id, "task", 100, "medium", source_key=source_key
+            )
+            session.commit()
+            return result
+        finally:
+            session.close()
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(lambda _index: settle(), range(2)))
+        verify = Sessions()
+        try:
+            profile = verify.query(CultivationProfile).filter_by(user_id=user_id).one()
+            logs = verify.query(CultivationLog).filter_by(source_key=source_key).all()
+
+            assert results[0].log_id == results[1].log_id
+            assert len(logs) == 1
+            assert profile.cultivation == 100
+            assert profile.spirit_stones == 60
+        finally:
+            verify.close()
+    finally:
+        concurrent_engine.dispose()
+
+
 def test_user_can_learn_realm_eligible_technique_and_repeat_is_idempotent(client, auth_headers, db_session, user):
     from app.models.cultivation import CultivationProfile
     from app.models.technique import LearnedTechnique
@@ -534,6 +657,36 @@ def test_overview_returns_profile_resources_and_stage_progress(db_session, user)
     assert overview.recent_rewards == []
 
 
+def test_overview_returns_today_and_recent_rewards_for_only_current_user(db_session, user):
+    from datetime import datetime, timezone
+
+    from app.models.cultivation import CultivationLog
+    from app.models.todo import Task
+    from app.models.user import User
+    from app.services.cultivation import CultivationService
+
+    other = User(
+        username=f"overview-other-{uuid4().hex}",
+        email=f"{uuid4().hex}@example.com",
+        password_hash="hashed",
+    )
+    db_session.add(other)
+    db_session.flush()
+    now = datetime.now(timezone.utc)
+    db_session.add_all([
+        Task(user_id=user.id, title="Own task", status="pending", deadline=now),
+        Task(user_id=other.id, title="Other task", status="pending", deadline=now),
+        CultivationLog(user_id=user.id, source="task", cultivation_delta=12, spirit_stones_delta=7),
+        CultivationLog(user_id=other.id, source="task", cultivation_delta=99, spirit_stones_delta=99),
+    ])
+    db_session.commit()
+
+    overview = CultivationService(db_session).get_overview(user.id)
+
+    assert [item["title"] for item in overview.today] == ["Own task"]
+    assert [item["cultivation"] for item in overview.recent_rewards] == [12]
+
+
 def test_settlement_advances_minor_stage_but_does_not_bypass_tribulation(db_session, user):
     from app.services.cultivation import CultivationService
 
@@ -838,12 +991,13 @@ def test_concurrent_tribulation_attempts_allow_only_one_daily_attempt(db_session
     profile.minor_stage = 4
     profile.cultivation = 950
     db_session.commit()
+    user_id = user.id
     monkeypatch.setattr(CultivationService, "roll", lambda self, probability: True)
 
     def attempt():
         session = TestingSessionLocal()
         try:
-            return CultivationService(session).attempt_tribulation(user.id, 0)
+            return CultivationService(session).attempt_tribulation(user_id, 0)
         except Exception as exc:
             return exc
         finally:

@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy import update
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models.cultivation import CultivationLog, CultivationProfile, TribulationAttempt
@@ -52,6 +53,8 @@ REALM_THRESHOLDS = {
 REALM_ORDER = list(REALM_THRESHOLDS) + ["ascended"]
 SOURCE_KEY_RETRY_COUNT = 3
 SOURCE_KEY_RETRY_DELAY_SECONDS = 0.05
+TRIBULATION_RETRY_COUNT = 5
+TRIBULATION_RETRY_DELAY_SECONDS = 0.05
 TRIBULATION_RULES = {
     ("qi_refining", "foundation"): (90, 10),
     ("foundation", "golden_core"): (80, 10),
@@ -146,6 +149,19 @@ class CultivationService:
 
     @staticmethod
     def seed_world(db: Session):
+        for attempt in range(3):
+            try:
+                return CultivationService._seed_world_once(db)
+            except (IntegrityError, OperationalError) as exc:
+                if isinstance(exc, OperationalError) and not CultivationService._is_database_lock_error(exc):
+                    raise
+                db.rollback()
+                if attempt == 2:
+                    raise
+                time.sleep(SOURCE_KEY_RETRY_DELAY_SECONDS)
+
+    @staticmethod
+    def _seed_world_once(db: Session):
         nodes = []
         for index in range(1, 10):
             key = f"mortal-domain-{index}"
@@ -688,7 +704,19 @@ class CultivationService:
 
     def attempt_tribulation(self, user_id: UUID, pill_count: int) -> TribulationResult:
         with _TRIBULATION_PROCESS_LOCK:
-            return self._attempt_tribulation(user_id, pill_count)
+            for attempt in range(TRIBULATION_RETRY_COUNT):
+                try:
+                    return self._attempt_tribulation(user_id, pill_count)
+                except OperationalError as exc:
+                    if not self._is_database_lock_error(exc):
+                        raise
+                    self.db.rollback()
+                    if self._has_attempt_today(user_id):
+                        raise PermissionError("tribulation cooldown active") from exc
+                    if attempt == TRIBULATION_RETRY_COUNT - 1:
+                        raise
+                    time.sleep(TRIBULATION_RETRY_DELAY_SECONDS)
+        raise RuntimeError("tribulation retry loop exhausted")
 
     def _attempt_tribulation(self, user_id: UUID, pill_count: int) -> TribulationResult:
         profile = self.db.query(CultivationProfile).with_for_update().filter_by(user_id=user_id).one_or_none()
@@ -806,6 +834,18 @@ class CultivationService:
         )
 
     @staticmethod
+    def _is_database_lock_error(exc: OperationalError) -> bool:
+        original = getattr(exc, "orig", None)
+        error_text = str(original or exc).lower()
+        return "database" in error_text and "locked" in error_text
+
+    def _has_attempt_today(self, user_id: UUID) -> bool:
+        return self.db.query(TribulationAttempt.id).filter(
+            TribulationAttempt.user_id == user_id,
+            TribulationAttempt.attempted_date == self._utc_today(),
+        ).first() is not None
+
+    @staticmethod
     def _realm_at_least(current_realm: str, required_realm: str) -> bool:
         return REALM_ORDER.index(current_realm) >= REALM_ORDER.index(required_realm)
 
@@ -837,12 +877,6 @@ class CultivationService:
                 user_id, source, base_exp, difficulty, quality, importance, None
             )
         for attempt in range(SOURCE_KEY_RETRY_COUNT):
-            existing_log = self.db.query(CultivationLog).filter(
-                CultivationLog.source_key == source_key,
-                CultivationLog.user_id == user_id,
-            ).one_or_none()
-            if existing_log is not None:
-                return self._settlement_from_existing_log(existing_log, user_id)
             try:
                 return self._settle_todo_reward_in_session(
                     user_id,
@@ -854,6 +888,7 @@ class CultivationService:
                     source_key,
                 )
             except IntegrityError:
+                self.db.expire_all()
                 existing_log = self.db.query(CultivationLog).filter(
                     CultivationLog.source_key == source_key,
                     CultivationLog.user_id == user_id,
@@ -903,7 +938,21 @@ class CultivationService:
         if user is None:
             raise ValueError("User not found")
         with (self.db.begin_nested() if source_key else nullcontext()):
+            if source_key:
+                # Acquire the profile row as a database write lock before
+                # checking or claiming the source key. This prevents SQLite
+                # read-to-write lock upgrades from deadlocking two sessions.
+                self.db.execute(update(CultivationProfile).where(
+                    CultivationProfile.user_id == user_id
+                ).values(cultivation=CultivationProfile.cultivation))
             profile = self.ensure_profile(user_id)
+            if source_key:
+                existing_log = self.db.query(CultivationLog).filter(
+                    CultivationLog.source_key == source_key,
+                    CultivationLog.user_id == user_id,
+                ).one_or_none()
+                if existing_log is not None:
+                    return self._settlement_from_existing_log(existing_log, user_id)
             cultivation = max(0, math.floor(
                 base_exp
                 * difficulty_factor
@@ -912,6 +961,17 @@ class CultivationService:
                 * quality
             ))
             stones = max(1, math.floor(cultivation * 0.6))
+            log = CultivationLog(
+                user_id=user_id,
+                source=source,
+                source_key=source_key,
+                cultivation_delta=cultivation,
+                spirit_stones_delta=stones,
+            )
+            # Claim the source key before changing balances. A competing
+            # session loses on the unique key and returns the committed log.
+            self.db.add(log)
+            self.db.flush()
             profile.cultivation += cultivation
             if profile.realm_key != ASCENDED_REALM_KEY:
                 while profile.minor_stage < len(REALM_THRESHOLDS[profile.realm_key]):
@@ -930,15 +990,6 @@ class CultivationService:
                 and self._is_final_minor_stage(profile)
             )
             profile.spirit_stones += stones
-            log = CultivationLog(
-                user_id=user_id,
-                source=source,
-                source_key=source_key,
-                cultivation_delta=cultivation,
-                spirit_stones_delta=stones,
-            )
-            self.db.add(log)
-            self.db.flush()
 
         self.user_repo._update_experience_no_commit(user, cultivation)
         self.user_repo._update_coins_no_commit(user, stones)
