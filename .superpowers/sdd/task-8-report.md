@@ -204,3 +204,43 @@ git diff --check
 Output: no output; exit code `0`.
 
 Latest code commit: `42bc8c3f68d882d17786930769565869bca0146b`.
+
+## Review Fixes - Final Important Items
+
+1. `Tribulations.vue` now refreshes the shared Pinia cultivation store after a successful server result before reloading the local page state. Sidebar therefore receives the authoritative `ascended=true` overview immediately.
+2. `/api/cultivation/npcs` now checks the user profile server-side before seeding or returning any NPC records. Mortal users receive stable HTTP 409 `NPCs require ascended realm`; ascended users retain the existing fixed-core NPC response. The frontend route carries `requiresAscended` metadata, loads the cultivation overview when needed, and redirects non-ascended users to cultivation.
+3. SQLite fallback cooldown detection now requires either the explicit `uq_tribulation_attempt_user_day` constraint name or the normalized exact SQLite message ending in `UNIQUE constraint failed: tribulation_attempts.user_id, tribulation_attempts.attempted_date`. Similar field errors without `UNIQUE constraint failed` are re-raised. Attempt ids are cached after flush to avoid expired ORM access during concurrent completion; a process-local lock only protects SQLite same-process connection use, while the database unique constraint remains the cross-process guarantee.
+
+Exact verification commands and actual output:
+
+```powershell
+cd backend; pytest tests/test_cultivation.py::test_concurrent_tribulation_attempts_allow_only_one_daily_attempt tests/test_cultivation.py::test_non_daily_integrity_error_is_not_reported_as_cooldown tests/test_cultivation.py::test_similar_daily_fields_without_unique_error_are_not_reported_as_cooldown -q
+```
+
+Output: `3 passed, 7 warnings in 0.27s`
+
+```powershell
+cd frontend; node --test src/views/cultivation-regressions.test.mjs
+```
+
+Output: `20 passed, 0 failed`
+
+```powershell
+cd backend; pytest
+```
+
+Output: `153 passed, 376 warnings in 85.82s (0:01:25)`
+
+```powershell
+cd frontend; npm run build
+```
+
+Output: exit code `0`; `1958 modules transformed`; Vite production build completed successfully. Existing npm/Rollup and large-chunk warnings were emitted.
+
+```powershell
+git diff --check
+```
+
+Output: no output; exit code `0`.
+
+Latest code commit: `4fa776b554be79746bd22e7c99d8d0c7fd06192a`.
