@@ -83,6 +83,8 @@ def purchase_slot(payload: TechniqueSlotPurchaseRequest, current_user: User = De
 def update_loadout(payload: LoadoutRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         return _service(db).update_loadout(current_user.id, payload.loadout)
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -99,4 +101,7 @@ def tribulation_preview(current_user: User = Depends(get_current_user), db: Sess
 
 @router.post("/tribulation/attempt", response_model=TribulationResult)
 def attempt_tribulation(payload: TribulationAttemptRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return _service(db).attempt_tribulation(current_user.id, payload.pill_count)
+    try:
+        return _service(db).attempt_tribulation(current_user.id, payload.pill_count)
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc

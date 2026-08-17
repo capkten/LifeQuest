@@ -1,3 +1,5 @@
+import math
+
 import pytest
 from uuid import uuid4
 
@@ -129,12 +131,12 @@ def test_cultivation_seed_is_idempotent(client, auth_headers):
     second = client.get("/api/cultivation/sects", headers=auth_headers)
 
     assert first.status_code == second.status_code == 200
-    assert len(first.json()) == len(second.json()) == 90
+    assert len(first.json()) == len(second.json()) == 81
 
 
 def test_sect_join_is_locked_before_foundation(client, auth_headers):
     response = client.post(
-        "/api/cultivation/sects/sect-1-1-ordinary-1/join",
+        "/api/cultivation/sects/sect-1-normal-1/join",
         headers=auth_headers,
     )
 
@@ -185,6 +187,108 @@ def test_tribulation_attempt_rejects_negative_pill_count(client, auth_headers):
     )
 
     assert response.status_code == 422
+
+
+def test_fresh_profile_cannot_attempt_tribulation_and_is_unchanged(db_session, user, monkeypatch):
+    from app.models.cultivation import TribulationAttempt
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    profile = service.ensure_profile(user.id)
+    monkeypatch.setattr("app.services.cultivation.random.random", lambda: 0.0)
+
+    with pytest.raises(PermissionError, match="tribulation requires final minor stage"):
+        service.attempt_tribulation(user.id, 0)
+
+    db_session.refresh(profile)
+    assert (profile.realm_key, profile.minor_stage, profile.cultivation) == ("qi_refining", 1, 0)
+    assert db_session.query(TribulationAttempt).filter_by(user_id=user.id).count() == 0
+
+
+def test_tribulation_persists_the_actual_random_roll_and_keeps_failure_loss(db_session, user, monkeypatch):
+    from app.models.cultivation import TribulationAttempt
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    profile = service.ensure_profile(user.id)
+    profile.minor_stage = 9
+    profile.cultivation = 235
+    monkeypatch.setattr("app.services.cultivation.random.random", lambda: 0.999)
+
+    result = service.attempt_tribulation(user.id, 0)
+    attempt = db_session.query(TribulationAttempt).filter_by(user_id=user.id).one()
+
+    assert result.success is False
+    assert attempt.roll == 99.9
+    assert attempt.roll != attempt.final_probability
+    assert result.cultivation_loss == math.floor(235 * 0.1)
+
+
+def test_sect_listing_hides_hidden_sects_and_uses_star_entry_realms(db_session, user):
+    from collections import Counter
+    from app.models.world import Sect
+
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    sects = service.get_sects(user.id)
+    all_sects = db_session.query(Sect).all()
+    counts = Counter((sect.star, sect.kind) for sect in all_sects)
+
+    assert len(sects) == 81
+    assert all(sect.kind != "hidden" for sect in sects)
+    for star in range(1, 10):
+        assert counts[(star, "normal")] == 6
+        assert counts[(star, "special")] == 3
+        assert counts[(star, "hidden")] == 1
+    expected = {
+        1: "foundation", 2: "golden_core", 3: "nascent_soul",
+        4: "spirit_transformation", 5: "void_refining",
+        6: "body_combination", 7: "great_vehicle", 8: "tribulation", 9: "tribulation",
+    }
+    assert {sect.star: sect.entry_realm for sect in all_sects if sect.kind == "normal"} == expected
+
+
+def test_sect_join_rejects_hidden_and_lower_realm_with_stable_locks(db_session, user):
+    from app.models.world import Sect
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    service.seed_world(db_session)
+    profile = service.ensure_profile(user.id)
+    profile.realm_key = "foundation"
+    hidden = db_session.query(Sect).filter_by(star=1, kind="hidden").one()
+    star_two = db_session.query(Sect).filter_by(star=2, kind="normal").first()
+
+    with pytest.raises(PermissionError, match="sect is locked"):
+        service.join_sect(user.id, hidden.sect_key)
+    with pytest.raises(PermissionError, match="sect requires golden_core realm"):
+        service.join_sect(user.id, star_two.sect_key)
+
+
+def test_update_loadout_requires_owned_learned_technique_and_realm(db_session, user):
+    from app.models.technique import LearnedTechnique, Technique, TechniqueSlot
+    from app.services.cultivation import CultivationService
+
+    other = type(user)(username=f"other-{uuid4().hex}", email=f"{uuid4().hex}@example.com", password_hash="hashed")
+    db_session.add(other)
+    db_session.commit()
+    service = CultivationService(db_session)
+    service.seed_world(db_session)
+    profile = service.ensure_profile(user.id)
+    slot = TechniqueSlot(user_id=user.id, slot_type="main", slot_index=0)
+    db_session.add(slot)
+    technique = db_session.query(Technique).filter_by(technique_key="stone-channel").one()
+    high_technique = db_session.query(Technique).filter_by(technique_key="golden-intent").one()
+    db_session.add(LearnedTechnique(user_id=other.id, technique_id=technique.id))
+    db_session.add(LearnedTechnique(user_id=user.id, technique_id=high_technique.id))
+    db_session.commit()
+
+    with pytest.raises(LookupError, match="technique not learned"):
+        service.update_loadout(user.id, {"main": technique.id})
+    with pytest.raises(PermissionError, match="technique requires golden_core realm"):
+        service.update_loadout(user.id, {"main": high_technique.id})
+    assert slot.technique_id is None
 
 
 def test_sect_join_accepts_seeded_sect_uuid_after_unlock(db_session, user):

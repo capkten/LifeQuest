@@ -40,6 +40,19 @@ REALM_THRESHOLDS = {
     "tribulation": [20000, 26000, 35000, 49000],
 }
 
+REALM_ORDER = list(REALM_THRESHOLDS)
+SECT_ENTRY_REALMS = {
+    1: "foundation",
+    2: "golden_core",
+    3: "nascent_soul",
+    4: "spirit_transformation",
+    5: "void_refining",
+    6: "body_combination",
+    7: "great_vehicle",
+    8: "tribulation",
+    9: "tribulation",
+}
+
 DIFFICULTY_FACTORS = {"easy": 0.8, "medium": 1.0, "hard": 1.35}
 
 
@@ -99,17 +112,19 @@ class CultivationService:
                 key = f"sect-{star}-{kind}-{ordinal}"
                 sect = db.query(Sect).filter(Sect.sect_key == key).first()
                 if sect is None:
-                    db.add(Sect(
+                    sect = Sect(
                         sect_key=key,
                         name=f"{star}-Star {kind.title()} Sect {ordinal}",
                         star=star,
                         kind=kind,
                         task_preference=f"discipline-{ordinal}",
                         core_legacy=f"Legacy of the {star}-star sect",
-                        entry_realm="foundation",
+                        entry_realm=SECT_ENTRY_REALMS[star],
                         trial_key=f"trial-{star}-{ordinal}",
                         world_node_id=node.id,
-                    ))
+                    )
+                    db.add(sect)
+                sect.entry_realm = SECT_ENTRY_REALMS[star]
 
         techniques = [
             ("steady-breath", "Steady Breath", "mind", "qi_refining"),
@@ -140,7 +155,7 @@ class CultivationService:
         membership = self.db.query(SectMembership).filter(
             SectMembership.user_id == user_id, SectMembership.status == "active"
         ).first()
-        query = self.db.query(Sect).order_by(Sect.star, Sect.sect_key)
+        query = self.db.query(Sect).filter(Sect.kind != "hidden").order_by(Sect.star, Sect.sect_key)
         if star is not None:
             query = query.filter(Sect.star == star)
         if kind is not None:
@@ -159,8 +174,6 @@ class CultivationService:
 
     def join_sect(self, user_id: UUID, sect_key: str) -> SectMembershipResponse:
         profile = self.ensure_profile(user_id)
-        if profile.realm_key == "qi_refining":
-            raise PermissionError("sect requires foundation realm")
         self.seed_world(self.db)
         sect = self.db.query(Sect).filter(Sect.sect_key == sect_key).first()
         if sect is None:
@@ -170,6 +183,11 @@ class CultivationService:
                 sect = None
         if sect is None:
             raise LookupError("sect not found")
+        if sect.kind == "hidden":
+            raise PermissionError("sect is locked")
+        required_realm = SECT_ENTRY_REALMS[sect.star]
+        if not self._realm_meets_entry(profile, sect.star, required_realm):
+            raise PermissionError(f"sect requires {required_realm} realm")
         current = self.db.query(SectMembership).filter(
             SectMembership.user_id == user_id, SectMembership.status == "active"
         ).first()
@@ -222,6 +240,8 @@ class CultivationService:
         return {"slot_type": slot_type, "slot_count": max(1, len(existing))}
 
     def update_loadout(self, user_id: UUID, loadout):
+        profile = self.ensure_profile(user_id)
+        updates = []
         for slot_type, technique_id in loadout.items():
             if technique_id is None:
                 continue
@@ -231,7 +251,17 @@ class CultivationService:
             technique = self.db.query(Technique).filter(Technique.id == technique_id).first()
             if slot is None or technique is None:
                 raise LookupError("technique or slot not found")
-            slot.technique_id = technique.id
+            learned = self.db.query(LearnedTechnique).filter(
+                LearnedTechnique.user_id == user_id,
+                LearnedTechnique.technique_id == technique.id,
+            ).first()
+            if learned is None:
+                raise LookupError("technique not learned")
+            if technique.required_realm and not self._realm_at_least(profile.realm_key, technique.required_realm):
+                raise PermissionError(f"technique requires {technique.required_realm} realm")
+            updates.append((slot, technique.id))
+        for slot, technique_id in updates:
+            slot.technique_id = technique_id
         self.db.commit()
         return self.get_techniques(user_id)
 
@@ -252,7 +282,7 @@ class CultivationService:
 
     def get_tribulation_preview(self, user_id: UUID, pill_count=0) -> TribulationPreview:
         profile = self.ensure_profile(user_id)
-        realm_order = list(REALM_THRESHOLDS)
+        realm_order = REALM_ORDER
         index = realm_order.index(profile.realm_key)
         target = realm_order[min(index + 1, len(realm_order) - 1)]
         base = max(20, 90 - index * 10)
@@ -274,7 +304,10 @@ class CultivationService:
     def attempt_tribulation(self, user_id: UUID, pill_count: int) -> TribulationResult:
         preview = self.get_tribulation_preview(user_id, pill_count)
         profile = self.ensure_profile(user_id)
-        success = random.random() * 100 < preview.final_probability
+        if not self._is_final_minor_stage(profile):
+            raise PermissionError("tribulation requires final minor stage threshold")
+        roll = random.random() * 100
+        success = roll < preview.final_probability
         loss = 0 if success else max(0, math.floor(profile.cultivation * preview.failure_loss_percent / 100))
         if not success:
             profile.cultivation = max(0, profile.cultivation - loss)
@@ -286,12 +319,27 @@ class CultivationService:
             user_id=user_id, target_realm=preview.target_realm,
             base_probability=preview.base_probability, readiness_score=preview.readiness_score,
             pill_bonus=preview.pill_bonus, final_probability=preview.final_probability,
-            roll=preview.final_probability if success else 100, success=success,
+            roll=roll, success=success,
             cultivation_loss=loss,
         )
         self.db.add(attempt)
         self.db.commit()
         return TribulationResult(success=success, realm_key=profile.realm_key, target_realm=preview.target_realm, cultivation_loss=loss, log_id=attempt.id)
+
+    @staticmethod
+    def _realm_at_least(current_realm: str, required_realm: str) -> bool:
+        return REALM_ORDER.index(current_realm) >= REALM_ORDER.index(required_realm)
+
+    @classmethod
+    def _is_final_minor_stage(cls, profile: CultivationProfile) -> bool:
+        thresholds = REALM_THRESHOLDS[profile.realm_key]
+        return profile.minor_stage == len(thresholds) and profile.cultivation >= thresholds[-1]
+
+    @classmethod
+    def _realm_meets_entry(cls, profile: CultivationProfile, star: int, required_realm: str) -> bool:
+        if not cls._realm_at_least(profile.realm_key, required_realm):
+            return False
+        return star != 9 or cls._is_final_minor_stage(profile)
 
     def settle_todo_reward(
         self,
