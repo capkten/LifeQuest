@@ -19,7 +19,8 @@
       <section v-if="selectedSlot" class="purchase-panel cultivation-surface" aria-labelledby="purchase-title">
         <div class="cultivation-section-heading"><h2 id="purchase-title">购买确认</h2><span>{{ slotLabel(selectedSlot.slot_type) }}</span></div>
         <p>当前灵石：{{ spiritStones }}</p><p>目标格子：{{ slotLabel(selectedSlot.slot_type) }}第 {{ selectedSlot.slot_index + 1 }} 格</p><p>需要境界：{{ selectedSlot.required_realm }} · 灵石：{{ selectedSlot.price }} · 购买后余额：{{ selectedSlot.balance }}</p>
-        <button type="button" class="cultivation-action" :disabled="busy || selectedSlot.purchased" @click="purchase">{{ selectedSlot.purchased ? '已购买' : '购买格子' }}</button>
+        <p v-if="selectedSlot.can_purchase === false" class="cultivation-state cultivation-state--error" role="alert">{{ purchaseLockMessage }}</p>
+        <button type="button" class="cultivation-action" :disabled="busy || selectedSlot.purchased || selectedSlot.can_purchase === false" @click="purchase">{{ selectedSlot.purchased ? '已购买' : selectedSlot.can_purchase === false ? '暂不可购买' : '购买格子' }}</button>
       </section>
     </template>
   </div>
@@ -33,6 +34,9 @@ import { cultivationService } from '../services/cultivation'
 const slotTypes = ['main', 'auxiliary', 'mind', 'body']
 const techniques = ref([]); const slots = ref([]); const loadout = ref({}); const spiritStones = ref(0); const nextSlotPurchases = ref({}); const loading = ref(false); const error = ref(null); const busy = ref(false); const selectedSlot = ref(null)
 const errorMessage = computed(() => error.value?.response?.data?.detail || error.value?.message || '功法暂时无法读取。')
+const purchaseLockMessage = computed(() => selectedSlot.value?.realm_confirmed === false
+  ? `境界不足：需要达到${selectedSlot.value.required_realm}境界。`
+  : `灵石不足：需要${selectedSlot.value.price}枚，当前仅有${spiritStones.value}枚。`)
 const displaySlots = computed(() => slotTypes.flatMap((type) => { const owned = slots.value.filter((slot) => slot.slot_type === type).sort((a, b) => a.slot_index - b.slot_index); const preview = nextSlotPurchases.value[type]; const next = { slot_type: type, slot_index: preview?.next_slot_index ?? owned.length, technique_id: null, purchased: false, price: preview?.price, balance: preview?.post_purchase_balance, required_realm: preview?.required_realm, isNext: true, can_purchase: preview?.can_purchase }; return [...owned.map((slot) => ({ ...slot, purchased: true, isNext: false })), next] }))
 async function load() { loading.value = true; error.value = null; try { applyLibrary(await cultivationService.getTechniques()) } catch (requestError) { error.value = requestError } finally { loading.value = false } }
 function applyLibrary(response) { techniques.value = response?.techniques || []; slots.value = response?.slots || []; loadout.value = response?.slot_assignments || response?.loadout || {}; spiritStones.value = response?.spirit_stones ?? 0; nextSlotPurchases.value = response?.next_slot_purchases || {} }
@@ -43,7 +47,7 @@ function selectedTypeSlots() { return slots.value.filter((slot) => slot.slot_typ
 function requiredSlots(technique) { const owned = selectedTypeSlots(); const start = selectedSlot.value?.slot_index ?? -1; return owned.slice(start, start + technique.slot_count).filter((slot, offset) => slot.slot_index === start + offset) }
 function hasRequiredSlots(technique) { return Boolean(selectedSlot.value?.purchased && requiredSlots(technique).length === technique.slot_count) }
 function statusLabel(technique) { if (!technique.learned) return '未学会'; if (technique.realm_confirmed === false) return '境界不足'; if (conflicts(technique).length) return '⚠ 冲突'; if (!hasRequiredSlots(technique)) return '连续格子不足'; return '可配置' }
-async function purchase() { if (!selectedSlot.value?.isNext || selectedSlot.value.can_purchase === false) return; busy.value = true; error.value = null; try { await cultivationService.purchaseSlot(selectedSlot.value.slot_type); applyLibrary(await cultivationService.getTechniques()); selectedSlot.value = displaySlots.value.find((slot) => slot.slot_type === selectedSlot.value.slot_type && slot.isNext) } catch (requestError) { error.value = requestError } finally { busy.value = false } }
+async function purchase() { if (!selectedSlot.value?.isNext) return; if (selectedSlot.value.can_purchase === false) { error.value = new Error(purchaseLockMessage.value); return } busy.value = true; error.value = null; try { await cultivationService.purchaseSlot(selectedSlot.value.slot_type); applyLibrary(await cultivationService.getTechniques()); selectedSlot.value = displaySlots.value.find((slot) => slot.slot_type === selectedSlot.value.slot_type && slot.isNext) } catch (requestError) { error.value = requestError } finally { busy.value = false } }
 async function equip(technique) { if (!selectedSlot.value?.purchased || !technique.learned || technique.realm_confirmed === false || !hasRequiredSlots(technique)) return; busy.value = true; error.value = null; try { const assignments = Object.fromEntries(slotTypes.map((type) => { const count = slots.value.filter((slot) => slot.slot_type === type).length; const current = Array.isArray(loadout.value[type]) ? loadout.value[type] : [loadout.value[type]]; return [type, Array.from({ length: count }, (_, index) => current[index] ?? null)] })); for (const slot of requiredSlots(technique)) assignments[selectedSlot.value.slot_type][slot.slot_index] = technique.id; applyLibrary(await cultivationService.updateLoadout(assignments)) } catch (requestError) { error.value = requestError } finally { busy.value = false } }
 onMounted(load)
 </script>

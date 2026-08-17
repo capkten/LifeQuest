@@ -175,6 +175,14 @@ test('technique confirmation uses authoritative server preview values', async ()
   assert.doesNotMatch(source, /服务器返回后显示/)
 })
 
+test('technique purchase preview locks unavailable purchases with an actionable error', async () => {
+  const source = await readFile(new URL('./Techniques.vue', import.meta.url), 'utf8')
+
+  assert.match(source, /can_purchase\s*===\s*false/)
+  assert.match(source, /境界不足|灵石不足|无法购买|不可购买/)
+  assert.match(source, /error\.value\s*=\s*new Error|error\.value\s*=\s*['"`]/)
+})
+
 test('sect joining follows server eligibility fields', async () => {
   const source = await readFile(new URL('./Sects.vue', import.meta.url), 'utf8')
 

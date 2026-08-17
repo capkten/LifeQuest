@@ -398,6 +398,37 @@ def test_update_loadout_rejects_multi_slot_conflict_and_returns_all_assignments(
         service.update_loadout(user.id, {"main": [technique.id, technique.id], "auxiliary": [technique.id]})
 
 
+def test_update_loadout_rejects_multi_slot_technique_spanning_categories_before_mutation(db_session, user):
+    from app.models.technique import LearnedTechnique, Technique, TechniqueSlot
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    service.seed_world(db_session)
+    service.ensure_profile(user.id).realm_key = "foundation"
+    main_slots = [
+        TechniqueSlot(user_id=user.id, slot_type="main", slot_index=0),
+    ]
+    auxiliary_slots = [
+        TechniqueSlot(user_id=user.id, slot_type="auxiliary", slot_index=0),
+        TechniqueSlot(user_id=user.id, slot_type="auxiliary", slot_index=1),
+    ]
+    db_session.add_all(main_slots + auxiliary_slots)
+    technique = db_session.query(Technique).filter_by(technique_key="stone-channel").one()
+    technique.slot_count = 2
+    db_session.add(LearnedTechnique(user_id=user.id, technique_id=technique.id))
+    db_session.commit()
+
+    with pytest.raises(ValueError, match="SLOT_CONFLICT:CATEGORY"):
+        service.update_loadout(
+            user.id,
+            {"main": [technique.id], "auxiliary": [None, technique.id]},
+        )
+
+    db_session.expire_all()
+    assert db_session.query(TechniqueSlot).filter_by(user_id=user.id, slot_type="main").one().technique_id is None
+    assert all(slot.technique_id is None for slot in db_session.query(TechniqueSlot).filter_by(user_id=user.id, slot_type="auxiliary").all())
+
+
 def test_sect_join_accepts_seeded_sect_uuid_after_unlock(db_session, user):
     from app.models.world import Sect
     from app.services.cultivation import CultivationService

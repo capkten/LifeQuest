@@ -305,7 +305,10 @@ class CultivationService:
                 raise ValueError("SLOT_CONFLICT:DUPLICATE_TECHNIQUE")
             if len(locations) != technique.slot_count:
                 raise ValueError("SLOT_CONFLICT:OCCUPANCY")
-            indexes = sorted(index for _, index in locations)
+            slot_types = {slot_type for slot_type, _ in locations}
+            if len(slot_types) != 1:
+                raise ValueError("SLOT_CONFLICT:CATEGORY")
+            indexes = sorted(slot_index for _, slot_index in locations)
             if indexes != list(range(indexes[0], indexes[0] + technique.slot_count)):
                 raise ValueError("SLOT_CONFLICT:NON_CONTIGUOUS")
         for slot, technique_id in updates:

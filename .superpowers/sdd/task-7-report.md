@@ -48,6 +48,160 @@ Command: `git diff --check`
 
 Exact result: no output, exit code `0`.
 
+## Review Fix Verification
+
+Command: `pytest -q backend/tests/test_cultivation.py --disable-warnings`
+
+Exact output:
+
+```text
+..........................                                               [100%]
+26 passed, 18 warnings in 10.28s
+```
+
+Command: `cd frontend; node --test src/views/cultivation-regressions.test.mjs`
+
+Exact output:
+
+```text
+✔ router includes authenticated cultivation routes (18.4043ms)
+✔ todo page keeps the legacy reward fallback (5.9102ms)
+✔ cultivation service keeps endpoint paths in one module (4.3147ms)
+✔ settlements update visible deltas and obtain an authoritative overview (2.6652ms)
+✔ realm progress derives its percentage from StageProgress thresholds (9.0702ms)
+✔ cultivation shared states expose accessible stable contracts (19.8238ms)
+✔ world page has lock and selection semantics (3.1011ms)
+✔ recent rewards preserve descriptions before numeric fallback (12.5976ms)
+✔ static world detail does not claim expansion state (5.4779ms)
+✔ sect page exposes comparison filters (5.8719ms)
+✔ technique page shows price and conflict without relying on color (1.4809ms)
+✔ task 7 fixes preserve authoritative state and honest empty/locked states (2.3711ms)
+✔ technique confirmation uses authoritative server preview values (1.8506ms)
+✔ technique purchase preview locks unavailable purchases with an actionable error (2.4838ms)
+✔ sect joining follows server eligibility fields (7.0197ms)
+✔ multi-slot techniques assign contiguous purchased slots or show insufficient state (2.4481ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 411.1868
+```
+
+Command: `cd frontend; npm run build`
+
+Exact output:
+
+```text
+npm warn Unknown user config "always-auth" (//repo.hexops.cn/artifactory/api/npm/npm-public/:always-auth). This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> lifequest-frontend@1.0.0 build
+> vite build
+
+vite v5.4.21 building for production...
+transforming...
+node_modules/@vueuse/core/dist/index.js (3362:0): A comment
+
+"/* #__PURE__ */"
+
+in "node_modules/@vueuse/core/dist/index.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+node_modules/@vueuse/core/dist/index.js (5780:22): A comment
+
+"/* #__PURE__ */"
+
+in "node_modules/@vueuse/core/dist/index.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+✓ 1954 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                   0.76 kB │ gzip:   0.46 kB
+dist/assets/World-Caqzjh6N.css                    1.48 kB │ gzip:   0.50 kB
+dist/assets/Npcs-J8nza0s_.css                     1.60 kB │ gzip:   0.51 kB
+dist/assets/Techniques-BAo_jE5k.css               1.72 kB │ gzip:   0.56 kB
+dist/assets/Sects-Cy5lbUxv.css                    2.23 kB │ gzip:   0.70 kB
+dist/assets/Cultivation-D94O1SYD.css              2.65 kB │ gzip:   0.72 kB
+dist/assets/Register-DzM5UaBy.css                 3.46 kB │ gzip:   1.06 kB
+dist/assets/Login-B0ZrrUXz.css                    4.52 kB │ gzip:   1.33 kB
+dist/assets/EditProfile-D0n-rmDb.css              6.39 kB │ gzip:   1.67 kB
+dist/assets/BackpackHistory-BqwkYrdm.css          6.43 kB │ gzip:   1.48 kB
+dist/assets/ExchangeHistory-dYW4K-kR.css          6.56 kB │ gzip:   1.54 kB
+dist/assets/NoteEditor-mw5En5n8.css               6.68 kB │ gzip:   1.59 kB
+dist/assets/CoinHistory-CHtcOeRf.css              8.96 kB │ gzip:   1.73 kB
+dist/assets/AppLayout-B8WsPlwv.css               10.81 kB │ gzip:   2.20 kB
+dist/assets/Stats-Btj6fDDQ.css                   11.16 kB │ gzip:   2.13 kB
+dist/assets/Profile-BW81_IGh.css                 11.41 kB │ gzip:   2.30 kB
+dist/assets/Calendar-DvWCiBTT.css                11.57 kB │ gzip:   2.27 kB
+dist/assets/Projects-CQOKFuPR.css                13.77 kB │ gzip:   2.46 kB
+dist/assets/Notes-CTnrvk1v.css                   14.44 kB │ gzip:   2.32 kB
+dist/assets/Backpack-DeBAoPW_.css                14.71 kB │ gzip:   2.51 kB
+dist/assets/Home-DspXc-UO.css                    15.17 kB │ gzip:   2.93 kB
+dist/assets/FinanceAccounts-CE7GBNud.css         16.14 kB │ gzip:   2.72 kB
+dist/assets/FinanceBudgets-CkQ2XN1X.css           17.73 kB │ gzip:   2.90 kB
+dist/assets/FinanceTransactions-ZHs8h8gh.css      17.94 kB │ gzip:   3.26 kB
+dist/assets/FinanceDebts-DueeNQE8.css             18.08 kB │ gzip:   2.90 kB
+dist/assets/NotebookFileManage-nL-Oub_x.css       18.34 kB │ gzip:   3.31 kB
+dist/assets/Finance-BZ9LN010.css                  20.36 kB │ gzip:   3.19 kB
+dist/assets/Shop-DGkLerHz.css                     22.41 kB │ gzip:   3.81 kB
+dist/assets/ProjectDetail-D1c884Ju.css            25.44 kB │ gzip:   3.79 kB
+dist/assets/Todos-BZ7UfgRz.css                    25.54 kB │ gzip:   3.97 kB
+dist/assets/el-input-B3C2tUI5.css                 44.55 kB │ gzip:   6.17 kB
+dist/assets/index-DT89u-dv.css                    75.37 kB │ gzip:  21.95 kB
+dist/assets/useResolvedImage-DQgMcYE1.js           0.43 kB │ gzip:   0.30 kB
+dist/assets/useToast-CFG8vNYc.js                   0.48 kB │ gzip:   0.25 kB
+dist/assets/backpack-D3JrRBfk.js                  0.50 kB │ gzip:   0.24 kB
+dist/assets/shop-DJt-Pieh.js                      0.50 kB │ gzip:   0.26 kB
+dist/assets/cultivation-DyNRCfHS.js                0.64 kB │ gzip:   0.36 kB
+dist/assets/useUserStats-H5ZKRTOc.js              0.88 kB │ gzip:   0.48 kB
+dist/assets/cultivation-CdUEkhgf.js               1.03 kB │ gzip:   0.38 kB
+dist/assets/project-4sSGxh2v.js                   1.25 kB │ gzip:   0.34 kB
+dist/assets/todo-WkEo_psF.js                      1.47 kB │ gzip:   0.39 kB
+dist/assets/CultivationStatusBar-BpTKHVui.js      1.49 kB │ gzip:   0.72 kB
+dist/assets/note-B4IDWPNK.js                      1.87 kB │ gzip:   0.67 kB
+dist/assets/finance-DjdkTeZr.js                   1.97 kB │ gzip:   0.44 kB
+dist/assets/Login-CalM8WnC.js                     3.36 kB │ gzip:   1.83 kB
+dist/assets/Register-vqvETBOI.js                  3.80 kB │ gzip:   1.93 kB
+dist/assets/Npcs-lcOjXq71.js                      4.10 kB │ gzip:   1.85 kB
+dist/assets/Sects-pUgEdNtP.js                     4.20 kB │ gzip:   2.12 kB
+dist/assets/World-D3mnmI9J.js                     4.77 kB │ gzip:   2.21 kB
+dist/assets/EditProfile-DhBqCaYU.js                5.09 kB │ gzip:   2.66 kB
+dist/assets/Cultivation-DOSmxvOX.js                5.62 kB │ gzip:   2.26 kB
+dist/assets/BackpackHistory-C-a1qFIp.js            6.12 kB │ gzip:   2.51 kB
+dist/assets/CoinHistory-Bnuqeyv4.js                6.13 kB │ gzip:   2.53 kB
+dist/assets/ExchangeHistory-CLfM8dOo.js            6.17 kB │ gzip:   2.63 kB
+dist/assets/Techniques-BK965pKN.js                 7.68 kB │ gzip:   3.08 kB
+dist/assets/NoteEditor--plvZX0e.js                 8.33 kB │ gzip:   3.31 kB
+dist/assets/Projects-B6Kc0ZBL.js                   10.56 kB │ gzip:   4.09 kB
+dist/assets/FinanceBudgets-CuymA6G4.js             11.22 kB │ gzip:   3.97 kB
+dist/assets/Backpack-BS50xO3j.js                   12.25 kB │ gzip:   4.18 kB
+dist/assets/Calendar-DDHaLNvo.js                   12.53 kB │ gzip:   3.65 kB
+dist/assets/Profile-CchN4lAQ.js                    13.18 kB │ gzip:   5.15 kB
+dist/assets/Stats-DAuez0tR.js                      13.34 kB │ gzip:   3.91 kB
+dist/assets/Notes-jor_GocA.js                      14.43 kB │ gzip:   4.81 kB
+dist/assets/Home-Bzl_eROZ.js                       14.44 kB │ gzip:   4.71 kB
+dist/assets/FinanceDebts-DJ5ui_tP.js               16.07 kB │ gzip:   4.81 kB
+dist/assets/FinanceAccounts-Cy-maV5l.js            16.14 kB │ gzip:   4.75 kB
+dist/assets/Finance-Dofvea7P.js                    17.46 kB │ gzip:   5.12 kB
+dist/assets/AppLayout-BQsDejNP.js                  17.48 kB │ gzip:   4.51 kB
+dist/assets/Shop-BgHUeAai.js                       17.63 kB │ gzip:   6.15 kB
+dist/assets/FinanceTransactions-d7jj8SZP.js        19.67 kB │ gzip:   6.06 kB
+dist/assets/NotebookFileManage-DfLOCEn7.js         30.29 kB │ gzip:   9.35 kB
+dist/assets/Todos-WbM7aF4S.js                      31.70 kB │ gzip:   8.15 kB
+dist/assets/ProjectDetail-CejXbRP1.js              33.67 kB │ gzip:   9.30 kB
+dist/assets/el-input-m_Zny6LR.js                   71.14 kB │ gzip:  24.79 kB
+dist/assets/index-KKD6_9EP.js                   1,487.97 kB │ gzip: 498.37 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Using build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#build.rollupOptions.output.manualChunks
+- Adjust chunk size warning threshold via build.chunkSizeWarningLimit.
+✓ built in 17.53s
+```
+
+Command: `git diff --check`
+
+Exact output: no output, exit code `0`.
+
 ## Remaining Review Verification
 
 - Sect eligibility is now one server-owned rule: hidden sects are unavailable; visible sects use their entry realm for both `can_join` and direct join validation. Messenger/trial booleans remain false with `trial_status="not_tracked_current_phase"` because no state table exists in this phase.
