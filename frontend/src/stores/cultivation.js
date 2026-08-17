@@ -6,18 +6,30 @@ export const useCultivationStore = defineStore('cultivation', () => {
   const overview = ref(null)
   const loading = ref(false)
   const error = ref(null)
+  let requestVersion = 0
+
+  function clear() {
+    requestVersion += 1
+    overview.value = null
+    loading.value = false
+    error.value = null
+  }
 
   async function loadOverview() {
+    const version = requestVersion
     loading.value = true
     error.value = null
     try {
-      overview.value = await cultivationService.getOverview()
+      const nextOverview = await cultivationService.getOverview()
+      if (version !== requestVersion) return null
+      overview.value = nextOverview
       return overview.value
     } catch (requestError) {
+      if (version !== requestVersion) return null
       error.value = requestError
       throw requestError
     } finally {
-      loading.value = false
+      if (version === requestVersion) loading.value = false
     }
   }
 
@@ -38,5 +50,5 @@ export const useCultivationStore = defineStore('cultivation', () => {
     return await refresh()
   }
 
-  return { overview, loading, error, loadOverview, refresh, applySettlement }
+  return { overview, loading, error, loadOverview, refresh, applySettlement, clear }
 })

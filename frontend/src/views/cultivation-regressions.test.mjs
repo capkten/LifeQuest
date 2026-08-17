@@ -58,6 +58,8 @@ test('tribulation page exposes transparent risk order and authoritative result s
   assert.match(page, /error\.value\s*=\s*null/)
   assert.match(page, /useCultivationStore/)
   assert.match(page, /cultivationStore\.refresh\(\)/)
+  assert.match(page, /result\.value\s*=\s*await cultivationService\.attemptTribulation[\s\S]*await cultivationStore\.refresh\(\)/)
+  assert.doesNotMatch(page, /if\s*\(result\.value\.success\)\s*await cultivationStore\.refresh\(\)/)
   assert.match(probability, /:disabled="[^"]*operationBusy/)
   assert.match(probability, /aria-live="polite"/)
 })
@@ -157,6 +159,18 @@ test('npcs route and API access are protected by ascended state', async () => {
   assert.match(router, /requiresAscended[\s\S]*cultivationStore\.loadOverview/)
   assert.match(api, /def npcs\([\s\S]*get_npcs\(current_user\.id\)/)
   assert.match(service, /NPCs require ascended realm/)
+})
+
+test('cultivation state is cleared across auth identity changes', async () => {
+  const auth = await readFile(new URL('../stores/auth.js', import.meta.url), 'utf8')
+  const cultivation = await readFile(new URL('../stores/cultivation.js', import.meta.url), 'utf8')
+  assert.match(cultivation, /function clear\(\)/)
+  assert.match(cultivation, /overview\.value\s*=\s*null/)
+  assert.match(cultivation, /error\.value\s*=\s*null/)
+  assert.match(cultivation, /requestVersion|generation/)
+  assert.match(auth, /useCultivationStore/)
+  assert.match(auth, /cultivationStore\.clear\(\)/)
+  assert.match(auth, /userData\.id|previousUserId|user\.value\?\.id/)
 })
 
 test('recent rewards preserve descriptions before numeric fallback', async () => {

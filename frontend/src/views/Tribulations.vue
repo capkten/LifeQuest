@@ -54,7 +54,7 @@ async function attempt() {
   attempting.value = true; error.value = null
   try {
     result.value = await cultivationService.attemptTribulation({ pill_count: pillCount.value })
-    if (result.value.success) await cultivationStore.refresh()
+    await cultivationStore.refresh()
     await load()
   } catch (cause) { error.value = cause } finally { attempting.value = false }
 }
