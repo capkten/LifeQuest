@@ -164,3 +164,43 @@ git diff --check
 Output: no output; exit code `0`.
 
 Latest code commit: `2eea4a59599d7373d971ea8b76956b6848013c41`.
+
+## Review Fixes - Latest Re-review 2
+
+1. Added an idempotent pre-index migration step for legacy duplicate daily attempts. Rows are ordered by user, day, latest `attempted_at`, and deterministic id; the newest record is retained and older duplicates are deleted before creating the unique index.
+2. Added `CultivationOverview.ascended` to the backend schema and service response. Sidebar仙界/仙官 links now consume that explicit API field, so only `realm_key=ascended` exposes them.
+3. Added targeted detection for the `uq_tribulation_attempt_user_day` constraint and SQLite user/day column error text. Other `IntegrityError` instances are re-raised after rollback instead of being mislabeled as cooldown conflicts.
+
+Exact verification commands and actual output:
+
+```powershell
+cd backend; pytest tests/test_notes.py::test_migrate_columns_deduplicates_daily_tribulation_attempts_before_unique_index tests/test_cultivation.py::test_overview_exposes_explicit_ascended_state tests/test_cultivation.py::test_non_daily_integrity_error_is_not_reported_as_cooldown -q
+```
+
+Output: `3 passed, 7 warnings in 0.45s`
+
+```powershell
+cd frontend; node --test src/views/cultivation-regressions.test.mjs
+```
+
+Output: `19 passed, 0 failed`
+
+```powershell
+cd backend; pytest
+```
+
+Output: `151 passed, 376 warnings in 92.92s (0:01:32)`
+
+```powershell
+cd frontend; npm run build
+```
+
+Output: exit code `0`; `1958 modules transformed`; Vite production build completed successfully. Existing npm/Rollup and large-chunk warnings were emitted.
+
+```powershell
+git diff --check
+```
+
+Output: no output; exit code `0`.
+
+Latest code commit: `42bc8c3f68d882d17786930769565869bca0146b`.
