@@ -277,3 +277,37 @@ git diff --check
 Output: no output; exit code `0`.
 
 Latest code commit: `cfac01d28fb36994b8409a1ce6742e95013c5fbc`.
+
+## Review Fixes - Final Important Authentication and Ordering
+
+1. Added `authSession` as the small shared cleanup boundary. Auth store registers the unified logout callback; refresh-token failure and API 401/refresh failure invoke it, clearing tokens, `authStore.user`, authentication state, and cultivation state without an auth/api import cycle.
+2. Cultivation overview loading now uses separate identity `requestVersion` and same-user `requestSequence` counters. Only the latest request for the current identity may update overview, loading, or error state.
+3. Tribulation result persistence is decoupled from shared-store synchronization. The result is retained immediately, shared refresh errors are captured, local page reload always continues, and the existing retry action re-runs synchronization plus local reload.
+
+Exact verification commands and actual output:
+
+```powershell
+cd frontend; node --test src/views/cultivation-regressions.test.mjs
+```
+
+Output: `21 passed, 0 failed`
+
+```powershell
+cd backend; pytest
+```
+
+Output: `153 passed, 376 warnings in 89.85s (0:01:29)`
+
+```powershell
+cd frontend; npm run build
+```
+
+Output: exit code `0`; `1959 modules transformed`; Vite production build completed successfully. Existing npm/Rollup and large-chunk warnings were emitted.
+
+```powershell
+git diff --check
+```
+
+Output: no output; exit code `0`.
+
+Latest code commit: `107e197f0ea1bd21d4fa71c9d066e0810090e745`.
