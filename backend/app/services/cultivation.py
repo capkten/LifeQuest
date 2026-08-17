@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.models.cultivation import CultivationLog, CultivationProfile, TribulationAttempt
 from app.models.technique import LearnedTechnique, Technique, TechniqueSlot
 from app.models.todo import Habit, Task
+from app.models.user import User
 from app.models.world import Npc, NpcEvent, Sect, SectAccessProgress, SectMembership, WorldNode
 from app.repositories.cultivation import CultivationRepository
 from app.repositories.user import UserRepository
@@ -938,13 +939,22 @@ class CultivationService:
         if user is None:
             raise ValueError("User not found")
         with (self.db.begin_nested() if source_key else nullcontext()):
-            if source_key:
-                # Acquire the profile row as a database write lock before
-                # checking or claiming the source key. This prevents SQLite
-                # read-to-write lock upgrades from deadlocking two sessions.
-                self.db.execute(update(CultivationProfile).where(
-                    CultivationProfile.user_id == user_id
-                ).values(cultivation=CultivationProfile.cultivation))
+            # Acquire both rows as writes, then refresh the ORM object. The
+            # caller may have loaded User before another session committed.
+            # SQLite serializes these writes; the outer retry handles a busy
+            # snapshot while other dialects use their normal row locks.
+            self.db.execute(update(CultivationProfile).where(
+                CultivationProfile.user_id == user_id
+            ).values(cultivation=CultivationProfile.cultivation))
+            self.db.execute(update(User).where(User.id == user_id).values(
+                level=User.level,
+                experience=User.experience,
+                coins=User.coins,
+                total_coins_earned=User.total_coins_earned,
+            ))
+            self.db.refresh(user)
+            legacy_level = user.level
+            legacy_experience = user.experience
             profile = self.ensure_profile(user_id)
             if source_key:
                 existing_log = self.db.query(CultivationLog).filter(
@@ -993,7 +1003,7 @@ class CultivationService:
 
         self.user_repo._update_experience_no_commit(user, cultivation)
         self.user_repo._update_coins_no_commit(user, stones)
-        return RewardSettlement(
+        settlement = RewardSettlement(
             cultivation=cultivation,
             spirit_stones=stones,
             merit=0,
@@ -1002,6 +1012,9 @@ class CultivationService:
             legacy_exp=cultivation,
             ready_for_tribulation=ready_for_tribulation,
         )
+        settlement._legacy_level = legacy_level
+        settlement._legacy_experience = legacy_experience
+        return settlement
 
     def _source_key_log_from_short_session(
         self, source_key: str, user_id: UUID

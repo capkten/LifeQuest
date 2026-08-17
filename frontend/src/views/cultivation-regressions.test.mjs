@@ -269,9 +269,8 @@ test('sect page exposes comparison filters', async () => {
 test('sects page cannot let an older filter response overwrite the latest one', async () => {
   const source = await readFile(new URL('./Sects.vue', import.meta.url), 'utf8')
 
-  assert.match(source, /requestSequence|requestId|requestVersion/)
-  assert.match(source, /latest|stale|过期|sequence/i)
-  assert.match(source, /if\s*\([^\n]*(requestSequence|requestVersion|requestId)[^\n]*\)\s*return/)
+  assert.match(source, /createSequencedRequest/)
+  assert.match(source, /requestSequence/)
 })
 
 test('technique page shows price and conflict without relying on color', async () => {

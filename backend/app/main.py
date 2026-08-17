@@ -108,20 +108,45 @@ def _create_unique_index(connection, table_name, index_name, column_names):
     dialect = getattr(connection, "dialect", None)
     dialect_name = (getattr(dialect, "name", "") or "").lower()
     columns = ", ".join(column_names)
-    if dialect_name in {"sqlite", "postgresql"}:
-        statement = (
-            "CREATE UNIQUE INDEX IF NOT EXISTS "
-            f"{index_name} ON {table_name} ({columns})"
-        )
-    elif dialect_name in {"mssql", "sql server"}:
-        statement = (
-            "IF NOT EXISTS (SELECT 1 FROM sys.indexes "
-            f"WHERE name = N'{index_name}' AND object_id = OBJECT_ID(N'{table_name}')) "
-            f"CREATE UNIQUE INDEX {index_name} ON {table_name} ({columns})"
-        )
-    else:
-        statement = f"CREATE UNIQUE INDEX {index_name} ON {table_name} ({columns})"
+    statement = f"CREATE UNIQUE INDEX {index_name} ON {table_name} ({columns})"
     connection.execute(text(statement))
+
+
+def _drop_index(connection, table_name, index_name):
+    dialect = getattr(connection, "dialect", None)
+    dialect_name = (getattr(dialect, "name", "") or "").lower()
+    if dialect_name in {"sqlite", "postgresql"}:
+        statement = f'DROP INDEX IF EXISTS "{index_name}"'
+    elif dialect_name in {"mysql", "mariadb"}:
+        statement = f"DROP INDEX `{index_name}` ON `{table_name}`"
+    elif dialect_name in {"mssql", "sql server"}:
+        statement = f"DROP INDEX [{index_name}] ON [{table_name}]"
+    else:
+        statement = f"DROP INDEX {index_name}"
+    connection.execute(text(statement))
+
+
+def _ensure_unique_index(connection, table_name, index_name, column_names):
+    """Replace a conflicting same-name index, then create the desired guard."""
+    inspector = inspect(connection)
+    try:
+        target = next(
+            (index for index in inspector.get_indexes(table_name)
+             if index.get("name") == index_name),
+            None,
+        )
+    except (AttributeError, NotImplementedError, NoSuchTableError):
+        target = None
+    if target and (
+        not target.get("unique")
+        or target.get("column_names") != list(column_names)
+    ):
+        _drop_index(connection, table_name, index_name)
+        inspector = inspect(connection)
+
+    if _has_unique_definition(inspector, table_name, column_names):
+        return
+    _create_unique_index(connection, table_name, index_name, column_names)
 
 
 def _migrate_learned_technique_constraint(inspector, connection):
@@ -133,24 +158,12 @@ def _migrate_learned_technique_constraint(inspector, connection):
 
     _deduplicate_learned_techniques(connection)
 
-    target_index_name = "uq_learned_technique_user_technique"
-    try:
-        learned_indexes = inspector.get_indexes("learned_techniques")
-    except (AttributeError, NotImplementedError):
-        learned_indexes = []
-    for index in learned_indexes:
-        if index.get("name") == target_index_name and not index.get("unique"):
-            connection.execute(text(
-                f'DROP INDEX "{target_index_name}"'
-            ))
-
-    if not _has_unique_definition(inspector, "learned_techniques", ["user_id", "technique_id"]):
-        _create_unique_index(
-            connection,
-            "learned_techniques",
-            target_index_name,
-            ["user_id", "technique_id"],
-        )
+    _ensure_unique_index(
+        connection,
+        "learned_techniques",
+        "uq_learned_technique_user_technique",
+        ["user_id", "technique_id"],
+    )
 
 
 def _deduplicate_npcs(connection):
@@ -206,17 +219,12 @@ def _migrate_npc_columns(inspector, connection):
         logger.info("Migration: added npcs.%s", column_name)
 
     _deduplicate_npcs(connection)
-    if not _has_unique_definition(
-        inspector,
+    _ensure_unique_index(
+        connection,
         "npcs",
+        "uq_npc_user_sect_population",
         ["user_id", "sect_id", "population_index"],
-    ):
-        _create_unique_index(
-            connection,
-            "npcs",
-            "uq_npc_user_sect_population",
-            ["user_id", "sect_id", "population_index"],
-        )
+    )
 
 
 def _deduplicate_unique_key_rows(connection, table_name, key_column, references=()):
@@ -231,6 +239,10 @@ def _deduplicate_unique_key_rows(connection, table_name, key_column, references=
         if keeper_id is None:
             seen[key_value] = row_id
             continue
+        if table_name == "techniques":
+            _merge_technique_references(connection, row_id, keeper_id)
+        elif table_name == "sects":
+            _merge_sect_references(connection, row_id, keeper_id)
         for reference_table, reference_column in references:
             if existing_tables.has_table(reference_table):
                 connection.execute(text(
@@ -243,15 +255,218 @@ def _deduplicate_unique_key_rows(connection, table_name, key_column, references=
         )
 
 
+def _merge_technique_references(connection, duplicate_id, keeper_id):
+    """Move technique references without violating learned-technique uniqueness."""
+    if inspect(connection).has_table("learned_techniques"):
+        rows = connection.execute(text(
+            "SELECT id, user_id, learned_at, level FROM learned_techniques "
+            "WHERE technique_id = :duplicate_id ORDER BY id"
+        ), {"duplicate_id": duplicate_id}).fetchall()
+        for learned_id, user_id, learned_at, level in rows:
+            keeper = connection.execute(text(
+                "SELECT id, learned_at, level FROM learned_techniques "
+                "WHERE user_id = :user_id AND technique_id = :keeper_id"
+            ), {"user_id": user_id, "keeper_id": keeper_id}).first()
+            if keeper is None:
+                connection.execute(text(
+                    "UPDATE learned_techniques SET technique_id = :keeper_id "
+                    "WHERE id = :learned_id"
+                ), {"keeper_id": keeper_id, "learned_id": learned_id})
+                continue
+            keeper_learned_id, keeper_learned_at, keeper_level = keeper
+            connection.execute(text(
+                "UPDATE learned_techniques SET learned_at = :learned_at, level = :level "
+                "WHERE id = :keeper_id"
+            ), {
+                "learned_at": max(keeper_learned_at, learned_at),
+                "level": max(keeper_level, level),
+                "keeper_id": keeper_learned_id,
+            })
+            connection.execute(text(
+                "DELETE FROM learned_techniques WHERE id = :learned_id"
+            ), {"learned_id": learned_id})
+    if inspect(connection).has_table("technique_slots"):
+        connection.execute(text(
+            "UPDATE technique_slots SET technique_id = :keeper_id "
+            "WHERE technique_id = :duplicate_id"
+        ), {"keeper_id": keeper_id, "duplicate_id": duplicate_id})
+
+
+def _merge_sect_access_reference(connection, duplicate_id, keeper_id):
+    if not inspect(connection).has_table("sect_access_progress"):
+        return
+    rows = connection.execute(text(
+        "SELECT id, user_id, messenger_contacted, trial_confirmed "
+        "FROM sect_access_progress WHERE sect_id = :duplicate_id ORDER BY id"
+    ), {"duplicate_id": duplicate_id}).fetchall()
+    for row_id, user_id, contacted, confirmed in rows:
+        keeper = connection.execute(text(
+            "SELECT id, messenger_contacted, trial_confirmed FROM sect_access_progress "
+            "WHERE user_id = :user_id AND sect_id = :keeper_id"
+        ), {"user_id": user_id, "keeper_id": keeper_id}).first()
+        if keeper is None:
+            connection.execute(text(
+                "UPDATE sect_access_progress SET sect_id = :keeper_id WHERE id = :row_id"
+            ), {"keeper_id": keeper_id, "row_id": row_id})
+            continue
+        keeper_row_id, keeper_contacted, keeper_confirmed = keeper
+        connection.execute(text(
+            "UPDATE sect_access_progress SET messenger_contacted = :contacted, "
+            "trial_confirmed = :confirmed WHERE id = :row_id"
+        ), {
+            "contacted": bool(keeper_contacted or contacted),
+            "confirmed": bool(keeper_confirmed or confirmed),
+            "row_id": keeper_row_id,
+        })
+        connection.execute(text(
+            "DELETE FROM sect_access_progress WHERE id = :row_id"
+        ), {"row_id": row_id})
+
+
+def _merge_sect_membership_reference(connection, duplicate_id, keeper_id):
+    if not inspect(connection).has_table("sect_memberships"):
+        return
+    rows = connection.execute(text(
+        "SELECT id, user_id, status, joined_at, left_at FROM sect_memberships "
+        "WHERE sect_id = :duplicate_id ORDER BY id"
+    ), {"duplicate_id": duplicate_id}).fetchall()
+    for row_id, user_id, status, joined_at, left_at in rows:
+        keeper = connection.execute(text(
+            "SELECT id, status, joined_at, left_at FROM sect_memberships "
+            "WHERE user_id = :user_id AND sect_id = :keeper_id"
+        ), {"user_id": user_id, "keeper_id": keeper_id}).first()
+        if keeper is None:
+            connection.execute(text(
+                "UPDATE sect_memberships SET sect_id = :keeper_id WHERE id = :row_id"
+            ), {"keeper_id": keeper_id, "row_id": row_id})
+            continue
+        keeper_row_id, keeper_status, keeper_joined_at, keeper_left_at = keeper
+        merged_status = "active" if "active" in {status, keeper_status} else keeper_status
+        merged_joined_at = min(keeper_joined_at, joined_at)
+        left_dates = [value for value in (keeper_left_at, left_at) if value is not None]
+        merged_left_at = None if merged_status == "active" or not left_dates else max(left_dates)
+        connection.execute(text(
+            "UPDATE sect_memberships SET status = :status, joined_at = :joined_at, "
+            "left_at = :left_at WHERE id = :row_id"
+        ), {
+            "status": merged_status,
+            "joined_at": merged_joined_at,
+            "left_at": merged_left_at,
+            "row_id": keeper_row_id,
+        })
+        connection.execute(text(
+            "DELETE FROM sect_memberships WHERE id = :row_id"
+        ), {"row_id": row_id})
+
+
+def _merge_sect_npc_references(connection, duplicate_id, keeper_id):
+    if not inspect(connection).has_table("npcs"):
+        return
+    has_events = inspect(connection).has_table("npc_events")
+    rows = connection.execute(text(
+        "SELECT id, user_id, population_index FROM npcs "
+        "WHERE sect_id = :duplicate_id ORDER BY id"
+    ), {"duplicate_id": duplicate_id}).fetchall()
+    for npc_id, user_id, population_index in rows:
+        keeper_npc = None
+        if population_index is not None:
+            keeper_npc = connection.execute(text(
+                "SELECT id FROM npcs WHERE user_id = :user_id AND sect_id = :keeper_id "
+                "AND population_index = :population_index"
+            ), {
+                "user_id": user_id,
+                "keeper_id": keeper_id,
+                "population_index": population_index,
+            }).scalar()
+        if keeper_npc is None:
+            connection.execute(text(
+                "UPDATE npcs SET sect_id = :keeper_id WHERE id = :npc_id"
+            ), {"keeper_id": keeper_id, "npc_id": npc_id})
+            continue
+        if has_events:
+            connection.execute(text(
+                "UPDATE npc_events SET npc_id = :keeper_npc WHERE npc_id = :npc_id"
+            ), {"keeper_npc": keeper_npc, "npc_id": npc_id})
+        connection.execute(text("DELETE FROM npcs WHERE id = :npc_id"), {"npc_id": npc_id})
+
+
+def _merge_sect_references(connection, duplicate_id, keeper_id):
+    _merge_sect_access_reference(connection, duplicate_id, keeper_id)
+    _merge_sect_membership_reference(connection, duplicate_id, keeper_id)
+    _merge_sect_npc_references(connection, duplicate_id, keeper_id)
+
+
 def _migrate_unique_key_table(inspector, connection, table_name, key_column, index_name, references=()):
     try:
         columns = {column["name"] for column in inspector.get_columns(table_name)}
     except (KeyError, NoSuchTableError):
         return
-    if key_column not in columns or _has_unique_definition(inspector, table_name, [key_column]):
+    if key_column not in columns:
         return
-    _deduplicate_unique_key_rows(connection, table_name, key_column, references)
-    _create_unique_index(connection, table_name, index_name, [key_column])
+    live_inspector = inspect(connection)
+    if not _has_unique_definition(live_inspector, table_name, [key_column]):
+        _deduplicate_unique_key_rows(connection, table_name, key_column, references)
+    _ensure_unique_index(connection, table_name, index_name, [key_column])
+
+
+def _deduplicate_sect_access_rows(connection):
+    if not inspect(connection).has_table("sect_access_progress"):
+        return
+    rows = connection.execute(text(
+        "SELECT id, user_id, sect_id, messenger_contacted, trial_confirmed "
+        "FROM sect_access_progress ORDER BY user_id, sect_id, id"
+    )).fetchall()
+    seen = {}
+    for row_id, user_id, sect_id, contacted, confirmed in rows:
+        key = (user_id, sect_id)
+        keeper_id = seen.get(key)
+        if keeper_id is None:
+            seen[key] = row_id
+            continue
+        keeper = connection.execute(text(
+            "SELECT messenger_contacted, trial_confirmed FROM sect_access_progress "
+            "WHERE id = :id"
+        ), {"id": keeper_id}).one()
+        connection.execute(text(
+            "UPDATE sect_access_progress SET messenger_contacted = :contacted, "
+            "trial_confirmed = :confirmed WHERE id = :id"
+        ), {
+            "contacted": bool(keeper[0] or contacted),
+            "confirmed": bool(keeper[1] or confirmed),
+            "id": keeper_id,
+        })
+        connection.execute(text(
+            "DELETE FROM sect_access_progress WHERE id = :id"
+        ), {"id": row_id})
+
+
+def _migrate_sect_access_constraint(connection):
+    if not inspect(connection).has_table("sect_access_progress"):
+        return
+    _deduplicate_sect_access_rows(connection)
+    _ensure_unique_index(
+        connection,
+        "sect_access_progress",
+        "uq_sect_access_user_sect",
+        ["user_id", "sect_id"],
+    )
+
+
+def _deduplicate_cultivation_logs(connection):
+    """Keep the newest settlement for each legacy non-null source key."""
+    rows = connection.execute(text(
+        "SELECT id, source_key, created_at FROM cultivation_logs "
+        "WHERE source_key IS NOT NULL "
+        "ORDER BY source_key, created_at DESC, id DESC"
+    )).fetchall()
+    seen = set()
+    for log_id, source_key, _created_at in rows:
+        if source_key in seen:
+            connection.execute(text(
+                "DELETE FROM cultivation_logs WHERE id = :id"
+            ), {"id": log_id})
+        else:
+            seen.add(source_key)
 
 
 def _attempted_date_expression(connection):
@@ -430,17 +645,12 @@ def _migrate_columns():
                 ))
                 logger.info("Migration: added tribulation_attempts.attempted_date")
             _deduplicate_tribulation_attempts(conn)
-            if not _has_unique_definition(
-                inspector,
+            _ensure_unique_index(
+                conn,
                 "tribulation_attempts",
+                "uq_tribulation_attempt_user_day",
                 ["user_id", "attempted_date"],
-            ):
-                _create_unique_index(
-                    conn,
-                    "tribulation_attempts",
-                    "uq_tribulation_attempt_user_day",
-                    ["user_id", "attempted_date"],
-                )
+            )
 
         # Task 12 reward event identity. Nullable keys preserve legacy logs;
         # todo completions use a stable non-null key going forward.
@@ -449,24 +659,17 @@ def _migrate_columns():
         except (KeyError, NoSuchTableError):
             cultivation_log_cols = None
         if cultivation_log_cols is not None:
-            source_key_added = False
             if "source_key" not in cultivation_log_cols:
                 conn.execute(text("ALTER TABLE cultivation_logs ADD COLUMN source_key VARCHAR(128)"))
-                source_key_added = True
                 logger.info("Migration: added cultivation_logs.source_key")
-            if source_key_added or not _has_unique_definition(
-                inspector,
+            _deduplicate_cultivation_logs(conn)
+            _ensure_unique_index(
+                conn,
                 "cultivation_logs",
+                "uq_cultivation_log_source_key",
                 ["source_key"],
-            ):
-                _create_unique_index(
-                    conn,
-                    "cultivation_logs",
-                    "uq_cultivation_log_source_key",
-                    ["source_key"],
-                )
+            )
 
-        _migrate_learned_technique_constraint(inspector, conn)
         _migrate_npc_columns(inspector, conn)
         _migrate_unique_key_table(
             inspector,
@@ -476,6 +679,7 @@ def _migrate_columns():
             "uq_techniques_technique_key",
             (("learned_techniques", "technique_id"), ("technique_slots", "technique_id")),
         )
+        _migrate_learned_technique_constraint(inspector, conn)
         _migrate_unique_key_table(
             inspector,
             conn,
@@ -484,6 +688,7 @@ def _migrate_columns():
             "uq_sects_sect_key",
             (("sect_access_progress", "sect_id"), ("sect_memberships", "sect_id"), ("npcs", "sect_id")),
         )
+        _migrate_sect_access_constraint(conn)
 
         # note_nodes.last_opened_at
         note_node_cols = {c["name"] for c in inspector.get_columns("note_nodes")}

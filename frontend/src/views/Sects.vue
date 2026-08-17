@@ -35,31 +35,27 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { cultivationService } from '../services/cultivation'
+import { createSequencedRequest } from './sects-request-state'
 
 const filters = reactive({ star: null, kind: null, task_preference: null })
 const sects = ref([]); const loading = ref(false); const error = ref(null); const busyId = ref(null)
-const requestSequence = ref(0)
 const relationship = ref({ recently_met: [] })
 const recentlyMet = computed(() => relationship.value?.recently_met || [])
 const errorMessage = () => error.value?.response?.data?.detail || error.value?.message || '宗门暂时无法读取。'
-async function load() {
-  const requestId = ++requestSequence.value
-  loading.value = true
-  error.value = null
-  try {
-    const [response, npcResponse] = await Promise.all([
-      cultivationService.getSects(filters),
-      cultivationService.getNpcs(),
-    ])
-    if (requestId !== requestSequence.value) return
+const requestSequence = createSequencedRequest({
+  onStart: () => { loading.value = true; error.value = null },
+  onSuccess: ([response, npcResponse]) => {
     sects.value = Array.isArray(response) ? response.filter((sect) => sect.visible === true) : []
     relationship.value = npcResponse || { recently_met: [] }
-  } catch (requestError) {
-    if (requestId !== requestSequence.value) return
-    error.value = requestError
-  } finally {
-    if (requestId === requestSequence.value) loading.value = false
-  }
+  },
+  onError: (requestError) => { error.value = requestError },
+  onFinish: () => { loading.value = false },
+})
+function load() {
+  return requestSequence(() => Promise.all([
+    cultivationService.getSects(filters),
+    cultivationService.getNpcs(),
+  ]))
 }
 function kindLabel(kind) { return ({ normal: '普通', special: '特殊', hidden: '隐藏' })[kind] || kind || '未知' }
 function eligibilityMessage(sect) { if (sect.realm_confirmed !== true) return '境界不足，暂不可推进'; if (sect.messenger_contacted !== true) return '请先联系使者'; if (sect.trial_confirmed !== true) return '请完成入门试炼'; return sect.realm_confirmed === true && sect.can_join === true ? '入门条件已满足' : '等待服务器确认' }

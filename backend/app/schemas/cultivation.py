@@ -16,6 +16,8 @@ class StageProgress(BaseModel):
 
 class RewardSettlement(BaseModel):
     _already_settled: bool = PrivateAttr(default=False)
+    _legacy_level: int = PrivateAttr(default=1)
+    _legacy_experience: int = PrivateAttr(default=0)
 
     cultivation: int
     spirit_stones: int
