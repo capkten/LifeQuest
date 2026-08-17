@@ -321,6 +321,28 @@ def test_complete_task_creates_one_cultivation_log_and_keeps_legacy_rewards(clie
         db.close()
 
 
+def test_task_reward_log_uses_unique_stable_source_key(client):
+    headers = _register_and_login(client)
+    create_response = client.post(
+        "/api/todos/tasks",
+        json={"title": "Stable event", "coins_reward": 20, "exp_reward": 15},
+        headers=headers,
+    )
+    task_id = create_response.json()["id"]
+
+    client.post(f"/api/todos/tasks/{task_id}/complete", headers=headers)
+
+    from app.models.cultivation import CultivationLog
+    from tests.conftest import TestingSessionLocal
+
+    db = TestingSessionLocal()
+    try:
+        log = db.query(CultivationLog).one()
+        assert log.source_key == f"todo:task:{task_id}"
+    finally:
+        db.close()
+
+
 def test_complete_goal_idempotent(client):
     """Completing a goal twice should only award rewards once."""
     headers = _register_and_login(client)

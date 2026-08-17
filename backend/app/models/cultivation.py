@@ -28,10 +28,12 @@ class CultivationProfile(Base):
 
 class CultivationLog(Base):
     __tablename__ = "cultivation_logs"
+    __table_args__ = (UniqueConstraint("source_key", name="uq_cultivation_log_source_key"),)
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
     source = Column(String(64), nullable=False)
+    source_key = Column(String(128), nullable=True, index=True)
     cultivation_delta = Column(Integer, nullable=False, default=0)
     spirit_stones_delta = Column(Integer, nullable=False, default=0)
     merit_delta = Column(Integer, nullable=False, default=0)

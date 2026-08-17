@@ -64,6 +64,88 @@ def test_cultivation_tables_are_registered(db_session):
     assert TechniqueSlot.__tablename__ == "technique_slots"
 
 
+def test_user_can_learn_realm_eligible_technique_and_repeat_is_idempotent(client, auth_headers, db_session, user):
+    from app.models.cultivation import CultivationProfile
+    from app.models.technique import LearnedTechnique
+    from app.services.cultivation import CultivationService
+
+    auth_user_id = UUID(client.get("/api/users/me", headers=auth_headers).json()["id"])
+    service = CultivationService(db_session)
+    service.seed_world(db_session)
+    service.set_realm(auth_user_id, "qi_refining", 1, 0)
+    profile = db_session.query(CultivationProfile).filter_by(user_id=auth_user_id).one()
+    profile.spirit_stones = 20
+    db_session.commit()
+
+    response = client.post("/api/cultivation/techniques/steady-breath/learn", headers=auth_headers)
+    repeated = client.post("/api/cultivation/techniques/steady-breath/learn", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json()["learned"] is True
+    assert repeated.status_code == 200
+    assert repeated.json()["learned"] is True
+    assert repeated.json()["id"] == response.json()["id"]
+    db_session.expire_all()
+    assert db_session.query(LearnedTechnique).filter_by(user_id=auth_user_id).count() == 1
+    assert db_session.query(CultivationProfile).filter_by(user_id=auth_user_id).one().spirit_stones == 10
+
+
+def test_learning_rejects_realm_and_spirit_stone_gates(client, auth_headers, db_session, user):
+    from app.models.cultivation import CultivationProfile
+    from app.services.cultivation import CultivationService
+
+    auth_user_id = UUID(client.get("/api/users/me", headers=auth_headers).json()["id"])
+    service = CultivationService(db_session)
+    service.seed_world(db_session)
+    service.set_realm(auth_user_id, "qi_refining", 1, 0)
+    profile = db_session.query(CultivationProfile).filter_by(user_id=auth_user_id).one()
+    profile.spirit_stones = 0
+    db_session.commit()
+
+    insufficient = client.post("/api/cultivation/techniques/steady-breath/learn", headers=auth_headers)
+    locked = client.post("/api/cultivation/techniques/stone-channel/learn", headers=auth_headers)
+
+    assert insufficient.status_code == 409
+    assert "SPIRIT_STONES" in insufficient.json()["detail"]
+    assert locked.status_code == 409
+    assert "REALM" in locked.json()["detail"]
+
+
+def test_tribulation_preview_exposes_lock_reason_for_non_final_stage_and_cooldown(db_session, user):
+    from app.models.cultivation import CultivationProfile, TribulationAttempt
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    profile = service.ensure_profile(user.id)
+    profile.minor_stage = 1
+    profile.cultivation = 0
+    db_session.commit()
+    locked = service.get_tribulation_preview(user.id)
+    assert locked.available is False
+    assert locked.lock_reason == "FINAL_MINOR_STAGE_REQUIRED"
+
+    db_session.add(TribulationAttempt(
+        user_id=user.id, target_realm="foundation", base_probability=90,
+        readiness_score=50, final_probability=90, roll=1, success=False,
+        attempted_date=service._utc_today(),
+    ))
+    db_session.commit()
+    cooldown = service.get_tribulation_preview(user.id)
+    assert cooldown.available is False
+    assert cooldown.lock_reason == "TRIBULATION_COOLDOWN_ACTIVE"
+
+
+def test_ascended_tribulation_preview_has_terminal_lock_reason(db_session, user):
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    service.set_realm(user.id, "ascended", 1, 0)
+    preview = service.get_tribulation_preview(user.id)
+
+    assert preview.available is False
+    assert preview.lock_reason == "ASCENDED"
+
+
 def test_npc_user_id_is_non_nullable():
     from app.models.world import Npc
 

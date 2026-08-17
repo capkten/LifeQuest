@@ -294,6 +294,21 @@ def _migrate_columns():
                 "ON tribulation_attempts (user_id, attempted_date)"
             ))
 
+        # Task 12 reward event identity. Nullable keys preserve legacy logs;
+        # todo completions use a stable non-null key going forward.
+        try:
+            cultivation_log_cols = {c["name"] for c in inspector.get_columns("cultivation_logs")}
+        except (KeyError, NoSuchTableError):
+            cultivation_log_cols = None
+        if cultivation_log_cols is not None:
+            if "source_key" not in cultivation_log_cols:
+                conn.execute(text("ALTER TABLE cultivation_logs ADD COLUMN source_key VARCHAR(128)"))
+                logger.info("Migration: added cultivation_logs.source_key")
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_cultivation_log_source_key "
+                "ON cultivation_logs (source_key)"
+            ))
+
         _migrate_npc_columns(inspector, conn)
 
         # note_nodes.last_opened_at

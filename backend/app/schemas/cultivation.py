@@ -97,6 +97,14 @@ class TechniqueSummary(BaseModel):
     realm_confirmed: bool = True
 
 
+class LearnedTechniqueResponse(BaseModel):
+    id: UUID
+    technique_key: str
+    learned: bool = True
+    learned_at: datetime
+    level: int = 1
+
+
 class TechniqueSlotResponse(BaseModel):
     slot_type: str
     slot_index: int
@@ -186,6 +194,7 @@ class TribulationPreview(BaseModel):
     cooldown_until: Optional[datetime] = None
     terminal: bool = False
     available: bool = True
+    lock_reason: Optional[str] = None
 
 
 class TribulationResult(BaseModel):

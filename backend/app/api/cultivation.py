@@ -17,6 +17,7 @@ from app.schemas.cultivation import (
     SectSummary,
     TechniqueLibraryResponse,
     TechniqueSlotPurchaseRequest,
+    LearnedTechniqueResponse,
     TribulationAttemptRequest,
     TribulationPreview,
     TribulationResult,
@@ -92,6 +93,16 @@ def leave_sect(current_user: User = Depends(get_current_user), db: Session = Dep
 @router.get("/techniques", response_model=TechniqueLibraryResponse)
 def techniques(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return _service(db).get_techniques(current_user.id)
+
+
+@router.post("/techniques/{technique_key}/learn", response_model=LearnedTechniqueResponse)
+def learn_technique(technique_key: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    try:
+        return _service(db).learn_technique(current_user.id, technique_key)
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/technique-slots/purchase")

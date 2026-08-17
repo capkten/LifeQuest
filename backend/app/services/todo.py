@@ -3,6 +3,7 @@ from typing import List
 from uuid import UUID
 
 from fastapi import HTTPException
+from sqlalchemy import or_, update
 from sqlalchemy.orm import Session
 
 from app.models.todo import Habit, Task, Goal, Subtask, TaskStatus, GOAL_COMPLETED_PROGRESS
@@ -102,20 +103,28 @@ class TodoService:
 
     def complete_habit(self, habit: Habit, user_id: UUID) -> Habit:
         """Mark habit as completed for today, incrementing streak and awarding rewards."""
-        # Idempotency: block repeated completion on the same UTC day
         now = datetime.now(timezone.utc)
-        if habit.last_completed_at and habit.last_completed_at.date() == now.date():
+        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        changed = self.db.execute(update(Habit).where(
+            Habit.id == habit.id, Habit.user_id == user_id,
+            or_(Habit.last_completed_at.is_(None), Habit.last_completed_at < day_start),
+        ).values(last_completed_at=now, streak=Habit.streak + 1).execution_options(
+            synchronize_session=False
+        )).rowcount
+        if not changed:
+            self.db.refresh(habit)
             return habit
-
-        habit.streak += 1
-        if habit.streak > habit.best_streak:
-            habit.best_streak = habit.streak
-        habit.last_completed_at = now
+        self.db.execute(update(Habit).where(
+            Habit.id == habit.id, Habit.streak > Habit.best_streak
+        ).values(best_streak=Habit.streak).execution_options(synchronize_session=False))
 
         user = self.user_repo.get_by_id(user_id)
         settlement = None
         if user:
-            settlement = self._update_rewards(user, habit.coins_reward, habit.exp_reward, CoinSource.HABIT, habit.difficulty)
+            settlement = self._update_rewards(
+                user, habit.coins_reward, habit.exp_reward, CoinSource.HABIT,
+                habit.difficulty, source_key=f"todo:habit:{habit.id}:{now.date().isoformat()}",
+            )
             self._check_achievements(user)
             self.db.commit()
 
@@ -146,10 +155,12 @@ class TodoService:
 
     def complete_task(self, task: Task, user_id: UUID) -> Task:
         """Complete a task and award coins and experience to the user."""
-        if task.status == TaskStatus.COMPLETED:
+        changed = self.db.execute(update(Task).where(
+            Task.id == task.id, Task.user_id == user_id, Task.status != TaskStatus.COMPLETED
+        ).values(status=TaskStatus.COMPLETED, completed_at=datetime.now(timezone.utc))).rowcount
+        if not changed:
+            self.db.refresh(task)
             return task
-        task.status = TaskStatus.COMPLETED
-        task.completed_at = datetime.now(timezone.utc)
 
         user = self.user_repo.get_by_id(user_id)
         settlement = None
@@ -161,6 +172,7 @@ class TodoService:
                 CoinSource.TASK,
                 task.difficulty,
                 importance=self.TASK_IMPORTANCE.get(task.priority, 1.0),
+                source_key=f"todo:task:{task.id}",
             )
             self._check_achievements(user)
             self.db.commit()
@@ -187,15 +199,20 @@ class TodoService:
 
     def complete_goal(self, goal: Goal, user_id: UUID) -> Goal:
         """Complete a goal and award coins and experience to the user."""
-        if goal.status == TaskStatus.COMPLETED:
+        changed = self.db.execute(update(Goal).where(
+            Goal.id == goal.id, Goal.user_id == user_id, Goal.status != TaskStatus.COMPLETED
+        ).values(status=TaskStatus.COMPLETED, progress=GOAL_COMPLETED_PROGRESS)).rowcount
+        if not changed:
+            self.db.refresh(goal)
             return goal
-        goal.status = TaskStatus.COMPLETED
-        goal.progress = GOAL_COMPLETED_PROGRESS
 
         user = self.user_repo.get_by_id(user_id)
         settlement = None
         if user:
-            settlement = self._update_rewards(user, goal.coins_reward, goal.exp_reward, CoinSource.GOAL, goal.difficulty)
+            settlement = self._update_rewards(
+                user, goal.coins_reward, goal.exp_reward, CoinSource.GOAL,
+                goal.difficulty, source_key=f"todo:goal:{goal.id}",
+            )
             self._check_achievements(user)
             self.db.commit()
 
@@ -211,13 +228,14 @@ class TodoService:
         source: str,
         difficulty: str = "medium",
         importance: float = 1.0,
+        source_key: str | None = None,
     ):
         """Update user coins and experience in a single transaction."""
         self.user_repo._update_coins_no_commit(user, coins)
         legacy_level = user.level
         legacy_experience = user.experience
         settlement = self.cultivation_service.settle_todo_reward(
-            user.id, source, exp, difficulty, importance=importance
+            user.id, source, exp, difficulty, importance=importance, source_key=source_key
         )
         # Spirit stones are persisted in cultivation, while the legacy todo
         # wallet must retain its pre-cultivation reward semantics.

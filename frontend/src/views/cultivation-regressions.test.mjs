@@ -275,6 +275,21 @@ test('technique page shows price and conflict without relying on color', async (
   assert.match(source, /TechniqueSlotGrid/)
 })
 
+test('task 12 exposes technique learning and tribulation lock states', async () => {
+  const [techniques, component, service] = await Promise.all([
+    readFile(new URL('./Techniques.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../components/cultivation/TribulationProbability.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../services/cultivation.js', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(service, /learnTechnique\(/)
+  assert.match(techniques, /!technique\.learned[\s\S]*学习|学习[\s\S]*learnTechnique/)
+  assert.match(techniques, /response\??\.data\??\.detail/)
+  assert.match(component, /preview\.available\s*===\s*false|!preview\.available/)
+  assert.match(component, /lock_reason/)
+  assert.doesNotMatch(component, /开始渡劫[\s\S]*v-if/)
+})
+
 test('task 7 fixes preserve authoritative state and honest empty/locked states', async () => {
   const [techniques, sects, slots] = await Promise.all([
     readFile(new URL('./Techniques.vue', import.meta.url), 'utf8'),

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, Uuid, UniqueConstraint
 
 from app.database import Base
 
@@ -35,6 +35,7 @@ class TechniqueSlot(Base):
 
 class LearnedTechnique(Base):
     __tablename__ = "learned_techniques"
+    __table_args__ = (UniqueConstraint("user_id", "technique_id", name="uq_learned_technique_user_technique"),)
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)

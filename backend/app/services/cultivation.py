@@ -27,6 +27,7 @@ from app.schemas.cultivation import (
     TechniqueSlotResponse,
     TechniqueSlotPurchasePreview,
     TechniqueSummary,
+    LearnedTechniqueResponse,
     TribulationPreview,
     TribulationResult,
     WorldNodeResponse,
@@ -304,6 +305,46 @@ class CultivationService:
                 slot_type: self._slot_purchase_preview(profile, slot_type, len([slot for slot in slots if slot.slot_type == slot_type]))
                 for slot_type in ("main", "auxiliary", "mind", "body")
             },
+        )
+
+    def learn_technique(self, user_id: UUID, technique_key: str) -> LearnedTechniqueResponse:
+        self.seed_world(self.db)
+        profile = self.ensure_profile(user_id)
+        technique = self.db.query(Technique).filter(Technique.technique_key == technique_key).one_or_none()
+        if technique is None:
+            raise LookupError("TECHNIQUE_NOT_FOUND:technique not found")
+        existing = self.db.query(LearnedTechnique).filter_by(
+            user_id=user_id, technique_id=technique.id
+        ).one_or_none()
+        if existing is not None:
+            return LearnedTechniqueResponse(
+                id=existing.id, technique_key=technique.technique_key,
+                learned_at=existing.learned_at, level=existing.level,
+            )
+        if technique.required_realm and not self._realm_at_least(profile.realm_key, technique.required_realm):
+            raise PermissionError(f"TECHNIQUE_REALM_REQUIRED:{technique.required_realm}")
+        if profile.spirit_stones < technique.spirit_stone_cost:
+            raise PermissionError(
+                f"INSUFFICIENT_SPIRIT_STONES:{technique.spirit_stone_cost}:{profile.spirit_stones}"
+            )
+        profile.spirit_stones -= technique.spirit_stone_cost
+        learned = LearnedTechnique(user_id=user_id, technique_id=technique.id)
+        self.db.add(learned)
+        try:
+            self.db.flush()
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            existing = self.db.query(LearnedTechnique).filter_by(
+                user_id=user_id, technique_id=technique.id
+            ).one()
+            return LearnedTechniqueResponse(
+                id=existing.id, technique_key=technique.technique_key,
+                learned_at=existing.learned_at, level=existing.level,
+            )
+        return LearnedTechniqueResponse(
+            id=learned.id, technique_key=technique.technique_key,
+            learned_at=learned.learned_at, level=learned.level,
         )
 
     def purchase_slot(self, user_id: UUID, slot_type: str):
@@ -601,6 +642,7 @@ class CultivationService:
                 failure_loss=0,
                 terminal=True,
                 available=False,
+                lock_reason="ASCENDED",
             )
         index = REALM_ORDER.index(profile.realm_key)
         target = "ascension" if profile.realm_key == "tribulation" else REALM_ORDER[index + 1]
@@ -618,6 +660,12 @@ class CultivationService:
         bounded_pills = min(15, max(0, int(pill_count or 0)))
         pill_bonus = bounded_pills * 5
         cooldown_until = self._cooldown_until(user_id)
+        final_stage = self._is_final_minor_stage(profile)
+        lock_reason = (
+            "TRIBULATION_COOLDOWN_ACTIVE" if cooldown_until is not None
+            else "FINAL_MINOR_STAGE_REQUIRED" if not final_stage
+            else None
+        )
         return TribulationPreview(
             target_realm=target,
             base_probability=base,
@@ -630,6 +678,8 @@ class CultivationService:
             failure_loss_percent=failure_loss_percent,
             failure_loss=math.floor(REALM_THRESHOLDS[profile.realm_key][-1] * failure_loss_percent / 100),
             cooldown_until=cooldown_until,
+            available=lock_reason is None,
+            lock_reason=lock_reason,
         )
 
     def attempt_tribulation(self, user_id: UUID, pill_count: int) -> TribulationResult:
@@ -641,7 +691,7 @@ class CultivationService:
         if profile is None:
             profile = self.ensure_profile(user_id)
         preview = self.get_tribulation_preview(user_id, pill_count)
-        if preview.terminal or not preview.available:
+        if preview.terminal:
             raise PermissionError("tribulation already complete")
         if preview.cooldown_until is not None:
             raise PermissionError("tribulation cooldown active")
@@ -763,16 +813,31 @@ class CultivationService:
         difficulty: str,
         quality: float = 1.0,
         importance: float = 1.0,
+        source_key: str | None = None,
     ) -> RewardSettlement:
         try:
             difficulty_factor = DIFFICULTY_FACTORS[difficulty]
         except KeyError as exc:
             raise ValueError(f"Unknown difficulty: {difficulty}") from exc
 
-        profile = self.ensure_profile(user_id)
         user = self.user_repo.get_by_id(user_id)
         if user is None:
             raise ValueError("User not found")
+        if source_key:
+            existing_log = self.db.query(CultivationLog).filter(
+                CultivationLog.source_key == source_key
+            ).one_or_none()
+            if existing_log is not None:
+                return RewardSettlement(
+                    cultivation=existing_log.cultivation_delta,
+                    spirit_stones=existing_log.spirit_stones_delta,
+                    merit=existing_log.merit_delta,
+                    efficiency=1.0,
+                    log_id=existing_log.id,
+                    legacy_exp=existing_log.cultivation_delta,
+                    ready_for_tribulation=False,
+                )
+        profile = self.ensure_profile(user_id)
 
         cultivation = max(0, math.floor(
             base_exp
@@ -803,6 +868,7 @@ class CultivationService:
         log = CultivationLog(
             user_id=user_id,
             source=source,
+            source_key=source_key,
             cultivation_delta=cultivation,
             spirit_stones_delta=stones,
         )

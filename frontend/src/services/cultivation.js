@@ -48,6 +48,11 @@ export const cultivationService = {
     return response.data
   },
 
+  async learnTechnique(techniqueKey) {
+    const response = await api.post(`/cultivation/techniques/${techniqueKey}/learn`)
+    return response.data
+  },
+
   async purchaseSlot(slotType) {
     const response = await api.post('/cultivation/technique-slots/purchase', { slot_type: slotType })
     return response.data
