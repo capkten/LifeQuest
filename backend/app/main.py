@@ -15,7 +15,7 @@ from app.config import settings
 from app.database import engine, Base, SessionLocal
 from app import models  # noqa: F401  # Register all ORM models before create_all.
 from app.services.note import NoteService
-from app.api import auth, users, notes, todos, shop, backpack, achievements, checkin, titles, coins, calendar, stats, finance, projects
+from app.api import auth, users, notes, todos, shop, backpack, achievements, checkin, titles, coins, calendar, stats, finance, projects, cultivation
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -253,6 +253,8 @@ def startup_event():
         # Seed default finance categories
         from app.services.finance import FinanceService
         FinanceService.seed_categories(db)
+        from app.services.cultivation import CultivationService
+        CultivationService.seed_world(db)
     except Exception:
         logger.exception("Seed data failed")
         raise
@@ -288,6 +290,7 @@ app.include_router(calendar.router)
 app.include_router(stats.router)
 app.include_router(finance.router)
 app.include_router(projects.router)
+app.include_router(cultivation.router)
 
 # MCP SSE server — subprocess on internal port, proxied through explicit routes.
 _mcp_process = None

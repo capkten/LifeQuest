@@ -1,7 +1,8 @@
-from typing import Optional
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class StageProgress(BaseModel):
@@ -35,3 +36,117 @@ class CultivationOverview(BaseModel):
     aptitude_points: int
     cultivation_efficiency: float
     next_stage: StageProgress
+    realm: Optional[Dict[str, Any]] = None
+
+
+class WorldNodeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    node_key: str
+    name: str
+    description: Optional[str] = None
+    required_realm: Optional[str] = None
+    sort_order: int
+    is_hidden: bool
+
+
+class WorldResponse(BaseModel):
+    nodes: List[WorldNodeResponse]
+
+
+class SectSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    sect_key: str
+    name: str
+    star: int
+    kind: str
+    task_preference: Optional[str] = None
+    entry_realm: Optional[str] = None
+    world_node_key: Optional[str] = None
+    joined: bool = False
+
+
+class SectMembershipResponse(BaseModel):
+    sect_id: UUID
+    sect_key: str
+    status: str
+
+
+class TechniqueSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    technique_key: str
+    name: str
+    description: Optional[str] = None
+    technique_type: str
+    required_realm: Optional[str] = None
+    spirit_stone_cost: int
+    slot_count: int
+    learned: bool = False
+
+
+class TechniqueSlotResponse(BaseModel):
+    slot_type: str
+    slot_index: int
+    technique_id: Optional[UUID] = None
+
+
+class TechniqueLibraryResponse(BaseModel):
+    techniques: List[TechniqueSummary]
+    slots: List[TechniqueSlotResponse]
+    loadout: Dict[str, Optional[UUID]]
+
+
+class TechniqueSlotPurchaseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    slot_type: str
+
+
+class LoadoutRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    loadout: Dict[str, Optional[UUID]]
+
+
+class NpcSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    sect_id: Optional[UUID] = None
+    name: str
+    role: Optional[str] = None
+    description: Optional[str] = None
+    is_core: bool
+
+
+class NpcRelationshipResponse(BaseModel):
+    fixed_core: List[NpcSummary]
+    recently_met: List[NpcSummary] = []
+    events: List[Dict[str, Any]] = []
+
+
+class TribulationAttemptRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    pill_count: int = Field(default=0, ge=0)
+
+
+class TribulationPreview(BaseModel):
+    target_realm: str
+    base_probability: float
+    readiness_score: float
+    readiness_breakdown: Dict[str, float]
+    readiness_bonus: float
+    pill_count: int
+    pill_bonus: float
+    final_probability: float
+    failure_loss_percent: float
+    cooldown_until: Optional[datetime] = None
+
+
+class TribulationResult(BaseModel):
+    success: bool
+    realm_key: str
+    target_realm: str
+    cultivation_loss: int
+    lost_realm: bool = False
+    lost_techniques: bool = False
+    log_id: Optional[UUID] = None
+    cooldown_until: Optional[datetime] = None
