@@ -21,6 +21,8 @@ REALM_THRESHOLDS = {
     "tribulation": [20000, 26000, 35000, 49000],
 }
 
+DIFFICULTY_FACTORS = {"easy": 0.8, "medium": 1.0, "hard": 1.35}
+
 
 class CultivationService:
     def __init__(self, db: Session):
@@ -58,15 +60,24 @@ class CultivationService:
         base_exp: int,
         difficulty: str,
         quality: float = 1.0,
+        importance: float = 1.0,
     ) -> RewardSettlement:
+        try:
+            difficulty_factor = DIFFICULTY_FACTORS[difficulty]
+        except KeyError as exc:
+            raise ValueError(f"Unknown difficulty: {difficulty}") from exc
+
         profile = self.ensure_profile(user_id)
         user = self.user_repo.get_by_id(user_id)
         if user is None:
             raise ValueError("User not found")
 
-        factors = {"easy": 0.8, "medium": 1.0, "hard": 1.4}
         cultivation = max(0, math.floor(
-            base_exp * factors[difficulty] * profile.cultivation_efficiency * quality
+            base_exp
+            * difficulty_factor
+            * importance
+            * profile.cultivation_efficiency
+            * quality
         ))
         stones = max(1, math.floor(cultivation * 0.6))
         profile.cultivation += cultivation

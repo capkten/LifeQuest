@@ -41,9 +41,29 @@ def test_reward_uses_difficulty_and_never_writes_negative_resources(db_session, 
     service = CultivationService(db_session)
     result = service.settle_todo_reward(user.id, "task", 25, "hard", quality=0.8)
 
-    assert result.cultivation == 28
+    assert result.cultivation == 27
     assert result.spirit_stones == 16
     assert result.cultivation >= 0
+
+
+def test_reward_applies_explicit_importance_to_formula(db_session, user):
+    from app.services.cultivation import CultivationService
+
+    result = CultivationService(db_session).settle_todo_reward(
+        user.id, "task", 10, "medium", importance=1.3
+    )
+
+    assert result.cultivation == 13
+    assert result.spirit_stones == 7
+
+
+def test_reward_rejects_unknown_difficulty(db_session, user):
+    from app.services.cultivation import CultivationService
+
+    with pytest.raises(ValueError, match="Unknown difficulty"):
+        CultivationService(db_session).settle_todo_reward(
+            user.id, "task", 10, "impossible"
+        )
 
 
 def test_stage_progress_reports_next_threshold(db_session, user):

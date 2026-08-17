@@ -57,3 +57,30 @@ Result: `113 passed, 357 warnings`.
 - The backend suite still emits the repository's existing FastAPI and JWT deprecation warnings.
 - The todo integration intentionally neutralizes the cultivation settlement's legacy wallet mirror after settlement so existing todo coin semantics remain unchanged; spirit stones remain persisted on `CultivationProfile`.
 - No code-review subagent was available in the current environment, so the final review was performed from the scoped diff and test results.
+
+## Review Fixes
+
+- Updated settlement to use the exact formula `floor(base * difficulty * importance * efficiency * quality)` with the specification coefficients `easy=0.8`, `medium=1.0`, and `hard=1.35`.
+- Added the explicit `importance: float = 1.0` service argument. Task completion maps `Task.priority` as `low=0.8`, `medium=1.0`, `high=1.3`, and `urgent=1.6`; habits and goals retain the medium default.
+- Added focused coverage for non-default importance and invalid difficulty validation. Unknown difficulty now raises `ValueError("Unknown difficulty: ...")` instead of leaking `KeyError`.
+- Preserved legacy coin/experience semantics, achievement checks, idempotency, and same-session persistence. The integration test now completes an urgent hard task and verifies cultivation `32`, spirit stones `19`, legacy coins `70`, legacy experience `15`, and one cultivation log.
+
+## Review Fix Test Evidence
+
+Focused command:
+
+```text
+cd backend
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; pytest tests/test_cultivation.py tests/test_todos.py -q
+```
+
+Result: `16 passed, 40 warnings in 7.26s`.
+
+Full backend command:
+
+```text
+cd backend
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; pytest -q
+```
+
+Result: `115 passed, 357 warnings in 70.91s`.

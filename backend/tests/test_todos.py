@@ -213,6 +213,7 @@ def test_complete_task_creates_one_cultivation_log_and_keeps_legacy_rewards(clie
         json={
             "title": "Cultivation integration",
             "difficulty": "hard",
+            "priority": "urgent",
             "coins_reward": 20,
             "exp_reward": 15,
         },
@@ -242,8 +243,8 @@ def test_complete_task_creates_one_cultivation_log_and_keeps_legacy_rewards(clie
         ).one()
         assert user.experience == 15
         assert user.coins == 70
-        assert profile.cultivation == 21
-        assert profile.spirit_stones == 12
+        assert profile.cultivation == 32
+        assert profile.spirit_stones == 19
     finally:
         db.close()
 

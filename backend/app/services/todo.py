@@ -31,6 +31,13 @@ from app.services.cultivation import CultivationService
 
 
 class TodoService:
+    TASK_IMPORTANCE = {
+        "low": 0.8,
+        "medium": 1.0,
+        "high": 1.3,
+        "urgent": 1.6,
+    }
+
     def __init__(self, db: Session):
         self.db = db
         self.habit_repo = HabitRepository(db)
@@ -144,7 +151,14 @@ class TodoService:
 
         user = self.user_repo.get_by_id(user_id)
         if user:
-            self._update_rewards(user, task.coins_reward, task.exp_reward, CoinSource.TASK, task.difficulty)
+            self._update_rewards(
+                user,
+                task.coins_reward,
+                task.exp_reward,
+                CoinSource.TASK,
+                task.difficulty,
+                importance=self.TASK_IMPORTANCE.get(task.priority, 1.0),
+            )
             self._check_achievements(user)
             self.db.commit()
 
@@ -183,13 +197,21 @@ class TodoService:
         self.goal_repo.db.refresh(goal)
         return goal
 
-    def _update_rewards(self, user, coins: int, exp: int, source: str, difficulty: str = "medium") -> None:
+    def _update_rewards(
+        self,
+        user,
+        coins: int,
+        exp: int,
+        source: str,
+        difficulty: str = "medium",
+        importance: float = 1.0,
+    ) -> None:
         """Update user coins and experience in a single transaction."""
         self.user_repo._update_coins_no_commit(user, coins)
         legacy_level = user.level
         legacy_experience = user.experience
         settlement = self.cultivation_service.settle_todo_reward(
-            user.id, source, exp, difficulty
+            user.id, source, exp, difficulty, importance=importance
         )
         # Spirit stones are persisted in cultivation, while the legacy todo
         # wallet must retain its pre-cultivation reward semantics.
