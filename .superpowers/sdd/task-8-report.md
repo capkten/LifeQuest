@@ -122,3 +122,45 @@ Final review-fix implementation commit: `f4dd7250d435105bacbb333b00a0c4573b2a52f
 ## Review Fixes Final Confirmation
 
 The Review Fixes section above is persisted in this report and includes the actual post-fix outputs: cultivation tests `38 passed`, frontend regression tests `18 passed`, full backend tests `146 passed`, frontend build exit code `0`, and `git diff --check` exit code `0`. No production code was changed during this report-only finalization.
+
+## Review Fixes - Latest Re-review
+
+1. Daily tribulation protection now relies on the database-level `(user_id, attempted_date)` unique index, with a compatibility migration that only runs when the legacy database already has `tribulation_attempts`. The migration guard preserves older migration test doubles and databases without that table; no process-local lock is used as the deployment guarantee.
+2. `ascended` is included in the canonical realm order and comparison paths. Post-ascension overview, techniques, sects, slots, and world access are covered by regression tests and remain within the existing mortal-realm UI.
+3. Tribulation preview cancellation sends `skipErrorToast: true`, preventing expected `AbortController` cancellation from becoming a network-error toast.
+4. `loadPreview` clears the previous preview error at request start and on success, so a later successful preview cannot retain stale failure text.
+5. The migration compatibility regression found during full-suite verification was fixed in `backend/app/main.py`; `tests/test_notes.py` now passes against the existing inspector test double while real tribulation migrations remain enabled.
+
+Latest verification commands and actual output:
+
+```powershell
+cd backend; pytest tests/test_notes.py -q
+```
+
+Output: `41 passed, 143 warnings in 32.95s`
+
+```powershell
+cd backend; pytest
+```
+
+Output: `148 passed, 376 warnings in 90.10s (0:01:30)`
+
+```powershell
+cd frontend; node --test src/views/cultivation-regressions.test.mjs
+```
+
+Output: `18 passed, 0 failed`
+
+```powershell
+cd frontend; npm run build
+```
+
+Output: exit code `0`; `1958 modules transformed`; Vite production build completed successfully. Existing npm config, Rollup annotation, and large-chunk warnings were emitted.
+
+```powershell
+git diff --check
+```
+
+Output: no output; exit code `0`.
+
+Latest code commit: `2eea4a59599d7373d971ea8b76956b6848013c41`.
