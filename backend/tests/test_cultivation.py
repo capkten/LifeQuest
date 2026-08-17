@@ -386,6 +386,39 @@ def test_concurrent_tribulation_attempts_allow_only_one_daily_attempt(db_session
     assert sum(isinstance(result, PermissionError) for result in results) == 1
 
 
+def test_tribulation_attempts_have_database_unique_user_day_constraint():
+    from app.models.cultivation import TribulationAttempt
+
+    columns = {column.name for column in TribulationAttempt.__table__.columns}
+    constraints = [
+        {column.name for column in constraint.columns}
+        for constraint in TribulationAttempt.__table__.constraints
+        if hasattr(constraint, "columns")
+    ]
+
+    assert "attempted_date" in columns
+    assert {"user_id", "attempted_date"} in constraints
+
+
+def test_ascended_profile_remains_valid_for_progression_endpoints(db_session, user):
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    service.set_realm(user.id, "ascended", 1, 0)
+
+    overview = service.get_overview(user.id)
+    techniques = service.get_techniques(user.id)
+    sects = service.get_sects(user.id)
+    world = service.get_world(user.id)
+    slot = service.purchase_slot(user.id, "main")
+
+    assert overview.realm_key == "ascended"
+    assert techniques.next_slot_purchases["main"].realm_confirmed is True
+    assert len(sects) == 81
+    assert len(world.nodes) >= 9
+    assert slot["slot_index"] == 0
+
+
 def test_failed_tribulation_keeps_realm_and_techniques(db_session, user, monkeypatch):
     from app.services.cultivation import CultivationService
 

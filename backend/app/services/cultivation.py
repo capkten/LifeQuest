@@ -1,9 +1,9 @@
 import math
 import random
-import threading
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.cultivation import CultivationLog, CultivationProfile, TribulationAttempt
@@ -43,7 +43,7 @@ REALM_THRESHOLDS = {
     "tribulation": [20000, 26000, 35000, 49000],
 }
 
-REALM_ORDER = list(REALM_THRESHOLDS)
+REALM_ORDER = list(REALM_THRESHOLDS) + ["ascended"]
 TRIBULATION_RULES = {
     ("qi_refining", "foundation"): (90, 10),
     ("foundation", "golden_core"): (80, 10),
@@ -56,7 +56,6 @@ TRIBULATION_RULES = {
     ("tribulation", "ascension"): (20, 25),
 }
 ASCENDED_REALM_KEY = "ascended"
-_TRIBULATION_ATTEMPT_LOCK = threading.Lock()
 SECT_ENTRY_REALMS = {
     1: "foundation",
     2: "golden_core",
@@ -434,7 +433,7 @@ class CultivationService:
 
     def set_realm(self, user_id: UUID, realm_key: str, minor_stage: int, cultivation: int):
         profile = self.ensure_profile(user_id)
-        if realm_key not in REALM_THRESHOLDS:
+        if realm_key not in REALM_ORDER:
             raise ValueError("Unknown realm")
         profile.realm_key = realm_key
         profile.minor_stage = minor_stage
@@ -490,8 +489,7 @@ class CultivationService:
         )
 
     def attempt_tribulation(self, user_id: UUID, pill_count: int) -> TribulationResult:
-        with _TRIBULATION_ATTEMPT_LOCK:
-            return self._attempt_tribulation(user_id, pill_count)
+        return self._attempt_tribulation(user_id, pill_count)
 
     def _attempt_tribulation(self, user_id: UUID, pill_count: int) -> TribulationResult:
         profile = self.db.query(CultivationProfile).with_for_update().filter_by(user_id=user_id).one_or_none()
@@ -522,9 +520,14 @@ class CultivationService:
             pill_bonus=preview.pill_bonus, final_probability=preview.final_probability,
             roll=roll, success=success,
             cultivation_loss=loss,
+            attempted_date=self._utc_today(),
         )
         self.db.add(attempt)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise PermissionError("tribulation cooldown active") from exc
         return TribulationResult(success=success, realm_key=profile.realm_key, target_realm=preview.target_realm, cultivation_loss=loss, log_id=attempt.id, cooldown_until=self._cooldown_until(user_id), terminal=success and preview.target_realm == "ascension")
 
     def roll(self, probability: float):
@@ -559,7 +562,7 @@ class CultivationService:
         return value.astimezone(timezone.utc)
 
     def _cooldown_until(self, user_id: UUID):
-        last_attempt = self.db.query(TribulationAttempt).filter_by(user_id=user_id).order_by(TribulationAttempt.attempted_at.desc()).first()
+        last_attempt = self.db.query(TribulationAttempt).filter_by(user_id=user_id, attempted_date=self._utc_today()).order_by(TribulationAttempt.attempted_at.desc()).first()
         if last_attempt is None:
             return None
         attempted_at = last_attempt.attempted_at
@@ -567,6 +570,10 @@ class CultivationService:
             attempted_at = attempted_at.replace(tzinfo=timezone.utc)
         next_day = (attempted_at + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         return next_day if next_day > datetime.now(timezone.utc) else None
+
+    @staticmethod
+    def _utc_today():
+        return datetime.now(timezone.utc).date()
 
     @staticmethod
     def _realm_at_least(current_realm: str, required_realm: str) -> bool:

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Uuid
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, Uuid, UniqueConstraint
 
 from app.database import Base
 
@@ -41,6 +41,7 @@ class CultivationLog(Base):
 
 class TribulationAttempt(Base):
     __tablename__ = "tribulation_attempts"
+    __table_args__ = (UniqueConstraint("user_id", "attempted_date", name="uq_tribulation_attempt_user_day"),)
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
@@ -52,4 +53,5 @@ class TribulationAttempt(Base):
     roll = Column(Float, nullable=False)
     success = Column(Boolean, nullable=False)
     cultivation_loss = Column(Integer, nullable=False, default=0)
+    attempted_date = Column(Date, nullable=False, default=lambda: datetime.now(timezone.utc).date())
     attempted_at = Column(DateTime, nullable=False, default=utc_now)

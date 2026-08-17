@@ -31,7 +31,7 @@ const selectedNode = ref(null)
 const loading = ref(false)
 const error = ref(null)
 const overview = computed(() => store.overview)
-const realmOrder = ['qi_refining', 'foundation', 'golden_core', 'nascent_soul', 'spirit_transformation', 'void_refining', 'body_combination', 'great_vehicle', 'tribulation']
+const realmOrder = ['qi_refining', 'foundation', 'golden_core', 'nascent_soul', 'spirit_transformation', 'void_refining', 'body_combination', 'great_vehicle', 'tribulation', 'ascended']
 
 async function load() {
   loading.value = true; error.value = null

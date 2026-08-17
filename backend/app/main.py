@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import CheckConstraint, Column, Integer, MetaData, Table, inspect, select, text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import NoSuchTableError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -197,6 +197,22 @@ def _migrate_columns():
                 "ALTER TABLE finance_transactions ADD COLUMN recurring_id VARCHAR(36)"
             ))
             logger.info("Migration: added finance_transactions.recurring_id")
+
+        # tribulation_attempts.attempted_date and its database-level daily guard.
+        # Older databases (and migration-only test doubles) may predate this table.
+        try:
+            tribulation_cols = {c["name"] for c in inspector.get_columns("tribulation_attempts")}
+        except (KeyError, NoSuchTableError):
+            tribulation_cols = None
+        if tribulation_cols is not None:
+            if "attempted_date" not in tribulation_cols:
+                conn.execute(text("ALTER TABLE tribulation_attempts ADD COLUMN attempted_date DATE"))
+                conn.execute(text("UPDATE tribulation_attempts SET attempted_date = DATE(attempted_at) WHERE attempted_date IS NULL"))
+                logger.info("Migration: added tribulation_attempts.attempted_date")
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_tribulation_attempt_user_day "
+                "ON tribulation_attempts (user_id, attempted_date)"
+            ))
 
         # note_nodes.last_opened_at
         note_node_cols = {c["name"] for c in inspector.get_columns("note_nodes")}

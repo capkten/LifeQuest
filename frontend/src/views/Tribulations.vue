@@ -35,9 +35,10 @@ async function loadPreview() {
   const requestId = ++previewRequestId
   previewController?.abort()
   previewController = new AbortController()
+  error.value = null
   try {
-    const nextPreview = await cultivationService.getTribulationPreview(pillCount.value, { signal: previewController.signal })
-    if (requestId === previewRequestId) preview.value = nextPreview
+    const nextPreview = await cultivationService.getTribulationPreview(pillCount.value, { signal: previewController.signal, skipErrorToast: true })
+    if (requestId === previewRequestId) { preview.value = nextPreview; error.value = null }
   } catch (cause) {
     if (cause?.code !== 'ERR_CANCELED' && cause?.name !== 'CanceledError' && requestId === previewRequestId) error.value = cause
   }
