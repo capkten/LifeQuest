@@ -244,3 +244,36 @@ git diff --check
 Output: no output; exit code `0`.
 
 Latest code commit: `4fa776b554be79746bd22e7c99d8d0c7fd06192a`.
+
+## Review Fixes - Final State Important and Minor
+
+1. Cultivation shared state now exposes `clear()` and invalidates in-flight overview requests with a version counter. Auth clears cultivation state before login, when `fetchUser()` detects a different user id, and on logout, preventing stale `ascended` or cultivation data from crossing users or being restored by an old response.
+2. Tribulation submission now refreshes the shared Pinia cultivation store for every returned result, including failed attempts that reduce cultivation. The local tribulation view still reloads afterward.
+
+Exact verification commands and actual output:
+
+```powershell
+cd frontend; node --test src/views/cultivation-regressions.test.mjs
+```
+
+Output: `21 passed, 0 failed`
+
+```powershell
+cd backend; pytest
+```
+
+Output: `153 passed, 376 warnings in 81.09s (0:01:21)`
+
+```powershell
+cd frontend; npm run build
+```
+
+Output: exit code `0`; `1958 modules transformed`; Vite production build completed successfully. Existing npm/Rollup and large-chunk warnings were emitted.
+
+```powershell
+git diff --check
+```
+
+Output: no output; exit code `0`.
+
+Latest code commit: `cfac01d28fb36994b8409a1ce6742e95013c5fbc`.
