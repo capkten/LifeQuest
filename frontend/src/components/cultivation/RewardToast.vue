@@ -3,11 +3,13 @@
     <strong>{{ title }}</strong>
     <span v-if="reward?.cultivation">+{{ reward.cultivation }} cultivation</span>
     <span v-if="reward?.spirit_stones">+{{ reward.spirit_stones }} spirit stones</span>
-    <button type="button" class="cultivation-icon-button" aria-label="Dismiss reward" @click="$emit('dismiss')">×</button>
+    <button type="button" class="cultivation-icon-button" aria-label="Dismiss reward" @click="$emit('dismiss')"><Close /></button>
   </div>
 </template>
 
 <script setup>
+import { Close } from '@element-plus/icons-vue'
+
 defineProps({ reward: { type: Object, default: null }, visible: Boolean, title: { type: String, default: 'Reward received' } })
 defineEmits(['dismiss'])
 </script>

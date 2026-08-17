@@ -192,6 +192,11 @@
   background: var(--color-bg-tertiary);
 }
 
+.cultivation-slot:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .cultivation-map-node {
   display: grid;
   gap: var(--spacing-2xs);

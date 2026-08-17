@@ -1,5 +1,5 @@
 <template>
-  <section class="cultivation-tribulation-probability stitch-surface" aria-labelledby="tribulation-probability-title">
+  <section class="cultivation-tribulation-probability stitch-surface" aria-labelledby="tribulation-probability-title" :aria-busy="operationBusy">
     <h2 id="tribulation-probability-title">Tribulation preview</h2>
     <div v-if="loading" class="cultivation-probability-skeleton" aria-hidden="true"></div>
     <div v-else-if="error" class="cultivation-state cultivation-state--error" role="alert">
@@ -15,7 +15,9 @@
         <div><dt>Pill bonus</dt><dd>+{{ preview.pill_bonus }}%</dd></div>
         <div><dt>Failure loss</dt><dd>{{ preview.failure_loss_percent }}%</dd></div>
       </dl>
-      <button type="button" class="cultivation-action" :disabled="Boolean(preview.cooldown_until)" @click="$emit('attempt')">Attempt tribulation</button>
+      <button type="button" class="cultivation-action" :disabled="Boolean(preview.cooldown_until) || operationBusy" @click="$emit('attempt')">
+        {{ operationBusy ? 'Attempting...' : 'Attempt tribulation' }}
+      </button>
     </template>
   </section>
 </template>
@@ -23,7 +25,8 @@
 <script setup>
 import { computed } from 'vue'
 
-const props = defineProps({ preview: { type: Object, default: null }, loading: Boolean, error: { type: [Object, String], default: null } })
+const props = defineProps({ preview: { type: Object, default: null }, loading: Boolean, error: { type: [Object, String], default: null }, attempting: Boolean, submitting: Boolean })
 defineEmits(['attempt', 'retry'])
 const errorMessage = computed(() => props.error?.message || 'Tribulation preview could not be loaded.')
+const operationBusy = computed(() => props.attempting || props.submitting)
 </script>

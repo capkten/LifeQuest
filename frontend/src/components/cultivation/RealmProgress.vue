@@ -6,8 +6,8 @@
         <h2 id="realm-progress-title">Realm progress</h2>
         <span>{{ progress.realm_key }} · Stage {{ progress.minor_stage }}</span>
       </div>
-      <div class="cultivation-progress-track" role="progressbar" :aria-valuenow="progress.cultivation" :aria-valuemin="0" :aria-valuemax="progress.next_threshold || progress.cultivation">
-        <span :style="{ width: `${progress.percent ?? 0}%` }"></span>
+      <div class="cultivation-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="progressPercent">
+        <span :style="{ width: `${progressPercent}%` }"></span>
       </div>
       <p>{{ progress.cultivation }} / {{ progress.next_threshold ?? 'Max' }} · {{ progress.remaining }} remaining</p>
     </template>
@@ -15,5 +15,14 @@
 </template>
 
 <script setup>
-defineProps({ progress: { type: Object, default: null }, loading: Boolean })
+import { computed } from 'vue'
+
+const props = defineProps({ progress: { type: Object, default: null }, loading: Boolean })
+const progressPercent = computed(() => {
+  const current = Number(props.progress?.current_threshold ?? 0)
+  const next = Number(props.progress?.next_threshold ?? current)
+  const cultivation = Number(props.progress?.cultivation ?? current)
+  if (next <= current) return 100
+  return Math.min(100, Math.max(0, ((cultivation - current) / (next - current)) * 100))
+})
 </script>

@@ -25,11 +25,17 @@ export const useCultivationStore = defineStore('cultivation', () => {
     return loadOverview()
   }
 
-  function applySettlement(settlement) {
-    const nextOverview = settlement?.overview || settlement
-    if (nextOverview?.next_stage && nextOverview?.realm_key) {
-      overview.value = nextOverview
+  async function applySettlement(settlement) {
+    if (settlement) {
+      const currentOverview = overview.value || {}
+      overview.value = {
+        ...currentOverview,
+        cultivation: (currentOverview.cultivation || 0) + (settlement.cultivation || 0),
+        spirit_stones: (currentOverview.spirit_stones || 0) + (settlement.spirit_stones || 0),
+        merit: (currentOverview.merit || 0) + (settlement.merit || 0),
+      }
     }
+    return await refresh()
   }
 
   return { overview, loading, error, loadOverview, refresh, applySettlement }

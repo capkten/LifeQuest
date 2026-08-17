@@ -2,57 +2,57 @@ import api from './api'
 
 export const cultivationService = {
   async getOverview() {
-    const response = await api.get('/api/cultivation/overview')
+    const response = await api.get('/cultivation/overview')
     return response.data
   },
 
   async getWorld() {
-    const response = await api.get('/api/cultivation/world')
+    const response = await api.get('/cultivation/world')
     return response.data
   },
 
   async getSects(params) {
-    const response = await api.get('/api/cultivation/sects', { params })
+    const response = await api.get('/cultivation/sects', { params })
     return response.data
   },
 
   async joinSect(sectId) {
-    const response = await api.post(`/api/cultivation/sects/${sectId}/join`)
+    const response = await api.post(`/cultivation/sects/${sectId}/join`)
     return response.data
   },
 
   async leaveSect() {
-    const response = await api.post('/api/cultivation/sects/leave')
+    const response = await api.post('/cultivation/sects/leave')
     return response.data
   },
 
   async getTechniques() {
-    const response = await api.get('/api/cultivation/techniques')
+    const response = await api.get('/cultivation/techniques')
     return response.data
   },
 
   async purchaseSlot(slotType) {
-    const response = await api.post('/api/cultivation/technique-slots/purchase', { slot_type: slotType })
+    const response = await api.post('/cultivation/technique-slots/purchase', { slot_type: slotType })
     return response.data
   },
 
   async updateLoadout(loadout) {
-    const response = await api.put('/api/cultivation/loadout', { loadout })
+    const response = await api.put('/cultivation/loadout', { loadout })
     return response.data
   },
 
   async getNpcs() {
-    const response = await api.get('/api/cultivation/npcs')
+    const response = await api.get('/cultivation/npcs')
     return response.data
   },
 
   async getTribulationPreview() {
-    const response = await api.get('/api/cultivation/tribulation/preview')
+    const response = await api.get('/cultivation/tribulation/preview')
     return response.data
   },
 
   async attemptTribulation(payload) {
-    const response = await api.post('/api/cultivation/tribulation/attempt', payload)
+    const response = await api.post('/cultivation/tribulation/attempt', payload)
     return response.data
   },
 }
