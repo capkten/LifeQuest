@@ -190,3 +190,24 @@ npm run build
 ```
 
 Observed: Vite build exited `0` after transforming 1959 modules. Existing npm config, Rollup annotation, and chunk-size warnings were emitted.
+
+## Review Fixes - Third Round
+
+### Changes
+
+- Source-key reward lock recovery now keeps the caller's task, habit, or goal transaction intact. The claim uses the existing nested savepoint and never calls the outer `Session.rollback()`.
+- Lock retries use a short-lived independent session only to observe a committed winner settlement, avoiding stale SQLite read transactions.
+- Non-lock `OperationalError` coverage injects a real SQLAlchemy exception at the engine boundary, re-raises the original exception, and verifies the session remains usable.
+- Lock tests use independent sessions, an explicit barrier and lock window, WAL-backed SQLite, and a bounded exhaustion assertion. No session is shared across worker threads.
+
+### Verification
+
+- RED: the focused lock/status command failed with `3 failed, 2 passed`; task, habit, and goal completion state was lost under the old outer rollback.
+- Focused GREEN: `5 passed` for task/habit/goal preservation, independent real-lock retry, and non-lock error handling.
+- Bounded lock exhaustion: `1 passed`; the held-lock path raised within one second.
+- The first Task 12 file run reached `10 passed, 1 failed`; the failure was a test-fixture bug from reading an expired `user.id` in the holder thread. The corrected test passed in the short verification above; the long file run was not repeated.
+- Frontend regression: `27 passed, 0 failed`.
+- `npm run build`: exited `0`, with existing npm config, Rollup annotation, and chunk-size warnings.
+- `git diff --check`: no output, exit code `0`.
+
+The full backend suite remains explicitly not green because the existing `test_concurrent_tribulation_attempts_allow_only_one_daily_attempt` failure still reports a concurrent loser result that is not consistently a `PermissionError`. This existing tribulation concurrency failure was not changed or hidden in this round.

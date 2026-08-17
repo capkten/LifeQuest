@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError, OperationalError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.models.cultivation import CultivationLog, CultivationProfile, TribulationAttempt
 from app.models.technique import LearnedTechnique, Technique, TechniqueSlot
@@ -832,70 +832,27 @@ class CultivationService:
         importance: float = 1.0,
         source_key: str | None = None,
     ) -> RewardSettlement:
-        try:
-            difficulty_factor = DIFFICULTY_FACTORS[difficulty]
-        except KeyError as exc:
-            raise ValueError(f"Unknown difficulty: {difficulty}") from exc
-
-        user = self.user_repo.get_by_id(user_id)
-        if user is None:
-            raise ValueError("User not found")
-        if source_key:
+        if not source_key:
+            return self._settle_todo_reward_in_session(
+                user_id, source, base_exp, difficulty, quality, importance, None
+            )
+        for attempt in range(SOURCE_KEY_RETRY_COUNT):
             existing_log = self.db.query(CultivationLog).filter(
                 CultivationLog.source_key == source_key,
                 CultivationLog.user_id == user_id,
             ).one_or_none()
             if existing_log is not None:
                 return self._settlement_from_existing_log(existing_log, user_id)
-        for attempt in range(SOURCE_KEY_RETRY_COUNT):
-            if source_key:
-                existing_log = self.db.query(CultivationLog).filter(
-                    CultivationLog.source_key == source_key,
-                    CultivationLog.user_id == user_id,
-                ).one_or_none()
-                if existing_log is not None:
-                    return self._settlement_from_existing_log(existing_log, user_id)
             try:
-                # A source-key savepoint contains both the unique claim and all
-                # cultivation mutations, so a losing concurrent session rolls back
-                # without leaving a partial reward behind.
-                with (self.db.begin_nested() if source_key else nullcontext()):
-                    profile = self.ensure_profile(user_id)
-                    cultivation = max(0, math.floor(
-                        base_exp
-                        * difficulty_factor
-                        * importance
-                        * profile.cultivation_efficiency
-                        * quality
-                    ))
-                    stones = max(1, math.floor(cultivation * 0.6))
-                    profile.cultivation += cultivation
-                    if profile.realm_key != ASCENDED_REALM_KEY:
-                        while profile.minor_stage < len(REALM_THRESHOLDS[profile.realm_key]):
-                            next_threshold = self.get_next_stage(
-                                profile.realm_key, profile.minor_stage, profile.cultivation
-                            ).next_threshold
-                            if next_threshold is None or profile.cultivation < next_threshold:
-                                break
-                            profile.cultivation -= next_threshold
-                            profile.minor_stage += 1
-                            if profile.minor_stage == len(REALM_THRESHOLDS[profile.realm_key]):
-                                profile.cultivation += next_threshold
-                                break
-                    ready_for_tribulation = (
-                        profile.realm_key != ASCENDED_REALM_KEY
-                        and self._is_final_minor_stage(profile)
-                    )
-                    profile.spirit_stones += stones
-                    log = CultivationLog(
-                        user_id=user_id,
-                        source=source,
-                        source_key=source_key,
-                        cultivation_delta=cultivation,
-                        spirit_stones_delta=stones,
-                    )
-                    self.db.add(log)
-                    self.db.flush()
+                return self._settle_todo_reward_in_session(
+                    user_id,
+                    source,
+                    base_exp,
+                    difficulty,
+                    quality,
+                    importance,
+                    source_key,
+                )
             except IntegrityError:
                 existing_log = self.db.query(CultivationLog).filter(
                     CultivationLog.source_key == source_key,
@@ -905,37 +862,117 @@ class CultivationService:
                     raise
                 return self._settlement_from_existing_log(existing_log, user_id)
             except OperationalError as exc:
-                if not source_key or not self._is_source_key_lock_error(exc):
+                if not self._is_source_key_lock_error(exc):
                     raise
-                # The nested transaction has rolled back the failed write. Clear
-                # the failed session transaction and expired ORM state before the
-                # bounded retry can re-read the winner.
-                self.db.rollback()
+                # The nested claim savepoint is already rolled back. Keep the
+                # caller's todo transaction and use a fresh session only to see
+                # whether another session committed this source key.
                 self.db.expire_all()
                 if attempt == SOURCE_KEY_RETRY_COUNT - 1:
-                    existing_log = self.db.query(CultivationLog).filter(
-                        CultivationLog.source_key == source_key,
-                        CultivationLog.user_id == user_id,
-                    ).one_or_none()
+                    existing_log = self._source_key_log_from_short_session(
+                        source_key, user_id
+                    )
                     if existing_log is not None:
                         return self._settlement_from_existing_log(existing_log, user_id)
                     raise
                 time.sleep(SOURCE_KEY_RETRY_DELAY_SECONDS)
-                continue
-
-            self.user_repo._update_experience_no_commit(user, cultivation)
-            self.user_repo._update_coins_no_commit(user, stones)
-            return RewardSettlement(
-                cultivation=cultivation,
-                spirit_stones=stones,
-                merit=0,
-                efficiency=profile.cultivation_efficiency,
-                log_id=log.id,
-                legacy_exp=cultivation,
-                ready_for_tribulation=ready_for_tribulation,
-            )
+                existing_log = self._source_key_log_from_short_session(
+                    source_key, user_id
+                )
+                if existing_log is not None:
+                    return self._settlement_from_existing_log(existing_log, user_id)
 
         raise RuntimeError("source-key settlement retry loop exhausted")
+
+    def _settle_todo_reward_in_session(
+        self,
+        user_id: UUID,
+        source: str,
+        base_exp: int,
+        difficulty: str,
+        quality: float,
+        importance: float,
+        source_key: str | None,
+    ) -> RewardSettlement:
+        try:
+            difficulty_factor = DIFFICULTY_FACTORS[difficulty]
+        except KeyError as exc:
+            raise ValueError(f"Unknown difficulty: {difficulty}") from exc
+
+        user = self.user_repo.get_by_id(user_id)
+        if user is None:
+            raise ValueError("User not found")
+        with (self.db.begin_nested() if source_key else nullcontext()):
+            profile = self.ensure_profile(user_id)
+            cultivation = max(0, math.floor(
+                base_exp
+                * difficulty_factor
+                * importance
+                * profile.cultivation_efficiency
+                * quality
+            ))
+            stones = max(1, math.floor(cultivation * 0.6))
+            profile.cultivation += cultivation
+            if profile.realm_key != ASCENDED_REALM_KEY:
+                while profile.minor_stage < len(REALM_THRESHOLDS[profile.realm_key]):
+                    next_threshold = self.get_next_stage(
+                        profile.realm_key, profile.minor_stage, profile.cultivation
+                    ).next_threshold
+                    if next_threshold is None or profile.cultivation < next_threshold:
+                        break
+                    profile.cultivation -= next_threshold
+                    profile.minor_stage += 1
+                    if profile.minor_stage == len(REALM_THRESHOLDS[profile.realm_key]):
+                        profile.cultivation += next_threshold
+                        break
+            ready_for_tribulation = (
+                profile.realm_key != ASCENDED_REALM_KEY
+                and self._is_final_minor_stage(profile)
+            )
+            profile.spirit_stones += stones
+            log = CultivationLog(
+                user_id=user_id,
+                source=source,
+                source_key=source_key,
+                cultivation_delta=cultivation,
+                spirit_stones_delta=stones,
+            )
+            self.db.add(log)
+            self.db.flush()
+
+        self.user_repo._update_experience_no_commit(user, cultivation)
+        self.user_repo._update_coins_no_commit(user, stones)
+        return RewardSettlement(
+            cultivation=cultivation,
+            spirit_stones=stones,
+            merit=0,
+            efficiency=profile.cultivation_efficiency,
+            log_id=log.id,
+            legacy_exp=cultivation,
+            ready_for_tribulation=ready_for_tribulation,
+        )
+
+    def _source_key_log_from_short_session(
+        self, source_key: str, user_id: UUID
+    ) -> CultivationLog | None:
+        short_session_factory = sessionmaker(
+            bind=self.db.get_bind(),
+            autocommit=False,
+            autoflush=False,
+        )
+        short_session = short_session_factory()
+        try:
+            try:
+                return short_session.query(CultivationLog).filter(
+                    CultivationLog.source_key == source_key,
+                    CultivationLog.user_id == user_id,
+                ).one_or_none()
+            except OperationalError as exc:
+                if self._is_source_key_lock_error(exc):
+                    return None
+                raise
+        finally:
+            short_session.close()
 
     def _settlement_from_existing_log(
         self, log: CultivationLog, user_id: UUID

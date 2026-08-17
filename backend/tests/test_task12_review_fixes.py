@@ -1,7 +1,8 @@
 from concurrent.futures import ThreadPoolExecutor
-from threading import Event
-from time import sleep
+from threading import Barrier, Event
+from time import monotonic
 import sqlite3
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -12,6 +13,7 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base
 from app.models.coin_transaction import CoinTransaction
 from app.models.cultivation import CultivationLog, CultivationProfile
+from app.models.todo import Goal, Habit, Task, TaskStatus
 from app.models.user import User
 
 
@@ -238,7 +240,78 @@ def test_source_key_conflict_in_independent_sessions_returns_original_settlement
         engine.dispose()
 
 
-def test_locked_source_key_session_reloads_committed_settlement_without_duplicates(tmp_path):
+@pytest.mark.parametrize(
+    ("model", "source", "complete"),
+    [
+        (Task, "task", "complete_task"),
+        (Habit, "habit", "complete_habit"),
+        (Goal, "goal", "complete_goal"),
+    ],
+)
+def test_lock_retry_preserves_completed_todo_state_and_claims_once(
+    tmp_path, model, source, complete
+):
+    from app.services.todo import TodoService
+
+    engine = create_engine(f"sqlite:///{tmp_path / f'{source}-lock-regression.sqlite'}")
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    session = session_factory()
+    injected = False
+
+    def inject_lock(_conn, _cursor, statement, parameters, _context, _executemany):
+        nonlocal injected
+        if not injected and "insert into cultivation_logs" in statement.lower():
+            injected = True
+            raise OperationalError(
+                statement,
+                parameters,
+                sqlite3.OperationalError("database is locked"),
+            )
+
+    event.listen(engine, "before_cursor_execute", inject_lock)
+    try:
+        user = User(
+            username=f"regression-{uuid4().hex}",
+            email=f"regression-{uuid4().hex}@example.com",
+            password_hash="hashed",
+        )
+        session.add(user)
+        session.flush()
+        todo = model(
+            user_id=user.id,
+            title=f"{source} lock regression",
+            coins_reward=20,
+            exp_reward=15,
+        )
+        session.add(todo)
+        session.commit()
+        source_key = f"todo:{source}:{todo.id}"
+        if model is Habit:
+            source_key += f":{datetime.now(timezone.utc).date().isoformat()}"
+
+        getattr(TodoService(session), complete)(todo, user.id)
+        session.expire_all()
+        persisted = session.get(model, todo.id)
+
+        assert injected is True
+        if model is Habit:
+            assert persisted.streak == 1
+            assert persisted.best_streak == 1
+            assert persisted.last_completed_at is not None
+        else:
+            assert persisted.status == TaskStatus.COMPLETED
+        assert session.query(CultivationLog).filter_by(source_key=source_key).count() == 1
+        assert session.query(CoinTransaction).filter_by(
+            user_id=user.id, source=source
+        ).count() == 1
+    finally:
+        event.remove(engine, "before_cursor_execute", inject_lock)
+        session.close()
+        engine.dispose()
+
+
+def test_locked_source_key_sessions_retry_after_explicit_lock_window(tmp_path):
     from app.services.todo import TodoService
 
     engine = create_engine(
@@ -246,16 +319,19 @@ def test_locked_source_key_session_reloads_committed_settlement_without_duplicat
         connect_args={"check_same_thread": False, "timeout": 0.01},
     )
     Base.metadata.create_all(bind=engine)
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA journal_mode=WAL"))
     session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     setup = session_factory()
-    winner_session = session_factory()
-    loser_session = session_factory()
     lock_errors = []
+    lock_seen = Event()
+    barrier = Barrier(2)
 
     def record_lock_error(error_context):
         original = error_context.original_exception
         if "locked" in str(original).lower():
             lock_errors.append(original)
+            lock_seen.set()
 
     event.listen(engine, "handle_error", record_lock_error)
     try:
@@ -267,40 +343,54 @@ def test_locked_source_key_session_reloads_committed_settlement_without_duplicat
         setup.add(user)
         setup.commit()
         user_id = user.id
+        from app.services.cultivation import CultivationService
 
-        loser_user = loser_session.get(User, user_id)
+        CultivationService(setup).ensure_profile(user_id)
+        setup.commit()
 
-        winner_user = winner_session.get(User, user_id)
-        winner_service = TodoService(winner_session)
-        # Start a real outer write transaction so the loser receives SQLITE_BUSY
-        # while the winner's source-key settlement is still uncommitted.
-        winner_session.execute(
-            text("UPDATE users SET coins = coins WHERE id = :id"),
-            {"id": str(user_id)},
-        )
-        winner_session.flush()
-        winner_result = winner_service._update_rewards(
-            winner_user, 20, 15, "task", source_key="todo:task:locked"
-        )
+        def hold_write_lock():
+            holder_session = session_factory()
+            try:
+                holder_session.execute(
+                    text("UPDATE users SET coins = coins WHERE id = :id"),
+                    {"id": str(user_id)},
+                )
+                holder_session.flush()
+                barrier.wait(timeout=2)
+                assert lock_seen.wait(timeout=2)
+                holder_session.commit()
+            finally:
+                holder_session.close()
 
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            winner_commit = executor.submit(lambda: (sleep(0.08), winner_session.commit()))
-            loser_result = TodoService(loser_session)._update_rewards(
-                loser_user, 20, 15, "task", source_key="todo:task:locked"
-            )
-            winner_commit.result(timeout=2)
-        loser_session.commit()
+        def attempt_losing_claim():
+            loser_session = session_factory()
+            try:
+                loser_user = loser_session.get(User, user_id)
+                barrier.wait(timeout=2)
+                result = TodoService(loser_session)._update_rewards(
+                    loser_user, 20, 15, "task", source_key="todo:task:locked"
+                )
+                loser_session.commit()
+                return result
+            finally:
+                loser_session.close()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            holder = executor.submit(hold_write_lock)
+            loser_result = executor.submit(attempt_losing_claim).result(timeout=2)
+            holder.result(timeout=2)
 
         assert lock_errors
-        assert loser_result.model_dump() == winner_result.model_dump()
+        assert loser_result.cultivation == 15
+        assert loser_result.spirit_stones == 9
         verify = session_factory()
         try:
             stored_user = verify.get(User, user_id)
             profile = verify.query(CultivationProfile).filter_by(user_id=user_id).one()
             assert (stored_user.coins, stored_user.total_coins_earned, stored_user.experience) == (20, 20, 15)
             assert (profile.cultivation, profile.spirit_stones) == (
-                winner_result.cultivation,
-                winner_result.spirit_stones,
+                15,
+                9,
             )
             assert verify.query(CultivationLog).filter_by(source_key="todo:task:locked").count() == 1
             assert verify.query(CoinTransaction).filter_by(user_id=user_id, source="task").count() == 1
@@ -309,12 +399,85 @@ def test_locked_source_key_session_reloads_committed_settlement_without_duplicat
     finally:
         event.remove(engine, "handle_error", record_lock_error)
         setup.close()
-        winner_session.close()
-        loser_session.close()
         engine.dispose()
 
 
-def test_non_lock_operational_error_is_reraised_unchanged(client, db_session, monkeypatch):
+def test_locked_source_key_retry_exhaustion_is_bounded(tmp_path, monkeypatch):
+    from app.services import cultivation as cultivation_module
+    from app.services.cultivation import CultivationService
+    from app.services.todo import TodoService
+
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'source-key-lock-exhaustion.sqlite'}",
+        connect_args={"check_same_thread": False, "timeout": 0.01},
+    )
+    Base.metadata.create_all(bind=engine)
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA journal_mode=WAL"))
+    session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    setup = session_factory()
+    barrier = Barrier(2)
+    release_lock = Event()
+    monkeypatch.setattr(cultivation_module, "SOURCE_KEY_RETRY_COUNT", 2)
+    monkeypatch.setattr(cultivation_module, "SOURCE_KEY_RETRY_DELAY_SECONDS", 0.01)
+    try:
+        user = User(
+            username=f"exhaust-{uuid4().hex}",
+            email=f"exhaust-{uuid4().hex}@example.com",
+            password_hash="hashed",
+        )
+        setup.add(user)
+        setup.commit()
+        CultivationService(setup).ensure_profile(user.id)
+        setup.commit()
+        user_id = user.id
+
+        def hold_write_lock():
+            holder_session = session_factory()
+            try:
+                holder_session.execute(
+                    text("UPDATE users SET coins = coins WHERE id = :id"),
+                    {"id": str(user_id)},
+                )
+                holder_session.flush()
+                barrier.wait(timeout=2)
+                assert release_lock.wait(timeout=2)
+            finally:
+                holder_session.rollback()
+                holder_session.close()
+
+        def exhaust_claim_retries():
+            loser_session = session_factory()
+            try:
+                loser_user = loser_session.get(User, user_id)
+                barrier.wait(timeout=2)
+                TodoService(loser_session)._update_rewards(
+                    loser_user, 20, 15, "task", source_key="todo:task:exhausted"
+                )
+            finally:
+                loser_session.close()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            holder = executor.submit(hold_write_lock)
+            started = monotonic()
+            loser = executor.submit(exhaust_claim_retries)
+            try:
+                with pytest.raises(OperationalError, match="database is locked"):
+                    loser.result(timeout=1)
+                elapsed = monotonic() - started
+            finally:
+                release_lock.set()
+                holder.result(timeout=2)
+
+        assert elapsed < 1
+    finally:
+        setup.close()
+        engine.dispose()
+
+
+def test_non_lock_operational_error_is_reraised_unchanged_and_session_survives(
+    client, db_session
+):
     from app.services.cultivation import CultivationService
 
     user = User(
@@ -330,18 +493,24 @@ def test_non_lock_operational_error_is_reraised_unchanged(client, db_session, mo
         sqlite3.OperationalError("no such table: cultivation_profiles"),
     )
 
-    def raise_non_lock_error(_service, _user_id):
-        raise expected
+    def raise_non_lock_error(
+        _conn, _cursor, statement, _parameters, _context, _executemany
+    ):
+        if "insert into cultivation_logs" in statement.lower():
+            raise expected
 
-    monkeypatch.setattr(CultivationService, "ensure_profile", raise_non_lock_error)
+    event.listen(db_session.bind, "before_cursor_execute", raise_non_lock_error)
+    try:
+        with pytest.raises(OperationalError) as caught:
+            CultivationService(db_session).settle_todo_reward(
+                user.id,
+                "task",
+                15,
+                "medium",
+                source_key="todo:task:non-lock-error",
+            )
 
-    with pytest.raises(OperationalError) as caught:
-        CultivationService(db_session).settle_todo_reward(
-            user.id,
-            "task",
-            15,
-            "medium",
-            source_key="todo:task:non-lock-error",
-        )
-
-    assert caught.value is expected
+        assert caught.value is expected
+        assert db_session.execute(text("SELECT 1")).scalar_one() == 1
+    finally:
+        event.remove(db_session.bind, "before_cursor_execute", raise_non_lock_error)
