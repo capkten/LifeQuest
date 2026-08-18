@@ -32,7 +32,7 @@ Protected routes: 52 route/viewport checks total. Every unauthenticated check re
 | `/finance` | `/login?redirect=/finance`, 375/375 | `/login?redirect=/finance`, 768/768 | `/login?redirect=/finance`, 1024/1024 | `/login?redirect=/finance`, 1440/1440 |
 | `/profile` | `/login?redirect=/profile`, 375/375 | `/login?redirect=/profile`, 768/768 | `/login?redirect=/profile`, 1024/1024 | `/login?redirect=/profile`, 1440/1440 |
 
-The protected-route screenshots therefore show the public Login state, not the requested authenticated content. No authenticated browser session was available, so authenticated content states, API-backed data, and post-login layouts were not visually checked and are not claimed as checked in this report.
+This first protected-route pass documents the public Login redirect behavior only. Its authenticated-content limitation was subsequently closed by the authenticated verification addendum below; the initial redirect results must not be read as the final protected-route result.
 
 ## Authenticated Verification Addendum
 
@@ -51,11 +51,11 @@ Route coverage: `/`, `/todos`, `/cultivation`, `/world`, `/sects`, `/techniques`
 ## Automated Verification
 
 - `cd backend; $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; pytest -q`
-  - `215 passed`, `1 failed`, `419 warnings` in 140.81s.
-  - Failure: `tests/test_cultivation.py::test_npc_cultivation_updates_once_per_natural_day`; the test expects fixed date `2026-08-17`, while the service returned the current date `2026-08-18`. No backend file was changed because this task is scoped to auth-page CSS and this report.
+  - `218 passed`, `0 failed`, `423 warnings` in 132.54s.
+  - `tests/test_cultivation.py::test_npc_cultivation_updates_once_per_natural_day` now derives the verification day from the created NPC's `cultivation_updated_on`, so it verifies daily idempotency without coupling the result to the calendar date.
   - Warnings are existing Starlette/httpx, FastAPI `on_event`, and `datetime.utcnow()` deprecations.
 - `cd frontend; node --test src/composables/useNoteAutosave.test.mjs src/views/ui-regressions.test.mjs src/views/sects-request-state.test.mjs src/views/cultivation-regressions.test.mjs src/views/localization-regressions.test.mjs`
-  - `52 passed`, `0 failed`, `0 warnings`.
+  - `56 passed`, `0 failed`, `0 warnings`.
 - `cd frontend; npm run build`
   - Vite build succeeded with exit code 0.
   - Warnings: npm `always-auth` config warning, 2 Rollup PURE-annotation warnings, and 1 chunk-size warning for the minified main chunk over 500 kB.
@@ -66,6 +66,6 @@ Route coverage: `/`, `/todos`, `/cultivation`, `/world`, `/sects`, `/techniques`
 
 ## Scope and Concerns
 
-- The source scope is limited to the required CSS rules in `frontend/src/views/Login.vue` and `frontend/src/views/Register.vue`.
-- The 52 protected-route checks are authentication-gated redirects; they must not be interpreted as authenticated content checks.
-- The backend suite has one pre-existing/time-sensitive date assertion failure unrelated to this CSS change and remains unchanged.
+- The initial public-route pass is retained as evidence that unauthenticated redirects work; the authenticated addendum is the authoritative result for protected content layout.
+- The authenticated 52-check run used an ad-hoc local CDP script and ignored screenshot artifacts. It is recorded as execution evidence rather than a committed application runtime dependency.
+- The latest backend suite is fully green; the remaining warnings are existing Starlette/httpx, FastAPI `on_event`, `datetime.utcnow()` and JWT time deprecations.
