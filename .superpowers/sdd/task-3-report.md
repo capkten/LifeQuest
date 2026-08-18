@@ -111,3 +111,47 @@ git diff --check
 
 - brief 指定的未过滤测试命令仍受已有日期硬编码测试影响，当前证据为 `92 passed, 1 failed`；本次没有修改该无关测试或 NPC 日期逻辑。
 - 当前金币历史兼容展示只能识别精确的旧系统模板 `Reward from <source>`。同样精确的用户自定义文本在现有 schema 缺少系统身份字段时无法与历史系统记录区分；其他用户文本均保持原样。后续若需要完全可判定保护，应增加独立系统流水身份字段，但本任务明确禁止数据库字段变更。
+
+## Review-fix 追加（2026-08-18）
+
+已修复独立审查指出的 Important 问题和 Minor 测试缺口：
+
+- `TodoService._update_rewards` 真实持久化路径改为 canonical 中文 source label，并保留现有 `source`；同时把已有 `source_key` 写入既有 `source_id` 字段，确保新 Todo 系统流水可被保守识别。
+- `CoinService` 不再按 description 单字段翻译。只有 `type=earn`、`source` 为 task/habit/goal，且既有 `source_id` 符合 `todo:<source>:<key>` 的系统流水才会把 legacy `Reward from <source>` 转为中文展示。无 `source_id` 的用户自定义同文案保持原样。
+- `finance.py` transfer 无用户描述时改为中文 `转账：<from> -> <to>`，用户自定义 description 原样保留。
+- source label 统一由 `content_catalog.py` 提供，并保留 `COIN_SOURCE_LABELS`、`CULTIVATION_SOURCE_LABELS` 兼容导出；`coin.py` 和 `cultivation.py` 不再维护重复字典。
+- 新增真实 HTTP JSON 回归，验证 cultivation raw key 与中文 label、Todo 动态 coin description/source_id、NPC `event_key` 与既有 event 字段共存；新增未知 label raw-key fallback 和 Finance 默认/自定义描述测试。
+
+### Review-fix TDD
+
+RED：新增/调整的 4 个 focused 测试首次运行结果为 `4 failed`，失败分别复现 legacy 用户同文案误翻译、Todo HTTP 流水仍为英文且 `source_id` 为空、Finance transfer 默认英文、未知 realm label fallback 异常。
+
+GREEN：focused 回归结果为 `4 passed, 14 warnings`。
+
+指定 Task 3 回归命令：
+
+```powershell
+cd D:\codes\LifeQuest\backend
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'
+pytest tests/test_content_localization.py tests/test_cultivation.py tests/test_todos.py -q
+```
+
+实际结果：`95 passed, 1 failed, 92 warnings in 40.12s`。唯一失败是既有 `test_npc_cultivation_updates_once_per_natural_day` 将日期硬编码为 `2026-08-17`，当前运行日期为 `2026-08-18`，与本次修改无关。
+
+排除该既有日期冲突后的实际结果：`95 passed, 1 deselected, 92 warnings in 38.77s`。
+
+```powershell
+python -m compileall -q app
+git diff --check
+```
+
+两条命令均退出码 `0`，无输出。
+
+### Review-fix Commit
+
+- `bcbe619` — `fix(localization): close task 3 review gaps`
+
+### Review-fix Concerns
+
+- 现有 schema 没有独立 system ownership 字段，因此无法证明一个用户伪造的、同时具备合法 `source/type/source_id` 形状的完整 legacy 流水不是系统流水；实现采取保守策略，仅识别稳定 Todo source key，未匹配者原样返回。要完全消除该歧义需要新增系统身份字段，本任务未改数据库 schema。
+- 指定未过滤回归仍包含上述日期敏感测试失败；新增与本次修复相关的测试均通过。
