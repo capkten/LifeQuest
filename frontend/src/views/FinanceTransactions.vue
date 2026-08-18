@@ -113,6 +113,7 @@
       <span>{{ supportError }}</span>
       <button type="button" class="retry-btn" @click="fetchSupportData">重试账户和分类</button>
     </div>
+    <div v-if="supportLoading" class="inline-loading" aria-live="polite">正在加载账户和分类...</div>
     <div v-if="loadMoreError" class="inline-error" role="alert">
       <span>{{ loadMoreError }}</span>
       <button type="button" class="retry-btn" @click="loadMore">重试加载更多</button>
@@ -355,6 +356,7 @@ const error = ref(null)
 const accountsError = ref(null)
 const categoriesError = ref(null)
 const loadMoreError = ref(null)
+const supportLoading = ref(false)
 const page = ref(1)
 const hasMore = ref(false)
 let requestSequence = 0
@@ -522,6 +524,7 @@ async function loadMore() {
 
 async function fetchSupportData() {
   const requestId = ++supportRequestId
+  supportLoading.value = true
   accountsError.value = null
   categoriesError.value = null
   const [accountResult, categoryResult] = await Promise.allSettled([
@@ -543,6 +546,7 @@ async function fetchSupportData() {
   } else {
     categoriesError.value = getErrorMessage(categoryResult.reason, '加载分类失败，请重试。')
   }
+  supportLoading.value = false
 }
 
 async function saveTransaction() {
