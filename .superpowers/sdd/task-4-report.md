@@ -187,3 +187,49 @@ git diff --check
 
 - 当前工作区未提供 `gpt-5.6-luna` 的模型切换接口，无法从工具侧验证或切换该模型。
 - 用户既有的 `frontend/components.d.ts` 修改，以及 `.agents/`、`.claude/skills/`、`.codex/`、计划文档和 `frontend/vite-check.log` 未跟踪项仍保留，未纳入本轮提交。
+
+## Final Test Coverage Fix
+
+本轮仅修改 `frontend/src/views/localization-regressions.test.mjs`，没有修改业务代码：
+
+- API 的非 401 HTTP/status 分支与 network/no-response 分支分别提取源码块，分别断言 `getErrorMessage(error)`。
+- `Sects.vue` 的 `onError` 回调单独断言捕获错误经过 `getErrorMessage`。
+- `ProjectDetail.vue` 的两个 Promise `.catch` 回调逐个断言捕获错误经过 `getErrorMessage`，删除任一调用都会失败。
+- 保留原有页面清单和可见错误 catch 扫描，未减少现有可见页面目标覆盖。
+
+### RED
+
+临时删除上述 API 两个分支、Sects `onError` 和 ProjectDetail 两个 Promise catch 中的转换调用，逐项运行对应测试，均按目标源码块失败；所有临时业务改动已恢复，未进入提交。
+
+### Verification
+
+指定回归命令：`38/38` 通过。
+
+```text
+node --test src/views/localization-regressions.test.mjs src/views/cultivation-regressions.test.mjs
+ℹ tests 38
+ℹ pass 38
+ℹ fail 0
+```
+
+生产构建：退出码 `0`。保留已有 npm `always-auth` 配置弃用、`@vueuse/core` Rollup 注释和主 chunk 超过 500 kB warnings。
+
+```text
+npm run build
+✓ built in 12.43s
+```
+
+差异检查：退出码 `0`，无输出。
+
+```text
+git diff --check
+```
+
+### Commit
+
+测试提交：`a176a90 test(localization): harden error branch coverage`
+
+### Concerns
+
+- 当前工作区仍未提供 `gpt-5.6-luna` 的模型切换接口，无法从工具侧切换或验证该模型。
+- 用户既有的 `frontend/components.d.ts` 修改，以及 `.agents/`、`.claude/skills/`、`.codex/`、计划文档和 `frontend/vite-check.log` 未跟踪项仍保留，未纳入测试提交。
