@@ -174,3 +174,38 @@ pytest tests/test_content_localization.py tests/test_cultivation.py -q -k "not t
 ### Commit
 
 实现与测试 commit：`7f3462c` — `fix(localization): harden fixed core npc migration`。
+
+## Review-fix 第三轮
+
+### 修复内容
+
+- 固定核心 NPC 的新建路径继续使用现有 `is_generated=True` 作为系统身份；固定核心本地化只查询该身份，不再把 `is_generated=False` 的用户核心当作新系统记录。
+- 历史固定核心只在用户已处于 `ascended`、宗门可由稳定 key 确认、同一用户/宗门存在三种固定角色各一条、名称/角色/核心标志/生成标志/人口槽位/锁定标志和旧描述模板均精确匹配时迁移。旧描述支持真实旧模板 `1-Star Normal Sect 1的固定核心人物。` 这类“英文宗门名 + `的固定核心人物。`”形式。
+- 同角色重复候选或同旧描述但名称不符的碰撞会使整组判为歧义并跳过，避免只迁移其中看似匹配的一条。
+- 历史核心升级 `is_generated=True` 后显式调用 `db.flush()`，再查询 `NpcEvent`，因此本轮迁移核心关联的旧事件也能被系统事件回填逻辑看到并更新。
+
+### 测试
+
+RED：先补真实旧模板事件、完整旧字段但无飞升证明的伪造集合，以及同角色歧义集合；旧实现暴露了未 flush 的旧事件仍为英文，并会在歧义集合中迁移部分候选。
+
+GREEN：
+
+```text
+pytest tests/test_content_localization.py -q
+12 passed, 7 warnings
+```
+
+```text
+pytest tests/test_content_localization.py tests/test_cultivation.py -q -k "not test_npc_cultivation_updates_once_per_natural_day"
+76 passed, 1 deselected, 39 warnings
+```
+
+### Commit
+
+实现与测试 commit：`bad3e82` — `fix(localization): flush migrated core npc events`。
+
+### Schema 边界
+
+当前 `Npc` 没有独立的系统身份列。完全伪造一套与历史系统集合拥有完全相同的用户、宗门、名称、角色、标志、描述和飞升上下文时，数据库中不存在可用于区分的事实；本轮不能声称能区分该集合。测试覆盖的是可证明的真实旧模板、缺少飞升证明的完整伪造集合和重复/冲突歧义集合，后两者跳过迁移；完全同值的伪造集合属于现有 schema 的不可判定边界。
+
+本轮未修改 Task 3 的 check-in、coin 或 achievement 文件。
