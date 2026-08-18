@@ -173,4 +173,4 @@ pytest tests/test_content_localization.py tests/test_cultivation.py -q -k "not t
 
 ### Commit
 
-实现与测试 commit：`IMPLEMENTATION_COMMIT_PENDING`。
+实现与测试 commit：`7f3462c` — `fix(localization): harden fixed core npc migration`。
