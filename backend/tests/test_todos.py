@@ -343,6 +343,50 @@ def test_task_reward_log_uses_unique_stable_source_key(client):
         db.close()
 
 
+def test_todo_coin_reward_source_ids_are_short_and_type_distinct(client):
+    headers = _register_and_login(client)
+    task = client.post(
+        "/api/todos/tasks",
+        json={"title": "Short task source", "coins_reward": 1, "exp_reward": 1},
+        headers=headers,
+    ).json()
+    habit = client.post(
+        "/api/todos/habits",
+        json={"title": "Short habit source", "coins_reward": 1, "exp_reward": 1},
+        headers=headers,
+    ).json()
+    goal = client.post(
+        "/api/todos/goals",
+        json={"title": "Short goal source", "coins_reward": 1, "exp_reward": 1},
+        headers=headers,
+    ).json()
+
+    assert client.post(f"/api/todos/tasks/{task['id']}/complete", headers=headers).status_code == 200
+    assert client.post(f"/api/todos/habits/{habit['id']}/complete", headers=headers).status_code == 200
+    assert client.post(f"/api/todos/goals/{goal['id']}/complete", headers=headers).status_code == 200
+
+    from app.models.coin_transaction import CoinTransaction
+    from tests.conftest import TestingSessionLocal
+
+    db = TestingSessionLocal()
+    try:
+        transactions = {
+            transaction.source: transaction
+            for transaction in db.query(CoinTransaction).filter(
+                CoinTransaction.source.in_(["task", "habit", "goal"])
+            ).all()
+        }
+        assert set(transactions) == {"task", "habit", "goal"}
+        source_ids = {source: transaction.source_id for source, transaction in transactions.items()}
+        assert all(source_id and len(source_id) <= 36 for source_id in source_ids.values())
+        assert source_ids["task"].startswith("t:")
+        assert source_ids["habit"].startswith("h:")
+        assert source_ids["goal"].startswith("g:")
+        assert len(set(source_ids.values())) == 3
+    finally:
+        db.close()
+
+
 def test_complete_goal_idempotent(client):
     """Completing a goal twice should only award rewards once."""
     headers = _register_and_login(client)

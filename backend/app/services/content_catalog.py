@@ -23,6 +23,12 @@ SOURCE_LABELS = {
     "other": "其他",
 }
 
+TODO_SOURCE_PREFIXES = {
+    "task": "t",
+    "habit": "h",
+    "goal": "g",
+}
+
 # Keep named exports available for callers that need a source-specific catalog.
 COIN_SOURCE_LABELS = SOURCE_LABELS
 CULTIVATION_SOURCE_LABELS = SOURCE_LABELS

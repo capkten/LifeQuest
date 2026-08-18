@@ -647,6 +647,43 @@ def test_generated_system_text_is_chinese_and_user_coin_text_is_preserved(isolat
     assert descriptions.count("Reward from task") == 1
 
 
+def test_compact_todo_coin_sources_are_localized_for_all_todo_types(isolated_db):
+    from app.services.coin import CoinService
+
+    user = User(
+        username=f"compact-source-{uuid4().hex}",
+        email=f"{uuid4().hex}@example.com",
+        password_hash="hashed",
+    )
+    isolated_db.add(user)
+    isolated_db.commit()
+    isolated_db.add_all([
+        CoinTransaction(
+            user_id=user.id,
+            amount=5,
+            type="earn",
+            source=source,
+            source_id=source_id,
+            description=f"Reward from {source}",
+        )
+        for source, source_id in (
+            ("task", "t:legacy"),
+            ("habit", "h:legacy:20260818"),
+            ("goal", "g:legacy"),
+        )
+    ])
+    isolated_db.commit()
+
+    history = CoinService(isolated_db).get_history(user.id)
+    descriptions = {
+        transaction.source: transaction.description
+        for transaction in history["transactions"]
+    }
+    assert descriptions["task"] == "任务奖励"
+    assert descriptions["habit"] == "习惯奖励"
+    assert descriptions["goal"] == "目标奖励"
+
+
 def test_unknown_content_labels_fall_back_to_raw_keys(isolated_db):
     from app.services.cultivation import CultivationService
 
@@ -713,7 +750,8 @@ def test_http_json_keeps_raw_keys_labels_dynamic_text_and_event_key(client, db_s
     history = client.get("/api/coins/history", headers=headers)
     assert history.status_code == 200
     task_transaction = next(item for item in history.json()["transactions"] if item["source"] == "task")
-    assert task_transaction["source_id"] == f"todo:task:{task['id']}"
+    assert task_transaction["source_id"].startswith("t:")
+    assert len(task_transaction["source_id"]) <= 36
     assert task_transaction["description"] == "任务奖励"
 
     user_id = UUID(client.get("/api/users/me", headers=headers).json()["id"])

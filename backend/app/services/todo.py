@@ -1,3 +1,4 @@
+import base64
 from datetime import date, datetime, timezone
 from typing import List
 from uuid import UUID
@@ -27,7 +28,7 @@ from app.schemas.todo import (
 from app.models.coin_transaction import CoinSource, CoinType
 from app.repositories.coin_transaction import CoinTransactionRepository
 from app.services.achievement import AchievementService
-from app.services.content_catalog import source_label
+from app.services.content_catalog import TODO_SOURCE_PREFIXES, source_label
 from app.services.title import TitleService
 from app.services.cultivation import CultivationService
 
@@ -51,6 +52,15 @@ class TodoService:
         self.achievement_service = AchievementService(db)
         self.title_service = TitleService(db)
         self.cultivation_service = CultivationService(db)
+
+    @staticmethod
+    def _coin_source_id(source: str, entity_id: UUID, completed_on: date = None) -> str:
+        source_value = getattr(source, "value", source)
+        compact_uuid = base64.urlsafe_b64encode(entity_id.bytes).decode("ascii").rstrip("=")
+        source_id = f"{TODO_SOURCE_PREFIXES[source_value]}:{compact_uuid}"
+        if source_value == "habit":
+            source_id = f"{source_id}:{completed_on:%Y%m%d}"
+        return source_id
 
     # --- Ownership verification (returns object or raises HTTPException) ---
     def get_habit_for_user(self, habit_id: UUID, user_id: UUID) -> Habit:
@@ -125,6 +135,7 @@ class TodoService:
             settlement = self._update_rewards(
                 user, habit.coins_reward, habit.exp_reward, CoinSource.HABIT,
                 habit.difficulty, source_key=f"todo:habit:{habit.id}:{now.date().isoformat()}",
+                coin_source_id=self._coin_source_id(CoinSource.HABIT, habit.id, now.date()),
             )
             self._check_achievements(user)
             self.db.commit()
@@ -174,6 +185,7 @@ class TodoService:
                 task.difficulty,
                 importance=self.TASK_IMPORTANCE.get(task.priority, 1.0),
                 source_key=f"todo:task:{task.id}",
+                coin_source_id=self._coin_source_id(CoinSource.TASK, task.id),
             )
             self._check_achievements(user)
             self.db.commit()
@@ -213,6 +225,7 @@ class TodoService:
             settlement = self._update_rewards(
                 user, goal.coins_reward, goal.exp_reward, CoinSource.GOAL,
                 goal.difficulty, source_key=f"todo:goal:{goal.id}",
+                coin_source_id=self._coin_source_id(CoinSource.GOAL, goal.id),
             )
             self._check_achievements(user)
             self.db.commit()
@@ -230,6 +243,7 @@ class TodoService:
         difficulty: str = "medium",
         importance: float = 1.0,
         source_key: str | None = None,
+        coin_source_id: str | None = None,
     ):
         """Update user coins and experience in a single transaction."""
         settlement = self.cultivation_service.settle_todo_reward(
@@ -254,7 +268,7 @@ class TodoService:
                 "amount": coins,
                 "type": CoinType.EARN,
                 "source": source,
-                "source_id": source_key,
+                "source_id": coin_source_id,
                 "description": f"{source_label(source)}奖励",
             }
         )

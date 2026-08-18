@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.repositories.coin_transaction import CoinTransactionRepository
-from app.services.content_catalog import source_label
+from app.services.content_catalog import TODO_SOURCE_PREFIXES, source_label
 
 
 class CoinService:
@@ -75,11 +75,21 @@ class CoinService:
         source_value = getattr(transaction.source, "value", transaction.source)
         transaction_type = getattr(transaction.type, "value", transaction.type)
         source_id = transaction.source_id or ""
+        legacy_prefix = f"todo:{source_value}:"
+        compact_prefix = f"{TODO_SOURCE_PREFIXES.get(source_value, '')}:"
         return (
             transaction_type == "earn"
             and source_value in {"task", "habit", "goal"}
-            and source_id.startswith(f"todo:{source_value}:")
-            and bool(source_id[len(f"todo:{source_value}:"):])
+            and (
+                (
+                    source_id.startswith(legacy_prefix)
+                    and bool(source_id[len(legacy_prefix):])
+                )
+                or (
+                    source_id.startswith(compact_prefix)
+                    and bool(source_id[len(compact_prefix):])
+                )
+            )
         )
 
     @classmethod
