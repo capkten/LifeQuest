@@ -66,7 +66,7 @@ npm run build
 
 ## Commit
 
-`73c2138`
+`4d3f723`
 
 提交信息：`feat(localization): add chinese content dictionaries`
 
