@@ -124,7 +124,7 @@
             </svg>
           </div>
           <h2>工作区暂时无法打开</h2>
-          <p>{{ errorMessage }}</p>
+          <p>{{ workspaceError }}</p>
           <button type="button" class="button button--primary" @click="loadWorkspace">重新加载</button>
         </div>
         <template v-else>
@@ -291,7 +291,6 @@ const {
   currentFolderId,
   expandedIds,
   loading,
-  error: workspaceErrorCause,
   loadTree,
   selectNote,
   toggleFolder,
@@ -322,8 +321,7 @@ let toastTimer = null
 let loadRequest = 0
 
 const workspaceLoading = computed(() => loading.value || !notebook.value && !notebookError.value)
-const workspaceError = computed(() => notebookError.value || workspaceErrorCause.value)
-const errorMessage = computed(() => getErrorMessage(workspaceError.value))
+const workspaceError = computed(() => notebookError.value)
 const isNewNoteRoute = computed(() => route.name === 'NewNoteInWorkspace')
 const routeModeLabel = computed(() => route.name === 'NotebookWorkspaceEdit' ? '编辑上下文' : '已选择笔记')
 
@@ -393,7 +391,7 @@ async function loadWorkspace() {
     notebook.value = nextNotebook
     syncRouteSelection()
   } catch (cause) {
-    if (requestId === loadRequest) notebookError.value = cause
+    if (requestId === loadRequest) notebookError.value = getErrorMessage(cause)
   }
 }
 
@@ -439,7 +437,7 @@ async function loadViewer(noteId) {
     }
   } catch (cause) {
     viewerNote.value = null
-    viewerError.value = cause
+    viewerError.value = getErrorMessage(cause)
   } finally {
     viewerLoading.value = false
   }

@@ -10,7 +10,7 @@
       </div>
     </section>
     <div v-if="loading" class="cultivation-state">正在读取宗门...</div>
-    <div v-else-if="error" class="cultivation-state cultivation-state--error" role="alert"><span>{{ errorMessage() }}</span><button type="button" class="cultivation-action" @click="load">重试</button></div>
+    <div v-else-if="error" class="cultivation-state cultivation-state--error" role="alert"><span>{{ error }}</span><button type="button" class="cultivation-action" @click="load">重试</button></div>
     <p v-else-if="!sects.length" class="cultivation-state">暂无符合条件的宗门。</p>
     <section v-else class="sect-list" aria-label="宗门比较结果">
       <article v-for="sect in sects" :key="sect.id || sect.sect_key" class="sect-card cultivation-surface" :class="{ 'sect-card--special': sect.kind === 'special' }">
@@ -42,14 +42,13 @@ const filters = reactive({ star: null, kind: null, task_preference: null })
 const sects = ref([]); const loading = ref(false); const error = ref(null); const busyId = ref(null)
 const relationship = ref({ recently_met: [] })
 const recentlyMet = computed(() => relationship.value?.recently_met || [])
-const errorMessage = () => getErrorMessage(error.value)
 const requestSequence = createSequencedRequest({
   onStart: () => { loading.value = true; error.value = null },
   onSuccess: ([response, npcResponse]) => {
     sects.value = Array.isArray(response) ? response.filter((sect) => sect.visible === true) : []
     relationship.value = npcResponse || { recently_met: [] }
   },
-  onError: (requestError) => { error.value = requestError },
+  onError: (requestError) => { error.value = getErrorMessage(requestError) },
   onFinish: () => { loading.value = false },
 })
 function load() {
@@ -64,8 +63,8 @@ function sectNameForNpc(npc) { return sects.value.find((sect) => sect.id === npc
 function applySectState(result) { sects.value = sects.value.map((item) => item.sect_key === result.sect_key ? { ...item, ...result } : item) }
 async function contactMessenger(sect) { if (sect.visible !== true || sect.realm_confirmed !== true || sect.messenger_contacted === true) return; await mutate(sect, () => cultivationService.contactSectMessenger(sect.sect_key)) }
 async function completeTrial(sect) { if (sect.visible !== true || sect.messenger_contacted !== true || sect.trial_confirmed === true) return; await mutate(sect, () => cultivationService.completeSectTrial(sect.sect_key)) }
-async function mutate(sect, action) { busyId.value = sect.sect_key; error.value = null; try { applySectState(await action()) } catch (requestError) { error.value = requestError } finally { busyId.value = null } }
-async function join(sect) { if (sect.can_join !== true || sect.visible !== true) return; busyId.value = sect.sect_key; error.value = null; try { const result = await cultivationService.joinSect(sect.id || sect.sect_key); sects.value = sects.value.map((item) => ({ ...item, joined: item.sect_key === result.sect_key })) } catch (requestError) { error.value = requestError } finally { busyId.value = null } }
+async function mutate(sect, action) { busyId.value = sect.sect_key; error.value = null; try { applySectState(await action()) } catch (requestError) { error.value = getErrorMessage(requestError) } finally { busyId.value = null } }
+async function join(sect) { if (sect.can_join !== true || sect.visible !== true) return; busyId.value = sect.sect_key; error.value = null; try { const result = await cultivationService.joinSect(sect.id || sect.sect_key); sects.value = sects.value.map((item) => ({ ...item, joined: item.sect_key === result.sect_key })) } catch (requestError) { error.value = getErrorMessage(requestError) } finally { busyId.value = null } }
 onMounted(load)
 </script>
 
