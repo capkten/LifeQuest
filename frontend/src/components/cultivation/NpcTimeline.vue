@@ -14,7 +14,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { labelEventSummary, labelNpcRole } from '../../utils/displayLabels'
+import { labelEventSummary, labelFromServer, labelNpcRole } from '../../utils/displayLabels'
 
 const props = defineProps({ npcs: { type: [Array, Object], default: () => [] }, events: { type: Array, default: () => [] } })
 const items = computed(() => {
@@ -37,24 +37,34 @@ function normalizeItem(item, source, index) {
   const label = source === 'event'
     ? eventLabel(item)
     : firstText(item?.name, item?.title) || `人物记录${index + 1}`
-  const roleLabel = firstText(item?.role_label) || labelNpcRole(item?.role)
+  const roleLabel = labelFromServer(item, 'role_label', item?.role, labelNpcRole)
   return {
     key: source + '-' + index + '-' + (item?.id || item?.event_id || item?.key || 'record'),
     label,
     detail: source === 'event'
-      ? firstText(item?.detail, item?.text, item?.message) || '关系事件记录'
+      ? eventDetail(item)
       : roleLabel !== '未知身份' ? roleLabel : firstText(item?.description, item?.text, item?.message) || '人物信息待补充',
     date: firstText(item?.date, item?.created_at, item?.occurred_at),
   }
 }
 
 function eventLabel(item) {
-  const serverLabel = firstText(item?.summary_label)
-  if (serverLabel) return serverLabel
   const eventKey = firstText(item?.event_key)
-  const summary = firstText(item?.summary)
-  if (summary && summary !== eventKey) return summary
-  return labelEventSummary(eventKey || summary)
+  return labelFromServer(item, 'summary_label', eventKey, () => labelFromServer(
+    { summary: firstText(item?.summary) },
+    'summary',
+    eventKey,
+    () => labelEventSummary(eventKey),
+  ))
+}
+
+function eventDetail(item) {
+  const eventKey = firstText(item?.event_key)
+  for (const key of ['detail', 'text', 'message']) {
+    const detail = labelFromServer(item, key, eventKey, '')
+    if (detail) return detail
+  }
+  return '关系事件记录'
 }
 
 function firstText(...values) {

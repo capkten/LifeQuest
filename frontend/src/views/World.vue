@@ -12,7 +12,7 @@
         <div class="world-detail__status"><span aria-hidden="true">{{ statusIcon(nodeStatus(selectedNode)) }}</span>{{ statusLabel(nodeStatus(selectedNode), selectedNode) }}</div>
         <h2 id="world-detail-title">{{ selectedNode.name }}</h2>
         <p>{{ selectedNode.description || '这个节点的详细记录尚未建立。' }}</p>
-        <dl><div><dt>节点状态</dt><dd>{{ statusLabel(nodeStatus(selectedNode), selectedNode) }}</dd></div><div><dt>解锁条件</dt><dd>{{ selectedNode.required_realm_label || realmLabel(selectedNode.required_realm) }}</dd></div></dl>
+        <dl><div><dt>节点状态</dt><dd>{{ statusLabel(nodeStatus(selectedNode), selectedNode) }}</dd></div><div><dt>解锁条件</dt><dd>{{ requiredRealmLabel(selectedNode) }}</dd></div></dl>
       </article>
       <p v-else class="world-detail cultivation-surface">选择一个节点查看详情。</p>
     </section>
@@ -24,7 +24,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useCultivationStore } from '../stores/cultivation'
 import { cultivationService } from '../services/cultivation'
 import MapNode from '../components/cultivation/MapNode.vue'
-import { labelRealm, labelStatus } from '../utils/displayLabels'
+import { labelFromServer, labelRealm, labelStatus } from '../utils/displayLabels'
 
 const store = useCultivationStore()
 const nodes = ref([])
@@ -68,9 +68,10 @@ function realmIndex(realm) {
   const index = realmOrder.indexOf(realm)
   return index === -1 ? 0 : index
 }
-function statusLabel(status, node) { return node?.status_label || labelStatus(status) }
+function statusLabel(status, node) { return labelFromServer(node, 'status_label', status, labelStatus) }
 function statusIcon(status) { return ({ current: '●', available: '○', completed: '✓', locked: '锁' })[status] || '○' }
 function realmLabel(value) { return labelRealm(value) }
+function requiredRealmLabel(node) { return labelFromServer(node, 'required_realm_label', node?.required_realm, realmLabel) }
 onMounted(load)
 </script>
 

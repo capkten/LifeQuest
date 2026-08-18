@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 import {
+  isTrustedLabel,
   labelRealm,
   labelResource,
   labelSectKind,
@@ -11,6 +12,8 @@ import {
   labelTechniqueType,
   labelNpcRole,
   labelEventSummary,
+  labelFromServer,
+  labelLockReason,
 } from '../utils/displayLabels.js'
 import { SLOT_TYPE_LABELS, TECHNIQUE_TYPE_LABELS } from '../locales/zh-CN.js'
 import { getErrorMessage } from '../utils/errorMessage.js'
@@ -175,6 +178,29 @@ test('display labels hide unknown stable keys and use Chinese empty fallbacks', 
   assert.equal(displayLabels.labelLockReason?.(''), '未知渡劫状态')
 })
 
+test('server labels only override fallbacks when they are localized', () => {
+  const cases = [
+    [{ realm_key: 'future_realm', realm_label: 'future_realm' }, 'realm_label', 'realm_key', labelRealm, '未知境界'],
+    [{ kind: 'future_kind', kind_label: 'future_kind' }, 'kind_label', 'kind', labelSectKind, '未知宗门类型'],
+    [{ technique_type: 'future_type', technique_type_label: 'future_type' }, 'technique_type_label', 'technique_type', labelTechniqueType, '未知功法类型'],
+    [{ task_preference: 'future_preference', task_preference_label: 'future_preference' }, 'task_preference_label', 'task_preference', labelTaskPreference, '未知任务偏好'],
+    [{ status: 'future_status', status_label: 'future_status' }, 'status_label', 'status', labelStatus, '未知状态'],
+    [{ resource: 'future_resource', resource_label: 'future_resource' }, 'resource_label', 'resource', labelResource, '未知资源'],
+    [{ slot_type: 'future_slot', slot_type_label: 'future_slot' }, 'slot_type_label', 'slot_type', labelSlotType, '未知格子类型'],
+    [{ role: 'future_role', role_label: 'future_role' }, 'role_label', 'role', labelNpcRole, '未知身份'],
+    [{ event_key: 'future_event', summary_label: 'future_event' }, 'summary_label', 'event_key', labelEventSummary, '未知事件'],
+    [{ lock_reason: 'future_lock', lock_reason_label: 'future_lock' }, 'lock_reason_label', 'lock_reason', labelLockReason, '未知渡劫状态'],
+  ]
+
+  for (const [record, labelKey, valueKey, fallback, expected] of cases) {
+    assert.equal(labelFromServer(record, labelKey, record[valueKey], fallback), expected)
+  }
+  assert.equal(labelFromServer({ realm_key: 'foundation', realm_label: '筑基期' }, 'realm_label', 'foundation', labelRealm), '筑基期')
+  assert.equal(labelFromServer({ realm_key: 'foundation', realm_label: '服务器中文境界' }, 'realm_label', 'foundation', labelRealm), '服务器中文境界')
+  assert.equal(isTrustedLabel('foundation', 'foundation'), false)
+  assert.equal(isTrustedLabel('筑基期', 'foundation'), true)
+})
+
 test('slot labels keep body distinct from technique type labels', () => {
   assert.equal(TECHNIQUE_TYPE_LABELS.body, '炼体')
   assert.equal(SLOT_TYPE_LABELS.body, '身法')
@@ -197,35 +223,42 @@ test('cultivation surfaces keep Chinese fallback and state copy', async () => {
 
 test('cultivation pages prefer server labels before shared display labels', async () => {
   const assertions = {
-    './Cultivation.vue': [/realm_label\s*\|\|/, /labelRealm/],
-    './World.vue': [/status_label\s*\|\|\s*labelStatus/, /required_realm_label\s*\|\|\s*realmLabel/],
+    './Cultivation.vue': [/labelFromServer/, /labelRealm/],
+    './World.vue': [/labelFromServer/, /labelStatus/],
     './Sects.vue': [
-      /sect\.kind_label\s*\|\|\s*labelSectKind/,
-      /sect\.task_preference_label\s*\|\|\s*labelTaskPreference/,
-      /sect\.entry_realm_label\s*\|\|\s*labelRealm/,
-      /sect\.trial_status_label\s*\|\|\s*labelStatus/,
-      /npc\.role_label\s*\|\|/,
+      /labelFromServer/,
+      /labelSectKind/,
+      /labelTaskPreference/,
+      /labelRealm/,
+      /labelStatus/,
+      /labelNpcRole/,
     ],
     './Techniques.vue': [
-      /technique\.technique_type_label\s*\|\|\s*labelTechniqueType/,
-      /technique\.required_realm_label\s*\|\|\s*labelRealm/,
-      /selectedSlot\.required_realm_label\s*\|\|\s*labelRealm/,
+      /labelFromServer/,
+      /labelTechniqueType/,
+      /labelRealm/,
     ],
-    './Tribulations.vue': [/realm_label\s*\|\|\s*labelRealm/, /target_realm_label\s*\|\|\s*labelRealm/],
-    '../components/cultivation/CultivationStatusBar.vue': [/realm_label\s*\|\|\s*labelRealm/, /\$\{key\}_label`\]\s*\|\|\s*labelResource/],
-    '../components/cultivation/RealmProgress.vue': [/realm_label\s*\|\|\s*labelRealm/],
-    '../components/cultivation/ResourceSummary.vue': [/\$\{item\.key\}_label`\]\s*\|\|\s*labelResource/],
-    '../components/cultivation/RewardToast.vue': [/cultivation_label\s*\|\|\s*resourceLabel/, /spirit_stones_label\s*\|\|\s*resourceLabel/, /labelResource/],
-    '../components/cultivation/MapNode.vue': [/status_label\s*\|\|\s*labelStatus/, /required_realm_label\s*\|\|\s*labelRealm/],
-    '../components/cultivation/NpcTimeline.vue': [/summary_label/, /role_label\)\s*\|\|\s*labelNpcRole/],
-    './Npcs.vue': [/npc\.role_label\s*\|\|/, /labelNpcRole/],
-    '../components/cultivation/TribulationProbability.vue': [/target_realm_label\s*\|\|\s*labelRealm/, /lock_reason_label\s*\|\|\s*labelLockReason/],
+    './Tribulations.vue': [/labelFromServer/, /labelRealm/],
+    '../components/cultivation/CultivationStatusBar.vue': [/labelFromServer/, /labelResource/],
+    '../components/cultivation/RealmProgress.vue': [/labelFromServer/, /labelRealm/],
+    '../components/cultivation/ResourceSummary.vue': [/labelFromServer/, /labelResource/],
+    '../components/cultivation/RewardToast.vue': [/labelFromServer/, /labelResource/],
+    '../components/cultivation/MapNode.vue': [/labelFromServer/, /labelStatus/, /labelRealm/],
+    '../components/cultivation/NpcTimeline.vue': [/labelFromServer/, /labelNpcRole/, /labelEventSummary/],
+    './Npcs.vue': [/labelFromServer/, /labelNpcRole/],
+    '../components/cultivation/TribulationProbability.vue': [/labelFromServer/, /labelRealm/, /labelLockReason/],
   }
 
   for (const [file, patterns] of Object.entries(assertions)) {
     const source = await readFile(new URL(file, import.meta.url), 'utf8')
     for (const pattern of patterns) assert.match(source, pattern, `${file} must prefer server labels before fallback`)
   }
+})
+
+test('Sidebar sanitizes the server realm label through the shared helper', async () => {
+  const source = await readFile(new URL('../components/layout/Sidebar.vue', import.meta.url), 'utf8')
+  assert.match(source, /labelFromServer\(cultivationOverview,\s*['"]realm_label['"],\s*cultivationOverview\?\.realm_key,\s*labelRealm\)/)
+  assert.doesNotMatch(source, /cultivationOverview\?\.realm_label\s*\|\|/)
 })
 
 test('error messages translate backend details and machine codes', () => {

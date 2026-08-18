@@ -26,15 +26,15 @@ import TribulationProbability from '../components/cultivation/TribulationProbabi
 import { cultivationService } from '../services/cultivation'
 import { useCultivationStore } from '../stores/cultivation'
 import { getErrorMessage } from '../utils/errorMessage'
-import { labelRealm } from '../utils/displayLabels'
+import { labelFromServer, labelRealm } from '../utils/displayLabels'
 
 const preview = ref(null), overview = ref(null), result = ref(null), error = ref(null), loading = ref(false), attempting = ref(false), pillCount = ref(0)
 const cultivationStore = useCultivationStore()
 let previewRequestId = 0
 let previewController = null
 const readinessItems = [{ key: 'mind_state', label: '心境状态' }, { key: 'habit', label: '最近 7 天习惯' }, { key: 'task_quality', label: '最近 7 天任务质量' }, { key: 'trial', label: '渡劫试炼质量' }, { key: 'compatibility', label: '功法宗门契合度' }]
-const realmLabel = computed(() => `${overview.value?.realm_label || labelRealm(overview.value?.realm_key)} ${overview.value?.minor_stage || ''}`.trim())
-const resultRealmLabel = computed(() => result.value?.target_realm_label || labelRealm(result.value?.target_realm))
+const realmLabel = computed(() => `${labelFromServer(overview.value, 'realm_label', overview.value?.realm_key, labelRealm)} ${overview.value?.minor_stage || ''}`.trim())
+const resultRealmLabel = computed(() => labelFromServer(result.value, 'target_realm_label', result.value?.target_realm, labelRealm))
 const errorMessage = computed(() => getErrorMessage(error.value, '渡劫状态暂时无法读取。'))
 
 async function loadPreview() {

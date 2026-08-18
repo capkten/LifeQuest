@@ -27,7 +27,7 @@ import { computed, defineComponent, h, onMounted, ref } from 'vue'
 import { cultivationService } from '../services/cultivation'
 import NpcTimeline from '../components/cultivation/NpcTimeline.vue'
 import { getErrorMessage } from '../utils/errorMessage'
-import { labelNpcRole } from '../utils/displayLabels'
+import { labelFromServer, labelNpcRole } from '../utils/displayLabels'
 
 const relationship = ref({ fixed_core: [], recently_met: [], events: [] })
 const loading = ref(false)
@@ -46,7 +46,11 @@ const NpcGroup = defineComponent({
 })
 
 const errorMessage = computed(() => getErrorMessage(error.value, '关系记录暂时无法读取。'))
-function npcRoleLabel(npc) { return npc.role_label || (npc.role ? labelNpcRole(npc.role) : '') || npc.description || '关系信息待补充' }
+function npcRoleLabel(npc) {
+  return labelFromServer(npc, 'role_label', npc?.role, () => npc?.role
+    ? labelNpcRole(npc.role)
+    : labelFromServer(npc, 'description', npc?.role, '关系信息待补充'))
+}
 async function load() { loading.value = true; error.value = null; try { relationship.value = await cultivationService.getNpcs() || { fixed_core: [], recently_met: [], events: [] } } catch (requestError) { error.value = requestError } finally { loading.value = false } }
 async function meetNpc() { meeting.value = true; error.value = null; try { await cultivationService.meetNpc({ sect_key: sectKey.value, population_index: Number(populationIndex.value) }); await load() } catch (requestError) { error.value = requestError } finally { meeting.value = false } }
 onMounted(load)

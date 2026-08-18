@@ -51,14 +51,14 @@ import { computed, onMounted } from 'vue'
 import { useCultivationStore } from '../stores/cultivation'
 import RealmProgress from '../components/cultivation/RealmProgress.vue'
 import ResourceSummary from '../components/cultivation/ResourceSummary.vue'
-import { labelRealm } from '../utils/displayLabels'
+import { labelFromServer, labelRealm } from '../utils/displayLabels'
 
 const store = useCultivationStore()
 const overview = computed(() => store.overview)
 const loading = computed(() => store.loading)
 const error = computed(() => store.error)
 const realm = computed(() => overview.value?.realm || { key: overview.value?.realm_key, minor_stage: overview.value?.minor_stage })
-const realmLabel = computed(() => `${overview.value?.realm_label || realm.value?.realm_label || labelRealm(realm.value?.key)} ${realm.value?.minor_stage || ''}`.trim())
+const realmLabel = computed(() => `${labelFromServer(overview.value, 'realm_label', realm.value?.key, () => labelFromServer(realm.value, 'realm_label', realm.value?.key, labelRealm))} ${realm.value?.minor_stage || ''}`.trim())
 const progress = computed(() => overview.value?.next_stage || overview.value?.progress)
 const resources = computed(() => overview.value?.resources || {
   spirit_stones: overview.value?.spirit_stones,

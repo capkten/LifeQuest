@@ -16,10 +16,10 @@
 
 <script setup>
 import { computed } from 'vue'
-import { labelRealm } from '../../utils/displayLabels'
+import { labelFromServer, labelRealm } from '../../utils/displayLabels'
 
 const props = defineProps({ progress: { type: Object, default: null }, loading: Boolean })
-const realmLabel = computed(() => props.progress?.realm_label || labelRealm(props.progress?.realm_key))
+const realmLabel = computed(() => labelFromServer(props.progress, 'realm_label', props.progress?.realm_key, labelRealm))
 const progressPercent = computed(() => {
   const current = Number(props.progress?.current_threshold ?? 0)
   const next = Number(props.progress?.next_threshold ?? current)

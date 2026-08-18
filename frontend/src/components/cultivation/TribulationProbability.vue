@@ -28,14 +28,14 @@
 <script setup>
 import { computed } from 'vue'
 import { getErrorMessage } from '../../utils/errorMessage'
-import { labelLockReason, labelRealm } from '../../utils/displayLabels'
+import { labelFromServer, labelLockReason, labelRealm } from '../../utils/displayLabels'
 
 const props = defineProps({ preview: { type: Object, default: null }, loading: Boolean, error: { type: [Object, String], default: null }, attempting: Boolean, submitting: Boolean })
 defineEmits(['attempt', 'retry'])
 const operationBusy = computed(() => props.loading || props.attempting || props.submitting)
 const errorMessage = computed(() => typeof props.error === 'string' ? props.error : getErrorMessage(props.error))
-const targetRealmLabel = computed(() => props.preview?.target_realm_label || labelRealm(props.preview?.target_realm))
-const lockReasonLabel = computed(() => props.preview?.lock_reason_label || labelLockReason(props.preview?.lock_reason))
+const targetRealmLabel = computed(() => labelFromServer(props.preview, 'target_realm_label', props.preview?.target_realm, labelRealm))
+const lockReasonLabel = computed(() => labelFromServer(props.preview, 'lock_reason_label', props.preview?.lock_reason, labelLockReason))
 const cooldownLabel = computed(() => props.preview?.cooldown_until ? `下一次可尝试：${formatCooldown(props.preview.cooldown_until)}` : '现在可尝试')
 function formatCooldown(value) {
   return new Date(value).toLocaleString('zh-CN', { dateStyle: 'medium', timeStyle: 'short' })

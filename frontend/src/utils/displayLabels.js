@@ -51,6 +51,22 @@ export function labelLockReason(value) {
   return labelValue(LOCK_REASON_LABELS, value, '未知渡劫状态')
 }
 
+export function isTrustedLabel(serverLabel, stableValue) {
+  const label = normalizeLabel(serverLabel)
+  const stableKey = normalizeLabel(stableValue)
+  return Boolean(label && label !== stableKey && /[\u3400-\u9fff]/.test(label))
+}
+
+export function labelFromServer(record, labelKey, stableValue, fallback) {
+  const serverLabel = record?.[labelKey]
+  if (isTrustedLabel(serverLabel, stableValue)) return normalizeLabel(serverLabel)
+  return typeof fallback === 'function' ? fallback(stableValue) : fallback
+}
+
 function labelValue(labels, value, fallback) {
   return typeof value === 'string' && labels[value] ? labels[value] : fallback
+}
+
+function normalizeLabel(value) {
+  return typeof value === 'string' ? value.trim() : ''
 }

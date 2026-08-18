@@ -13,7 +13,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { labelResource } from '../../utils/displayLabels'
+import { labelFromServer, labelResource } from '../../utils/displayLabels'
 
 const props = defineProps({ resources: { type: Object, default: () => ({}) }, loading: Boolean })
 const resourceItems = computed(() => [
@@ -22,5 +22,5 @@ const resourceItems = computed(() => [
   { key: 'contribution' },
   { key: 'mind_state' },
 ])
-const resourceLabel = (item) => props.resources?.[`${item.key}_label`] || labelResource(item.key)
+const resourceLabel = (item) => labelFromServer(props.resources, `${item.key}_label`, item.key, labelResource)
 </script>

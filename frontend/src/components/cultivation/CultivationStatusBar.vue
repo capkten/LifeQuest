@@ -22,11 +22,11 @@
 <script setup>
 import { computed } from 'vue'
 import { getErrorMessage } from '../../utils/errorMessage'
-import { labelRealm, labelResource } from '../../utils/displayLabels'
+import { labelFromServer, labelRealm, labelResource } from '../../utils/displayLabels'
 
 const props = defineProps({ overview: { type: Object, default: null }, loading: Boolean, error: { type: [Object, String], default: null } })
 defineEmits(['retry'])
-const realmLabel = computed(() => props.overview?.realm_label || labelRealm(props.overview?.realm_key))
-const resourceLabel = (key) => props.overview?.[`${key}_label`] || labelResource(key)
+const realmLabel = computed(() => labelFromServer(props.overview, 'realm_label', props.overview?.realm_key, labelRealm))
+const resourceLabel = (key) => labelFromServer(props.overview, `${key}_label`, key, labelResource)
 const errorMessage = computed(() => getErrorMessage(props.error, '修炼数据暂时无法读取。'))
 </script>

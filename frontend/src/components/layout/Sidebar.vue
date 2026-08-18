@@ -30,7 +30,7 @@
           </svg>
         </span>
         <span class="stat-label">{{ cultivationOverview ? '境界' : '等级' }}</span>
-        <span class="stat-value">{{ cultivationOverview ? `${cultivationOverview.realm_label || labelRealm(cultivationOverview.realm_key)} ${cultivationOverview.minor_stage}` : (user?.level || 1) }}</span>
+        <span class="stat-value">{{ cultivationOverview ? `${labelFromServer(cultivationOverview, 'realm_label', cultivationOverview?.realm_key, labelRealm)} ${cultivationOverview.minor_stage}` : (user?.level || 1) }}</span>
       </div>
       <div class="stat-item">
         <span class="stat-icon">
@@ -200,7 +200,7 @@ import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStats } from '../../composables/useUserStats'
 import { useResolvedImage } from '../../composables/useResolvedImage'
-import { labelRealm } from '../../utils/displayLabels'
+import { labelFromServer, labelRealm } from '../../utils/displayLabels'
 
 const route = useRoute()
 
