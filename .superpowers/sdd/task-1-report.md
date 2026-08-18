@@ -75,3 +75,46 @@ npm run build
 - 聚焦后端测试仍输出 7 条现有框架弃用警告；未修改无关配置。
 - 前端构建输出现有 npm `always-auth` 配置警告、Rollup 注释警告和大于 500 kB chunk 提示；构建本身成功。
 - 按 Task 1 范围未运行后端全量测试，也未处理后续任务的数据库回填、API label 字段接线或页面文案替换。
+
+## Task 1 修复追加
+
+### 修复说明
+
+- 后端新增稳定任务偏好标签映射，`discipline-2` 至 `discipline-10` 现在分别返回“专注修行”“持久修行”“探索历练”“资源积累”“团队协作”“专精突破”“高难试炼”“传承研究”“隐秘探索”；稳定 key 和目录生成规则保持不变。
+- 前端拆分功法类型与格子类型映射：功法 `body` 保持“炼体”，格子 `body` 显示“身法”。
+- 新增回归断言覆盖上述两项行为；未修改 API 路径、数据库字段、内部 key、用户内容或后续任务文件。
+
+### TDD 追加证据
+
+RED：
+
+```text
+backend: 1 failed, 2 passed; discipline-2 仍返回“纪律修行”而非“专注修行”。
+frontend: 1 failed, 3 passed; SLOT_TYPE_LABELS.body 为“炼体”而非“身法”。
+```
+
+GREEN：
+
+```powershell
+cd backend
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'
+pytest tests/test_content_catalog.py -q
+# 3 passed, 7 warnings in 0.03s
+
+cd ../frontend
+node --test src/views/localization-regressions.test.mjs
+# 4 passed, 0 failed
+npm run build
+# exit code 0; Vite production build completed
+```
+
+```text
+git diff --check
+# exit code 0; no output
+```
+
+### 修复 Commit
+
+`041b6fb` — `fix(localization): correct task and slot labels`
+
+报告追加提交后，最终提交 hash 将在本报告后续提交中记录。
