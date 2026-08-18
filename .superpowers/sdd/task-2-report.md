@@ -96,3 +96,46 @@ git diff --check
 
 - brief 指定聚焦套件仍有一个既有日期敏感测试在当前日期下失败；本任务未修改该行为或测试，避免扩大范围。
 - 测试输出包含现有 FastAPI/Starlette 和 jose 弃用警告；未修改无关配置。
+
+## Review-fix 追加
+
+### A. 固定核心 NPC 边界
+
+- 固定核心 NPC 现在必须同时满足 cultivation 生成器的稳定字段：`is_core=True`、`is_generated=False`、`population_index is None`、`cultivation_locked=True`，关联宗门必须命中 `SECT_CATALOG` 的稳定 `sect_key`。
+- 记录还必须使用 `_ensure_fixed_core_npcs()` 产生的精确系统名称（`玄衡宗主`、`传法长老`、`入门使者`），且描述必须是当前系统模板或精确旧模板 `A fixed core character.`。
+- 增加了同角色/同宗门/同标志位、不同名称的用户 NPC 碰撞测试，以及同系统名称但已被用户改写描述的碰撞测试；两者的 name、role、description、sect_id 及其他字段均保持不变。
+- 真实旧系统固定核心 NPC 仍可按精确名称和旧模板迁移，回填只更新 description，不修改身份或关系字段。
+
+### B. 回填与种子流程覆盖
+
+- 增加真实 SQLite 测试，重复执行 `seed_world()` + `backfill_system_content()`，断言 world/sect/technique/NPC/event 行数不变，主键、NPC/事件用户外键、宗门外键和既有字段不变。
+- 增加 empty DB 的重复 seed + backfill 测试，确认只创建 catalog 规定的 9 个 world nodes、90 个 sects、3 个 techniques，后续回填计数为零。
+- 增加 startup 调用测试，确认顺序为 `seed_world` 后 `backfill_system_content`，并确认异常边界中的 session 关闭行为仍由 `finally` 保证。
+
+### TDD 与验证
+
+RED：先运行碰撞测试，现实现将用户 NPC 描述改成了固定核心系统描述，结果为 `1 failed, 7 warnings`。
+
+GREEN：实现后核心迁移/碰撞测试通过；指定套件结果为：
+
+```text
+pytest tests/test_content_localization.py tests/test_cultivation.py -q
+73 passed, 1 failed, 39 warnings
+```
+
+唯一失败仍是既有日期敏感测试 `test_npc_cultivation_updates_once_per_natural_day`：测试固定断言 `2026-08-17`，当前运行日期为 `2026-08-18`。排除该已知环境冲突后：
+
+```text
+pytest tests/test_content_localization.py tests/test_cultivation.py -q -k "not test_npc_cultivation_updates_once_per_natural_day"
+73 passed, 1 deselected, 39 warnings
+```
+
+`python -m compileall -q app` 与 `git diff --check` 均退出码 `0`。
+
+### Commit
+
+实现与测试 commit：`494623a` — `fix(localization): protect user core NPCs during backfill`
+
+### Task 3 转交
+
+审查提出的奖励/流水英文文案属于 Task 3 明确范围，已转交 Task 3；本次未修改 `checkin.py`、`coin.py`、`achievement.py`，也未修改 reward/check-in/achievement/cultivation log 描述。
