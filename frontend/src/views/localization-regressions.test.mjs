@@ -12,66 +12,96 @@ import {
 import { SLOT_TYPE_LABELS, TECHNIQUE_TYPE_LABELS } from '../locales/zh-CN.js'
 import { getErrorMessage } from '../utils/errorMessage.js'
 
+function readBracedBody(source, openBraceIndex) {
+  let depth = 1
+  let quote = null
+  let escaped = false
+  let comment = null
+
+  for (let index = openBraceIndex + 1; index < source.length; index += 1) {
+    const character = source[index]
+    const nextCharacter = source[index + 1]
+
+    if (comment === 'line') {
+      if (character === '\n') comment = null
+      continue
+    }
+    if (comment === 'block') {
+      if (character === '*' && nextCharacter === '/') {
+        comment = null
+        index += 1
+      }
+      continue
+    }
+    if (quote) {
+      if (escaped) {
+        escaped = false
+      } else if (character === '\\') {
+        escaped = true
+      } else if (character === quote) {
+        quote = null
+      }
+      continue
+    }
+    if (character === '/' && nextCharacter === '/') {
+      comment = 'line'
+      index += 1
+      continue
+    }
+    if (character === '/' && nextCharacter === '*') {
+      comment = 'block'
+      index += 1
+      continue
+    }
+    if (character === "'" || character === '"' || character === '`') {
+      quote = character
+      continue
+    }
+    if (character === '{') depth += 1
+    if (character === '}') depth -= 1
+    if (depth === 0) return source.slice(openBraceIndex + 1, index)
+  }
+
+  throw new Error('Unclosed source block')
+}
+
 function readCatchBlocks(source) {
   const catches = []
   const catchPattern = /catch\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*\{/g
 
   for (const match of source.matchAll(catchPattern)) {
-    const bodyStart = match.index + match[0].length
-    let depth = 1
-    let quote = null
-    let escaped = false
-    let comment = null
-
-    for (let index = bodyStart; index < source.length; index += 1) {
-      const character = source[index]
-      const nextCharacter = source[index + 1]
-
-      if (comment === 'line') {
-        if (character === '\n') comment = null
-        continue
-      }
-      if (comment === 'block') {
-        if (character === '*' && nextCharacter === '/') {
-          comment = null
-          index += 1
-        }
-        continue
-      }
-      if (quote) {
-        if (escaped) {
-          escaped = false
-        } else if (character === '\\') {
-          escaped = true
-        } else if (character === quote) {
-          quote = null
-        }
-        continue
-      }
-      if (character === '/' && nextCharacter === '/') {
-        comment = 'line'
-        index += 1
-        continue
-      }
-      if (character === '/' && nextCharacter === '*') {
-        comment = 'block'
-        index += 1
-        continue
-      }
-      if (character === "'" || character === '"' || character === '`') {
-        quote = character
-        continue
-      }
-      if (character === '{') depth += 1
-      if (character === '}') depth -= 1
-      if (depth === 0) {
-        catches.push({ caughtName: match[1], body: source.slice(bodyStart, index) })
-        break
-      }
-    }
+    const openBraceIndex = source.indexOf('{', match.index)
+    catches.push({ caughtName: match[1], body: readBracedBody(source, openBraceIndex) })
   }
 
   return catches
+}
+
+function readNamedArrowCallback(source, name) {
+  const pattern = new RegExp(`${name}\\s*:\\s*\\(\\s*([A-Za-z_$][\\w$]*)\\s*\\)\\s*=>\\s*\\{`)
+  const match = pattern.exec(source)
+  assert.ok(match, `${name} callback must exist`)
+  const openBraceIndex = source.indexOf('{', match.index)
+  return { caughtName: match[1], body: readBracedBody(source, openBraceIndex) }
+}
+
+function readPromiseCatchCallbacks(source) {
+  const callbacks = []
+  const pattern = /\.catch\s*\(\s*([A-Za-z_$][\w$]*)\s*=>\s*\{/g
+
+  for (const match of source.matchAll(pattern)) {
+    const openBraceIndex = source.indexOf('{', match.index)
+    callbacks.push({ caughtName: match[1], body: readBracedBody(source, openBraceIndex) })
+  }
+
+  return callbacks
+}
+
+function readBranchBody(source, pattern, label) {
+  const match = pattern.exec(source)
+  assert.ok(match, `${label} must exist`)
+  const openBraceIndex = source.indexOf('{', match.index)
+  return readBracedBody(source, openBraceIndex)
 }
 
 const hasVisibleError = (body) => /(?:\b(?:error\w*|\w*Error)\.value\s*=|\bshowError\s*\(|\bshowToast\s*\(|\bElMessage\.error\s*\(|\balert\s*\()/.test(body)
@@ -175,6 +205,40 @@ test('api and pages use the shared error converter', async () => {
   assert.match(apiSource, /getErrorMessage\(error\)/)
   for (const [file, source] of files.map((file, index) => [file, sources[index]])) {
     assert.doesNotMatch(source, /error\?\.response\?\.data\?\.detail|err\.response\?\.data\?\.detail|cause\.response\?\.data\?\.detail|response\.data\?\.detail/, `${file} reads raw backend error details`)
+  }
+})
+
+test('api converts every non-401 HTTP and network error branch', async () => {
+  const source = await readFile(new URL('../services/api.js', import.meta.url), 'utf8')
+  const httpBranch = readBranchBody(
+    source,
+    /if \(!error\.config\?\.skipErrorToast && status && status !== 401\)\s*\{/g,
+    'non-401 HTTP status branch',
+  )
+  const networkBranch = readBranchBody(
+    source,
+    /else if \(!error\.config\?\.skipErrorToast && !error\.response\)\s*\{/g,
+    'network/no-response branch',
+  )
+
+  assert.match(httpBranch, /getErrorMessage\(error\)/)
+  assert.match(networkBranch, /getErrorMessage\(error\)/)
+})
+
+test('Sects onError converts the request error before rendering it', async () => {
+  const source = await readFile(new URL('./Sects.vue', import.meta.url), 'utf8')
+  const { caughtName, body } = readNamedArrowCallback(source, 'onError')
+
+  assert.match(body, new RegExp(`getErrorMessage\\(\\s*${caughtName}\\s*\\)`))
+})
+
+test('ProjectDetail converts every Promise catch error before showing it', async () => {
+  const source = await readFile(new URL('./ProjectDetail.vue', import.meta.url), 'utf8')
+  const callbacks = readPromiseCatchCallbacks(source)
+
+  assert.equal(callbacks.length, 2, 'ProjectDetail Promise catch callbacks must remain covered')
+  for (const { caughtName, body } of callbacks) {
+    assert.match(body, new RegExp(`getErrorMessage\\(\\s*${caughtName}\\s*\\)`))
   }
 })
 
