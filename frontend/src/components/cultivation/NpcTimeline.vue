@@ -43,7 +43,7 @@ function normalizeItem(item, source, index) {
     label,
     detail: source === 'event'
       ? eventDetail(item)
-      : roleLabel !== '未知身份' ? roleLabel : firstText(item?.description, item?.text, item?.message) || '人物信息待补充',
+      : roleLabel !== '未知身份' ? roleLabel : '人物信息待补充',
     date: firstText(item?.date, item?.created_at, item?.occurred_at),
   }
 }

@@ -657,7 +657,7 @@ class CultivationService:
         if npc.is_core:
             description = f"{sect_name}的固定核心人物。"
         else:
-            role_label = NPC_ROLE_LABELS.get(npc.role, npc.role)
+            role_label = NPC_ROLE_LABELS.get(npc.role, "未知身份")
             description = (
                 f"{sect_name}的{role_label}。"
                 if role_label

@@ -6,7 +6,7 @@
       <div class="sects-filter-grid">
         <label>星级<select v-model="filters.star" @change="load"><option :value="null">全部星级</option><option v-for="star in 9" :key="star" :value="star">{{ star }} 星</option></select></label>
         <label>类型<select v-model="filters.kind" @change="load"><option :value="null">普通与特殊</option><option value="normal">普通</option><option value="special">特殊</option></select></label>
-        <label>任务偏好<input v-model.trim="filters.task_preference" placeholder="输入任务偏好标识" @change="load"></label>
+        <label>任务偏好<select v-model="filters.task_preference" @change="load"><option :value="null">全部偏好</option><option v-for="option in taskPreferenceOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
       </div>
     </section>
     <div v-if="loading" class="cultivation-state">正在读取宗门...</div>
@@ -40,6 +40,10 @@ import { getErrorMessage } from '../utils/errorMessage'
 import { labelFromServer, labelNpcRole, labelRealm, labelSectKind, labelStatus, labelTaskPreference } from '../utils/displayLabels'
 
 const filters = reactive({ star: null, kind: null, task_preference: null })
+const taskPreferenceOptions = Array.from({ length: 10 }, (_, index) => {
+  const value = `discipline-${index + 1}`
+  return { value, label: labelTaskPreference(value) }
+})
 const sects = ref([]); const loading = ref(false); const error = ref(null); const busyId = ref(null)
 const relationship = ref({ recently_met: [] })
 const recentlyMet = computed(() => relationship.value?.recently_met || [])

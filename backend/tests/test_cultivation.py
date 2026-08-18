@@ -527,6 +527,44 @@ def test_npc_api_keeps_unknown_event_key_but_hides_raw_key_from_summary(client, 
     assert known["summary"] == "与普通弟子相遇"
 
 
+def test_npc_api_hides_unknown_generated_role_from_description(client, auth_headers, db_session):
+    from uuid import UUID
+
+    from app.models.world import Npc, NpcEvent
+    from app.services.cultivation import CultivationService
+
+    current_user = client.get("/api/users/me", headers=auth_headers).json()
+    user_id = UUID(current_user["id"])
+    service = CultivationService(db_session)
+    _prepare_npc_meeting(service, user_id)
+    sect = service._get_sect("sect-1-normal-1")
+    npc = Npc(
+        user_id=user_id,
+        sect_id=sect.id,
+        name="未知角色人物",
+        role="future_role_key",
+        description="赤霞门的future_role_key。",
+        is_generated=True,
+        population_index=15,
+    )
+    db_session.add(npc)
+    db_session.flush()
+    db_session.add(NpcEvent(
+        user_id=user_id,
+        npc_id=npc.id,
+        event_key="met",
+        summary="与普通弟子相遇",
+    ))
+    db_session.commit()
+
+    response = client.get("/api/cultivation/npcs", headers=auth_headers)
+
+    assert response.status_code == 200
+    recently_met = next(item for item in response.json()["recently_met"] if item["id"] == str(npc.id))
+    assert recently_met["description"] == "赤霞门的未知身份。"
+    assert "future_role_key" not in recently_met["description"]
+
+
 def test_npc_migration_moves_events_before_deleting_duplicate_npcs(tmp_path, monkeypatch):
     from sqlalchemy import create_engine, inspect, text
 

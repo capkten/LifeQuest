@@ -253,6 +253,23 @@ test('ProjectDetail close buttons use Chinese aria labels', async () => {
   assert.equal((source.match(/aria-label="关闭"/g) || []).length, 5)
 })
 
+test('NPC meeting and sect preference controls keep stable keys internal', async () => {
+  const [npcs, sects, timeline] = await Promise.all([
+    readFile(new URL('./Npcs.vue', import.meta.url), 'utf8'),
+    readFile(new URL('./Sects.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../components/cultivation/NpcTimeline.vue', import.meta.url), 'utf8'),
+  ])
+
+  assert.doesNotMatch(npcs, /sect-1-normal-1/)
+  assert.match(npcs, /cultivationService\.getSects\(\)/)
+  assert.match(npcs, /<option v-for="sect in sectOptions"/)
+  assert.match(npcs, /\{\{ sect\.name \}\}/)
+  assert.doesNotMatch(sects, /<input v-model\.trim="filters\.task_preference"/)
+  assert.match(sects, /<select v-model="filters\.task_preference"/)
+  assert.match(sects, /taskPreferenceOptions/)
+  assert.doesNotMatch(timeline, /roleLabel !== '未知身份' \? roleLabel : firstText\(item\?\.description/)
+})
+
 test('all task 6 legacy page templates contain no bare English user-facing text', async () => {
   const sources = await Promise.all(legacyFiles.map((file) => readFile(new URL(file, import.meta.url), 'utf8')))
 
