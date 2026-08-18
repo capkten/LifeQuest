@@ -444,6 +444,18 @@ test('cultivation pages prefer server labels before shared display labels', asyn
   }
 })
 
+test('cultivation resource projections preserve server labels', async () => {
+  const [cultivation, sidebar] = await Promise.all([
+    readFile(new URL('./Cultivation.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../components/layout/Sidebar.vue', import.meta.url), 'utf8'),
+  ])
+
+  for (const resource of ['spirit_stones', 'merit', 'contribution', 'mind_state']) {
+    assert.match(cultivation, new RegExp(`${resource}_label: overview\\.value\\?\\.${resource}_label`))
+  }
+  assert.match(sidebar, /labelFromServer\(cultivationOverview,\s*['"]spirit_stones_label['"],\s*['"]spirit_stones['"],\s*labelResource\)/)
+})
+
 test('Sidebar sanitizes the server realm label through the shared helper', async () => {
   const source = await readFile(new URL('../components/layout/Sidebar.vue', import.meta.url), 'utf8')
   assert.match(source, /labelFromServer\(cultivationOverview,\s*['"]realm_label['"],\s*cultivationOverview\?\.realm_key,\s*labelRealm\)/)

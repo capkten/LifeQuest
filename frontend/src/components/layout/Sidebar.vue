@@ -39,7 +39,7 @@
             <path d="M12 6v12M6 12h12" />
           </svg>
         </span>
-        <span class="stat-label">{{ cultivationOverview ? '灵石' : '金币' }}</span>
+        <span class="stat-label">{{ cultivationOverview ? labelFromServer(cultivationOverview, 'spirit_stones_label', 'spirit_stones', labelResource) : '金币' }}</span>
         <span class="stat-value">{{ cultivationOverview ? cultivationOverview.spirit_stones : (user?.coins || 0) }}</span>
       </div>
     </div>
@@ -200,7 +200,7 @@ import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStats } from '../../composables/useUserStats'
 import { useResolvedImage } from '../../composables/useResolvedImage'
-import { labelFromServer, labelRealm } from '../../utils/displayLabels'
+import { labelFromServer, labelRealm, labelResource } from '../../utils/displayLabels'
 
 const route = useRoute()
 

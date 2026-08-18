@@ -62,9 +62,13 @@ const realmLabel = computed(() => `${labelFromServer(overview.value, 'realm_labe
 const progress = computed(() => overview.value?.next_stage || overview.value?.progress)
 const resources = computed(() => overview.value?.resources || {
   spirit_stones: overview.value?.spirit_stones,
+  spirit_stones_label: overview.value?.spirit_stones_label,
   merit: overview.value?.merit,
+  merit_label: overview.value?.merit_label,
   contribution: overview.value?.contribution,
+  contribution_label: overview.value?.contribution_label,
   mind_state: overview.value?.mind_state,
+  mind_state_label: overview.value?.mind_state_label,
 })
 const todayItems = computed(() => toArray(overview.value?.today))
 const recentRewards = computed(() => toArray(overview.value?.recent_rewards))

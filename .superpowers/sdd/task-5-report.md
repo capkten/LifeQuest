@@ -149,3 +149,25 @@ NO_RAW_LABEL_SHORTCUTS
 - `npm run build` 保留已有 npm `always-auth` 配置弃用提示、`@vueuse/core` 的两个 Rollup `#__PURE__` 注释提示，以及主 chunk 超过 500 kB 的 warning；均未导致构建失败。
 - 当前 Codex 工作区没有模型切换接口，无法从工具侧切换或验证用户要求的 `gpt-5.6-luna`。
 - 用户已有的 `frontend/components.d.ts` 修改，以及 `.agents/`、`.claude/skills/`、`.codex/`、计划文档和 `frontend/vite-check.log` 未纳入本次提交。
+
+## Current Task 5 Execution
+
+本次执行在既有修仙中文化基础上补齐了两条资源标签链路：`Cultivation.vue` 的顶层资源投影保留服务器 `*_label` 字段，`Sidebar.vue` 的灵石名称优先使用 `spirit_stones_label`，无可信服务器中文标签时回退 `displayLabels.js`。同时新增了对应静态回归断言。
+
+TDD 记录：先加入 `cultivation resource projections preserve server labels` 断言，focused localization test 得到 `24 passed, 1 failed`；实现最小修改后，brief 指定测试为 `57 passed, 0 failed`。
+
+本次指定验证结果：
+
+```text
+cd frontend
+node --test src/views/localization-regressions.test.mjs src/views/cultivation-regressions.test.mjs
+57 passed, 0 failed
+
+npm run build
+exit code 0; Vite built 1963 modules
+
+git diff --check
+exit code 0; no output
+```
+
+Task 5 修改范围和最终工作区的 `git diff --check` 均通过。未修改或暂存 Task 4 文件；`localization-regressions.test.mjs` 的差异仅为本次新增断言，没有覆盖既有测试内容。
