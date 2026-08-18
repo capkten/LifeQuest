@@ -1,94 +1,77 @@
-# Task 1 Report
+# Task 1 Report: 中文内容目录和展示契约
 
-## Scope
+## 改动文件
 
-Implemented only the Task 1 cultivation domain model and registration work:
+- `backend/app/services/content_catalog.py`
+  - 新增 9 个世界节点、90 个宗门、3 个初始功法的中文目录。
+  - 新增境界、NPC 角色和系统事件摘要标签。
+- `backend/tests/test_content_catalog.py`
+  - 覆盖 brief 指定的世界节点与功法断言，以及目录 key 完整性和中文内容断言。
+- `frontend/src/locales/zh-CN.js`
+  - 新增境界、宗门类型、功法/格子类型、任务偏好、状态、资源、NPC、事件和错误中文字典。
+- `frontend/src/utils/displayLabels.js`
+  - 新增 brief 指定的 6 个稳定 key 展示函数及中文空值回退。
+- `frontend/src/utils/errorMessage.js`
+  - 新增统一错误 detail、机器码、中文 detail 和网络错误转换契约。
+- `frontend/src/views/localization-regressions.test.mjs`
+  - 覆盖展示标签、未知值回退、错误对象、机器码和网络错误。
+- `.superpowers/sdd/task-1-report.md`
+  - 本交付报告。
 
-- Added `CultivationProfile`, `CultivationLog`, and `TribulationAttempt` in `backend/app/models/cultivation.py`.
-- Added `WorldNode`, `Sect`, `SectMembership`, `Npc`, and `NpcEvent` in `backend/app/models/world.py`.
-- Added `Technique`, `TechniqueSlot`, and `LearnedTechnique` in `backend/app/models/technique.py`.
-- Registered the new model modules in `backend/app/models/__init__.py`.
-- Explicitly imported `app.models` in `backend/app/main.py` before `Base.metadata.create_all` so startup table creation sees every model.
-- Added the focused registration test in `backend/tests/test_cultivation.py`.
+## 设计决策
 
-No API routes, frontend code, schemas, repositories, services, or later-task behavior were added.
+- 保留现有 API 路径、数据库字段、内部 key、稳定事件码、主键和外键；目录只提供中文系统内容和展示标签。
+- 宗门 key 按现有生成规则覆盖每星 6 个 `normal`、3 个 `special` 和 1 个 `hidden`，总计 90 个；世界节点和功法 key 与现有服务保持一致。
+- 使用世界规格中的九星宗门中文名称和核心传承；stable realm、kind、task preference、technique type 等值仍作为逻辑值保留。
+- 前端仅使用 ES module 常量和函数，没有新增 i18n 依赖。`labelRealm` 和 `getErrorMessage` 遵循 brief 的精确回退顺序；无响应但有 request 时返回网络错误提示。
+- 用户创建内容未被读取、改写或覆盖；本 Task 只建立目录和展示/错误契约，不处理后续种子回填、API 字段或页面替换。
 
-## TDD Evidence
+## TDD 证据
 
-The registration test was run before implementation:
+### RED
+
+先新增测试并运行：
 
 ```text
-FAILED tests/test_cultivation.py::test_cultivation_tables_are_registered
-ModuleNotFoundError: No module named 'app.models.cultivation'
+backend: 2 failed, ModuleNotFoundError: No module named 'app.services.content_catalog'
+frontend: ERR_MODULE_NOT_FOUND for src/utils/displayLabels.js
 ```
 
-After implementing the models and registration, the focused test passed:
+失败原因均为 brief 要求的实现尚不存在。
 
-```text
-1 passed, 7 warnings
-```
+### GREEN
 
-## Verification
-
-Commands run from `backend`:
+实现后运行：
 
 ```powershell
-$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; pytest tests/test_cultivation.py::test_cultivation_tables_are_registered -q
-$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; pytest tests/test_cultivation.py -q
-$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; pytest -q
+cd backend
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'
+pytest tests/test_content_catalog.py -q
 ```
 
-The complete backend suite passed:
+结果：`2 passed, 7 warnings in 0.04s`。警告为现有 FastAPI/Starlette 弃用提示。
 
-```text
-108 passed, 354 warnings in 74.00s
+```powershell
+cd frontend
+node --test src/views/localization-regressions.test.mjs
 ```
 
-`git diff --check` completed without whitespace errors.
+结果：`3 passed, 0 failed`。
 
-## Notes
-
-The suite emits existing FastAPI/Starlette and `datetime.utcnow()` deprecation warnings. They are unrelated to Task 1 and did not cause test failures.
-
-`CultivationService.ensure_profile` is a later-task service interface from the plan; it was intentionally not implemented because this task is restricted to domain models, model registration, and focused tests.
-
-## Review Fix: NPC Ownership
-
-The review finding at `backend/app/models/world.py:51` was fixed by making `Npc.user_id` non-nullable. NPC records are user-scoped/generated records for this implementation, so every NPC now requires a user foreign key. No services, APIs, schemas, or unrelated model behavior were added.
-
-### Regression Test Evidence
-
-The new regression test was run before the model change:
-
-```text
-$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; pytest tests/test_cultivation.py::test_npc_user_id_is_non_nullable -q
-F                                                                        [100%]
-E       AssertionError: assert True is False
-E        +  where True = Column('user_id', Uuid(), ForeignKey('users.id'), table=<npcs>).nullable
-1 failed, 7 warnings in 0.58s
+```powershell
+npm run build
 ```
 
-After changing `Npc.user_id` to `nullable=False`, the same focused regression test passed:
+结果：成功；`1960 modules transformed`，Vite 生产构建完成。
 
-```text
-$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; pytest tests/test_cultivation.py::test_npc_user_id_is_non_nullable -q
-.                                                                        [100%]
-1 passed, 7 warnings in 0.03s
-```
+## Commit
 
-### Final Test Evidence
+`73c2138`
 
-```text
-$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; pytest tests/test_cultivation.py -q --disable-warnings
-..                                                                       [100%]
-2 passed, 7 warnings in 0.02s
-```
+提交信息：`feat(localization): add chinese content dictionaries`
 
-```text
-$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; pytest -q --disable-warnings
-..............................
-.......................................... [ 66%]
-....................
-.................                                    [100%]
-109 passed, 354 warnings in 74.13s (0:01:14)
-```
+## 遗留顾虑
+
+- 聚焦后端测试仍输出 7 条现有框架弃用警告；未修改无关配置。
+- 前端构建输出现有 npm `always-auth` 配置警告、Rollup 注释警告和大于 500 kB chunk 提示；构建本身成功。
+- 按 Task 1 范围未运行后端全量测试，也未处理后续任务的数据库回填、API label 字段接线或页面文案替换。
