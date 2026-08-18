@@ -296,6 +296,8 @@ async function handleLogin() {
   padding: var(--spacing-2xl);
   width: 100%;
   max-width: 420px;
+  min-width: 0;
+  box-sizing: border-box;
   box-shadow: var(--shadow-lg);
   border: 1px solid var(--color-border);
 }
