@@ -27,6 +27,7 @@ from app.schemas.todo import (
 from app.models.coin_transaction import CoinSource, CoinType
 from app.repositories.coin_transaction import CoinTransactionRepository
 from app.services.achievement import AchievementService
+from app.services.content_catalog import source_label
 from app.services.title import TitleService
 from app.services.cultivation import CultivationService
 
@@ -253,7 +254,8 @@ class TodoService:
                 "amount": coins,
                 "type": CoinType.EARN,
                 "source": source,
-                "description": f"Reward from {source}",
+                "source_id": source_key,
+                "description": f"{source_label(source)}奖励",
             }
         )
         return settlement

@@ -13,6 +13,25 @@ REALM_LABELS = {
     "ascended": "飞升境",
 }
 
+SOURCE_LABELS = {
+    "task": "任务",
+    "habit": "习惯",
+    "goal": "目标",
+    "checkin": "签到",
+    "shop": "商店",
+    "achievement": "成就",
+    "other": "其他",
+}
+
+# Keep named exports available for callers that need a source-specific catalog.
+COIN_SOURCE_LABELS = SOURCE_LABELS
+CULTIVATION_SOURCE_LABELS = SOURCE_LABELS
+
+
+def source_label(source):
+    source_value = getattr(source, "value", source)
+    return SOURCE_LABELS.get(source_value, source_value)
+
 WORLD_NODE_CATALOG = {
     "mortal-domain-1": {
         "name": "青云凡域",

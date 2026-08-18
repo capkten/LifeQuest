@@ -23,6 +23,7 @@ from app.services.content_catalog import (
     NPC_ROLE_LABELS,
     REALM_LABELS,
     SECT_CATALOG,
+    source_label,
     TECHNIQUE_CATALOG,
     WORLD_NODE_CATALOG,
 )
@@ -110,13 +111,7 @@ def _realm_label(realm_key):
 
 
 def _cultivation_log_description(source, cultivation, spirit_stones):
-    source_labels = {
-        "task": "任务",
-        "habit": "习惯",
-        "goal": "目标",
-    }
-    source_label = source_labels.get(source, source)
-    return f"完成{source_label}，获得{cultivation}点修为和{spirit_stones}枚灵石。"
+    return f"完成{source_label(source)}，获得{cultivation}点修为和{spirit_stones}枚灵石。"
 
 
 class CultivationService:
@@ -928,6 +923,8 @@ class CultivationService:
 
     @staticmethod
     def _realm_at_least(current_realm: str, required_realm: str) -> bool:
+        if current_realm not in REALM_ORDER or required_realm not in REALM_ORDER:
+            return False
         return REALM_ORDER.index(current_realm) >= REALM_ORDER.index(required_realm)
 
     @classmethod

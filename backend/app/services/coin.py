@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.repositories.coin_transaction import CoinTransactionRepository
+from app.services.content_catalog import source_label
 
 
 class CoinService:
@@ -67,22 +68,27 @@ class CoinService:
 
     @staticmethod
     def _default_description(source: str) -> str:
-        source_value = getattr(source, "value", source)
-        source_labels = {
-            "task": "任务",
-            "habit": "习惯",
-            "goal": "目标",
-            "checkin": "签到",
-            "shop": "商店",
-            "achievement": "成就",
-            "other": "其他",
-        }
-        return f"{source_labels.get(source_value, source_value)}奖励"
+        return f"{source_label(source)}奖励"
+
+    @staticmethod
+    def _is_proven_todo_system_transaction(transaction) -> bool:
+        source_value = getattr(transaction.source, "value", transaction.source)
+        transaction_type = getattr(transaction.type, "value", transaction.type)
+        source_id = transaction.source_id or ""
+        return (
+            transaction_type == "earn"
+            and source_value in {"task", "habit", "goal"}
+            and source_id.startswith(f"todo:{source_value}:")
+            and bool(source_id[len(f"todo:{source_value}:"):])
+        )
 
     @classmethod
     def _localized_transaction(cls, transaction):
         source_value = getattr(transaction.source, "value", transaction.source)
-        if transaction.description == f"Reward from {source_value}":
+        if (
+            cls._is_proven_todo_system_transaction(transaction)
+            and transaction.description == f"Reward from {source_value}"
+        ):
             localized = copy(transaction)
             localized.description = cls._default_description(source_value)
             return localized

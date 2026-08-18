@@ -1,4 +1,4 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import create_engine
@@ -629,6 +629,7 @@ def test_generated_system_text_is_chinese_and_user_coin_text_is_preserved(isolat
             amount=5,
             type="earn",
             source="task",
+            source_id="todo:task:legacy",
             description="Reward from task",
         ),
         CoinTransaction(
@@ -636,11 +637,128 @@ def test_generated_system_text_is_chinese_and_user_coin_text_is_preserved(isolat
             amount=5,
             type="earn",
             source="task",
-            description="Reward from my task",
+            description="Reward from task",
         ),
     ])
     isolated_db.commit()
     history = CoinService(isolated_db).get_history(user.id)
     descriptions = [transaction.description for transaction in history["transactions"]]
     assert "任务奖励" in descriptions
-    assert "Reward from my task" in descriptions
+    assert descriptions.count("Reward from task") == 1
+
+
+def test_unknown_content_labels_fall_back_to_raw_keys(isolated_db):
+    from app.services.cultivation import CultivationService
+
+    user = User(
+        username=f"fallback-{uuid4().hex}",
+        email=f"{uuid4().hex}@example.com",
+        password_hash="hashed",
+    )
+    isolated_db.add(user)
+    isolated_db.commit()
+    service = CultivationService(isolated_db)
+    service.seed_world(isolated_db)
+    profile = service.ensure_profile(user.id)
+    node = isolated_db.query(WorldNode).first()
+    sect = Sect(
+        sect_key="unknown-label-sect",
+        name="Unknown Label Sect",
+        star=1,
+        kind="unknown-kind",
+        task_preference="unknown-preference",
+        entry_realm="unknown-realm",
+        world_node_id=node.id,
+    )
+    isolated_db.add(sect)
+    isolated_db.commit()
+
+    summary = service._sect_summary(user.id, profile, sect)
+
+    assert summary.kind_label == "unknown-kind"
+    assert summary.task_preference_label == "unknown-preference"
+    assert summary.entry_realm_label == "unknown-realm"
+
+
+def test_http_json_keeps_raw_keys_labels_dynamic_text_and_event_key(client, db_session):
+    from app.models.world import SectAccessProgress
+    from app.services.cultivation import CultivationService
+
+    username = f"http-localization-{uuid4().hex}"
+    email = f"{uuid4().hex}@example.com"
+    assert client.post(
+        "/api/auth/register",
+        json={"username": username, "email": email, "password": "testpassword123"},
+    ).status_code == 200
+    login = client.post(
+        "/api/auth/login",
+        data={"username": username, "password": "testpassword123"},
+    )
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    sects = client.get("/api/cultivation/sects?star=1", headers=headers)
+    assert sects.status_code == 200
+    sect = sects.json()[0]
+    assert sect["kind"] == "normal"
+    assert sect["kind_label"] == "普通宗门"
+    assert sect["entry_realm"] == "foundation"
+    assert sect["entry_realm_label"] == "筑基期"
+
+    task = client.post(
+        "/api/todos/tasks",
+        json={"title": "HTTP reward", "coins_reward": 7, "exp_reward": 3},
+        headers=headers,
+    ).json()
+    assert client.post(f"/api/todos/tasks/{task['id']}/complete", headers=headers).status_code == 200
+    history = client.get("/api/coins/history", headers=headers)
+    assert history.status_code == 200
+    task_transaction = next(item for item in history.json()["transactions"] if item["source"] == "task")
+    assert task_transaction["source_id"] == f"todo:task:{task['id']}"
+    assert task_transaction["description"] == "任务奖励"
+
+    user_id = UUID(client.get("/api/users/me", headers=headers).json()["id"])
+    cultivation = CultivationService(db_session)
+    cultivation.set_realm(user_id, "foundation", 1, 0)
+    sect_row = cultivation._get_sect("sect-1-normal-1")
+    db_session.add(SectAccessProgress(
+        user_id=user_id,
+        sect_id=sect_row.id,
+        messenger_contacted=True,
+    ))
+    db_session.commit()
+    assert client.post(
+        "/api/cultivation/npcs/meet",
+        json={"sect_key": "sect-1-normal-1", "population_index": 31},
+        headers=headers,
+    ).status_code == 200
+    timeline = client.get("/api/cultivation/npcs", headers=headers)
+    assert timeline.status_code == 200
+    event = timeline.json()["events"][0]
+    assert event["event_key"] == "met"
+    assert event["summary"] == "与普通弟子相遇"
+    assert event["event_id"] is not None
+    assert event["npc_id"] is not None
+
+
+def test_finance_transfer_defaults_are_chinese_and_preserves_custom_text(isolated_db):
+    from app.models.account import Account
+    from app.services.finance import FinanceService
+
+    user = User(
+        username=f"finance-{uuid4().hex}",
+        email=f"{uuid4().hex}@example.com",
+        password_hash="hashed",
+    )
+    isolated_db.add(user)
+    isolated_db.commit()
+    source = Account(user_id=user.id, name="现金", balance=100)
+    target = Account(user_id=user.id, name="储蓄", balance=0)
+    isolated_db.add_all([source, target])
+    isolated_db.commit()
+
+    service = FinanceService(isolated_db)
+    default_transfer = service.transfer(user.id, source.id, target.id, 10)
+    custom_transfer = service.transfer(user.id, target.id, source.id, 5, "我的转账备注")
+
+    assert default_transfer["transaction"].description == "转账：现金 -> 储蓄"
+    assert custom_transfer["transaction"].description == "我的转账备注"

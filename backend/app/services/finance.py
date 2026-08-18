@@ -132,7 +132,7 @@ class FinanceService:
             account_id=from_id,
             type=FinanceTransactionType.TRANSFER,
             amount=amount,
-            description=description or f"Transfer: {from_acc.name} -> {to_acc.name}",
+            description=description or f"转账：{from_acc.name} -> {to_acc.name}",
             date=transfer_date or date.today(),
             to_account_id=to_id,
         )
