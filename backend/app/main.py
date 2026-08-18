@@ -472,6 +472,55 @@ def _deduplicate_cultivation_logs(connection):
             seen.add(source_key)
 
 
+def _deduplicate_reward_key_rows(connection, table_name, key_columns):
+    """Keep the lowest-id row for each exact non-null reward idempotency key."""
+    key_sql = ", ".join(key_columns)
+    rows = connection.execute(text(
+        f"SELECT id, {key_sql} FROM {table_name} "
+        f"WHERE {' AND '.join(f'{column} IS NOT NULL' for column in key_columns)} "
+        f"ORDER BY {key_sql}, id"
+    )).fetchall()
+    seen = set()
+    for row in rows:
+        row_id = row[0]
+        key = tuple(row[1:])
+        if key in seen:
+            connection.execute(
+                text(f"DELETE FROM {table_name} WHERE id = :id"),
+                {"id": row_id},
+            )
+        else:
+            seen.add(key)
+
+
+def _migrate_reward_idempotency_constraints(connection):
+    """Upgrade legacy reward tables before enforcing their idempotency keys."""
+    constraints = (
+        (
+            "user_achievements",
+            "uq_user_achievement_user_achievement",
+            ["user_id", "achievement_id"],
+        ),
+        (
+            "coin_transactions",
+            "uq_coin_transaction_reward_source",
+            ["user_id", "source", "source_id"],
+        ),
+    )
+    for table_name, index_name, key_columns in constraints:
+        try:
+            inspect(connection).get_columns(table_name)
+        except (KeyError, NoSuchTableError):
+            continue
+
+        live_inspector = inspect(connection)
+        if not _has_unique_definition(live_inspector, table_name, key_columns):
+            # Nullable historical rows are intentionally left untouched. SQLite
+            # unique indexes continue to allow multiple NULL key values.
+            _deduplicate_reward_key_rows(connection, table_name, key_columns)
+        _ensure_unique_index(connection, table_name, index_name, key_columns)
+
+
 def _attempted_date_expression(connection):
     dialect = getattr(connection, "dialect", None)
     dialect_name = (getattr(dialect, "name", "") or "").lower()
@@ -632,6 +681,10 @@ def _migrate_columns():
                 "ALTER TABLE finance_transactions ADD COLUMN recurring_id VARCHAR(36)"
             ))
             logger.info("Migration: added finance_transactions.recurring_id")
+
+        # Task 2 reward idempotency. Deduplicate only exact non-null keys and
+        # keep the deterministic lowest-id legacy row before creating guards.
+        _migrate_reward_idempotency_constraints(conn)
 
         # tribulation_attempts.attempted_date and its database-level daily guard.
         # Older databases (and migration-only test doubles) may predate this table.

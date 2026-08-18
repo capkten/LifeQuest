@@ -46,7 +46,7 @@ def test_first_task_completion_unlocks_achievement(client):
     assert len(achievements) >= 1
 
 
-def test_achievement_does_not_double_unlock(client):
+def test_achievement_does_not_double_unlock(client, db_session):
     """Completing two tasks should still only unlock the task_count=1 achievement once."""
     headers = _register_and_login(client)
 
@@ -70,6 +70,19 @@ def test_achievement_does_not_double_unlock(client):
     assert ach_resp.status_code == 200
     achievements = ach_resp.json()
     assert len(achievements) == 1
+
+    from app.models.achievement import UserAchievement
+    from app.models.coin_transaction import CoinTransaction
+    from app.models.user import User
+
+    user = db_session.query(User).filter(User.username == "testuser").one()
+    assert db_session.query(UserAchievement).filter(
+        UserAchievement.user_id == user.id
+    ).count() == 1
+    assert db_session.query(CoinTransaction).filter(
+        CoinTransaction.user_id == user.id,
+        CoinTransaction.source == "achievement",
+    ).count() == 1
 
 
 def test_achievement_reward_has_stable_source_id(client, db_session):
