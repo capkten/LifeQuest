@@ -517,7 +517,7 @@ async function fetchItems() {
   try {
     items.value = await shopService.getItems()
   } catch (e) {
-    error.value = '加载商城商品失败，请重试。'
+    error.value = getErrorMessage(e)
   } finally {
     loading.value = false
   }

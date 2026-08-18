@@ -458,7 +458,7 @@ async function fetchTransactions() {
     transactions.value = Array.isArray(data) ? data : (data.items || data.transactions || [])
     hasMore.value = data.has_more || (Array.isArray(data) ? false : (data.total > transactions.value.length))
   } catch (e) {
-    error.value = '加载流水失败，请重试。'
+    error.value = getErrorMessage(e)
   } finally {
     loading.value = false
   }

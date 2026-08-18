@@ -171,7 +171,7 @@ async function handleAvatarChange(event) {
     await authStore.fetchUser()
     showSuccess('头像上传成功')
   } catch (err) {
-    showError('头像上传失败，请重试')
+    showError(getErrorMessage(err))
     avatarPreview.value = null
   } finally {
     avatarUploading.value = false

@@ -345,7 +345,7 @@ async function fetchProjects() {
   try {
     projects.value = await projectService.getProjects()
   } catch (e) {
-    error.value = '加载项目失败，请重试。'
+    error.value = getErrorMessage(e)
   } finally {
     loading.value = false
   }

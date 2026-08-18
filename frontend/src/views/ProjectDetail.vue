@@ -704,7 +704,7 @@ async function fetchData() {
     if (phases.value.length > 0) expandedPhases.add(phases.value[0].id)
     expandedPhases.add('__unphased')
   } catch (e) {
-    error.value = '加载项目失败，请重试。'
+    error.value = getErrorMessage(e)
   } finally {
     loading.value = false
   }

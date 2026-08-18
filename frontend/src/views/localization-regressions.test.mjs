@@ -113,3 +113,31 @@ test('api and pages use the shared error converter', async () => {
     assert.doesNotMatch(source, /error\?\.response\?\.data\?\.detail|err\.response\?\.data\?\.detail|cause\.response\?\.data\?\.detail|response\.data\?\.detail/, `${file} reads raw backend error details`)
   }
 })
+
+test('visible errors in task 4 page catches use the caught error converter', async () => {
+  const files = [
+    './Home.vue',
+    './Backpack.vue',
+    './Finance.vue',
+    './FinanceAccounts.vue',
+    './FinanceTransactions.vue',
+    './FinanceDebts.vue',
+    './FinanceBudgets.vue',
+    './Notes.vue',
+    './Projects.vue',
+    './ProjectDetail.vue',
+    './EditProfile.vue',
+    './Shop.vue',
+  ]
+  const sources = await Promise.all(files.map((file) => readFile(new URL(file, import.meta.url), 'utf8')))
+
+  for (const [file, source] of files.map((file, index) => [file, sources[index]])) {
+    const catches = [...source.matchAll(/catch\s*\(\s*([A-Za-z_$][\w$]*)\s*(?:\)\s*\{|=>\s*\{)([\s\S]*?)\n\s*\}/g)]
+    for (const [, caughtName, body] of catches) {
+      const hasVisibleError = /(?:\b\w*Error|error)\.value\s*=|\bshowError\s*\(|\balert\s*\(/.test(body)
+      if (hasVisibleError) {
+        assert.match(body, new RegExp(`getErrorMessage\\(\\s*${caughtName}\\s*\\)`), `${file} has a visible catch error without the shared converter`)
+      }
+    }
+  }
+})

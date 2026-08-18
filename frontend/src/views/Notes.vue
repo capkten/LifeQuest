@@ -388,7 +388,7 @@ async function fetchNotebooks() {
   try {
     notebooks.value = await noteService.getNotebooks()
   } catch (e) {
-    error.value = '加载笔记本失败，请重试。'
+    error.value = getErrorMessage(e)
   } finally {
     loading.value = false
   }
@@ -432,7 +432,7 @@ async function deleteNotebook() {
     showDeleteConfirm.value = false
     notebookToDelete.value = null
   } catch (e) {
-    alert('删除笔记本失败，请重试。')
+    alert(getErrorMessage(e))
   } finally {
     deleting.value = false
   }

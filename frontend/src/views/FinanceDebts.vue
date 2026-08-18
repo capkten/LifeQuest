@@ -357,7 +357,7 @@ async function fetchDebts() {
     const data = await financeService.getDebts({ type: activeTab.value })
     debts.value = Array.isArray(data) ? data : (data.items || data.debts || [])
   } catch (e) {
-    error.value = '加载借贷数据失败，请重试。'
+    error.value = getErrorMessage(e)
   } finally {
     loading.value = false
   }

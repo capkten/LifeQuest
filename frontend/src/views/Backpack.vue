@@ -312,7 +312,7 @@ async function fetchShopItems() {
     shopItemsMap.value = map
   } catch (e) {
     console.error('Failed to fetch shop items for name lookup:', e)
-    showError('无法加载物品详情，物品名称可能不可用。')
+    showError(getErrorMessage(e))
   }
 }
 
@@ -326,7 +326,7 @@ async function fetchAll() {
   try {
     await Promise.all([fetchShopItems(), fetchBackpackItems()])
   } catch (e) {
-    error.value = '加载背包物品失败，请重试。'
+    error.value = getErrorMessage(e)
   } finally {
     loading.value = false
   }

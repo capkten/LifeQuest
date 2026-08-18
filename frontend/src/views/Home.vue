@@ -358,7 +358,7 @@ async function fetchTasks() {
   try {
     tasks.value = await todoService.getTasks()
   } catch (e) {
-    errorTasks.value = '加载任务失败，请重试。'
+    errorTasks.value = getErrorMessage(e)
   } finally {
     loadingTasks.value = false
   }
@@ -394,7 +394,7 @@ async function fetchGoals() {
   try {
     goals.value = await todoService.getGoals()
   } catch (e) {
-    errorGoals.value = '加载目标失败，请重试。'
+    errorGoals.value = getErrorMessage(e)
   } finally {
     loadingGoals.value = false
   }

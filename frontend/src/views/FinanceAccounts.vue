@@ -369,7 +369,7 @@ async function fetchAccounts() {
     const data = await financeService.getAccounts()
     accounts.value = Array.isArray(data) ? data : (data.items || data.accounts || [])
   } catch (e) {
-    error.value = '加载账户失败，请重试。'
+    error.value = getErrorMessage(e)
   } finally {
     loading.value = false
   }

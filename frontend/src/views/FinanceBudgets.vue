@@ -282,7 +282,7 @@ async function fetchBudgets() {
     budgets.value = Array.isArray(bData) ? bData : (bData.items || bData.budgets || [])
     categories.value = Array.isArray(cData) ? cData : (cData.items || cData.categories || [])
   } catch (e) {
-    error.value = '加载预算失败，请重试。'
+    error.value = getErrorMessage(e)
   } finally {
     loading.value = false
   }

@@ -456,7 +456,7 @@ async function fetchDashboard() {
     recentTransactions.value = Array.isArray(txs) ? txs : (txs.items || txs.transactions || [])
     categories.value = Array.isArray(cats) ? cats : (cats.items || cats.categories || [])
   } catch (e) {
-    error.value = '加载财务数据失败，请重试。'
+    error.value = getErrorMessage(e)
   } finally {
     loading.value = false
   }
