@@ -915,7 +915,7 @@ async function fetchProjects() {
 
 async function completeHabit(habit) {
   if (habit.completed_today) { explainBlocked('该习惯今天已经完成，明天再来继续。'); return }
-  if (completingId.value) return
+  if (completingId.value) { explainBlocked('已有其他待办正在提交，请等待完成后再试。'); return }
   beginCompletion(habit.id)
   try {
     const updated = await todoService.completeHabit(habit.id)
@@ -936,7 +936,7 @@ async function completeHabit(habit) {
 
 async function completeTask(task) {
   if (task.status === 'completed') { explainBlocked('该任务已经完成，无需重复提交。'); return }
-  if (completingId.value) return
+  if (completingId.value) { explainBlocked('已有其他待办正在提交，请等待完成后再试。'); return }
   beginCompletion(task.id)
   try {
     const updated = await todoService.completeTask(task.id)
@@ -957,7 +957,7 @@ async function completeTask(task) {
 
 async function completeGoal(goal) {
   if (goal.status === 'completed') { explainBlocked('该目标已经完成，无需重复提交。'); return }
-  if (completingId.value) return
+  if (completingId.value) { explainBlocked('已有其他待办正在提交，请等待完成后再试。'); return }
   beginCompletion(goal.id)
   try {
     const updated = await todoService.completeGoal(goal.id)
@@ -1028,7 +1028,7 @@ async function addSubtask(taskId) {
 
 async function completeSubtask(subtask, taskId) {
   if (subtask.is_completed) { explainBlocked('该子任务已经完成，无需重复提交。'); return }
-  if (completingSubtaskId.value) return
+  if (completingSubtaskId.value) { explainBlocked('已有其他子任务正在提交，请等待完成后再试。'); return }
   completingSubtaskId.value = subtask.id
   try {
     const updated = await todoService.completeSubtask(subtask.id)

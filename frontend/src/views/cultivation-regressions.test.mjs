@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import { getErrorMessage } from '../utils/errorMessage.js'
 
 const srcDirectory = new URL('../', import.meta.url)
 
@@ -100,6 +101,28 @@ test('tribulation page exposes transparent risk order and authoritative result s
   assert.match(page, /async function syncAndLoad[\s\S]*try\s*\{\s*await cultivationStore\.refresh\(\)\s*\}\s*catch[\s\S]*await load\(\)/)
   assert.match(probability, /:disabled="[^"]*operationBusy/)
   assert.match(probability, /aria-live="polite"/)
+})
+
+test('cultivation error details from the backend map to actionable messages', () => {
+  const details = [
+    ['TECHNIQUE_REALM_REQUIRED:筑基', '筑基'],
+    ['SLOT_REALM_REQUIRED:金丹', '金丹'],
+    ['FINAL_MINOR_STAGE_REQUIRED', '最终小境界'],
+    ['tribulation already complete', '已经完成'],
+    ['tribulation cooldown active', '冷却'],
+    ['tribulation requires final minor stage threshold', '最终小境界'],
+  ]
+
+  for (const [detail, expected] of details) {
+    assert.match(getErrorMessage({ response: { data: { detail } } }), new RegExp(expected))
+    assert.notEqual(getErrorMessage({ response: { data: { detail } } }), '操作失败，请重试。')
+  }
+})
+
+test('tribulation attempt checks cooldown before availability', async () => {
+  const source = await readFile(new URL('./Tribulations.vue', import.meta.url), 'utf8')
+
+  assert.match(source, /if \(preview\.value\?\.cooldown_until\)[\s\S]*?return[\s\S]*?if \(!preview\.value\?\.available\)/)
 })
 
 test('settlements update visible deltas and obtain an authoritative overview', async () => {

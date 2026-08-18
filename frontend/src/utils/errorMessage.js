@@ -12,8 +12,12 @@ const STATUS_MESSAGES = Object.freeze({
 const CODE_MESSAGES = Object.freeze({
   INSUFFICIENT_SPIRIT_STONES: '灵石不足，请先完成任务获得灵石后再试。',
   REALM_PREREQUISITE: '境界不足，请先提升境界后再试。',
+  FINAL_MINOR_STAGE_REQUIRED: '尚未达到当前境界的最终小境界阈值。',
   TRIBULATION_PREREQUISITE: '渡劫前置条件未满足，请先完成渡劫试炼并达到要求。',
   TRIBULATION_COOLDOWN_ACTIVE: '渡劫冷却中，请等待冷却结束后再试。',
+  'tribulation already complete': '渡劫已经完成，无需重复尝试。',
+  'tribulation cooldown active': '渡劫冷却中，请等待冷却结束后再试。',
+  'tribulation requires final minor stage threshold': '尚未达到当前境界的最终小境界阈值。',
   'Insufficient coins': '金币不足，请先获得更多金币后再试。',
   'Item is out of stock': '商品已售罄，请选择其他商品。',
   'Already checked in today': '今天已经签到过了。',
@@ -34,6 +38,14 @@ function detailParts(detail) {
 
 function translateCode(code, parameters = []) {
   if (!code) return null
+  if (code === 'TECHNIQUE_REALM_REQUIRED' && parameters.length) {
+    const realm = parameters.join(':').replace(/^technique requires\s+/i, '').replace(/\s+realm$/i, '')
+    return `境界不足，需要达到${realm}后再学习或配置功法。`
+  }
+  if (code === 'SLOT_REALM_REQUIRED' && parameters.length) {
+    const realm = parameters.join(':')
+    return `境界不足，需要达到${realm}后购买功法格。`
+  }
   const direct = translateDetail(code) || CODE_MESSAGES[code]
   if (direct) return direct
   const parameterized = parameters.length ? translateDetail(`${code}:${parameters.join(':')}`) : null

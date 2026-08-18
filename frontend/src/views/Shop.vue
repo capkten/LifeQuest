@@ -539,7 +539,7 @@ function purchaseLockReason(item) {
 }
 
 async function purchaseItem(item) {
-  if (purchasingId.value) return
+  if (purchasingId.value) { explainBlocked('已有其他商品正在兑换，请等待完成后再试。'); return }
   if (isPurchaseBlocked(item)) { explainBlocked(purchaseLockReason(item)); return }
   purchasingId.value = item.id
   try {

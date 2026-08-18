@@ -335,7 +335,7 @@ function explainBlocked(message) {
 }
 
 async function useItem(item) {
-  if (actionId.value) return
+  if (actionId.value) { explainBlocked('已有其他物品操作正在进行，请等待完成后再试。'); return }
   if (item.item_type !== 'consumable') { explainBlocked('该物品不可使用。'); return }
   actionId.value = item.id
   try {
@@ -358,7 +358,7 @@ async function useItem(item) {
 }
 
 async function equipItem(item) {
-  if (actionId.value) return
+  if (actionId.value) { explainBlocked('已有其他物品操作正在进行，请等待完成后再试。'); return }
   if (item.is_equipped) { explainBlocked('该物品已经装备。'); return }
   if (item.item_type !== 'gear' && item.item_type !== 'collectible') { explainBlocked('该物品不可装备。'); return }
   actionId.value = item.id
@@ -395,7 +395,8 @@ function cancelConfirm() {
 }
 
 async function confirmDiscard() {
-  if (!confirmDialog.value || actionId.value) return
+  if (!confirmDialog.value) return
+  if (actionId.value) { explainBlocked('已有其他物品操作正在进行，请等待完成后再试。'); return }
   const itemId = confirmDialog.value.id
   confirmDialog.value = null
   actionId.value = itemId

@@ -88,7 +88,11 @@
         <div v-if="loadingDaily" class="loading-state">
           <span class="loading-spinner"></span>
         </div>
-        <div v-else-if="!dailySummary || (dailySummary.habits.length === 0 && dailySummary.tasks.length === 0 && dailySummary.goals.length === 0)" class="empty-state">
+        <div v-else-if="dailyError" class="error-state" role="alert" aria-live="polite">
+          <p>{{ dailyError }}</p>
+          <button type="button" class="retry-btn" @click="fetchDailySummary">重试</button>
+        </div>
+        <div v-else-if="dailySummary && dailySummary.habits.length === 0 && dailySummary.tasks.length === 0 && dailySummary.goals.length === 0" class="empty-state">
           <p>今天没有待办事项，去创建一些吧！</p>
         </div>
         <div v-else class="daily-groups">
@@ -341,6 +345,7 @@ const errorGoals = ref(null)
 
 const dailySummary = ref(null)
 const loadingDaily = ref(true)
+const dailyError = ref(null)
 const completingHabitId = ref(null)
 
 const recentTasks = computed(() => tasks.value.slice(0, 5))
@@ -405,10 +410,13 @@ async function fetchGoals() {
 
 async function fetchDailySummary() {
   loadingDaily.value = true
+  dailyError.value = null
   try {
     dailySummary.value = await todoService.getDailySummary()
   } catch (e) {
-    showError(getErrorMessage(e))
+    dailySummary.value = null
+    dailyError.value = getErrorMessage(e, '今日待办加载失败，请重试。')
+    showError(dailyError.value)
   } finally {
     loadingDaily.value = false
   }

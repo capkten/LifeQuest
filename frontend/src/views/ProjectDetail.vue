@@ -745,7 +745,7 @@ function addKanbanTask(event) {
 async function completeTaskCard(task) {
   if (!task) { showError('任务不存在，无法完成。'); return }
   if (task.status === 'completed') { showError('该任务已经完成，无需重复提交。'); return }
-  if (completingTaskId.value) return
+  if (completingTaskId.value) { showError('已有其他项目任务正在提交，请等待完成后再试。'); return }
   completingTaskId.value = task.id
   const oldStatus = task.status
   try {

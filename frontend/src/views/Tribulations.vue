@@ -64,8 +64,8 @@ async function syncAndLoad() {
 }
 async function attempt() {
   if (attempting.value) return
-  if (!preview.value?.available) { explainBlocked('渡劫前置条件未满足，请先完成渡劫试炼并达到要求。'); return }
   if (preview.value?.cooldown_until) { explainBlocked('渡劫冷却中，请等待冷却结束后再试。'); return }
+  if (!preview.value?.available) { explainBlocked('渡劫前置条件未满足，请先完成渡劫试炼并达到要求。'); return }
   attempting.value = true; error.value = null
   try {
     result.value = await cultivationService.attemptTribulation({ pill_count: pillCount.value })

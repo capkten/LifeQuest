@@ -53,3 +53,26 @@ test('backpack business actions expose a visible blocked-action feedback path', 
   assert.match(source, /不可使用|不可装备|不可丢弃/)
   assert.match(source, /aria-disabled/)
 })
+
+test('cross-item in-flight actions explain the shared lock without submitting', async () => {
+  const [todos, shop, backpack, project] = await Promise.all([
+    readFile(new URL('./Todos.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('./Shop.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('./Backpack.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8'),
+  ])
+
+  assert.match(todos, /if \(completingId\.value\) \{\s*explainBlocked\(/)
+  assert.match(todos, /if \(completingSubtaskId\.value\) \{\s*explainBlocked\(/)
+  assert.match(shop, /if \(purchasingId\.value\) \{\s*explainBlocked\(/)
+  assert.match(backpack, /if \(actionId\.value\) \{\s*explainBlocked\(/)
+  assert.match(project, /if \(completingTaskId\.value\) \{\s*showError\(/)
+})
+
+test('home daily summary keeps request failures separate from the legitimate empty state', async () => {
+  const source = await readFile(new URL('./Home.vue', viewsDirectory), 'utf8')
+
+  assert.match(source, /dailyError/)
+  assert.match(source, /v-else-if="dailyError"[\s\S]*重试[\s\S]*fetchDailySummary/)
+  assert.match(source, /dailyError\.value\s*=\s*getErrorMessage\(e/)
+})
