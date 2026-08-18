@@ -213,7 +213,7 @@
           <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" @keydown.escape="cancelConfirm">
             <div class="dialog-header">
               <h3 id="confirm-dialog-title" class="dialog-title">确认丢弃</h3>
-              <button class="dialog-close" @click="cancelConfirm" aria-label="Close">
+              <button class="dialog-close" @click="cancelConfirm" aria-label="关闭对话框">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
@@ -242,6 +242,7 @@ import { backpackService } from '../services/backpack'
 import { shopService } from '../services/shop'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
+import { labelItemType } from '../utils/displayLabels'
 
 const authStore = useAuthStore()
 const { successToast, errorToast, showSuccess, showError } = useToast()
@@ -283,13 +284,7 @@ function getItemDescription(item) {
 }
 
 function formatType(type) {
-  const typeMap = {
-    'consumable': '消耗品',
-    'gear': '装备',
-    'collectible': '收藏品',
-    'quest': '任务'
-  }
-  return typeMap[type] || type
+  return labelItemType(type)
 }
 
 function formatDate(dateStr) {

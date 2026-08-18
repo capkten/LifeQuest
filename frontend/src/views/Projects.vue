@@ -29,9 +29,9 @@
 
     <section class="project-summary-card" aria-label="项目概览">
       <div>
-        <span class="project-summary-kicker">PROJECT COMMAND CENTER</span>
+        <span class="project-summary-kicker">项目指挥中心</span>
         <h3>把长期目标拆成可推进的阶段</h3>
-        <p class="project-summary-copy">把 Active Projects、进度和任务完成情况放在同一层级里看。</p>
+        <p class="project-summary-copy">把进行中的项目、进度和任务完成情况放在同一层级里看。</p>
       </div>
       <div class="project-summary-stats">
         <span><strong>{{ activeProjectsCount }}</strong> 进行中</span>
@@ -135,7 +135,7 @@
         <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title" @keydown="trapFocus">
           <div class="dialog-header">
             <h3 id="dialog-title" class="dialog-title">新建项目</h3>
-            <button class="dialog-close" @click="cancelDialog" aria-label="Close">
+          <button class="dialog-close" @click="cancelDialog" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -226,6 +226,7 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { projectService } from '../services/project'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
+import { labelProjectStatus } from '../utils/displayLabels'
 
 const { errorToast, showError } = useToast()
 
@@ -290,13 +291,7 @@ function getCount(filter) {
 }
 
 function formatStatus(status) {
-  const map = {
-    planning: '规划中',
-    active: '进行中',
-    completed: '已完成',
-    archived: '已归档'
-  }
-  return map[status] || status
+  return labelProjectStatus(status)
 }
 
 function formatDate(dateStr) {

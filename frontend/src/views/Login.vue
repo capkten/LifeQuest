@@ -1,7 +1,7 @@
 <template>
   <div class="login-container">
     <section class="login-brand" aria-label="LifeQuest 产品介绍">
-      <span class="auth-eyebrow">PERSONAL PROGRESS SYSTEM</span>
+      <span class="auth-eyebrow">个人成长系统</span>
       <div class="auth-brand-mark" aria-hidden="true">
         <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M24 5v38M5 24h38" opacity="0.28" />
@@ -14,7 +14,7 @@
       <div class="auth-momentum">
         <div class="auth-momentum-head">
           <span>今日行动力</span>
-          <strong>+12 XP</strong>
+          <strong>+12 经验</strong>
         </div>
         <div class="auth-momentum-bar"><span></span></div>
         <div class="auth-momentum-foot">

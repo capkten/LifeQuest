@@ -14,6 +14,17 @@ import {
   labelEventSummary,
   labelFromServer,
   labelLockReason,
+  labelDifficulty,
+  labelFrequency,
+  labelAccountType,
+  labelPeriod,
+  labelSource,
+  labelProjectStatus,
+  labelTaskStatus,
+  labelItemType,
+  labelActionType,
+  labelExchangeStatus,
+  labelTransactionType,
 } from '../utils/displayLabels.js'
 import { SLOT_TYPE_LABELS, TECHNIQUE_TYPE_LABELS } from '../locales/zh-CN.js'
 import { getErrorMessage } from '../utils/errorMessage.js'
@@ -37,6 +48,42 @@ const cultivationFiles = [
   '../components/layout/Header.vue',
   '../components/layout/Sidebar.vue',
 ]
+
+const legacyFiles = [
+  './Login.vue',
+  './Register.vue',
+  './Home.vue',
+  './Todos.vue',
+  './Profile.vue',
+  './Projects.vue',
+  './Shop.vue',
+  './NoteEditor.vue',
+  './Notes.vue',
+  './NotebookFileManage.vue',
+  './Finance.vue',
+  './FinanceAccounts.vue',
+  './FinanceBudgets.vue',
+  './FinanceDebts.vue',
+  './FinanceTransactions.vue',
+  './Backpack.vue',
+  './BackpackHistory.vue',
+  './ExchangeHistory.vue',
+  './CoinHistory.vue',
+  './Stats.vue',
+]
+
+const forbiddenLegacyLiterals = [
+  'PERSONAL PROGRESS SYSTEM',
+  'DAILY PROGRESS',
+  'PLAYER SUMMARY',
+  'Loading note...',
+  'Wallet summary',
+  'TIMELINE',
+]
+
+function templateSource(source) {
+  return source.match(/<template\b[^>]*>([\s\S]*?)<\/template>/i)?.[1] || ''
+}
 
 function readBracedBody(source, openBraceIndex) {
   let depth = 1
@@ -144,6 +191,26 @@ function templateEnglish(source) {
   return templateText(source).match(/\b[A-Za-z][A-Za-z-]*\b/g) || []
 }
 
+test('legacy pages contain no forbidden English user-facing literals', async () => {
+  const sources = await Promise.all(legacyFiles.map((file) => readFile(new URL(file, import.meta.url), 'utf8')))
+
+  for (const [file, source] of legacyFiles.map((file, index) => [file, sources[index]])) {
+    const template = templateSource(source)
+    for (const literal of forbiddenLegacyLiterals) {
+      assert.doesNotMatch(template, new RegExp(literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `${file} still renders ${literal}`)
+    }
+  }
+})
+
+test('legacy pages do not render stable enum keys directly', async () => {
+  const sources = await Promise.all(legacyFiles.map((file) => readFile(new URL(file, import.meta.url), 'utf8')))
+  const directEnumPattern = /{{\s*(?:[A-Za-z_$][\w$]*\??\.)?(?:difficulty|frequency|account_type|period|source|status|type|item_type|realm_key)\s*}}/
+
+  for (const [file, source] of legacyFiles.map((file, index) => [file, sources[index]])) {
+    assert.doesNotMatch(templateSource(source), directEnumPattern, `${file} renders a stable enum key directly`)
+  }
+})
+
 test('display labels translate stable server keys', () => {
   assert.equal(labelRealm('foundation'), '筑基期')
   assert.equal(labelResource('spirit_stones'), '灵石')
@@ -155,6 +222,17 @@ test('display labels translate stable server keys', () => {
   assert.equal(labelSlotType('body'), '身法')
   assert.equal(labelNpcRole('ordinary disciple'), '普通弟子')
   assert.equal(labelEventSummary('met'), '与普通弟子相遇')
+  assert.equal(labelDifficulty('hard'), '困难')
+  assert.equal(labelFrequency('weekly'), '每周')
+  assert.equal(labelAccountType('credit'), '信用卡')
+  assert.equal(labelPeriod('monthly'), '每月')
+  assert.equal(labelSource('checkin'), '签到')
+  assert.equal(labelProjectStatus('archived'), '已归档')
+  assert.equal(labelTaskStatus('pending'), '待开始')
+  assert.equal(labelItemType('collectible'), '收藏品')
+  assert.equal(labelActionType('discard'), '丢弃')
+  assert.equal(labelExchangeStatus('refunded'), '已退款')
+  assert.equal(labelTransactionType('transfer'), '转账')
 })
 
 test('display labels hide unknown stable keys and use Chinese empty fallbacks', async () => {

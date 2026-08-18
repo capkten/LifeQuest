@@ -239,7 +239,7 @@
         <div class="dialog dialog--wide" role="dialog" aria-modal="true" aria-labelledby="quick-add-title" @keydown.escape="cancelQuickAdd">
           <div class="dialog-header">
             <h3 id="quick-add-title" class="dialog-title">{{ editingTx ? '编辑流水' : '快速记账' }}</h3>
-            <button class="dialog-close" @click="cancelQuickAdd" aria-label="Close">
+            <button class="dialog-close" @click="cancelQuickAdd" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />

@@ -1,7 +1,7 @@
 <template>
   <div class="register-container">
     <section class="register-brand" aria-label="LifeQuest 产品介绍">
-      <span class="auth-eyebrow">START YOUR NEXT CHAPTER</span>
+      <span class="auth-eyebrow">开启下一段旅程</span>
       <div class="auth-brand-mark" aria-hidden="true">
         <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M24 5v38M5 24h38" opacity="0.28" />

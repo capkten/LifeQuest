@@ -50,12 +50,16 @@ export const STATUS_LABELS = Object.freeze({
   awaiting_trial: '等待试炼',
   available: '可进入',
   completed: '已完成',
+  cancelled: '已取消',
   current: '当前所在',
   failed: '失败',
+  in_progress: '进行中',
   locked: '已锁定',
   left: '已离开',
   pending: '待处理',
+  planning: '规划中',
   success: '成功',
+  archived: '已归档',
 })
 
 export const RESOURCE_LABELS = Object.freeze({
@@ -87,6 +91,86 @@ export const LOCK_REASON_LABELS = Object.freeze({
   ASCENDED: '已达飞升终点。',
 })
 
+export const DIFFICULTY_LABELS = Object.freeze({
+  easy: '简单',
+  medium: '中等',
+  hard: '困难',
+})
+
+export const FREQUENCY_LABELS = Object.freeze({
+  daily: '每日',
+  weekly: '每周',
+  monthly: '每月',
+})
+
+export const ACCOUNT_TYPE_LABELS = Object.freeze({
+  cash: '现金',
+  bank: '银行卡',
+  credit: '信用卡',
+  alipay: '支付宝',
+  wechat: '微信',
+  debt: '借贷',
+  other: '其他',
+})
+
+export const PERIOD_LABELS = Object.freeze({
+  week: '周',
+  month: '月',
+  year: '年',
+  weekly: '每周',
+  monthly: '每月',
+  yearly: '每年',
+})
+
+export const SOURCE_LABELS = Object.freeze({
+  task: '任务',
+  habit: '习惯',
+  goal: '目标',
+  checkin: '签到',
+  shop: '商城',
+  achievement: '成就',
+})
+
+export const PROJECT_STATUS_LABELS = Object.freeze({
+  planning: '规划中',
+  active: '进行中',
+  completed: '已完成',
+  archived: '已归档',
+})
+
+export const TASK_STATUS_LABELS = Object.freeze({
+  pending: '待开始',
+  in_progress: '进行中',
+  completed: '已完成',
+  cancelled: '已取消',
+})
+
+export const ITEM_TYPE_LABELS = Object.freeze({
+  consumable: '消耗品',
+  gear: '装备',
+  collectible: '收藏品',
+  quest: '任务',
+})
+
+export const ACTION_TYPE_LABELS = Object.freeze({
+  use: '使用',
+  equip: '装备',
+  discard: '丢弃',
+})
+
+export const EXCHANGE_STATUS_LABELS = Object.freeze({
+  pending: '处理中',
+  completed: '已完成',
+  cancelled: '已取消',
+  refunded: '已退款',
+})
+
+export const TRANSACTION_TYPE_LABELS = Object.freeze({
+  income: '收入',
+  expense: '支出',
+  transfer: '转账',
+})
+
 export const ERROR_MESSAGES = Object.freeze({
   'Task not found': '任务不存在。',
   'TECHNIQUE_NOT_FOUND:technique not found': '功法不存在。',
@@ -108,5 +192,16 @@ export default {
   NPC_ROLE_LABELS,
   EVENT_SUMMARY_LABELS,
   LOCK_REASON_LABELS,
+  DIFFICULTY_LABELS,
+  FREQUENCY_LABELS,
+  ACCOUNT_TYPE_LABELS,
+  PERIOD_LABELS,
+  SOURCE_LABELS,
+  PROJECT_STATUS_LABELS,
+  TASK_STATUS_LABELS,
+  ITEM_TYPE_LABELS,
+  ACTION_TYPE_LABELS,
+  EXCHANGE_STATUS_LABELS,
+  TRANSACTION_TYPE_LABELS,
   ERROR_MESSAGES,
 }

@@ -175,7 +175,7 @@
             <div class="selection-copy">
               <p class="selection-eyebrow">新建笔记</p>
               <h2>从当前目录开始</h2>
-              <p>新笔记编辑器将在 Task 5 接入。你可以先选择保存位置，然后继续创建。</p>
+              <p>新笔记编辑器将在任务 5 接入。你可以先选择保存位置，然后继续创建。</p>
               <button type="button" class="button button--primary" @click="openCreateNote()">新建笔记</button>
             </div>
           </article>

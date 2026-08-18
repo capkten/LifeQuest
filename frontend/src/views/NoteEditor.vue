@@ -2,7 +2,7 @@
   <div class="note-editor-page">
     <header class="editor-header">
       <div class="header-left">
-        <button type="button" class="back-btn" aria-label="Back" @click="goBack">
+        <button type="button" class="back-btn" aria-label="返回" @click="goBack">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M19 12H5" />
             <polyline points="12 19 5 12 12 5" />
@@ -10,7 +10,7 @@
         </button>
         <div>
           <p class="context-kicker">{{ contextLabel }}</p>
-          <h1 class="page-title">{{ isEditing ? 'Edit note' : 'New note' }}</h1>
+          <h1 class="page-title">{{ isEditing ? '编辑笔记' : '新建笔记' }}</h1>
         </div>
       </div>
       <div class="header-actions">
@@ -24,41 +24,41 @@
             <polyline points="17 21 17 13 7 13 7 21" />
             <polyline points="7 3 7 8 15 8" />
           </svg>
-          {{ status === 'error' ? 'Retry & view' : 'Save & view' }}
+          {{ status === 'error' ? '重试并查看' : '保存并查看' }}
         </button>
       </div>
     </header>
 
     <div v-if="loading" class="loading-state" aria-live="polite">
       <div class="loading-spinner"></div>
-      <span>Loading note...</span>
+      <span>正在加载笔记...</span>
     </div>
 
     <main v-else class="editor-body">
-      <section class="editor-meta" aria-label="Note details">
+      <section class="editor-meta" aria-label="笔记详情">
         <label class="field field--title" for="note-title">
-          <span class="sr-only">Title</span>
-          <input id="note-title" v-model="noteTitle" type="text" class="title-input" placeholder="Note title" maxlength="200" />
+          <span class="sr-only">标题</span>
+          <input id="note-title" v-model="noteTitle" type="text" class="title-input" placeholder="笔记标题" maxlength="200" />
         </label>
         <label class="field" for="note-summary">
-          <span class="field-label">Summary</span>
-          <textarea id="note-summary" v-model="noteSummary" class="meta-input meta-input--summary" rows="2" maxlength="500" placeholder="A short summary for the reader"></textarea>
+          <span class="field-label">摘要</span>
+          <textarea id="note-summary" v-model="noteSummary" class="meta-input meta-input--summary" rows="2" maxlength="500" placeholder="为读者写一段简短摘要"></textarea>
         </label>
         <label class="field" for="note-tags">
-          <span class="field-label">Tags</span>
-          <input id="note-tags" v-model="noteTags" type="text" class="meta-input" placeholder="work, ideas, reference" maxlength="500" />
+          <span class="field-label">标签</span>
+          <input id="note-tags" v-model="noteTags" type="text" class="meta-input" placeholder="工作、想法、参考" maxlength="500" />
         </label>
         <label class="pin-field" for="note-pinned">
           <input id="note-pinned" v-model="isPinned" type="checkbox" />
-          <span>Keep this note pinned</span>
+          <span>置顶这篇笔记</span>
         </label>
       </section>
 
-      <section class="editor-wrapper" aria-label="Markdown editor">
+      <section class="editor-wrapper" aria-label="Markdown 编辑器">
         <v-md-editor
           v-model="noteContent"
           height="100%"
-          placeholder="Write in Markdown..."
+          placeholder="使用 Markdown 编写内容..."
           :disabled-menus="[]"
           @upload-image="handleUploadImage"
         />

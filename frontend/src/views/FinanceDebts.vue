@@ -128,7 +128,7 @@
         <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="debt-dialog-title" tabindex="-1" @keydown.escape="cancelDialog">
           <div class="dialog-header">
             <h3 id="debt-dialog-title" class="dialog-title">{{ editingDebt ? '编辑借贷' : '新建借贷' }}</h3>
-            <button class="dialog-close" @click="cancelDialog" aria-label="Close">
+            <button class="dialog-close" @click="cancelDialog" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             </button>
           </div>
@@ -181,7 +181,7 @@
         <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="pay-dialog-title" tabindex="-1" @keydown.escape="cancelPayment">
           <div class="dialog-header">
             <h3 id="pay-dialog-title" class="dialog-title">添加还款</h3>
-            <button class="dialog-close" @click="cancelPayment" aria-label="Close">
+            <button class="dialog-close" @click="cancelPayment" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             </button>
           </div>
@@ -218,7 +218,7 @@
         <div class="dialog dialog--confirm" role="dialog" aria-modal="true" aria-labelledby="del-debt-title" tabindex="-1" @keydown.escape="cancelDelete">
           <div class="dialog-header">
             <h3 id="del-debt-title" class="dialog-title">确认删除</h3>
-            <button class="dialog-close" @click="cancelDelete" aria-label="Close">
+            <button class="dialog-close" @click="cancelDelete" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             </button>
           </div>

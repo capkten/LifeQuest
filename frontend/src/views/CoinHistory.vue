@@ -123,6 +123,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useUserStats } from '../composables/useUserStats'
 import { coinService } from '../services/coin'
+import { labelSource } from '../utils/displayLabels'
 
 const { user } = useUserStats()
 
@@ -141,17 +142,8 @@ const typeOptions = [
   { label: '支出', value: 'expense' }
 ]
 
-const sourceMap = {
-  task: '任务',
-  habit: '习惯',
-  goal: '目标',
-  checkin: '签到',
-  shop: '商城',
-  achievement: '成就'
-}
-
 function sourceLabel(source) {
-  return sourceMap[source] || source || '其他'
+  return labelSource(source)
 }
 
 const groupedTransactions = computed(() => {

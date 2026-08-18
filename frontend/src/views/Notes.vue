@@ -185,7 +185,7 @@
         >
           <div class="dialog-header">
             <h3 id="dialog-title" class="dialog-title">新建笔记本</h3>
-            <button class="dialog-close" @click="cancelDialog" aria-label="Close">
+            <button class="dialog-close" @click="cancelDialog" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />

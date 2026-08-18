@@ -11,7 +11,7 @@
           </p>
           <div class="hero-progress" aria-label="经验值进度">
             <div class="hero-progress-label">
-              <span>EXP TO LEVEL {{ (user?.level || 1) + 1 }}</span>
+              <span>升级所需经验 {{ (user?.level || 1) + 1 }}</span>
               <strong>{{ expPercent }}%</strong>
             </div>
             <div class="hero-progress-track">
@@ -42,7 +42,7 @@
       <div class="hero-meta">
         <div class="hero-meta-item">
           <span class="hero-meta-label">等级</span>
-          <strong>Lv. {{ user?.level || 1 }}</strong>
+          <strong>等级 {{ user?.level || 1 }}</strong>
         </div>
         <div class="hero-meta-item">
           <span class="hero-meta-label">金币</span>
@@ -122,7 +122,7 @@
                   </svg>
                   {{ habit.streak }}
                 </span>
-                <span class="task-difficulty" :class="'task-difficulty--' + habit.difficulty">{{ habit.difficulty }}</span>
+                <span class="task-difficulty" :class="'task-difficulty--' + habit.difficulty">{{ labelDifficulty(habit.difficulty) }}</span>
               </div>
             </div>
           </div>
@@ -140,7 +140,7 @@
                 <span class="task-status" :class="'task-status--' + task.status"></span>
                 <span class="daily-item-title">{{ task.title }}</span>
                 <span v-if="isOverdue(task.deadline)" class="daily-overdue">逾期</span>
-                <span class="task-difficulty" :class="'task-difficulty--' + task.difficulty">{{ task.difficulty }}</span>
+                <span class="task-difficulty" :class="'task-difficulty--' + task.difficulty">{{ labelDifficulty(task.difficulty) }}</span>
               </router-link>
             </div>
           </div>
@@ -173,7 +173,7 @@
     <aside class="home-aside-actions">
       <section class="quick-actions-card">
         <div class="aside-card-title">
-          <span class="aside-card-kicker">FOCUS</span>
+          <span class="aside-card-kicker">专注行动</span>
           <h3>快速行动</h3>
         </div>
         <div class="quick-actions-list">
@@ -223,7 +223,7 @@
             <div v-for="task in recentTasks" :key="task.id" class="task-item">
               <span class="task-status" :class="'task-status--' + task.status"></span>
               <span class="task-title">{{ task.title }}</span>
-              <span class="task-difficulty" :class="'task-difficulty--' + task.difficulty">{{ task.difficulty }}</span>
+              <span class="task-difficulty" :class="'task-difficulty--' + task.difficulty">{{ labelDifficulty(task.difficulty) }}</span>
             </div>
           </div>
         </div>
@@ -270,7 +270,7 @@
     <section class="habit-progress-card">
       <div class="habit-progress-heading">
         <div>
-          <span class="aside-card-kicker">DAILY RHYTHM</span>
+          <span class="aside-card-kicker">每日节奏</span>
           <h3>习惯进度</h3>
         </div>
         <strong>{{ habitProgress }}%</strong>
@@ -314,6 +314,7 @@ import { checkinService } from '../services/checkin'
 import { useToast } from '../composables/useToast'
 import { useUserStats } from '../composables/useUserStats'
 import { getErrorMessage } from '../utils/errorMessage'
+import { labelDifficulty } from '../utils/displayLabels'
 import CultivationStatusBar from '../components/cultivation/CultivationStatusBar.vue'
 
 const authStore = useAuthStore()

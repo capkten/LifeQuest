@@ -11,7 +11,7 @@
         </div>
 
         <div class="profile-copy">
-          <span class="profile-kicker">PLAYER SUMMARY</span>
+          <span class="profile-kicker">玩家概览</span>
           <div class="profile-name-row">
             <h1 class="profile-name">{{ user?.username || '冒险者' }}</h1>
             <span v-if="activeTitle" class="profile-title-badge">{{ activeTitle.name }}</span>
@@ -20,9 +20,9 @@
           <p v-if="user?.email" class="profile-email">{{ user.email }}</p>
 
           <div class="profile-meta">
-            <span class="profile-meta-pill">Lv. {{ user?.level || 1 }}</span>
+            <span class="profile-meta-pill">等级 {{ user?.level || 1 }}</span>
             <span class="profile-meta-pill">{{ user?.coins || 0 }} 金币</span>
-            <span class="profile-meta-pill">{{ user?.experience || 0 }} XP</span>
+            <span class="profile-meta-pill">{{ user?.experience || 0 }} 经验</span>
             <span class="profile-meta-pill">{{ unlockedAchievementsCount }} 个成就</span>
           </div>
         </div>
@@ -36,7 +36,7 @@
       <div class="profile-progress-card">
         <div class="progress-header">
           <div>
-            <span class="section-kicker">NEXT LEVEL</span>
+          <span class="section-kicker">下一等级</span>
             <h2>经验进度</h2>
           </div>
           <strong>{{ expPercent }}%</strong>
@@ -47,13 +47,13 @@
           :aria-valuenow="expPercent"
           aria-valuemin="0"
           aria-valuemax="100"
-          :aria-label="`Experience progress: ${expPercent}% toward next level`"
+          :aria-label="`经验值进度：${expPercent}%，距离下一等级`"
         >
           <div class="exp-bar-fill" :style="{ width: expPercent + '%' }"></div>
         </div>
         <div class="progress-meta">
-          <span>{{ user?.experience || 0 }} / {{ requiredExp }} XP</span>
-          <span>距离下一等级还差 {{ Math.max(requiredExp - (user?.experience || 0), 0) }} XP</span>
+          <span>{{ user?.experience || 0 }} / {{ requiredExp }} 经验</span>
+          <span>距离下一等级还差 {{ Math.max(requiredExp - (user?.experience || 0), 0) }} 经验</span>
         </div>
       </div>
     </section>
@@ -73,7 +73,7 @@
       <article class="surface-card">
         <div class="section-heading">
           <div>
-            <span class="section-kicker">ATTRIBUTES</span>
+          <span class="section-kicker">属性</span>
             <h2>能力属性</h2>
           </div>
           <span class="section-meta">来自当前账号真实数据</span>
@@ -93,12 +93,12 @@
           <div class="detail-card">
             <span class="detail-label">已完成任务</span>
             <strong>{{ stats.totalTasksCompleted }}</strong>
-            <p>根据任务状态为 completed 的数量统计。</p>
+          <p>根据已完成任务的数量统计。</p>
           </div>
           <div class="detail-card">
             <span class="detail-label">最佳习惯连击</span>
             <strong>{{ stats.maxHabitStreak }}</strong>
-            <p>取所有习惯 best_streak / streak 的最大值。</p>
+          <p>取所有习惯最佳连击或当前连击的最大值。</p>
           </div>
         </div>
       </article>
@@ -106,7 +106,7 @@
       <article class="surface-card">
         <div class="section-heading">
           <div>
-            <span class="section-kicker">INVENTORY</span>
+          <span class="section-kicker">物品</span>
             <h2>背包入口</h2>
           </div>
           <router-link class="text-link" to="/backpack">查看背包</router-link>
@@ -129,7 +129,7 @@
     <section class="surface-card achievements-card">
       <div class="section-heading">
         <div>
-          <span class="section-kicker">ACHIEVEMENTS</span>
+          <span class="section-kicker">成就</span>
           <h2>成就墙</h2>
         </div>
         <span class="section-meta">{{ unlockedAchievementsCount }} / {{ mergedAchievements.length || 0 }} 已解锁</span>
@@ -174,7 +174,7 @@
         <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="title-dialog-title">
           <div class="dialog-header">
             <h3 id="title-dialog-title" class="dialog-title">切换称号</h3>
-            <button class="dialog-close" @click="showTitleModal = false" aria-label="Close">
+              <button class="dialog-close" @click="showTitleModal = false" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />

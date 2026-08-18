@@ -23,7 +23,7 @@
 
     <section class="finance-summary-grid">
       <article class="summary-panel summary-panel--primary stitch-surface">
-        <div class="summary-panel__eyebrow">Wallet summary</div>
+        <div class="summary-panel__eyebrow">钱包概览</div>
         <div class="summary-panel__hero">
           <div>
             <span class="summary-panel__label">净流动</span>
@@ -68,7 +68,7 @@
       <article class="summary-panel stitch-surface">
         <div class="summary-panel__header">
           <div>
-            <div class="summary-panel__eyebrow">Recent transactions</div>
+            <div class="summary-panel__eyebrow">最近流水</div>
             <h3 class="summary-panel__title">筛选与范围</h3>
           </div>
           <span class="summary-panel__meta">{{ activeFilterCount === 0 ? '当前查看全部' : `已启用 ${activeFilterCount} 个筛选` }}</span>
@@ -85,7 +85,7 @@
               :aria-selected="filters.type === t.value"
               @click="filters.type = t.value; fetchTransactions()"
             >
-              {{ t.label }}
+              {{ t.value ? labelTransactionType(t.value) : '全部' }}
             </button>
           </div>
 
@@ -132,7 +132,7 @@
     <section v-else class="transactions-section">
       <div class="section-heading">
         <div>
-          <div class="section-eyebrow">Recent activity</div>
+          <div class="section-eyebrow">最近活动</div>
           <h3 class="section-title">按日期查看流水</h3>
         </div>
       </div>
@@ -330,6 +330,7 @@ import { ref, computed, onMounted } from 'vue'
 import { financeService } from '../services/finance'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
+import { labelTransactionType } from '../utils/displayLabels'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -351,10 +352,10 @@ const filters = ref({
 })
 
 const typeFilters = [
-  { value: '', label: '全部' },
-  { value: 'income', label: '收入' },
-  { value: 'expense', label: '支出' },
-  { value: 'transfer', label: '转账' }
+  { value: '' },
+  { value: 'income' },
+  { value: 'expense' },
+  { value: 'transfer' }
 ]
 
 const showDialog = ref(false)

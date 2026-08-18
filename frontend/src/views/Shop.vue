@@ -2,7 +2,7 @@
   <div class="shop-page">
     <section class="shop-hero" aria-labelledby="shop-hero-title">
       <div class="shop-hero-copy">
-        <span class="shop-hero-kicker">LIFEQUEST REWARDS</span>
+      <span class="shop-hero-kicker">LifeQuest 奖励</span>
         <h1 id="shop-hero-title">用今天的努力，兑换生活里的小奖励</h1>
         <p>把完成任务获得的金币，换成真正让你开心的时刻。</p>
       </div>
@@ -14,7 +14,7 @@
     <div class="page-header">
       <div class="page-header-main">
         <div class="header-left">
-          <span class="shop-kicker">REWARD MARKET</span>
+          <span class="shop-kicker">奖励商城</span>
           <h2 class="page-title">商城</h2>
           <span class="item-count">{{ filteredItems.length }} 件奖励可兑换</span>
         </div>
@@ -232,7 +232,7 @@
         >
           <div class="dialog-header">
             <h3 id="create-dialog-title" class="dialog-title">{{ dialogMode === 'edit' ? '编辑商品' : '新建商品' }}</h3>
-            <button class="dialog-close" @click="cancelDialog" aria-label="Close">
+          <button class="dialog-close" @click="cancelDialog" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -341,7 +341,7 @@
         >
           <div class="dialog-header">
             <h3 id="delete-dialog-title" class="dialog-title">确认删除</h3>
-            <button class="dialog-close" @click="cancelDelete" aria-label="Close">
+          <button class="dialog-close" @click="cancelDelete" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />

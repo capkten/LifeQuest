@@ -113,7 +113,7 @@
         <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="account-dialog-title" tabindex="-1" @keydown.escape="cancelDialog">
           <div class="dialog-header">
             <h3 id="account-dialog-title" class="dialog-title">{{ dialogMode === 'edit' ? '编辑账户' : '新建账户' }}</h3>
-            <button class="dialog-close" @click="cancelDialog" aria-label="Close">
+            <button class="dialog-close" @click="cancelDialog" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -174,7 +174,7 @@
         <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="transfer-dialog-title" tabindex="-1" @keydown.escape="cancelTransfer">
           <div class="dialog-header">
             <h3 id="transfer-dialog-title" class="dialog-title">转账</h3>
-            <button class="dialog-close" @click="cancelTransfer" aria-label="Close">
+            <button class="dialog-close" @click="cancelTransfer" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -223,7 +223,7 @@
         <div class="dialog dialog--confirm" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title" tabindex="-1" @keydown.escape="cancelDelete">
           <div class="dialog-header">
             <h3 id="delete-dialog-title" class="dialog-title">确认删除</h3>
-            <button class="dialog-close" @click="cancelDelete" aria-label="Close">
+            <button class="dialog-close" @click="cancelDelete" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -273,6 +273,7 @@ import { ref, computed, onMounted } from 'vue'
 import { financeService } from '../services/finance'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
+import { labelAccountType } from '../utils/displayLabels'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -314,8 +315,7 @@ function formatMoney(val) {
 }
 
 function accountTypeLabel(type) {
-  const map = { cash: '现金', bank: '银行卡', credit: '信用卡', alipay: '支付宝', wechat: '微信', debt: '借贷', other: '其他' }
-  return map[type] || type
+  return labelAccountType(type)
 }
 
 function openCreate() {

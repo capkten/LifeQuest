@@ -9,6 +9,17 @@ import {
   STATUS_LABELS,
   TASK_PREFERENCE_LABELS,
   TECHNIQUE_TYPE_LABELS,
+  DIFFICULTY_LABELS,
+  FREQUENCY_LABELS,
+  ACCOUNT_TYPE_LABELS,
+  PERIOD_LABELS,
+  SOURCE_LABELS,
+  PROJECT_STATUS_LABELS,
+  TASK_STATUS_LABELS,
+  ITEM_TYPE_LABELS,
+  ACTION_TYPE_LABELS,
+  EXCHANGE_STATUS_LABELS,
+  TRANSACTION_TYPE_LABELS,
 } from '../locales/zh-CN.js'
 
 export function labelRealm(value) {
@@ -49,6 +60,50 @@ export function labelEventSummary(value) {
 
 export function labelLockReason(value) {
   return labelValue(LOCK_REASON_LABELS, value, '未知渡劫状态')
+}
+
+export function labelDifficulty(value) {
+  return labelValue(DIFFICULTY_LABELS, value, '未知难度')
+}
+
+export function labelFrequency(value) {
+  return labelValue(FREQUENCY_LABELS, value, '未知频率')
+}
+
+export function labelAccountType(value) {
+  return labelValue(ACCOUNT_TYPE_LABELS, value, '未知账户类型')
+}
+
+export function labelPeriod(value) {
+  return labelValue(PERIOD_LABELS, value, '未知周期')
+}
+
+export function labelSource(value) {
+  return labelValue(SOURCE_LABELS, value, '其他')
+}
+
+export function labelProjectStatus(value) {
+  return labelValue(PROJECT_STATUS_LABELS, value, '未知项目状态')
+}
+
+export function labelTaskStatus(value) {
+  return labelValue(TASK_STATUS_LABELS, value, '未知任务状态')
+}
+
+export function labelItemType(value) {
+  return labelValue(ITEM_TYPE_LABELS, value, '未知物品类型')
+}
+
+export function labelActionType(value) {
+  return labelValue(ACTION_TYPE_LABELS, value, '未知动作')
+}
+
+export function labelExchangeStatus(value) {
+  return labelValue(EXCHANGE_STATUS_LABELS, value, '未知兑换状态')
+}
+
+export function labelTransactionType(value) {
+  return labelValue(TRANSACTION_TYPE_LABELS, value, '未知交易类型')
 }
 
 export function isTrustedLabel(serverLabel, stableValue) {

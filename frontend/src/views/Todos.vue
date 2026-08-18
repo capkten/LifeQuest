@@ -43,7 +43,7 @@
 
     <section class="todo-progress-card" aria-label="当前列表进度">
       <div class="todo-progress-copy">
-        <span class="todo-progress-kicker">DAILY PROGRESS</span>
+        <span class="todo-progress-kicker">每日进度</span>
         <strong>{{ activeTabProgress }}%</strong>
       </div>
       <div class="todo-progress-track" aria-hidden="true">
@@ -63,7 +63,7 @@
 
     <div class="mobile-add-cta">
       <div class="mobile-add-copy">
-        <span class="mobile-add-kicker">QUICK ADD</span>
+        <span class="mobile-add-kicker">快速添加</span>
         <strong>新建{{ activeTabSingular }}</strong>
       </div>
       <button class="btn-create btn-create--compact" @click="showCreateDialog = true">
@@ -118,7 +118,7 @@
                 :class="{ 'complete-btn--done': !habit.is_active }"
                 :disabled="completingId === habit.id"
                 @click="completeHabit(habit)"
-                :aria-label="'Complete ' + habit.title"
+                :aria-label="'完成 ' + habit.title"
               >
                 <span v-if="completionLoadingId === habit.id" class="loading-spinner loading-spinner--sm"></span>
                 <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
@@ -130,10 +130,10 @@
                 <p v-if="habit.description" class="todo-card-desc">{{ habit.description }}</p>
                 <div class="todo-card-meta todo-card-meta--inline">
                   <span class="difficulty-badge" :class="'difficulty-badge--' + habit.difficulty">
-                    {{ habit.difficulty === 'easy' ? '简单' : habit.difficulty === 'medium' ? '中等' : '困难' }}
+                    {{ labelDifficulty(habit.difficulty) }}
                   </span>
                   <span class="frequency-badge" :class="'frequency-badge--' + habit.frequency">
-                    {{ habit.frequency === 'daily' ? '每日' : habit.frequency === 'weekly' ? '每周' : '每月' }}
+                    {{ labelFrequency(habit.frequency) }}
                   </span>
                 </div>
               </div>
@@ -174,7 +174,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
-                +{{ habit.exp_reward }} XP
+                +{{ habit.exp_reward }} 经验
               </span>
             </div>
           </div>
@@ -196,7 +196,7 @@
                 :class="{ 'complete-btn--done': task.status === 'completed' }"
                 :disabled="task.status === 'completed' || completingId === task.id"
                 @click="completeTask(task)"
-                :aria-label="'Complete ' + task.title"
+                :aria-label="'完成 ' + task.title"
               >
                 <span v-if="completionLoadingId === task.id" class="loading-spinner loading-spinner--sm"></span>
                 <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
@@ -214,7 +214,7 @@
                     {{ formatPriority(task.priority) }}
                   </span>
                   <span class="difficulty-badge" :class="'difficulty-badge--' + task.difficulty">
-                    {{ task.difficulty === 'easy' ? '简单' : task.difficulty === 'medium' ? '中等' : '困难' }}
+                    {{ labelDifficulty(task.difficulty) }}
                   </span>
                   <span class="status-badge" :class="'status-badge--' + task.status">
                     {{ formatStatus(task.status) }}
@@ -351,7 +351,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
-                +{{ task.exp_reward }} XP
+                +{{ task.exp_reward }} 经验
               </span>
             </div>
           </div>
@@ -373,7 +373,7 @@
                 :class="{ 'complete-btn--done': goal.status === 'completed' }"
                 :disabled="goal.status === 'completed' || completingId === goal.id"
                 @click="completeGoal(goal)"
-                :aria-label="'Complete ' + goal.title"
+                :aria-label="'完成 ' + goal.title"
               >
                 <span v-if="completionLoadingId === goal.id" class="loading-spinner loading-spinner--sm"></span>
                 <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
@@ -385,7 +385,7 @@
                 <p v-if="goal.description" class="todo-card-desc">{{ goal.description }}</p>
                 <div class="todo-card-meta todo-card-meta--inline">
                   <span class="difficulty-badge" :class="'difficulty-badge--' + goal.difficulty">
-                    {{ goal.difficulty === 'easy' ? '简单' : goal.difficulty === 'medium' ? '中等' : '困难' }}
+                    {{ labelDifficulty(goal.difficulty) }}
                   </span>
                   <span class="status-badge" :class="'status-badge--' + goal.status">
                     {{ formatStatus(goal.status) }}
@@ -443,7 +443,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
-                +{{ goal.exp_reward }} XP
+                +{{ goal.exp_reward }} 经验
               </span>
             </div>
           </div>
@@ -480,7 +480,7 @@
         >
           <div class="dialog-header">
             <h3 id="create-dialog-title" class="dialog-title">{{ isEditing ? '编辑' : '新建' }}{{ activeTabSingular }}</h3>
-            <button class="dialog-close" @click="cancelDialog" aria-label="Close">
+            <button class="dialog-close" @click="cancelDialog" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -592,7 +592,7 @@
         >
           <div class="dialog-header">
             <h3 id="delete-dialog-title" class="dialog-title">确认删除</h3>
-            <button class="dialog-close" @click="closeDeleteDialog" aria-label="Close">
+            <button class="dialog-close" @click="closeDeleteDialog" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -624,6 +624,7 @@ import { projectService } from '../services/project'
 import { useAuthStore } from '../stores/auth'
 import { useCultivationStore } from '../stores/cultivation'
 import { getErrorMessage } from '../utils/errorMessage'
+import { labelDifficulty, labelFrequency, labelTaskStatus } from '../utils/displayLabels'
 
 const authStore = useAuthStore()
 const cultivationStore = useCultivationStore()
@@ -740,13 +741,7 @@ function getCount(tab) {
 }
 
 function formatStatus(status) {
-  const statusMap = {
-    'pending': '待开始',
-    'in_progress': '进行中',
-    'completed': '已完成',
-    'cancelled': '已取消'
-  }
-  return statusMap[status] || status.replace(/_/g, ' ')
+  return labelTaskStatus(status)
 }
 
 function formatPriority(priority) {

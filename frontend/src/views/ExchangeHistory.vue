@@ -9,7 +9,7 @@
           </svg>
           返回商城
         </router-link>
-        <span class="history-kicker">REWARD LEDGER</span>
+        <span class="history-kicker">奖励记录</span>
         <h1 class="history-title">兑换历史</h1>
         <p class="history-subtitle">查看奖励兑换、状态变化与金币支出，保留原有历史记录与退款状态展示。</p>
       </div>
@@ -60,7 +60,7 @@
         <article class="summary-card">
           <span class="summary-card-label">累计支出金币</span>
           <strong class="summary-card-value">{{ totalSpent }}</strong>
-          <span class="summary-card-note">按 total_cost 汇总</span>
+          <span class="summary-card-note">按消费总额汇总</span>
         </article>
         <article class="summary-card">
           <span class="summary-card-label">最近兑换</span>
@@ -72,7 +72,7 @@
       <section class="timeline-card">
         <div class="section-heading">
           <div>
-            <span class="section-kicker">TIMELINE</span>
+            <span class="section-kicker">时间线</span>
             <h2>兑换时间线</h2>
           </div>
           <span class="section-meta">{{ records.length }} 条记录</span>
@@ -143,18 +143,12 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue'
 import { shopService } from '../services/shop'
+import { labelExchangeStatus } from '../utils/displayLabels'
 
 const records = ref([])
 const shopItemsMap = ref({})
 const loading = ref(true)
 const error = ref(null)
-
-const statusMap = {
-  pending: '处理中',
-  completed: '已完成',
-  cancelled: '已取消',
-  refunded: '已退款'
-}
 
 const totalSpent = computed(() => records.value.reduce((sum, record) => sum + (record.total_cost || 0), 0))
 const pendingCount = computed(() => records.value.filter((record) => record.status === 'pending').length)
@@ -181,7 +175,7 @@ function formatDate(dateStr) {
 }
 
 function formatStatus(status) {
-  return statusMap[status] || status
+  return labelExchangeStatus(status)
 }
 
 async function fetchShopItems() {

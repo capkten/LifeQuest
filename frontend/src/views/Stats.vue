@@ -92,7 +92,7 @@
               class="period-tab"
               :class="{ 'period-tab--active': taskPeriod === p.value }"
               @click="setTaskPeriod(p.value)"
-            >{{ p.label }}</button>
+            >{{ labelPeriod(p.value) }}</button>
           </div>
         </div>
         <div class="chart-body">
@@ -153,7 +153,7 @@
               class="period-tab"
               :class="{ 'period-tab--active': habitPeriod === p.value }"
               @click="setHabitPeriod(p.value)"
-            >{{ p.label }}</button>
+            >{{ labelPeriod(p.value) }}</button>
           </div>
         </div>
         <div class="chart-body">
@@ -218,7 +218,7 @@
               class="period-tab"
               :class="{ 'period-tab--active': coinPeriod === p.value }"
               @click="setCoinPeriod(p.value)"
-            >{{ p.label }}</button>
+            >{{ labelPeriod(p.value) }}</button>
           </div>
         </div>
         <div class="chart-body">
@@ -292,10 +292,10 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
-                <span class="level-number">Lv.{{ levelProgress.current_level }}</span>
+                <span class="level-number">等级 {{ levelProgress.current_level }}</span>
               </div>
               <div class="level-detail">
-                <span class="level-exp">{{ levelProgress.current_exp }} / {{ levelProgress.required_exp }} EXP</span>
+                <span class="level-exp">{{ levelProgress.current_exp }} / {{ levelProgress.required_exp }} 经验</span>
                 <span class="level-percent">{{ levelProgress.exp_percent }}%</span>
               </div>
             </div>
@@ -313,6 +313,7 @@
 </template>
 
 <script setup>
+import { labelPeriod } from '../utils/displayLabels'
 import { ref, computed, onMounted } from 'vue'
 import { statsService } from '../services/stats'
 
@@ -343,18 +344,18 @@ const loadingHabits = ref(false)
 const loadingCoins = ref(false)
 
 const taskPeriods = [
-  { value: 'week', label: '周' },
-  { value: 'month', label: '月' },
-  { value: 'year', label: '年' },
+  { value: 'week' },
+  { value: 'month' },
+  { value: 'year' },
 ]
 const habitPeriods = [
-  { value: 'week', label: '周' },
-  { value: 'month', label: '月' },
+  { value: 'week' },
+  { value: 'month' },
 ]
 const coinPeriods = [
-  { value: 'week', label: '周' },
-  { value: 'month', label: '月' },
-  { value: 'year', label: '年' },
+  { value: 'week' },
+  { value: 'month' },
+  { value: 'year' },
 ]
 
 // --- Task bar chart helpers ---
