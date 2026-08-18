@@ -46,6 +46,7 @@
       <span>{{ totalsError }}</span>
       <button type="button" class="retry-btn" @click="fetchTotals">重试累计数据</button>
     </div>
+    <div v-if="totalsLoading" class="inline-loading" aria-live="polite">正在加载累计数据...</div>
 
     <div class="filter-bar">
       <div class="filter-group">
@@ -184,6 +185,7 @@ async function fetchHistory() {
   loading.value = true
   error.value = null
   loadMoreError.value = null
+  loadingMore.value = false
   page.value = 1
   try {
     const params = { page: 1, limit: 20 }

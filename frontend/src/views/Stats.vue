@@ -370,6 +370,10 @@ let taskRequestId = 0
 let habitRequestId = 0
 let coinRequestId = 0
 
+function syncGlobalError() {
+  error.value = overviewError.value || levelError.value || taskError.value || habitError.value || coinError.value || null
+}
+
 const taskPeriods = [
   { value: 'week' },
   { value: 'month' },
@@ -512,16 +516,18 @@ const coinXLabels = computed(() => {
 async function fetchOverview() {
   const requestId = ++overviewRequestId
   overviewError.value = null
+  syncGlobalError()
   try {
     const result = await statsService.getOverview()
     if (requestId !== overviewRequestId) return false
     overview.value = result
     hasRenderableData.value = true
+    syncGlobalError()
     return true
   } catch (e) {
     if (requestId === overviewRequestId) {
       overviewError.value = getErrorMessage(e, '加载统计总览失败，请重试。')
-      error.value = overviewError.value
+      syncGlobalError()
     }
     return false
   }
@@ -530,16 +536,18 @@ async function fetchOverview() {
 async function fetchLevel() {
   const requestId = ++levelRequestId
   levelError.value = null
+  syncGlobalError()
   try {
     const result = await statsService.getLevelProgress()
     if (requestId !== levelRequestId) return false
     levelProgress.value = result
     hasRenderableData.value = true
+    syncGlobalError()
     return true
   } catch (e) {
     if (requestId === levelRequestId) {
       levelError.value = getErrorMessage(e, '加载等级进度失败，请重试。')
-      error.value = levelError.value
+      syncGlobalError()
     }
     return false
   }
@@ -549,14 +557,19 @@ async function fetchTaskTrends() {
   const requestId = ++taskRequestId
   loadingTasks.value = true
   taskError.value = null
+  syncGlobalError()
   try {
     const result = await statsService.getTaskTrends(taskPeriod.value)
     if (requestId === taskRequestId) {
       taskTrends.value = result
       hasRenderableData.value = true
+      syncGlobalError()
     }
   } catch (e) {
-    if (requestId === taskRequestId) taskError.value = getErrorMessage(e, '加载任务趋势失败，请重试。')
+    if (requestId === taskRequestId) {
+      taskError.value = getErrorMessage(e, '加载任务趋势失败，请重试。')
+      syncGlobalError()
+    }
   } finally {
     if (requestId === taskRequestId) loadingTasks.value = false
   }
@@ -566,14 +579,19 @@ async function fetchHabitStats() {
   const requestId = ++habitRequestId
   loadingHabits.value = true
   habitError.value = null
+  syncGlobalError()
   try {
     const result = await statsService.getHabitStats(habitPeriod.value)
     if (requestId === habitRequestId) {
       habitStats.value = result
       hasRenderableData.value = true
+      syncGlobalError()
     }
   } catch (e) {
-    if (requestId === habitRequestId) habitError.value = getErrorMessage(e, '加载习惯统计失败，请重试。')
+    if (requestId === habitRequestId) {
+      habitError.value = getErrorMessage(e, '加载习惯统计失败，请重试。')
+      syncGlobalError()
+    }
   } finally {
     if (requestId === habitRequestId) loadingHabits.value = false
   }
@@ -583,14 +601,19 @@ async function fetchCoinTrends() {
   const requestId = ++coinRequestId
   loadingCoins.value = true
   coinError.value = null
+  syncGlobalError()
   try {
     const result = await statsService.getCoinTrends(coinPeriod.value)
     if (requestId === coinRequestId) {
       coinTrends.value = result
       hasRenderableData.value = true
+      syncGlobalError()
     }
   } catch (e) {
-    if (requestId === coinRequestId) coinError.value = getErrorMessage(e, '加载金币趋势失败，请重试。')
+    if (requestId === coinRequestId) {
+      coinError.value = getErrorMessage(e, '加载金币趋势失败，请重试。')
+      syncGlobalError()
+    }
   } finally {
     if (requestId === coinRequestId) loadingCoins.value = false
   }
@@ -623,7 +646,8 @@ async function fetchAll() {
     fetchCoinTrends(),
   ])
   if (requestId === refreshRequestId && results.some((result) => result === false)) {
-    error.value = overviewError.value || levelError.value || taskError.value || habitError.value || coinError.value || '加载统计数据失败，请重试。'
+    syncGlobalError()
+    error.value = error.value || '加载统计数据失败，请重试。'
   }
   if (requestId === refreshRequestId) {
     loading.value = false

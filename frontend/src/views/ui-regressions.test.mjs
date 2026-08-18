@@ -176,3 +176,20 @@ test('notebook workspace and viewer ignore stale responses after selection chang
   assert.match(view, /viewerRequestId|viewerSequence|viewerAbortController/)
   assert.match(view, /requestId\s*!==\s*viewerRequestId|viewerRequestId\s*!==\s*requestId/)
 })
+
+test('pagination refreshes release stale loading locks and expose retryable failures', async () => {
+  const [finance, coins, stats] = await Promise.all([
+    readFile(new URL('./FinanceTransactions.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('./CoinHistory.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('./Stats.vue', viewsDirectory), 'utf8'),
+  ])
+
+  assert.match(finance, /loadMoreError/)
+  assert.match(finance, /filterGeneration/)
+  assert.match(finance, /generation !== filterGeneration/)
+  assert.match(coins, /loadMoreError/)
+  assert.match(coins, /filterGeneration/)
+  assert.match(coins, /loadingMore\.value = false/)
+  assert.match(stats, /function syncGlobalError\(/)
+  assert.match(stats, /syncGlobalError\(\)/)
+})

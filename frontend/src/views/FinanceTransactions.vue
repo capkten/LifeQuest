@@ -113,6 +113,10 @@
       <span>{{ supportError }}</span>
       <button type="button" class="retry-btn" @click="fetchSupportData">重试账户和分类</button>
     </div>
+    <div v-if="loadMoreError" class="inline-error" role="alert">
+      <span>{{ loadMoreError }}</span>
+      <button type="button" class="retry-btn" @click="loadMore">重试加载更多</button>
+    </div>
 
     <div v-if="loading && !transactions.length" class="loading-state">
       <span class="loading-spinner"></span>
@@ -350,9 +354,11 @@ const loadingMore = ref(false)
 const error = ref(null)
 const accountsError = ref(null)
 const categoriesError = ref(null)
+const loadMoreError = ref(null)
 const page = ref(1)
 const hasMore = ref(false)
 let requestSequence = 0
+let filterGeneration = 0
 let supportRequestId = 0
 
 const supportError = computed(() => accountsError.value || categoriesError.value)
@@ -460,8 +466,11 @@ function cancelDelete() { showDeleteDialog.value = false; deletingTx.value = nul
 
 async function fetchTransactions() {
   const requestId = ++requestSequence
+  const generation = ++filterGeneration
   loading.value = true
   error.value = null
+  loadMoreError.value = null
+  loadingMore.value = false
   page.value = 1
   try {
     const params = { page: 1, limit: 50 }
@@ -482,11 +491,14 @@ async function fetchTransactions() {
 }
 
 async function loadMore() {
+  if (loadingMore.value || !hasMore.value) return
   const requestId = ++requestSequence
+  const generation = filterGeneration
+  const nextPage = page.value + 1
   loadingMore.value = true
-  page.value++
+  loadMoreError.value = null
   try {
-    const params = { page: page.value, limit: 50 }
+    const params = { page: nextPage, limit: 50 }
     if (filters.value.type) params.type = filters.value.type
     if (filters.value.account_id) params.account_id = filters.value.account_id
     if (filters.value.category_id) params.category_id = filters.value.category_id
@@ -494,13 +506,16 @@ async function loadMore() {
     if (filters.value.end_date) params.end_date = filters.value.end_date
     const data = await financeService.getTransactions(params)
     const items = Array.isArray(data) ? data : (data.items || data.transactions || [])
-    if (requestId !== requestSequence) return
+    if (requestId !== requestSequence || generation !== filterGeneration) return
     transactions.value.push(...items)
+    page.value = nextPage
     hasMore.value = data.has_more || false
   } catch (e) {
-    if (requestId === requestSequence) page.value--
+    if (requestId === requestSequence && generation === filterGeneration) {
+      loadMoreError.value = getErrorMessage(e, '加载更多流水失败，请重试。')
+    }
   } finally {
-    if (requestId === requestSequence) loadingMore.value = false
+    if (requestId === requestSequence && generation === filterGeneration) loadingMore.value = false
   }
 }
 
