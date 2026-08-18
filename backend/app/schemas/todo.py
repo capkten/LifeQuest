@@ -43,6 +43,7 @@ class HabitResponse(BaseModel):
     streak: int
     best_streak: int
     last_completed_at: Optional[datetime] = None
+    completed_today: bool = False
     created_at: datetime
     updated_at: datetime
     cultivation_reward: Optional[RewardSettlement] = None

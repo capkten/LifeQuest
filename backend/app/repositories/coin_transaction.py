@@ -57,12 +57,24 @@ class CoinTransactionRepository(BaseRepository[CoinTransaction]):
                 totals["total_spent"] = row.total or 0
         return totals
 
-    def count_by_user(self, user_id: UUID) -> int:
-        return (
-            self.db.query(CoinTransaction)
-            .filter(CoinTransaction.user_id == user_id)
-            .count()
-        )
+    def count_by_user(
+        self,
+        user_id: UUID,
+        coin_type: Optional[str] = None,
+        source: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+    ) -> int:
+        query = self.db.query(CoinTransaction).filter(CoinTransaction.user_id == user_id)
+        if coin_type:
+            query = query.filter(CoinTransaction.type == coin_type)
+        if source:
+            query = query.filter(CoinTransaction.source == source)
+        if start_date:
+            query = query.filter(CoinTransaction.created_at >= start_date)
+        if end_date:
+            query = query.filter(CoinTransaction.created_at <= end_date)
+        return query.count()
 
     def create_transaction(
         self,

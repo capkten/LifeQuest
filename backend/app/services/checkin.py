@@ -109,4 +109,12 @@ class CheckinService:
         self.achievement_service.check_and_unlock(user_id, "login_streak", streak)
         self.achievement_service.check_and_unlock(user_id, "checkin_count", checkin_count)
 
-        return checkin
+        return {
+            "id": checkin.id,
+            "user_id": checkin.user_id,
+            "checkin_date": checkin.checkin_date,
+            "streak": checkin.streak,
+            "created_at": checkin.created_at,
+            "reward_coins": reward_coins,
+            "reward_exp": reward_exp,
+        }

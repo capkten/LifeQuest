@@ -14,6 +14,7 @@ from app.schemas.finance import (
     BudgetCreate, BudgetUpdate, BudgetResponse,
     CategoryCreate, CategoryResponse,
     TransactionCreate, TransactionUpdate, TransactionResponse,
+    TransactionPageResponse,
     RecurringCreate, RecurringResponse,
     DebtCreate, DebtUpdate, DebtResponse, DebtPaymentCreate, DebtPaymentResponse,
     FinanceDashboardResponse,
@@ -155,22 +156,24 @@ def delete_category(
 
 # --- Transactions ---
 
-@router.get("/transactions")
+@router.get("/transactions", response_model=TransactionPageResponse)
 def get_transactions(
     account_id: Optional[UUID] = None,
     category_id: Optional[UUID] = None,
     type: Optional[str] = None,
     start_date: Optional[Date] = None,
     end_date: Optional[Date] = None,
-    skip: int = 0,
-    limit: int = 50,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    skip: Optional[int] = Query(None, ge=0),
+    limit: Optional[int] = Query(None, ge=1, le=200),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     service = FinanceService(db)
     return service.get_transactions(
         current_user.id,
-        skip=skip, limit=limit,
+        page=page, page_size=page_size, skip=skip, limit=limit,
         account_id=account_id, category_id=category_id,
         type=type, start_date=start_date, end_date=end_date,
     )

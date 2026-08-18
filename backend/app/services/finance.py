@@ -229,9 +229,33 @@ class FinanceService:
         return txn
 
     def get_transactions(self, user_id: UUID, **filters) -> dict:
-        txns = self.transaction_repo.get_by_user(user_id, **filters)
+        page = filters.pop("page", 1)
+        page_size = filters.pop("page_size", 50)
+        legacy_skip = filters.pop("skip", None)
+        legacy_limit = filters.pop("limit", None)
+        if legacy_limit is not None:
+            page_size = legacy_limit
+
+        if legacy_skip is None:
+            offset = (page - 1) * page_size
+        else:
+            offset = legacy_skip
+            page = (offset // page_size) + 1
+
+        txns = self.transaction_repo.get_by_user(
+            user_id,
+            skip=offset,
+            limit=page_size,
+            **filters,
+        )
         total = self.transaction_repo.count_by_user(user_id)
-        return {"items": txns, "total": total}
+        return {
+            "items": txns,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "has_more": offset + len(txns) < total,
+        }
 
     def update_transaction(
         self, transaction: FinanceTransaction, data: TransactionUpdate, user_id: UUID

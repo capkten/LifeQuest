@@ -197,6 +197,43 @@ def test_complete_habit_awards_rewards(client):
     assert user_after["experience"] == exp_before + 10
 
 
+def test_habit_response_distinguishes_today_completion_from_activity(client):
+    headers = _register_and_login(client)
+    active_habit = client.post(
+        "/api/todos/habits",
+        json={"title": "Completed today", "coins_reward": 1, "exp_reward": 1},
+        headers=headers,
+    ).json()
+    inactive_habit = client.post(
+        "/api/todos/habits",
+        json={"title": "Inactive and incomplete", "coins_reward": 1, "exp_reward": 1},
+        headers=headers,
+    ).json()
+
+    initial = client.get("/api/todos/habits", headers=headers)
+    assert initial.status_code == 200
+    initial_by_id = {habit["id"]: habit for habit in initial.json()}
+    assert initial_by_id[active_habit["id"]]["completed_today"] is False
+    assert initial_by_id[inactive_habit["id"]]["completed_today"] is False
+
+    completed = client.post(
+        f"/api/todos/habits/{active_habit['id']}/complete",
+        headers=headers,
+    )
+    assert completed.status_code == 200
+    assert completed.json()["completed_today"] is True
+    assert completed.json()["is_active"] is True
+
+    deactivated = client.put(
+        f"/api/todos/habits/{inactive_habit['id']}",
+        json={"is_active": False},
+        headers=headers,
+    )
+    assert deactivated.status_code == 200
+    assert deactivated.json()["completed_today"] is False
+    assert deactivated.json()["is_active"] is False
+
+
 def test_complete_goal_awards_rewards(client):
     headers = _register_and_login(client)
 

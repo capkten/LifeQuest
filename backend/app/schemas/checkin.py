@@ -13,6 +13,8 @@ class CheckinResponse(BaseModel):
     checkin_date: date
     streak: int
     created_at: datetime
+    reward_coins: int
+    reward_exp: int
 
 
 class CheckinStatusResponse(BaseModel):

@@ -54,6 +54,20 @@ class TodoService:
         self.cultivation_service = CultivationService(db)
 
     @staticmethod
+    def _set_completed_today(habit: Habit) -> Habit:
+        if habit.last_completed_at is None:
+            habit.completed_today = False
+            return habit
+
+        completed_at = habit.last_completed_at
+        if completed_at.tzinfo is None:
+            completed_at = completed_at.replace(tzinfo=timezone.utc)
+        else:
+            completed_at = completed_at.astimezone(timezone.utc)
+        habit.completed_today = completed_at.date() == datetime.now(timezone.utc).date()
+        return habit
+
+    @staticmethod
     def _coin_source_id(source: str, entity_id: UUID, completed_on: date = None) -> str:
         source_value = getattr(source, "value", source)
         compact_uuid = base64.urlsafe_b64encode(entity_id.bytes).decode("ascii").rstrip("=")
@@ -69,7 +83,7 @@ class TodoService:
             raise HTTPException(status_code=404, detail="Habit not found")
         if habit.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
-        return habit
+        return self._set_completed_today(habit)
 
     def get_task_for_user(self, task_id: UUID, user_id: UUID) -> Task:
         task = self.task_repo.get_by_id(task_id)
@@ -100,14 +114,14 @@ class TodoService:
     def create_habit(self, user_id: UUID, habit_in: HabitCreate) -> Habit:
         data = habit_in.model_dump()
         data["user_id"] = user_id
-        return self.habit_repo.create(data)
+        return self._set_completed_today(self.habit_repo.create(data))
 
     def get_habits(self, user_id: UUID) -> List[Habit]:
-        return self.habit_repo.get_by_user(user_id)
+        return [self._set_completed_today(habit) for habit in self.habit_repo.get_by_user(user_id)]
 
     def update_habit(self, habit: Habit, habit_in: HabitUpdate) -> Habit:
         update_data = habit_in.model_dump(exclude_unset=True)
-        return self.habit_repo.update(habit, update_data)
+        return self._set_completed_today(self.habit_repo.update(habit, update_data))
 
     def delete_habit(self, habit_id: UUID) -> bool:
         return self.habit_repo.delete(habit_id)
@@ -124,7 +138,7 @@ class TodoService:
         )).rowcount
         if not changed:
             self.db.refresh(habit)
-            return habit
+            return self._set_completed_today(habit)
         self.db.execute(update(Habit).where(
             Habit.id == habit.id, Habit.streak > Habit.best_streak
         ).values(best_streak=Habit.streak).execution_options(synchronize_session=False))
@@ -142,7 +156,7 @@ class TodoService:
 
         self.habit_repo.db.refresh(habit)
         habit.cultivation_reward = settlement
-        return habit
+        return self._set_completed_today(habit)
 
     # --- Task operations ---
     def create_task(self, user_id: UUID, task_in: TaskCreate) -> Task:

@@ -35,7 +35,13 @@ class CoinService:
         )
         transactions = [self._localized_transaction(transaction) for transaction in transactions]
         totals = self.coin_repo.get_totals(user_id)
-        count = self.coin_repo.count_by_user(user_id)
+        count = self.coin_repo.count_by_user(
+            user_id,
+            coin_type=coin_type,
+            source=source,
+            start_date=start_date,
+            end_date=end_date,
+        )
         return {
             "transactions": transactions,
             "total_earned": totals["total_earned"],

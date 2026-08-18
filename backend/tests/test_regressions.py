@@ -56,3 +56,67 @@ def test_first_goal_completion_records_base_and_achievement_rewards(client, db_s
     after_second = client.get("/api/users/me", headers=headers).json()
     assert after_second["coins"] == after_first["coins"]
     assert after_second["experience"] == after_first["experience"]
+
+
+def test_checkin_response_reports_written_rewards_and_repeat_is_not_rewarded(client, db_session):
+    headers = _register_and_login(client)
+
+    first = client.post("/api/checkin", headers=headers)
+    assert first.status_code == 200
+    payload = first.json()
+    assert payload["reward_coins"] > 0
+    assert payload["reward_exp"] > 0
+
+    user_id = UUID(client.get("/api/users/me", headers=headers).json()["id"])
+    checkin_transactions = (
+        db_session.query(CoinTransaction)
+        .filter(
+            CoinTransaction.user_id == user_id,
+            CoinTransaction.source == "checkin",
+        )
+        .all()
+    )
+    assert len(checkin_transactions) == 1
+    assert checkin_transactions[0].amount == payload["reward_coins"]
+
+    repeat = client.post("/api/checkin", headers=headers)
+    assert repeat.status_code == 400
+    assert (
+        db_session.query(CoinTransaction)
+        .filter(
+            CoinTransaction.user_id == user_id,
+            CoinTransaction.source == "checkin",
+        )
+        .count()
+        == 1
+    )
+
+
+def test_coin_history_returns_filtered_transactions_and_totals(client, db_session):
+    headers = _register_and_login(client)
+    checkin = client.post("/api/checkin", headers=headers)
+    assert checkin.status_code == 200
+
+    user_id = UUID(client.get("/api/users/me", headers=headers).json()["id"])
+    from app.models.coin_transaction import CoinSource, CoinType
+    from app.repositories.coin_transaction import CoinTransactionRepository
+
+    CoinTransactionRepository(db_session).create_transaction(
+        user_id=user_id,
+        amount=7,
+        coin_type=CoinType.SPEND,
+        source=CoinSource.SHOP,
+        description="test spend",
+    )
+
+    earned = client.get("/api/coins/history?coin_type=earn", headers=headers)
+    spent = client.get("/api/coins/history?coin_type=spend", headers=headers)
+
+    assert earned.status_code == 200
+    assert spent.status_code == 200
+    assert earned.json()["transactions"]
+    assert all(item["type"] == "earn" for item in earned.json()["transactions"])
+    assert earned.json()["total_earned"] == checkin.json()["reward_coins"]
+    assert spent.json()["transactions"][0]["type"] == "spend"
+    assert spent.json()["total_spent"] == 7
+    assert spent.json()["count"] == 1
