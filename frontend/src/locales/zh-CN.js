@@ -156,6 +156,8 @@ export const ACTION_TYPE_LABELS = Object.freeze({
   use: '使用',
   equip: '装备',
   discard: '丢弃',
+  add: '添加',
+  unequip: '卸下',
 })
 
 export const EXCHANGE_STATUS_LABELS = Object.freeze({

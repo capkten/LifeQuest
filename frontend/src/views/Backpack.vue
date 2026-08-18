@@ -275,7 +275,7 @@ function getCount(filter) {
 
 function getItemName(item) {
   const shopItem = shopItemsMap.value[item.shop_item_id]
-  return shopItem?.name || 'Unknown Item'
+  return shopItem?.name || '未知商品'
 }
 
 function getItemDescription(item) {
@@ -376,7 +376,7 @@ function requestDiscard(item) {
   const shopItem = shopItemsMap.value[item.shop_item_id]
   confirmDialog.value = {
     id: item.id,
-    name: shopItem?.name || 'this item'
+    name: shopItem?.name || '该物品'
   }
 }
 

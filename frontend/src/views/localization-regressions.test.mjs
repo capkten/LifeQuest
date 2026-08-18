@@ -81,6 +81,15 @@ const forbiddenLegacyLiterals = [
   'TIMELINE',
 ]
 
+const allowedLegacyTemplateWords = new Set([
+  'LifeQuest',
+  'API',
+  'EXP',
+  'ID',
+  'NPC',
+  'URL',
+])
+
 function templateSource(source) {
   return source.match(/<template\b[^>]*>([\s\S]*?)<\/template>/i)?.[1] || ''
 }
@@ -184,7 +193,7 @@ function templateText(source) {
   return template
     .replace(/<!--[\s\S]*?-->/g, ' ')
     .replace(/{{[\s\S]*?}}/g, ' ')
-    .replace(/<[^>]*>/g, ' ')
+    .replace(/<(?:[^'"<>]|"[^"]*"|'[^']*')*>/g, ' ')
 }
 
 function templateEnglish(source) {
@@ -199,6 +208,15 @@ test('legacy pages contain no forbidden English user-facing literals', async () 
     for (const literal of forbiddenLegacyLiterals) {
       assert.doesNotMatch(template, new RegExp(literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `${file} still renders ${literal}`)
     }
+  }
+})
+
+test('all task 6 legacy page templates contain no bare English user-facing text', async () => {
+  const sources = await Promise.all(legacyFiles.map((file) => readFile(new URL(file, import.meta.url), 'utf8')))
+
+  for (const [file, source] of legacyFiles.map((file, index) => [file, sources[index]])) {
+    const english = templateEnglish(source).filter((word) => !allowedLegacyTemplateWords.has(word))
+    assert.deepEqual(english, [], `${file} contains bare English template text: ${english.join(', ')}`)
   }
 })
 
@@ -231,8 +249,42 @@ test('display labels translate stable server keys', () => {
   assert.equal(labelTaskStatus('pending'), '待开始')
   assert.equal(labelItemType('collectible'), '收藏品')
   assert.equal(labelActionType('discard'), '丢弃')
+  assert.equal(labelActionType('add'), '添加')
+  assert.equal(labelActionType('unequip'), '卸下')
   assert.equal(labelExchangeStatus('refunded'), '已退款')
   assert.equal(labelTransactionType('transfer'), '转账')
+})
+
+test('legacy display labels use Chinese fallbacks for unknown and empty values', () => {
+  for (const [label, fallback] of [
+    [labelDifficulty, '未知难度'],
+    [labelFrequency, '未知频率'],
+    [labelAccountType, '未知账户类型'],
+    [labelPeriod, '未知周期'],
+    [labelSource, '其他'],
+    [labelProjectStatus, '未知项目状态'],
+    [labelTaskStatus, '未知任务状态'],
+    [labelItemType, '未知物品类型'],
+    [labelActionType, '未知动作'],
+    [labelExchangeStatus, '未知兑换状态'],
+    [labelTransactionType, '未知交易类型'],
+  ]) {
+    assert.equal(label('future_stable_key'), fallback)
+    assert.equal(label(''), fallback)
+    assert.equal(label(null), fallback)
+  }
+})
+
+test('legacy item and coin history fallbacks stay localized', async () => {
+  const [backpackSource, coinHistorySource] = await Promise.all([
+    readFile(new URL('./Backpack.vue', import.meta.url), 'utf8'),
+    readFile(new URL('./CoinHistory.vue', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(backpackSource, /shopItem\?\.name \|\| '未知商品'/)
+  assert.match(backpackSource, /shopItem\?\.name \|\| '该物品'/)
+  assert.match(coinHistorySource, /tx\.description \|\| sourceLabel\(tx\.source\)/)
+  assert.doesNotMatch(coinHistorySource, /tx\.description \|\| tx\.source/)
 })
 
 test('display labels hide unknown stable keys and use Chinese empty fallbacks', async () => {

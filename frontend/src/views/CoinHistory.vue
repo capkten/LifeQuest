@@ -102,7 +102,7 @@
               </svg>
             </div>
             <div class="tx-info">
-              <span class="tx-desc">{{ tx.description || tx.source || '交易' }}</span>
+              <span class="tx-desc">{{ tx.description || sourceLabel(tx.source) }}</span>
               <span class="tx-source">{{ sourceLabel(tx.source) }}</span>
             </div>
             <span class="tx-amount" :class="tx.amount > 0 ? 'tx-amount--positive' : 'tx-amount--negative'">
