@@ -174,6 +174,8 @@ export const TRANSACTION_TYPE_LABELS = Object.freeze({
 })
 
 export const ERROR_MESSAGES = Object.freeze({
+  TITLE_REQUIRED: '保存前请填写标题。',
+  NOTEBOOK_REQUIRED: '请先选择笔记本。',
   'Task not found': '任务不存在。',
   'TECHNIQUE_NOT_FOUND:technique not found': '功法不存在。',
   'SLOT_CONFLICT:DUPLICATE_TECHNIQUE': '同一功法不能重复配置。',

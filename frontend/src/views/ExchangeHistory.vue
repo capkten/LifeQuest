@@ -144,6 +144,7 @@
 import { computed, ref, onMounted } from 'vue'
 import { shopService } from '../services/shop'
 import { labelExchangeStatus } from '../utils/displayLabels'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const records = ref([])
 const shopItemsMap = ref({})
@@ -201,7 +202,7 @@ async function fetchAll() {
   try {
     await Promise.all([fetchShopItems(), fetchHistory()])
   } catch (e) {
-    error.value = '加载兑换历史失败，请重试。'
+    error.value = getErrorMessage(e, '加载兑换历史失败，请重试。')
   } finally {
     loading.value = false
   }

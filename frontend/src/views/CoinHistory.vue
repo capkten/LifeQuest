@@ -124,6 +124,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useUserStats } from '../composables/useUserStats'
 import { coinService } from '../services/coin'
 import { labelSource } from '../utils/displayLabels'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const { user } = useUserStats()
 
@@ -169,7 +170,7 @@ async function fetchHistory() {
     transactions.value = Array.isArray(result) ? result : (result?.data || [])
     hasMore.value = transactions.value.length >= 20
   } catch (e) {
-    error.value = '加载金币记录失败，请重试。'
+    error.value = getErrorMessage(e, '加载金币记录失败，请重试。')
   } finally {
     loading.value = false
   }

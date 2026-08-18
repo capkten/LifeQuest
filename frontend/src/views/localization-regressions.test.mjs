@@ -57,6 +57,7 @@ const legacyFiles = [
   './Profile.vue',
   './Projects.vue',
   './Shop.vue',
+  './EditProfile.vue',
   './NoteEditor.vue',
   './Notes.vue',
   './NotebookFileManage.vue',
@@ -209,6 +210,47 @@ test('legacy pages contain no forbidden English user-facing literals', async () 
       assert.doesNotMatch(template, new RegExp(literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `${file} still renders ${literal}`)
     }
   }
+})
+
+test('NoteEditor keeps dynamic status and errors localized', async () => {
+  const source = await readFile(new URL('./NoteEditor.vue', import.meta.url), 'utf8')
+  // Scan the raw script source so interpolated status strings remain visible.
+  for (const pattern of [
+    /['"`]Unsaved changes['"`]/,
+    /['"`]Saving\.\.\.['"`]/,
+    /['"`]Save failed · retry['"`]/,
+    /`Saved\s+\$\{/,
+    /['"`]All changes saved['"`]/,
+    /`Notebook\s+\$\{/,
+    /`Notebook\s+\$\{[^}]+\}\s*\/\s*Folder\s+\$\{/,
+    /return\s+['"]Notes['"]/,
+    /['"]Could not load this note\.['"]/,
+    /['"]A title is required before saving\.['"]/,
+    /['"]Save failed\. Try again\.['"]/,
+    /['"]Image upload failed\.['"]/,
+    /['"]You have unsaved changes\. Leave this note\?['"]/,
+  ]) {
+    assert.doesNotMatch(source, pattern, `NoteEditor still contains ${pattern}`)
+  }
+  assert.match(source, /getErrorMessage\(\s*error\s*,\s*'加载笔记失败，请重试。'\s*\)/)
+  assert.match(source, /getErrorMessage\(\s*error\s*,\s*'保存失败，请重试。'\s*\)/)
+  assert.match(source, /getErrorMessage\(\s*error\s*,\s*'图片上传失败，请重试。'\s*\)/)
+  assert.match(source, /getErrorMessage\(\s*new Error\('TITLE_REQUIRED'\)\s*\)/)
+  assert.doesNotMatch(source, /error\.message/)
+})
+
+test('EditProfile keeps section headings localized', async () => {
+  const template = templateSource(await readFile(new URL('./EditProfile.vue', import.meta.url), 'utf8'))
+  assert.doesNotMatch(template, /PROFILE SETTINGS/)
+  assert.doesNotMatch(template, /ACCOUNT INFO/)
+  assert.match(template, /资料设置/)
+  assert.match(template, /账户信息/)
+})
+
+test('ProjectDetail close buttons use Chinese aria labels', async () => {
+  const source = await readFile(new URL('./ProjectDetail.vue', import.meta.url), 'utf8')
+  assert.doesNotMatch(source, /aria-label="Close"/)
+  assert.equal((source.match(/aria-label="关闭"/g) || []).length, 5)
 })
 
 test('all task 6 legacy page templates contain no bare English user-facing text', async () => {
@@ -400,6 +442,8 @@ test('error messages translate backend details and machine codes', () => {
     getErrorMessage({ response: { data: { detail: 'SLOT_CONFLICT:DUPLICATE_TECHNIQUE' } } }),
     '同一功法不能重复配置。',
   )
+  assert.equal(getErrorMessage(new Error('TITLE_REQUIRED')), '保存前请填写标题。')
+  assert.equal(getErrorMessage(new Error('NOTEBOOK_REQUIRED')), '请先选择笔记本。')
   assert.equal(
     getErrorMessage({ response: { data: { detail: { message: '自定义错误。' } } } }),
     '自定义错误。',
@@ -462,6 +506,11 @@ test('api and pages use the shared error converter', async () => {
     './Shop.vue',
     './Login.vue',
     './Register.vue',
+    './NoteEditor.vue',
+    './BackpackHistory.vue',
+    './ExchangeHistory.vue',
+    './CoinHistory.vue',
+    './Stats.vue',
   ]
   const sources = await Promise.all(files.map((file) => readFile(new URL(file, import.meta.url), 'utf8')))
 
@@ -539,13 +588,18 @@ test('visible errors in task 4 page catches use the caught error converter', asy
     './Login.vue',
     './Register.vue',
     './Shop.vue',
+    './NoteEditor.vue',
+    './BackpackHistory.vue',
+    './ExchangeHistory.vue',
+    './CoinHistory.vue',
+    './Stats.vue',
   ]
   const sources = await Promise.all(files.map((file) => readFile(new URL(file, import.meta.url), 'utf8')))
 
   for (const [file, source] of files.map((file, index) => [file, sources[index]])) {
     for (const { caughtName, body } of readCatchBlocks(source)) {
       if (hasVisibleError(body)) {
-        assert.match(body, new RegExp(`getErrorMessage\\(\\s*${caughtName}\\s*\\)`), `${file} has a visible catch error without the shared converter`)
+        assert.match(body, new RegExp(`getErrorMessage\\(\\s*${caughtName}(?:\\s*,|\\s*\\))`), `${file} has a visible catch error without the shared converter`)
       }
     }
   }

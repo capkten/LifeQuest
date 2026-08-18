@@ -19,7 +19,8 @@ function translateDetail(detail) {
 export function getErrorMessage(error, fallback = '操作失败，请重试。') {
   const detail = error?.response?.data?.detail
   const detailMessage = typeof detail === 'object' ? detail?.message : detail
-  const translatedDetail = translateDetail(detailMessage)
+  const errorCode = error?.code || error?.message
+  const translatedDetail = translateDetail(detailMessage || errorCode)
   if (translatedDetail) return translatedDetail
   if (error?.response?.status && STATUS_MESSAGES[error.response.status]) return STATUS_MESSAGES[error.response.status]
   if (!error?.response && error?.request) return '网络连接失败，请检查网络。'

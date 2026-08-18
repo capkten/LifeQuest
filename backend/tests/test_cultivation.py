@@ -497,6 +497,36 @@ def test_npc_event_response_uses_explicit_schema(db_session, user):
     assert get_args(NpcRelationshipResponse.model_fields["events"].annotation) == (NpcEventSummary,)
 
 
+def test_npc_api_keeps_unknown_event_key_but_hides_raw_key_from_summary(client, auth_headers, db_session):
+    from uuid import UUID
+
+    from app.models.world import NpcEvent
+    from app.services.cultivation import CultivationService
+
+    current_user = client.get("/api/users/me", headers=auth_headers).json()
+    user_id = UUID(current_user["id"])
+    service = CultivationService(db_session)
+    _prepare_npc_meeting(service, user_id)
+    npc = service.meet_npc(user_id, "sect-1-normal-1", 14)
+    db_session.add(NpcEvent(
+        user_id=user_id,
+        npc_id=npc.id,
+        event_key="future_event_key",
+        summary="sensitive raw event text",
+    ))
+    db_session.commit()
+
+    response = client.get("/api/cultivation/npcs", headers=auth_headers)
+
+    assert response.status_code == 200
+    events = response.json()["events"]
+    unknown = next(event for event in events if event["event_key"] == "future_event_key")
+    known = next(event for event in events if event["event_key"] == "met")
+    assert unknown["summary"] == "未知事件"
+    assert "future_event_key" not in unknown["summary"]
+    assert known["summary"] == "与普通弟子相遇"
+
+
 def test_npc_migration_moves_events_before_deleting_duplicate_npcs(tmp_path, monkeypatch):
     from sqlalchemy import create_engine, inspect, text
 

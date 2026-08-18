@@ -571,7 +571,7 @@ class CultivationService:
                 event_id=event.id,
                 npc_id=npc.id,
                 event_key=event.event_key,
-                summary=EVENT_SUMMARY_LABELS.get(event.event_key, event.event_key),
+                summary=EVENT_SUMMARY_LABELS.get(event.event_key, "未知事件"),
                 created_at=event.created_at,
             ))
             if npc.id in seen:

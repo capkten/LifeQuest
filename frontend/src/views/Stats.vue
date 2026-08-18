@@ -316,6 +316,7 @@
 import { labelPeriod } from '../utils/displayLabels'
 import { ref, computed, onMounted } from 'vue'
 import { statsService } from '../services/stats'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const loading = ref(true)
 const error = ref(null)
@@ -544,7 +545,7 @@ async function fetchAll() {
       fetchCoinTrends(),
     ])
   } catch (e) {
-    error.value = '加载统计数据失败，请重试。'
+    error.value = getErrorMessage(e, '加载统计数据失败，请重试。')
   } finally {
     loading.value = false
   }

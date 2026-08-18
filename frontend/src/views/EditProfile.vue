@@ -2,7 +2,7 @@
   <div class="edit-profile-page">
     <section class="profile-shell">
       <div class="profile-intro">
-        <span class="profile-kicker">PROFILE SETTINGS</span>
+        <span class="profile-kicker">资料设置</span>
         <h1 class="page-title">编辑资料</h1>
         <p class="page-copy">更新头像、用户名与邮箱信息，保留现有头像解析、上传和资料保存行为。</p>
       </div>
@@ -53,7 +53,7 @@
         <section class="form-card">
           <div class="section-heading">
             <div>
-              <span class="section-kicker">ACCOUNT INFO</span>
+              <span class="section-kicker">账户信息</span>
               <h2>基础信息</h2>
             </div>
             <button class="text-button" type="button" @click="goBack">返回资料页</button>

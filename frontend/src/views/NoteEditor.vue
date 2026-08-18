@@ -78,6 +78,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { useNoteAutosave } from '../composables/useNoteAutosave'
 import { noteService } from '../services/note'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const route = useRoute()
 const router = useRouter()
@@ -97,9 +98,9 @@ const toast = ref({ show: false, message: '', type: 'success' })
 
 const isEditing = computed(() => !!noteId.value)
 const contextLabel = computed(() => {
-  if (notebookId.value && folderId.value) return `Notebook ${notebookId.value} / Folder ${folderId.value}`
-  if (notebookId.value) return `Notebook ${notebookId.value}`
-  return 'Notes'
+  if (notebookId.value && folderId.value) return `笔记本 ${notebookId.value} / 文件夹 ${folderId.value}`
+  if (notebookId.value) return `笔记本 ${notebookId.value}`
+  return '笔记'
 })
 
 function snapshot() {
@@ -120,11 +121,11 @@ function displayTime(value) {
 const autosave = useNoteAutosave({ snapshot, delay: 900, save: persistNote })
 const status = computed(() => autosave.status.value)
 const statusLabel = computed(() => {
-  if (status.value === 'dirty') return 'Unsaved changes'
-  if (status.value === 'saving') return 'Saving...'
-  if (status.value === 'error') return 'Save failed · retry'
-  if (status.value === 'saved') return `Saved ${displayTime(autosave.lastSavedAt.value)}`
-  return 'All changes saved'
+  if (status.value === 'dirty') return '有未保存的更改'
+  if (status.value === 'saving') return '保存中...'
+  if (status.value === 'error') return '保存失败 · 点击重试'
+  if (status.value === 'saved') return `已保存 ${displayTime(autosave.lastSavedAt.value)}`
+  return '所有更改已保存'
 })
 
 let toastTimer = null
@@ -134,6 +135,10 @@ function showToast(message, type = 'success') {
   if (toastTimer) clearTimeout(toastTimer)
   toast.value = { show: true, message, type }
   toastTimer = setTimeout(() => { toast.value.show = false }, 3000)
+}
+
+function showTitleRequiredError() {
+  showToast(getErrorMessage(new Error('TITLE_REQUIRED')), 'error')
 }
 
 function routeContext() {
@@ -178,7 +183,7 @@ async function loadRoute() {
     autosave.reset(snapshot(), note.updated_at)
     hydrated.value = true
   } catch (error) {
-    if (requestId === loadRequest) showToast('Could not load this note.', 'error')
+    if (requestId === loadRequest) showToast(getErrorMessage(error, '加载笔记失败，请重试。'), 'error')
   } finally {
     if (requestId === loadRequest) loading.value = false
   }
@@ -190,7 +195,7 @@ function scheduleAutosave() {
 
 async function persistNote(payload) {
   if (!payload.title) {
-    showToast('A title is required before saving.', 'error')
+    showTitleRequiredError()
     throw new Error('TITLE_REQUIRED')
   }
   if (noteId.value) return noteService.updateNote(noteId.value, payload)
@@ -211,7 +216,7 @@ async function persistNote(payload) {
 
 async function saveNote() {
   if (!noteTitle.value.trim()) {
-    showToast('A title is required before saving.', 'error')
+    showTitleRequiredError()
     return
   }
   try {
@@ -220,7 +225,7 @@ async function saveNote() {
       await router.push({ name: 'NotebookWorkspaceView', params: { notebookId: notebookId.value, noteId: noteId.value } })
     }
   } catch (error) {
-    showToast(error.message === 'TITLE_REQUIRED' ? 'A title is required before saving.' : 'Save failed. Try again.', 'error')
+    showToast(getErrorMessage(error, '保存失败，请重试。'), 'error')
   }
 }
 
@@ -231,7 +236,7 @@ async function handleUploadImage(event, insertCallback, files) {
     const url = await noteService.uploadImage(file)
     insertCallback({ url })
   } catch (error) {
-    showToast('Image upload failed.', 'error')
+    showToast(getErrorMessage(error, '图片上传失败，请重试。'), 'error')
   }
 }
 
@@ -249,7 +254,7 @@ function handleBeforeUnload(event) {
 
 onBeforeRouteLeave(() => {
   if (suppressRouteWarning.value || !autosave.dirty.value) return true
-  return window.confirm('You have unsaved changes. Leave this note?')
+  return window.confirm('当前笔记有未保存的更改，确定要离开吗？')
 })
 
 watch(snapshot, scheduleAutosave, { deep: true })

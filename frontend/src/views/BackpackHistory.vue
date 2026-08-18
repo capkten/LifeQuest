@@ -140,6 +140,7 @@
 import { computed, ref, onMounted } from 'vue'
 import { backpackService } from '../services/backpack'
 import { labelActionType } from '../utils/displayLabels'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const records = ref([])
 const loading = ref(true)
@@ -178,7 +179,7 @@ async function fetchAll() {
   try {
     await fetchHistory()
   } catch (e) {
-    error.value = '加载使用历史失败，请重试。'
+    error.value = getErrorMessage(e, '加载使用历史失败，请重试。')
   } finally {
     loading.value = false
   }
