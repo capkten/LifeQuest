@@ -11,16 +11,20 @@
       </h1>
     </div>
 
-    <div v-if="loading" class="loading-state">
+    <div v-if="loading && !hasRenderableData" class="loading-state">
       <span class="loading-spinner"></span>
     </div>
 
-    <div v-else-if="error" class="error-state">
+    <div v-else-if="error && !hasRenderableData" class="error-state">
       <p>{{ error }}</p>
       <button class="retry-btn" @click="fetchAll">重试</button>
     </div>
 
     <template v-else>
+      <div v-if="error" class="inline-error" role="alert">
+        <span>{{ error }}</span>
+        <button type="button" class="retry-btn" @click="fetchAll">重试</button>
+      </div>
       <!-- Overview Cards -->
       <div class="overview-grid">
         <div class="overview-card overview-card--tasks">
@@ -72,6 +76,10 @@
             <span class="overview-label">活跃天数</span>
           </div>
         </div>
+      </div>
+      <div v-if="overviewError" class="inline-error" role="alert">
+        <span>{{ overviewError }}</span>
+        <button type="button" class="retry-btn" @click="fetchOverview">重试总览</button>
       </div>
 
       <!-- Task Completion Trend -->
@@ -289,6 +297,9 @@
           </h3>
         </div>
         <div class="chart-body">
+          <div v-if="levelError" class="chart-error" role="alert">
+            {{ levelError }} <button type="button" @click="fetchLevel">重试</button>
+          </div>
           <div class="level-section">
             <div class="level-info">
               <div class="level-badge">
@@ -323,6 +334,12 @@ import { getErrorMessage } from '../utils/errorMessage'
 
 const loading = ref(true)
 const error = ref(null)
+const hasRenderableData = ref(false)
+const overviewError = ref(null)
+const levelError = ref(null)
+let overviewRequestId = 0
+let levelRequestId = 0
+let refreshRequestId = 0
 
 const overview = ref({
   total_tasks_completed: 0,
@@ -493,11 +510,39 @@ const coinXLabels = computed(() => {
 
 // --- Data fetching ---
 async function fetchOverview() {
-  overview.value = await statsService.getOverview()
+  const requestId = ++overviewRequestId
+  overviewError.value = null
+  try {
+    const result = await statsService.getOverview()
+    if (requestId !== overviewRequestId) return false
+    overview.value = result
+    hasRenderableData.value = true
+    return true
+  } catch (e) {
+    if (requestId === overviewRequestId) {
+      overviewError.value = getErrorMessage(e, '加载统计总览失败，请重试。')
+      error.value = overviewError.value
+    }
+    return false
+  }
 }
 
 async function fetchLevel() {
-  levelProgress.value = await statsService.getLevelProgress()
+  const requestId = ++levelRequestId
+  levelError.value = null
+  try {
+    const result = await statsService.getLevelProgress()
+    if (requestId !== levelRequestId) return false
+    levelProgress.value = result
+    hasRenderableData.value = true
+    return true
+  } catch (e) {
+    if (requestId === levelRequestId) {
+      levelError.value = getErrorMessage(e, '加载等级进度失败，请重试。')
+      error.value = levelError.value
+    }
+    return false
+  }
 }
 
 async function fetchTaskTrends() {
@@ -506,7 +551,10 @@ async function fetchTaskTrends() {
   taskError.value = null
   try {
     const result = await statsService.getTaskTrends(taskPeriod.value)
-    if (requestId === taskRequestId) taskTrends.value = result
+    if (requestId === taskRequestId) {
+      taskTrends.value = result
+      hasRenderableData.value = true
+    }
   } catch (e) {
     if (requestId === taskRequestId) taskError.value = getErrorMessage(e, '加载任务趋势失败，请重试。')
   } finally {
@@ -520,7 +568,10 @@ async function fetchHabitStats() {
   habitError.value = null
   try {
     const result = await statsService.getHabitStats(habitPeriod.value)
-    if (requestId === habitRequestId) habitStats.value = result
+    if (requestId === habitRequestId) {
+      habitStats.value = result
+      hasRenderableData.value = true
+    }
   } catch (e) {
     if (requestId === habitRequestId) habitError.value = getErrorMessage(e, '加载习惯统计失败，请重试。')
   } finally {
@@ -534,7 +585,10 @@ async function fetchCoinTrends() {
   coinError.value = null
   try {
     const result = await statsService.getCoinTrends(coinPeriod.value)
-    if (requestId === coinRequestId) coinTrends.value = result
+    if (requestId === coinRequestId) {
+      coinTrends.value = result
+      hasRenderableData.value = true
+    }
   } catch (e) {
     if (requestId === coinRequestId) coinError.value = getErrorMessage(e, '加载金币趋势失败，请重试。')
   } finally {
@@ -558,19 +612,20 @@ function setCoinPeriod(p) {
 }
 
 async function fetchAll() {
+  const requestId = ++refreshRequestId
   loading.value = true
   error.value = null
-  try {
-    await Promise.all([
-      fetchOverview(),
-      fetchLevel(),
-      fetchTaskTrends(),
-      fetchHabitStats(),
-      fetchCoinTrends(),
-    ])
-  } catch (e) {
-    error.value = getErrorMessage(e, '加载统计数据失败，请重试。')
-  } finally {
+  const results = await Promise.all([
+    fetchOverview(),
+    fetchLevel(),
+    fetchTaskTrends(),
+    fetchHabitStats(),
+    fetchCoinTrends(),
+  ])
+  if (requestId === refreshRequestId && results.some((result) => result === false)) {
+    error.value = overviewError.value || levelError.value || taskError.value || habitError.value || coinError.value || '加载统计数据失败，请重试。'
+  }
+  if (requestId === refreshRequestId) {
     loading.value = false
   }
 }

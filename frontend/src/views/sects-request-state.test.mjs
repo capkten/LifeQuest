@@ -64,3 +64,21 @@ test('stale sect errors do not clear the latest loading state or overwrite its r
   assert.equal(state.loading, false)
   assert.equal(state.error?.message, 'latest failure')
 })
+
+test('cancelled requests do not surface stale failures', async () => {
+  const events = []
+  const requests = createSequencedRequest({
+    onStart: () => events.push('loading'),
+    onSuccess: (value) => events.push(`success:${value}`),
+    onError: (error) => events.push(`error:${error.message}`),
+    onFinish: () => events.push('finished'),
+  })
+  const pending = deferred()
+  const run = requests(() => pending.promise)
+
+  requests.cancel()
+  pending.reject(new Error('cancelled failure'))
+  await run
+
+  assert.deepEqual(events, ['loading'])
+})

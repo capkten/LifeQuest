@@ -51,6 +51,7 @@ export function useNoteWorkspace(notebookId) {
   const loading = ref(false)
   const error = ref(null)
   const actionLocks = ref(new Set())
+  let treeRequestId = 0
 
   function resolveNotebookId(value = notebookId) {
     return toValue(value)
@@ -102,17 +103,19 @@ export function useNoteWorkspace(notebookId) {
     const targetNotebookId = resolveNotebookId(options.notebookId ?? notebookId)
     if (targetNotebookId == null) return []
 
+    const requestId = ++treeRequestId
     loading.value = true
     error.value = null
     try {
       const nextTree = await noteService.getTree(targetNotebookId)
+      if (requestId !== treeRequestId) return tree.value
       reconcileTree(nextTree, options)
       return tree.value
     } catch (cause) {
-      error.value = cause
+      if (requestId === treeRequestId) error.value = cause
       throw cause
     } finally {
-      loading.value = false
+      if (requestId === treeRequestId) loading.value = false
     }
   }
 

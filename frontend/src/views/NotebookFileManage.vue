@@ -319,6 +319,7 @@ const viewerError = ref(null)
 const openedViewerNotes = new Set()
 let toastTimer = null
 let loadRequest = 0
+let viewerRequestId = 0
 
 const workspaceLoading = computed(() => loading.value || !notebook.value && !notebookError.value)
 const workspaceError = computed(() => notebookError.value)
@@ -396,6 +397,7 @@ async function loadWorkspace() {
 }
 
 function syncRouteSelection() {
+  viewerRequestId += 1
   const routeNoteId = route.params.noteId
   if (!routeNoteId) {
     selectedNoteId.value = null
@@ -411,13 +413,16 @@ function syncRouteSelection() {
 }
 
 async function loadViewer(noteId) {
+  const requestId = ++viewerRequestId
   viewerLoading.value = true
   viewerError.value = null
   try {
     let lastError
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        viewerNote.value = await noteService.getNote(noteId)
+        const nextNote = await noteService.getNote(noteId)
+        if (requestId !== viewerRequestId) return
+        viewerNote.value = nextNote
         lastError = null
         break
       } catch (cause) {
@@ -427,6 +432,7 @@ async function loadViewer(noteId) {
       }
     }
     if (lastError) throw lastError
+    if (requestId !== viewerRequestId) return
     if (!openedViewerNotes.has(String(noteId))) {
       openedViewerNotes.add(String(noteId))
       try {
@@ -436,10 +442,12 @@ async function loadViewer(noteId) {
       }
     }
   } catch (cause) {
-    viewerNote.value = null
-    viewerError.value = getErrorMessage(cause)
+    if (requestId === viewerRequestId) {
+      viewerNote.value = null
+      viewerError.value = getErrorMessage(cause)
+    }
   } finally {
-    viewerLoading.value = false
+    if (requestId === viewerRequestId) viewerLoading.value = false
   }
 }
 

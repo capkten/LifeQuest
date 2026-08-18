@@ -109,6 +109,11 @@
       </article>
     </section>
 
+    <div v-if="supportError" class="inline-error" role="alert">
+      <span>{{ supportError }}</span>
+      <button type="button" class="retry-btn" @click="fetchSupportData">重试账户和分类</button>
+    </div>
+
     <div v-if="loading && !transactions.length" class="loading-state">
       <span class="loading-spinner"></span>
     </div>
@@ -343,10 +348,14 @@ const categories = ref([])
 const loading = ref(true)
 const loadingMore = ref(false)
 const error = ref(null)
-const transactionsError = error
+const accountsError = ref(null)
+const categoriesError = ref(null)
 const page = ref(1)
 const hasMore = ref(false)
 let requestSequence = 0
+let supportRequestId = 0
+
+const supportError = computed(() => accountsError.value || categoriesError.value)
 
 const filters = ref({
   type: '',
@@ -496,15 +505,27 @@ async function loadMore() {
 }
 
 async function fetchSupportData() {
-  try {
-    const [acctData, catData] = await Promise.all([
-      financeService.getAccounts().catch(() => []),
-      financeService.getCategories().catch(() => [])
-    ])
-    accounts.value = Array.isArray(acctData) ? acctData : (acctData.items || acctData.accounts || [])
-    categories.value = Array.isArray(catData) ? catData : (catData.items || catData.categories || [])
-  } catch (e) {
-    // Non-critical
+  const requestId = ++supportRequestId
+  accountsError.value = null
+  categoriesError.value = null
+  const [accountResult, categoryResult] = await Promise.allSettled([
+    financeService.getAccounts(),
+    financeService.getCategories(),
+  ])
+  if (requestId !== supportRequestId) return
+
+  if (accountResult.status === 'fulfilled') {
+    const data = accountResult.value
+    accounts.value = Array.isArray(data) ? data : (data.items || data.accounts || [])
+  } else {
+    accountsError.value = getErrorMessage(accountResult.reason, '加载账户失败，请重试。')
+  }
+
+  if (categoryResult.status === 'fulfilled') {
+    const data = categoryResult.value
+    categories.value = Array.isArray(data) ? data : (data.items || data.categories || [])
+  } else {
+    categoriesError.value = getErrorMessage(categoryResult.reason, '加载分类失败，请重试。')
   }
 }
 

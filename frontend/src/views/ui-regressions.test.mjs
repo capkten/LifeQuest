@@ -152,3 +152,27 @@ test('note workspace writes use independent action locks and visible failures', 
   assert.match(source, /error\.value\s*=\s*cause/)
   assert.match(source, /finally[\s\S]*(actionLocks|mutationLocks)/)
 })
+
+test('profile keeps partial data failures visible and retryable', async () => {
+  const source = await readFile(new URL('./Profile.vue', viewsDirectory), 'utf8')
+
+  assert.match(source, /titlesError/)
+  assert.match(source, /titlesError[\s\S]*重试[\s\S]*fetchTitles|重试[\s\S]*fetchTitles[\s\S]*titlesError/)
+  assert.match(source, /Promise\.allSettled/)
+  assert.doesNotMatch(source, /todoService\.getTasks\(\)\.catch\(\(\) => \[\]\)/)
+  assert.doesNotMatch(source, /todoService\.getHabits\(\)\.catch\(\(\) => \[\]\)/)
+  assert.match(source, /tasksError|profileError/)
+  assert.match(source, /titlesRequestId|profileRequestId/)
+})
+
+test('notebook workspace and viewer ignore stale responses after selection changes', async () => {
+  const [workspace, view] = await Promise.all([
+    readFile(new URL('../composables/useNoteWorkspace.js', import.meta.url), 'utf8'),
+    readFile(new URL('./NotebookFileManage.vue', viewsDirectory), 'utf8'),
+  ])
+
+  assert.match(workspace, /treeRequestId|treeSequence|treeAbortController/)
+  assert.match(workspace, /requestId\s*!==\s*treeRequestId|treeRequestId\s*!==\s*requestId/)
+  assert.match(view, /viewerRequestId|viewerSequence|viewerAbortController/)
+  assert.match(view, /requestId\s*!==\s*viewerRequestId|viewerRequestId\s*!==\s*requestId/)
+})

@@ -1,7 +1,7 @@
 export function createSequencedRequest({ onStart, onSuccess, onError, onFinish }) {
   let sequence = 0
 
-  return async function run(request) {
+  async function run(request) {
     const requestId = ++sequence
     onStart()
     try {
@@ -17,4 +17,10 @@ export function createSequencedRequest({ onStart, onSuccess, onError, onFinish }
       if (requestId === sequence) onFinish()
     }
   }
+
+  run.cancel = () => {
+    sequence += 1
+  }
+
+  return run
 }

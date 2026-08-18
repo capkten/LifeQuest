@@ -24,6 +24,7 @@ export function useNoteAutosave({ snapshot, save, delay = 900, initialSnapshot =
   let timer = null
   let queued = false
   const inFlight = ref(null)
+  let generation = 0
   const status = ref('idle')
   const lastSavedAt = ref(null)
 
@@ -47,7 +48,7 @@ export function useNoteAutosave({ snapshot, save, delay = 900, initialSnapshot =
     if (dirty.value) status.value = 'dirty'
     timer = setTimeout(() => {
       timer = null
-      saveNow()
+      void saveNow().catch(() => {})
     }, Math.max(0, delay))
   }
 
@@ -66,11 +67,12 @@ export function useNoteAutosave({ snapshot, save, delay = 900, initialSnapshot =
     if (payload === null) return Promise.resolve(null)
 
     status.value = 'saving'
+    const requestGeneration = generation
     const request = Promise.resolve().then(() => save(payload))
-    inFlight.value = request
 
-    request
+    const handledRequest = request
       .then(() => {
+        if (requestGeneration !== generation) return null
         savedSnapshot.value = payload
         hasBaseline.value = true
         lastSavedAt.value = new Date()
@@ -82,21 +84,22 @@ export function useNoteAutosave({ snapshot, save, delay = 900, initialSnapshot =
           queued = false
         }
       })
-      .catch(() => {
+      .catch((error) => {
+        if (requestGeneration !== generation) return null
         status.value = 'error'
         queued = false
+        throw error
       })
       .finally(() => {
-        if (inFlight.value === request) inFlight.value = null
+        if (inFlight.value === handledRequest) inFlight.value = null
       })
 
-    return request
+    inFlight.value = handledRequest
+    return handledRequest
   }
 
   function reset(nextSnapshot = resolveSnapshot(snapshot), savedAt = null) {
-    if (timer) clearTimeout(timer)
-    timer = null
-    queued = false
+    cancel()
     savedSnapshot.value = nextSnapshot == null ? null : resolveSnapshot(nextSnapshot)
     hasBaseline.value = savedSnapshot.value !== null
     lastSavedAt.value = savedAt ? new Date(savedAt) : null
@@ -107,6 +110,9 @@ export function useNoteAutosave({ snapshot, save, delay = 900, initialSnapshot =
     if (timer) clearTimeout(timer)
     timer = null
     queued = false
+    generation += 1
+    inFlight.value = null
+    if (status.value === 'saving') status.value = 'idle'
   }
 
   return {

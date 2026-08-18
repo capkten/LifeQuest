@@ -371,7 +371,6 @@ const budgets = ref([])
 const recentTransactions = ref([])
 const categories = ref([])
 let dashboardRequestId = 0
-const dashboardError = error
 const hasDashboardData = computed(() => Boolean(
   Object.keys(dashboard.value).length || accounts.value.length || budgets.value.length || recentTransactions.value.length || categories.value.length
 ))

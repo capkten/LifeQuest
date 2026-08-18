@@ -188,6 +188,10 @@
           </div>
           <div class="dialog-body">
             <div v-if="titlesLoading" class="state-copy">加载中...</div>
+            <div v-else-if="titlesError" class="state-copy" role="alert">
+              <span>{{ titlesError }}</span>
+              <button type="button" class="retry-btn" @click="fetchTitles">重试</button>
+            </div>
             <div v-else class="titles-list">
               <button
                 v-for="title in allTitles"
@@ -278,6 +282,8 @@ const allTitles = ref([])
 const unlockedTitleIds = ref(new Set())
 const activeTitle = ref(null)
 const titlesLoading = ref(false)
+const titlesError = ref(null)
+let titlesRequestId = 0
 const showTitleModal = ref(false)
 
 const allAchievements = ref([])
@@ -339,19 +345,28 @@ async function fetchProfile() {
   profileError.value = null
   achievementsLoading.value = true
   fetchTitles()
-  try {
-    const [all, userAchs, tasks, habits] = await Promise.all([
+  const results = await Promise.allSettled([
       achievementService.getAchievements(),
       achievementService.getUserAchievements(),
-      todoService.getTasks().catch(() => []),
-      todoService.getHabits().catch(() => [])
+      todoService.getTasks(),
+      todoService.getHabits(),
     ])
 
-    if (requestId !== profileRequestId) return
-    allAchievements.value = all || []
+  if (requestId !== profileRequestId) return
+
+  const failures = []
+  const [allResult, userAchievementsResult, tasksResult, habitsResult] = results
+
+  if (allResult.status === 'fulfilled') {
+    allAchievements.value = allResult.value || []
+  } else {
+    failures.push(getErrorMessage(allResult.reason, '加载成就列表失败，请重试。'))
+  }
+
+  if (userAchievementsResult.status === 'fulfilled') {
     const ids = new Set()
     const dates = {}
-    for (const ua of (userAchs || [])) {
+    for (const ua of (userAchievementsResult.value || [])) {
       const achId = ua.achievement_id || ua.achievement?.id
       if (achId) {
         ids.add(achId)
@@ -360,17 +375,26 @@ async function fetchProfile() {
     }
     unlockedIds.value = ids
     unlockDates.value = dates
-
-    const taskList = Array.isArray(tasks) ? tasks : (tasks?.data || [])
-    stats.totalTasksCompleted = taskList.filter(t => t.status === 'completed').length
-
-    const habitList = Array.isArray(habits) ? habits : (habits?.data || [])
-    stats.maxHabitStreak = habitList.reduce((max, h) => Math.max(max, h.best_streak || h.streak || 0), 0)
-  } catch (e) {
-    if (requestId === profileRequestId) profileError.value = getErrorMessage(e, '加载个人资料失败，请重试。')
-  } finally {
-    if (requestId === profileRequestId) achievementsLoading.value = false
+  } else {
+    failures.push(getErrorMessage(userAchievementsResult.reason, '加载成就进度失败，请重试。'))
   }
+
+  if (tasksResult.status === 'fulfilled') {
+    const taskList = Array.isArray(tasksResult.value) ? tasksResult.value : (tasksResult.value?.data || [])
+    stats.totalTasksCompleted = taskList.filter(t => t.status === 'completed').length
+  } else {
+    failures.push(getErrorMessage(tasksResult.reason, '加载任务统计失败，请重试。'))
+  }
+
+  if (habitsResult.status === 'fulfilled') {
+    const habitList = Array.isArray(habitsResult.value) ? habitsResult.value : (habitsResult.value?.data || [])
+    stats.maxHabitStreak = habitList.reduce((max, h) => Math.max(max, h.best_streak || h.streak || 0), 0)
+  } else {
+    failures.push(getErrorMessage(habitsResult.reason, '加载习惯统计失败，请重试。'))
+  }
+
+  profileError.value = failures[0] || null
+  achievementsLoading.value = false
 }
 
 onMounted(fetchProfile)
@@ -392,12 +416,15 @@ async function activateTitle(title) {
 }
 
 async function fetchTitles() {
+  const requestId = ++titlesRequestId
   titlesLoading.value = true
+  titlesError.value = null
   try {
     const [all, my] = await Promise.all([
       titleService.getAllTitles(),
       titleService.getMyTitles()
     ])
+    if (requestId !== titlesRequestId) return
     allTitles.value = all || []
     const ids = new Set()
     for (const t of (my || [])) {
@@ -412,9 +439,9 @@ async function fetchTitles() {
       activeTitle.value = allTitles.value.find(t => t.name === user.value.title) || null
     }
   } catch (e) {
-    // Non-critical
+    if (requestId === titlesRequestId) titlesError.value = getErrorMessage(e, '加载称号失败，请重试。')
   } finally {
-    titlesLoading.value = false
+    if (requestId === titlesRequestId) titlesLoading.value = false
   }
 }
 

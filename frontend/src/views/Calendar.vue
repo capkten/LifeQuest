@@ -23,6 +23,10 @@
         <span>{{ eventsError }}</span>
         <button type="button" class="retry-btn" @click="fetchEvents">重试</button>
       </div>
+      <div v-if="loadingEvents" class="inline-loading" aria-live="polite">
+        <span class="loading-spinner"></span>
+        <span>正在加载日历事件...</span>
+      </div>
       <!-- Calendar Grid -->
       <div class="calendar-grid-wrapper">
         <!-- Weekday headers -->
@@ -62,7 +66,7 @@
         <template v-if="selectedDate">
           <div class="detail-header">
             <h3 class="detail-date">{{ formatSelectedDate }}</h3>
-            <button class="detail-close" @click="selectedDate = null" aria-label="关闭">
+            <button class="detail-close" @click="closeDetail" aria-label="关闭">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -194,13 +198,13 @@
 
     <!-- Mobile detail overlay -->
     <Transition name="overlay">
-      <div v-if="selectedDate && isMobile" class="mobile-overlay" @click.self="selectedDate = null">
+      <div v-if="selectedDate && isMobile" class="mobile-overlay" @click.self="closeDetail">
         <Transition name="sheet">
           <div v-if="selectedDate" class="mobile-sheet">
             <div class="mobile-sheet-handle"></div>
             <div class="detail-header">
               <h3 class="detail-date">{{ formatSelectedDate }}</h3>
-              <button class="detail-close" @click="selectedDate = null" aria-label="关闭">
+              <button class="detail-close" @click="closeDetail" aria-label="关闭">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
@@ -209,6 +213,10 @@
             </div>
             <div v-if="loadingDetail" class="detail-loading">
               <span class="loading-spinner"></span>
+            </div>
+            <div v-else-if="detailError" class="detail-error" role="alert">
+              <p>{{ detailError }}</p>
+              <button type="button" class="retry-btn" @click="selectDate(selectedDate)">重试</button>
             </div>
             <div v-else-if="dayDetail" class="detail-content">
               <div v-if="dayDetail.checked_in" class="detail-checkin">
@@ -457,6 +465,7 @@ async function fetchEvents() {
 async function selectDate(dateStr) {
   const requestId = ++detailRequestId
   selectedDate.value = dateStr
+  dayDetail.value = null
   loadingDetail.value = true
   detailError.value = null
   try {
@@ -469,6 +478,14 @@ async function selectDate(dateStr) {
   }
 }
 
+function closeDetail() {
+  detailRequestId += 1
+  selectedDate.value = null
+  dayDetail.value = null
+  detailError.value = null
+  loadingDetail.value = false
+}
+
 function prevMonth() {
   if (currentMonth.value === 0) {
     currentMonth.value = 11
@@ -476,8 +493,7 @@ function prevMonth() {
   } else {
     currentMonth.value--
   }
-  selectedDate.value = null
-  dayDetail.value = null
+  closeDetail()
 }
 
 function nextMonth() {
@@ -487,8 +503,7 @@ function nextMonth() {
   } else {
     currentMonth.value++
   }
-  selectedDate.value = null
-  dayDetail.value = null
+  closeDetail()
 }
 
 function goToday() {
