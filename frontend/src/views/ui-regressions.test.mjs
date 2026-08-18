@@ -190,6 +190,16 @@ test('pagination refreshes release stale loading locks and expose retryable fail
   assert.match(coins, /loadMoreError/)
   assert.match(coins, /filterGeneration/)
   assert.match(coins, /loadingMore\.value = false/)
+  assert.match(finance, /hasMore\.value = false/)
+  assert.match(coins, /hasMore\.value = false/)
   assert.match(stats, /function syncGlobalError\(/)
   assert.match(stats, /syncGlobalError\(\)/)
+  assert.match(stats, /loadingOverview/)
+  assert.match(stats, /loadingLevel/)
+})
+
+test('note editor leaves loading state when opening a new note route', async () => {
+  const source = await readFile(new URL('./NoteEditor.vue', viewsDirectory), 'utf8')
+
+  assert.match(source, /if \(!noteId\.value\) \{[\s\S]*loading\.value = false[\s\S]*hydrated\.value = true/)
 })

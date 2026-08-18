@@ -77,6 +77,7 @@
           </div>
         </div>
       </div>
+      <div v-if="loadingOverview" class="inline-loading" aria-live="polite">正在加载统计总览...</div>
       <div v-if="overviewError" class="inline-error" role="alert">
         <span>{{ overviewError }}</span>
         <button type="button" class="retry-btn" @click="fetchOverview">重试总览</button>
@@ -297,7 +298,8 @@
           </h3>
         </div>
         <div class="chart-body">
-          <div v-if="levelError" class="chart-error" role="alert">
+          <div v-if="loadingLevel" class="chart-loading"><span class="loading-spinner"></span></div>
+          <div v-else-if="levelError" class="chart-error" role="alert">
             {{ levelError }} <button type="button" @click="fetchLevel">重试</button>
           </div>
           <div class="level-section">
@@ -335,6 +337,8 @@ import { getErrorMessage } from '../utils/errorMessage'
 const loading = ref(true)
 const error = ref(null)
 const hasRenderableData = ref(false)
+const loadingOverview = ref(false)
+const loadingLevel = ref(false)
 const overviewError = ref(null)
 const levelError = ref(null)
 let overviewRequestId = 0
@@ -515,6 +519,7 @@ const coinXLabels = computed(() => {
 // --- Data fetching ---
 async function fetchOverview() {
   const requestId = ++overviewRequestId
+  loadingOverview.value = true
   overviewError.value = null
   syncGlobalError()
   try {
@@ -530,11 +535,14 @@ async function fetchOverview() {
       syncGlobalError()
     }
     return false
+  } finally {
+    if (requestId === overviewRequestId) loadingOverview.value = false
   }
 }
 
 async function fetchLevel() {
   const requestId = ++levelRequestId
+  loadingLevel.value = true
   levelError.value = null
   syncGlobalError()
   try {
@@ -550,6 +558,8 @@ async function fetchLevel() {
       syncGlobalError()
     }
     return false
+  } finally {
+    if (requestId === levelRequestId) loadingLevel.value = false
   }
 }
 

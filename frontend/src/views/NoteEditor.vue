@@ -171,6 +171,7 @@ async function loadRoute() {
   isPinned.value = false
 
   if (!noteId.value) {
+    loading.value = false
     hydrated.value = true
     autosave.reset(snapshot())
     return

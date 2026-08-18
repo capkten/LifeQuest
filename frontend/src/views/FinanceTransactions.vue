@@ -471,6 +471,7 @@ async function fetchTransactions() {
   error.value = null
   loadMoreError.value = null
   loadingMore.value = false
+  hasMore.value = false
   page.value = 1
   try {
     const params = { page: 1, limit: 50 }
