@@ -527,26 +527,29 @@ async function fetchSupportData() {
   supportLoading.value = true
   accountsError.value = null
   categoriesError.value = null
-  const [accountResult, categoryResult] = await Promise.allSettled([
-    financeService.getAccounts(),
-    financeService.getCategories(),
-  ])
-  if (requestId !== supportRequestId) return
+  try {
+    const [accountResult, categoryResult] = await Promise.allSettled([
+      Promise.resolve().then(() => financeService.getAccounts()),
+      Promise.resolve().then(() => financeService.getCategories()),
+    ])
+    if (requestId !== supportRequestId) return
 
-  if (accountResult.status === 'fulfilled') {
-    const data = accountResult.value
-    accounts.value = Array.isArray(data) ? data : (data.items || data.accounts || [])
-  } else {
-    accountsError.value = getErrorMessage(accountResult.reason, '加载账户失败，请重试。')
-  }
+    if (accountResult.status === 'fulfilled') {
+      const data = accountResult.value
+      accounts.value = Array.isArray(data) ? data : (data.items || data.accounts || [])
+    } else {
+      accountsError.value = getErrorMessage(accountResult.reason, '加载账户失败，请重试。')
+    }
 
-  if (categoryResult.status === 'fulfilled') {
-    const data = categoryResult.value
-    categories.value = Array.isArray(data) ? data : (data.items || data.categories || [])
-  } else {
-    categoriesError.value = getErrorMessage(categoryResult.reason, '加载分类失败，请重试。')
+    if (categoryResult.status === 'fulfilled') {
+      const data = categoryResult.value
+      categories.value = Array.isArray(data) ? data : (data.items || data.categories || [])
+    } else {
+      categoriesError.value = getErrorMessage(categoryResult.reason, '加载分类失败，请重试。')
+    }
+  } finally {
+    if (requestId === supportRequestId) supportLoading.value = false
   }
-  supportLoading.value = false
 }
 
 async function saveTransaction() {

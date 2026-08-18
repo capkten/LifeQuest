@@ -1,8 +1,27 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import * as vue from 'vue'
+import { compileTemplate } from '@vue/compiler-sfc'
 
 const viewsDirectory = new URL('./', import.meta.url)
+
+function compileRender(source) {
+  const result = compileTemplate({
+    source,
+    filename: 'FinanceTransactions.vue',
+    id: 'finance-support-loading',
+  })
+  assert.deepEqual(result.errors, [], 'finance support loading template must compile')
+  const imports = result.code.match(/^import \{ ([\s\S]*?) \} from "vue"\r?\n\r?\n/)
+  assert.ok(imports, 'compiled template must expose Vue helpers')
+  const aliases = imports[1].split(', ').map((entry) => entry.split(' as ').at(-1))
+  const values = imports[1].split(', ').map((entry) => vue[entry.split(' as ')[0]])
+  const code = result.code
+    .replace(imports[0], '')
+    .replace('export function render', 'function render')
+  return Function(...aliases, `${code}\nreturn render`)(...values)
+}
 
 test('notes discovery controls use readable Chinese labels', async () => {
   const source = await readFile(new URL('./Notes.vue', viewsDirectory), 'utf8')
@@ -197,6 +216,26 @@ test('pagination refreshes release stale loading locks and expose retryable fail
   assert.match(stats, /syncGlobalError\(\)/)
   assert.match(stats, /loadingOverview/)
   assert.match(stats, /loadingLevel/)
+})
+
+test('finance support loading renders and clears only for the latest request', async () => {
+  const source = await readFile(new URL('./FinanceTransactions.vue', viewsDirectory), 'utf8')
+  const loadingTemplate = source.match(/<div v-if="supportLoading"[^>]*>[\s\S]*?<\/div>/)?.[0]
+  assert.ok(loadingTemplate, 'finance support loading must be visible in the template')
+
+  const render = compileRender(loadingTemplate)
+  const loadingNode = render({ supportLoading: true }, [])
+  assert.equal(loadingNode.type, 'div')
+  assert.equal(loadingNode.props['aria-live'], 'polite')
+  assert.equal(loadingNode.children, '正在加载账户和分类...')
+  assert.equal(render({ supportLoading: false }, []).type, Symbol.for('v-cmt'))
+
+  const supportHandler = source.match(/async function fetchSupportData\(\) \{([\s\S]*?)\n\}/)?.[1]
+  assert.ok(supportHandler, 'fetchSupportData handler must remain available')
+  assert.match(supportHandler, /supportLoading\.value = true/)
+  assert.match(supportHandler, /if \(requestId !== supportRequestId\) return/)
+  assert.match(supportHandler, /try \{[\s\S]*Promise\.allSettled/)
+  assert.match(supportHandler, /finally \{[\s\S]*supportLoading\.value = false/)
 })
 
 test('note editor leaves loading state when opening a new note route', async () => {
