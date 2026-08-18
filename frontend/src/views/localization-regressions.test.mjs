@@ -12,6 +12,8 @@ import {
 import { SLOT_TYPE_LABELS, TECHNIQUE_TYPE_LABELS } from '../locales/zh-CN.js'
 import { getErrorMessage } from '../utils/errorMessage.js'
 
+const hasVisibleError = (body) => /(?:\b(?:\w*Error|error\w*)\.value\s*=|\bshowError\s*\(|\balert\s*\()/.test(body)
+
 test('display labels translate stable server keys', () => {
   assert.equal(labelRealm('foundation'), '筑基期')
   assert.equal(labelResource('spirit_stones'), '灵石')
@@ -114,6 +116,20 @@ test('api and pages use the shared error converter', async () => {
   }
 })
 
+test('Home task and goal catches are treated as visible errors', async () => {
+  const source = await readFile(new URL('./Home.vue', import.meta.url), 'utf8')
+  const catches = [...source.matchAll(/catch\s*\(\s*([A-Za-z_$][\w$]*)\s*(?:\)\s*\{|=>\s*\{)([\s\S]*?)\n\s*\}/g)]
+  const visibleHomeCatches = catches
+    .map(([, caughtName, body]) => ({ caughtName, body }))
+    .filter(({ body }) => hasVisibleError(body))
+    .filter(({ body }) => /errorTasks|errorGoals/.test(body))
+
+  assert.equal(visibleHomeCatches.length, 2, 'Home task and goal errors must be scanned')
+  for (const { caughtName, body } of visibleHomeCatches) {
+    assert.match(body, new RegExp(`getErrorMessage\\(\\s*${caughtName}\\s*\\)`))
+  }
+})
+
 test('visible errors in task 4 page catches use the caught error converter', async () => {
   const files = [
     './Home.vue',
@@ -134,8 +150,7 @@ test('visible errors in task 4 page catches use the caught error converter', asy
   for (const [file, source] of files.map((file, index) => [file, sources[index]])) {
     const catches = [...source.matchAll(/catch\s*\(\s*([A-Za-z_$][\w$]*)\s*(?:\)\s*\{|=>\s*\{)([\s\S]*?)\n\s*\}/g)]
     for (const [, caughtName, body] of catches) {
-      const hasVisibleError = /(?:\b\w*Error|error)\.value\s*=|\bshowError\s*\(|\balert\s*\(/.test(body)
-      if (hasVisibleError) {
+      if (hasVisibleError(body)) {
         assert.match(body, new RegExp(`getErrorMessage\\(\\s*${caughtName}\\s*\\)`), `${file} has a visible catch error without the shared converter`)
       }
     }
