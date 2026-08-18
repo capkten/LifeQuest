@@ -141,3 +141,49 @@ exit code: 0, no output
 ### Review-Fix Commit
 
 `5838c09dbad5eec7ccd52cc5bae796f5ac008034 fix(task-4): route page errors through shared converter`
+
+## Review-Fix Round 2: Eager Visible Error Conversion
+
+本轮严格限定为 brief 要求的两项 Important，未进行 Task 5/6 静态文案工作：
+
+- `Sects.vue`、`Techniques.vue` 和 `NotebookFileManage.vue` 的可见错误状态在 catch/错误回调边界直接调用 `getErrorMessage(caughtError)`，移除 raw error 到 computed 的延迟转换。
+- `localization-regressions.test.mjs` 使用目标页面清单覆盖 Todos、Profile、NotebookFileManage、Sects、Techniques、Login、Register，以及 Home、Backpack、Finance 系列、Notes、Projects、EditProfile、Shop 等既有页面；仅扫描可见错误 sink，静默 best-effort catch 不计入。
+
+### TDD and Verification
+
+扩展断言后的 RED 结果：`34 passed, 1 failed`，失败命中 `NotebookFileManage.vue` 可见 workspace catch 的 raw error。
+
+修复后的指定回归命令：`35/35` 通过。
+
+```powershell
+cd frontend
+node --test src/views/localization-regressions.test.mjs src/views/cultivation-regressions.test.mjs
+```
+
+```text
+ℹ tests 35
+ℹ pass 35
+ℹ fail 0
+```
+
+生产构建退出码 `0`。仍有已有 npm `always-auth` 配置弃用、`@vueuse/core` 两个 Rollup `#__PURE__` 注释和主 chunk 超过 500 kB 的 warnings，未阻断构建。
+
+```powershell
+cd frontend
+npm run build
+```
+
+`git diff --check` 退出码 `0`，无输出。
+
+```powershell
+git diff --check
+```
+
+### Commit
+
+`f37842b fix(task-4): eagerly translate visible page errors`
+
+### Concerns
+
+- 当前工作区未提供 `gpt-5.6-luna` 的模型切换接口，无法从工具侧验证或切换该模型。
+- 用户既有的 `frontend/components.d.ts` 修改，以及 `.agents/`、`.claude/skills/`、`.codex/`、计划文档和 `frontend/vite-check.log` 未跟踪项仍保留，未纳入本轮提交。
