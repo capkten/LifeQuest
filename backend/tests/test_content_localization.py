@@ -159,7 +159,7 @@ def test_backfill_is_idempotent_and_preserves_system_relationships(legacy_conten
     assert db.query(Npc).filter_by(id=original_ids["npc"]).one().sect_id == original_ids["npc_sect"]
 
 
-def test_backfill_updates_fixed_core_npcs_by_role_without_replacing_their_relation(isolated_db):
+def test_backfill_migrates_real_legacy_fixed_core_template_before_sect_rename(isolated_db):
     from app.services.content_localization import ContentLocalizationService
 
     user = User(
@@ -173,28 +173,49 @@ def test_backfill_updates_fixed_core_npcs_by_role_without_replacing_their_relati
 
     CultivationService.seed_world(isolated_db)
     sect = isolated_db.query(Sect).filter_by(sect_key="sect-1-normal-1").one()
-    core = Npc(
+    sect.name = "1-Star Normal Sect 1"
+    CultivationService(isolated_db).set_realm(user.id, "ascended", 1, 0)
+    legacy_description = f"{sect.name}的固定核心人物。"
+    cores = [
+        Npc(
+            user_id=user.id,
+            sect_id=sect.id,
+            name=name,
+            role=role,
+            description=legacy_description,
+            is_core=True,
+            is_generated=False,
+            cultivation_locked=True,
+        )
+        for role, name in (
+            ("sect master", "玄衡宗主"),
+            ("transmission elder", "传法长老"),
+            ("trial envoy", "入门使者"),
+        )
+    ]
+    isolated_db.add_all(cores)
+    isolated_db.flush()
+    isolated_db.add(NpcEvent(
         user_id=user.id,
-        sect_id=sect.id,
-        name="玄衡宗主",
-        role="sect master",
-        description="A fixed core character.",
-        is_core=True,
-        is_generated=False,
-        cultivation_locked=True,
-    )
-    isolated_db.add(core)
+        npc_id=cores[0].id,
+        event_key="core-contact",
+        summary="用户保留的核心事件",
+    ))
     isolated_db.commit()
 
     summary = ContentLocalizationService.backfill_system_content(isolated_db)
 
     isolated_db.expire_all()
-    refreshed = isolated_db.query(Npc).filter_by(id=core.id).one()
+    refreshed = isolated_db.query(Npc).filter_by(id=cores[0].id).one()
     assert refreshed.description == "赤霞门的固定核心人物。"
     assert refreshed.name == "玄衡宗主"
     assert refreshed.role == "sect master"
     assert refreshed.sect_id == sect.id
-    assert summary.npcs == 1
+    assert summary.npcs == 3
+    assert isolated_db.query(Sect).filter_by(id=sect.id).one().name == "赤霞门"
+    event = isolated_db.query(NpcEvent).filter_by(npc_id=cores[0].id).one()
+    assert event.user_id == user.id
+    assert event.summary == "用户保留的核心事件"
 
 
 def test_backfill_does_not_match_user_core_npc_with_similar_flags(isolated_db):
@@ -211,6 +232,7 @@ def test_backfill_does_not_match_user_core_npc_with_similar_flags(isolated_db):
 
     CultivationService.seed_world(isolated_db)
     sect = isolated_db.query(Sect).filter_by(sect_key="sect-1-normal-1").one()
+    sect.name = "1-Star Normal Sect 1"
     user_npc = Npc(
         user_id=user.id,
         sect_id=sect.id,
@@ -227,13 +249,20 @@ def test_backfill_does_not_match_user_core_npc_with_similar_flags(isolated_db):
         sect_id=sect.id,
         name="玄衡宗主",
         role="sect master",
-        description="用户改写过的同名 NPC",
+        description="A fixed core character.",
         is_core=True,
         is_generated=False,
         cultivation=732,
         cultivation_locked=True,
     )
     isolated_db.add_all([user_npc, same_name_user_npc])
+    isolated_db.flush()
+    isolated_db.add(NpcEvent(
+        user_id=user.id,
+        npc_id=same_name_user_npc.id,
+        event_key="custom-core-event",
+        summary="用户自定义核心事件",
+    ))
     isolated_db.commit()
 
     ContentLocalizationService.backfill_system_content(isolated_db)
@@ -250,9 +279,35 @@ def test_backfill_does_not_match_user_core_npc_with_similar_flags(isolated_db):
     assert refreshed.cultivation_locked is False
     same_name_refreshed = isolated_db.query(Npc).filter_by(id=same_name_user_npc.id).one()
     assert same_name_refreshed.name == "玄衡宗主"
-    assert same_name_refreshed.description == "用户改写过的同名 NPC"
+    assert same_name_refreshed.description == "A fixed core character."
     assert same_name_refreshed.sect_id == sect.id
     assert same_name_refreshed.cultivation == 732
+    event = isolated_db.query(NpcEvent).filter_by(npc_id=same_name_user_npc.id).one()
+    assert event.user_id == user.id
+    assert event.summary == "用户自定义核心事件"
+
+
+def test_new_fixed_core_npcs_use_system_generation_identity(isolated_db):
+    from app.services.cultivation import CultivationService
+
+    user = User(
+        username=f"new-core-{uuid4().hex}",
+        email=f"{uuid4().hex}@example.com",
+        password_hash="hashed",
+    )
+    isolated_db.add(user)
+    isolated_db.commit()
+
+    service = CultivationService(isolated_db)
+    service.set_realm(user.id, "ascended", 1, 0)
+    response = service.get_npcs(user.id)
+
+    assert len(response.fixed_core) == 270
+    assert isolated_db.query(Npc).filter(
+        Npc.user_id == user.id,
+        Npc.is_core.is_(True),
+        Npc.is_generated.is_(False),
+    ).count() == 0
 
 
 def test_backfill_is_safe_for_an_empty_database(isolated_db):

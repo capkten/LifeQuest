@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
+from app.models.cultivation import CultivationProfile
 from app.models.technique import Technique
 from app.models.world import Npc, NpcEvent, Sect, WorldNode
 from app.services.content_catalog import (
@@ -20,7 +21,7 @@ FIXED_CORE_NPC_NAMES = {
     "transmission elder": "传法长老",
     "trial envoy": "入门使者",
 }
-FIXED_CORE_LEGACY_DESCRIPTIONS = {"A fixed core character."}
+FIXED_CORE_ROLES = tuple(FIXED_CORE_NPC_NAMES)
 
 
 @dataclass(frozen=True)
@@ -41,12 +42,16 @@ class ContentLocalizationService:
         return True
 
     @staticmethod
-    def _is_system_fixed_core_npc(npc: Npc, sect: Sect) -> bool:
+    def _legacy_sect_name(sect: Sect) -> str | None:
+        if sect.sect_key not in SECT_CATALOG:
+            return None
+        ordinal = sect.sect_key.rsplit("-", 1)[-1]
+        return f"{sect.star}-Star {sect.kind.title()} Sect {ordinal}"
+
+    @staticmethod
+    def _is_fixed_core_name_match(npc: Npc) -> bool:
         expected_name = FIXED_CORE_NPC_NAMES.get(npc.role)
-        if expected_name is None or npc.name != expected_name:
-            return False
-        current_description = f"{sect.name}的固定核心人物。"
-        return npc.description == current_description or npc.description in FIXED_CORE_LEGACY_DESCRIPTIONS
+        return expected_name is not None and npc.name == expected_name
 
     @staticmethod
     def backfill_system_content(db: Session) -> ContentBackfillSummary:
@@ -56,6 +61,43 @@ class ContentLocalizationService:
             "techniques": 0,
             "npcs": 0,
             "events": 0,
+        }
+
+        sects = db.query(Sect).all()
+        sects_by_id = {sect.id: sect for sect in sects}
+        legacy_sect_names = {
+            sect.id: ContentLocalizationService._legacy_sect_name(sect)
+            for sect in sects
+        }
+
+        # The old implementation used is_generated=False for fixed cores, so
+        # only a complete, ascended-user core set is trusted as legacy system data.
+        legacy_core_candidates = {}
+        for npc in db.query(Npc).filter(
+            Npc.is_core.is_(True),
+            Npc.is_generated.is_(False),
+            Npc.sect_id.is_not(None),
+            Npc.role.in_(FIXED_CORE_ROLES),
+            Npc.population_index.is_(None),
+            Npc.cultivation_locked.is_(True),
+        ).all():
+            sect = sects_by_id.get(npc.sect_id)
+            legacy_sect_name = legacy_sect_names.get(npc.sect_id)
+            if (
+                sect is None
+                or legacy_sect_name is None
+                or not ContentLocalizationService._is_fixed_core_name_match(npc)
+                or npc.description != f"{legacy_sect_name}的固定核心人物。"
+            ):
+                continue
+            key = (npc.user_id, npc.sect_id)
+            legacy_core_candidates.setdefault(key, {}).setdefault(npc.role, []).append(npc)
+
+        ascended_user_ids = {
+            profile.user_id
+            for profile in db.query(CultivationProfile).filter(
+                CultivationProfile.realm_key == "ascended"
+            ).all()
         }
 
         for node_key, content in WORLD_NODE_CATALOG.items():
@@ -92,10 +134,10 @@ class ContentLocalizationService:
                 changed = ContentLocalizationService._set_if_changed(technique, field, content[field]) or changed
             counts["techniques"] += int(changed)
 
-        sects_by_id = {sect.id: sect for sect in db.query(Sect).all()}
         generated_roles = tuple(NPC_ROLE_LABELS)
         generated_npcs = db.query(Npc).filter(
             Npc.is_generated.is_(True),
+            Npc.is_core.is_(False),
             Npc.sect_id.is_not(None),
             Npc.role.in_(generated_roles),
         ).all()
@@ -111,9 +153,9 @@ class ContentLocalizationService:
 
         fixed_npcs = db.query(Npc).filter(
             Npc.is_core.is_(True),
-            Npc.is_generated.is_(False),
+            Npc.is_generated.is_(True),
             Npc.sect_id.is_not(None),
-            Npc.role.in_(tuple(FIXED_CORE_NPC_NAMES)),
+            Npc.role.in_(FIXED_CORE_ROLES),
             Npc.population_index.is_(None),
             Npc.cultivation_locked.is_(True),
         ).all()
@@ -122,13 +164,31 @@ class ContentLocalizationService:
             if (
                 sect is None
                 or sect.sect_key not in SECT_CATALOG
-                or not ContentLocalizationService._is_system_fixed_core_npc(npc, sect)
+                or not ContentLocalizationService._is_fixed_core_name_match(npc)
             ):
                 continue
-            if ContentLocalizationService._set_if_changed(
+            changed = ContentLocalizationService._set_if_changed(
                 npc, "description", f"{sect.name}的固定核心人物。"
-            ):
+            )
+            if changed:
                 counts["npcs"] += 1
+
+        for (user_id, sect_id), candidates_by_role in legacy_core_candidates.items():
+            if user_id not in ascended_user_ids or set(candidates_by_role) != set(FIXED_CORE_ROLES):
+                continue
+            if any(len(candidates_by_role[role]) != 1 for role in FIXED_CORE_ROLES):
+                continue
+            sect = sects_by_id[sect_id]
+            for role in FIXED_CORE_ROLES:
+                npc = candidates_by_role[role][0]
+                changed = ContentLocalizationService._set_if_changed(
+                    npc, "description", f"{sect.name}的固定核心人物。"
+                )
+                changed = ContentLocalizationService._set_if_changed(
+                    npc, "is_generated", True
+                ) or changed
+                if changed:
+                    counts["npcs"] += 1
 
         old_event_summary = "Met ordinary disciple"
         events = db.query(NpcEvent).join(Npc, Npc.id == NpcEvent.npc_id).filter(

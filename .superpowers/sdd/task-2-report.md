@@ -139,3 +139,38 @@ pytest tests/test_content_localization.py tests/test_cultivation.py -q -k "not t
 ### Task 3 转交
 
 审查提出的奖励/流水英文文案属于 Task 3 明确范围，已转交 Task 3；本次未修改 `checkin.py`、`coin.py`、`achievement.py`，也未修改 reward/check-in/achievement/cultivation log 描述。
+
+## Review-fix 第二轮
+
+### 修复内容
+
+- 新建固定核心 NPC 改用现有 `is_generated=True` 系统身份语义；`_ensure_fixed_core_npcs()` 按“用户、宗门、角色、系统名称、核心标志、生成标志”复用记录，并只返回系统固定核心，避免把用户自建核心记录当成系统记录。
+- 普通生成 NPC 的本地化明确排除 `is_core=True`，避免新建固定核心落入普通弟子/角色描述模板。
+- 历史固定核心在宗门本地化前先快照可推导的旧宗门名，兼容真实旧模板 `{sect.name}的固定核心人物。`，包括 `1-Star Normal Sect 1`。只有飞升用户同一宗门完整且唯一的三角色固定核心集合、名称和旧描述全部精确匹配时才接受迁移；接受后将记录升级为 `is_generated=True`，保留主键、外键、宗门关联和事件关联。
+- 单个同名、同角色、同标志且保留旧描述的用户 NPC 不满足完整系统集合边界，回填不会修改其字段。模型没有专用系统身份列，因此理论上无法区分“用户完整伪造三条完全相同记录”和真实历史系统集合；本轮选择跳过不完整或重复候选，优先保护用户内容，并在该边界上不扩大迁移。
+
+### TDD 与验证
+
+RED：新增真实旧英文宗门模板迁移、同名旧描述碰撞、新建系统身份三项测试后，旧实现结果为 `3 failed, 7 deselected`。
+
+GREEN：聚焦回归测试结果：
+
+```text
+pytest tests/test_content_localization.py -q -k "real_legacy_fixed_core_template or user_core_npc_with_similar_flags or new_fixed_core_npcs_use_system_generation_identity"
+3 passed, 7 deselected, 7 warnings
+```
+
+完整 Task 2 本地化测试结果：`10 passed, 7 warnings`。
+
+用户指定覆盖命令结果：
+
+```text
+pytest tests/test_content_localization.py tests/test_cultivation.py -q -k "not test_npc_cultivation_updates_once_per_natural_day"
+74 passed, 1 deselected, 39 warnings
+```
+
+必需验证结果：`python -m compileall -q app` 和 `git diff --check` 均退出码 `0`，无输出。警告仍为既有 FastAPI/Starlette、jose 弃用提示；未修改无关配置。
+
+### Commit
+
+实现与测试 commit：`IMPLEMENTATION_COMMIT_PENDING`。

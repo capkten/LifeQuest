@@ -618,17 +618,20 @@ class CultivationService:
             for role, name in roles:
                 exists = self.db.query(Npc).filter(
                     Npc.user_id == user_id, Npc.sect_id == sect.id,
-                    Npc.role == role, Npc.is_core.is_(True),
+                    Npc.role == role, Npc.name == name,
+                    Npc.is_core.is_(True), Npc.is_generated.is_(True),
                 ).first()
                 if exists is None:
                     self.db.add(Npc(
                         user_id=user_id, sect_id=sect.id, name=name, role=role,
                         description=f"{sect.name}的固定核心人物。", is_core=True,
-                        is_generated=False, cultivation_locked=True,
+                        is_generated=True, cultivation_locked=True,
                     ))
         self.db.commit()
         return self.db.query(Npc).filter(
-            Npc.user_id == user_id, Npc.is_core.is_(True)
+            Npc.user_id == user_id,
+            Npc.is_core.is_(True),
+            Npc.is_generated.is_(True),
         ).order_by(Npc.name).all()
 
     @staticmethod
