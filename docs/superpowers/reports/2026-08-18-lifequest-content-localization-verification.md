@@ -34,6 +34,20 @@ Protected routes: 52 route/viewport checks total. Every unauthenticated check re
 
 The protected-route screenshots therefore show the public Login state, not the requested authenticated content. No authenticated browser session was available, so authenticated content states, API-backed data, and post-login layouts were not visually checked and are not claimed as checked in this report.
 
+## Authenticated Verification Addendum
+
+The protected-route gap above was completed on 2026-08-18 using the local services at `http://127.0.0.1:8000` and `http://127.0.0.1:5173`. A temporary local account was registered through the normal API, its access and refresh tokens were loaded into a real Chrome headless session, and the same 13 routes were checked at `375x900`, `768x900`, `1024x900`, and `1440x900`.
+
+The authenticated run produced 52 checks and 52 screenshots under the ignored path `.superpowers/sdd/authenticated-visual-check/`:
+
+- All 13 routes remained on their requested authenticated URL; none redirected to Login or Register.
+- All 52 checks had `document.documentElement.scrollWidth` equal to the viewport width; horizontal overflow count was `0`.
+- All 52 bodies rendered non-empty authenticated content; blank-body count was `0`.
+- No scanned body contained stable sect/task keys or the test unknown role key (`sect-*`, `discipline-*`, `future_role`).
+- Representative mobile and desktop screenshots for Home, Cultivation, and NPCs were visually inspected. Chinese headings, cards, bottom navigation, desktop sidebar, NPC sect selector and empty states fit without overlap or clipping.
+
+Route coverage: `/`, `/todos`, `/cultivation`, `/world`, `/sects`, `/techniques`, `/npcs`, `/tribulations`, `/notes`, `/shop`, `/backpack`, `/finance`, and `/profile`.
+
 ## Automated Verification
 
 - `cd backend; $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; pytest -q`
@@ -47,6 +61,8 @@ The protected-route screenshots therefore show the public Login state, not the r
   - Warnings: npm `always-auth` config warning, 2 Rollup PURE-annotation warnings, and 1 chunk-size warning for the minified main chunk over 500 kB.
 - `git diff --check`
   - No whitespace errors.
+- Authenticated Chrome verification script: `node .superpowers/sdd/authenticated-visual-check.mjs`
+  - `52/52` route/viewport checks passed with no redirects, blank states or horizontal overflow.
 
 ## Scope and Concerns
 

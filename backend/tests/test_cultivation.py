@@ -1,5 +1,5 @@
 import math
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from uuid import UUID, uuid4
@@ -296,14 +296,15 @@ def test_npc_cultivation_updates_once_per_natural_day(db_session, user):
     _prepare_npc_meeting(service, user.id)
     npc = service.meet_npc(user.id, "sect-1-normal-1", 2)
     before = npc.cultivation
+    next_day = npc.cultivation_updated_on + timedelta(days=1)
 
-    service.refresh_npc_cultivation(npc, date(2026, 8, 17))
+    service.refresh_npc_cultivation(npc, next_day)
     after = npc.cultivation
-    service.refresh_npc_cultivation(npc, date(2026, 8, 17))
+    service.refresh_npc_cultivation(npc, next_day)
 
     assert after >= before
     assert npc.cultivation == after
-    assert npc.cultivation_updated_on == date(2026, 8, 17)
+    assert npc.cultivation_updated_on == next_day
 
 
 def test_npc_cultivation_uses_utc_day_across_midnight_and_is_idempotent(db_session, user, monkeypatch):
