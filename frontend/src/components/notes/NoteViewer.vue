@@ -28,11 +28,12 @@
 
 <script setup>
 import { computed } from 'vue'
+import { getErrorMessage } from '../../utils/errorMessage'
 
 const props = defineProps({ noteId: { type: [String, Number], default: null }, note: { type: Object, default: null }, loading: Boolean, error: { type: [String, Object], default: null } })
 defineEmits(['edit', 'toggle-pin', 'move', 'delete', 'retry'])
 const tagList = computed(() => String(props.note?.tags || '').split(',').map(tag => tag.trim()).filter(Boolean))
-const errorMessage = computed(() => typeof props.error === 'string' ? props.error : props.error?.response?.data?.detail || '笔记加载失败，请重试。')
+const errorMessage = computed(() => typeof props.error === 'string' ? props.error : getErrorMessage(props.error))
 function formatDate(value) { return value ? new Date(value).toLocaleString('zh-CN') : '尚未更新' }
 </script>
 

@@ -623,6 +623,7 @@ import { todoService } from '../services/todo'
 import { projectService } from '../services/project'
 import { useAuthStore } from '../stores/auth'
 import { useCultivationStore } from '../stores/cultivation'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const authStore = useAuthStore()
 const cultivationStore = useCultivationStore()
@@ -893,7 +894,7 @@ async function fetchAll() {
   try {
     await Promise.all([fetchHabits(), fetchTasks(), fetchGoals(), fetchProjects()])
   } catch (e) {
-    error.value = '加载数据失败，请重试。'
+    error.value = getErrorMessage(e)
   } finally {
     loading.value = false
   }
@@ -922,7 +923,7 @@ async function completeHabit(habit) {
     await authStore.fetchUser()
   } catch (e) {
     console.error('Failed to complete habit:', e)
-    showError(e.response?.data?.detail || '完成习惯失败，请重试。', () => completeHabit(habit))
+    showError(getErrorMessage(e), () => completeHabit(habit))
   } finally {
     endCompletion()
   }
@@ -942,7 +943,7 @@ async function completeTask(task) {
     await authStore.fetchUser()
   } catch (e) {
     console.error('Failed to complete task:', e)
-    showError(e.response?.data?.detail || '完成任务失败，请重试。', () => completeTask(task))
+    showError(getErrorMessage(e), () => completeTask(task))
   } finally {
     endCompletion()
   }
@@ -962,7 +963,7 @@ async function completeGoal(goal) {
     await authStore.fetchUser()
   } catch (e) {
     console.error('Failed to complete goal:', e)
-    showError(e.response?.data?.detail || '完成目标失败，请重试。', () => completeGoal(goal))
+    showError(getErrorMessage(e), () => completeGoal(goal))
   } finally {
     endCompletion()
   }
@@ -993,7 +994,7 @@ async function fetchSubtasks(taskId) {
     taskSubtasks.value[taskId] = subtasks
   } catch (e) {
     console.error('Failed to fetch subtasks:', e)
-    showError('加载子任务失败')
+    showError(getErrorMessage(e))
   } finally {
     loadingSubtasks.value = false
   }
@@ -1012,7 +1013,7 @@ async function addSubtask(taskId) {
     newSubtaskTitle.value = ''
   } catch (e) {
     console.error('Failed to create subtask:', e)
-    showError(e.response?.data?.detail || '创建子任务失败')
+    showError(getErrorMessage(e))
   } finally {
     creatingSubtask.value = false
   }
@@ -1032,7 +1033,7 @@ async function completeSubtask(subtask, taskId) {
     }
   } catch (e) {
     console.error('Failed to complete subtask:', e)
-    showError(e.response?.data?.detail || '完成子任务失败')
+    showError(getErrorMessage(e))
   } finally {
     completingSubtaskId.value = null
   }
@@ -1048,7 +1049,7 @@ async function deleteSubtask(subtask, taskId) {
     }
   } catch (e) {
     console.error('Failed to delete subtask:', e)
-    showError(e.response?.data?.detail || '删除子任务失败')
+    showError(getErrorMessage(e))
   } finally {
     deletingSubtaskId.value = null
   }
@@ -1093,7 +1094,7 @@ async function createItem() {
     }
     cancelDialog()
   } catch (e) {
-    dialogError.value = e.response?.data?.detail || '创建失败，请重试。'
+    dialogError.value = getErrorMessage(e)
   } finally {
     creating.value = false
   }
@@ -1159,7 +1160,7 @@ async function saveItem() {
     }
     cancelDialog()
   } catch (e) {
-    dialogError.value = e.response?.data?.detail || '保存失败，请重试。'
+    dialogError.value = getErrorMessage(e)
   } finally {
     creating.value = false
   }
@@ -1194,7 +1195,7 @@ async function confirmDelete() {
     closeDeleteDialog()
   } catch (e) {
     console.error('Failed to delete item:', e)
-    showError(e.response?.data?.detail || '删除失败，请重试。')
+    showError(getErrorMessage(e))
     closeDeleteDialog()
   } finally {
     deleting.value = false

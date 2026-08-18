@@ -197,6 +197,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { financeService } from '../services/finance'
 import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -304,7 +305,7 @@ async function saveBudget() {
     }
     cancelDialog()
   } catch (e) {
-    dialogError.value = e.response?.data?.detail || '保存失败，请重试。'
+    dialogError.value = getErrorMessage(e)
   } finally {
     saving.value = false
   }
@@ -319,7 +320,7 @@ async function deleteBudget() {
     showSuccess('预算已删除')
     cancelDelete()
   } catch (e) {
-    showError(e.response?.data?.detail || '删除失败，请重试。')
+    showError(getErrorMessage(e))
     cancelDelete()
   } finally {
     deleting.value = false

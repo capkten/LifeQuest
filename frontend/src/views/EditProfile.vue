@@ -119,6 +119,7 @@ import { useAuthStore } from '../stores/auth'
 import { authService } from '../services/auth'
 import { useToast } from '../composables/useToast'
 import { useResolvedImage } from '../composables/useResolvedImage'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -207,8 +208,7 @@ async function handleSave() {
       router.push({ name: 'Profile' })
     }, 1000)
   } catch (err) {
-    const message = err.response?.data?.detail || '更新失败，请重试'
-    showError(message)
+    showError(getErrorMessage(err))
   } finally {
     saving.value = false
   }

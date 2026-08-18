@@ -259,6 +259,7 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { noteService } from '../services/note'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const router = useRouter()
 const notebooks = ref([])
@@ -411,7 +412,7 @@ async function createNotebook() {
     notebooks.value.push(notebook)
     cancelDialog()
   } catch (e) {
-    dialogError.value = e.response?.data?.detail || '创建笔记本失败，请重试。'
+    dialogError.value = getErrorMessage(e)
   } finally {
     creating.value = false
   }

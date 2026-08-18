@@ -371,6 +371,7 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { shopService } from '../services/shop'
 import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/errorMessage'
 import {
   Apple,
   Box,
@@ -538,7 +539,7 @@ async function purchaseItem(item) {
     await authStore.fetchUser()
     showSuccess(`成功购买 ${item.name}！`)
   } catch (e) {
-    showError(e.response?.data?.detail || '购买失败，请重试。')
+    showError(getErrorMessage(e))
   } finally {
     purchasingId.value = null
   }
@@ -586,7 +587,7 @@ async function deleteItem() {
     cancelDelete()
     showSuccess(`"${name}" 已删除！`)
   } catch (e) {
-    showError(e.response?.data?.detail || '删除失败，请重试。')
+    showError(getErrorMessage(e))
     cancelDelete()
   } finally {
     deleting.value = false
@@ -611,7 +612,7 @@ async function createItem() {
     cancelDialog()
     showSuccess(`"${newItem.name}" 已添加到商城！`)
   } catch (e) {
-    dialogError.value = e.response?.data?.detail || '创建商品失败，请重试。'
+    dialogError.value = getErrorMessage(e)
   } finally {
     creating.value = false
   }
@@ -638,7 +639,7 @@ async function updateItem() {
     cancelDialog()
     showSuccess(`"${updated.name}" 已更新！`)
   } catch (e) {
-    dialogError.value = e.response?.data?.detail || '更新商品失败，请重试。'
+    dialogError.value = getErrorMessage(e)
   } finally {
     creating.value = false
   }

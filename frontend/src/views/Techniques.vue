@@ -31,10 +31,11 @@
 import { computed, onMounted, ref } from 'vue'
 import TechniqueSlotGrid from '../components/cultivation/TechniqueSlotGrid.vue'
 import { cultivationService } from '../services/cultivation'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const slotTypes = ['main', 'auxiliary', 'mind', 'body']
 const techniques = ref([]); const slots = ref([]); const loadout = ref({}); const spiritStones = ref(0); const nextSlotPurchases = ref({}); const loading = ref(false); const error = ref(null); const busy = ref(false); const selectedSlot = ref(null)
-const errorMessage = computed(() => error.value?.response?.data?.detail || error.value?.message || '功法暂时无法读取。')
+const errorMessage = computed(() => getErrorMessage(error.value))
 const purchaseLockMessage = computed(() => selectedSlot.value?.realm_confirmed === false
   ? `境界不足：需要达到${selectedSlot.value.required_realm}境界。`
   : `灵石不足：需要${selectedSlot.value.price}枚，当前仅有${spiritStones.value}枚。`)

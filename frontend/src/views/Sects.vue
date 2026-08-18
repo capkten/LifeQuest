@@ -36,12 +36,13 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { cultivationService } from '../services/cultivation'
 import { createSequencedRequest } from './sects-request-state'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const filters = reactive({ star: null, kind: null, task_preference: null })
 const sects = ref([]); const loading = ref(false); const error = ref(null); const busyId = ref(null)
 const relationship = ref({ recently_met: [] })
 const recentlyMet = computed(() => relationship.value?.recently_met || [])
-const errorMessage = () => error.value?.response?.data?.detail || error.value?.message || '宗门暂时无法读取。'
+const errorMessage = () => getErrorMessage(error.value)
 const requestSequence = createSequencedRequest({
   onStart: () => { loading.value = true; error.value = null },
   onSuccess: ([response, npcResponse]) => {

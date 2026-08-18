@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { invalidateAuthSession } from './authSession'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
 const serverBaseUrl = apiBaseUrl.replace(/\/api\/?$/, '')
@@ -99,18 +100,10 @@ api.interceptors.response.use(
     // Unified error display for non-401 errors. Background metadata requests can
     // opt out when their failure must not interrupt the current screen.
     const status = error.response?.status
-    const detail = error.response?.data?.detail
     if (!error.config?.skipErrorToast && status && status !== 401) {
-      const messages = {
-        400: detail || '请求参数错误',
-        403: '没有权限执行此操作',
-        404: detail || '资源不存在',
-        422: '请求数据格式错误',
-        500: '服务器内部错误，请稍后重试',
-      }
-      ElMessage.error(messages[status] || `请求失败 (${status})`)
+      ElMessage.error(getErrorMessage(error))
     } else if (!error.config?.skipErrorToast && !error.response) {
-      ElMessage.error('网络连接失败，请检查网络')
+      ElMessage.error(getErrorMessage(error))
     }
 
     return Promise.reject(error)

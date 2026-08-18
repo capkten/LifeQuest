@@ -104,6 +104,7 @@
 import { ref, reactive } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { ElMessage } from 'element-plus'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const authStore = useAuthStore()
 const formRef = ref(null)
@@ -158,7 +159,7 @@ async function handleRegister() {
     })
     ElMessage.success('注册成功，请登录')
   } catch (error) {
-    ElMessage.error(error.response?.data?.detail || '注册失败，请稍后重试')
+    ElMessage.error(getErrorMessage(error))
   } finally {
     loading.value = false
   }

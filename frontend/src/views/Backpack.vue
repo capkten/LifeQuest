@@ -241,6 +241,7 @@ import { useAuthStore } from '../stores/auth'
 import { backpackService } from '../services/backpack'
 import { shopService } from '../services/shop'
 import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const authStore = useAuthStore()
 const { successToast, errorToast, showSuccess, showError } = useToast()
@@ -347,7 +348,7 @@ async function useItem(item) {
     await authStore.fetchUser()
     showSuccess('物品使用成功！')
   } catch (e) {
-    showError(e.response?.data?.detail || '使用物品失败，请重试。')
+    showError(getErrorMessage(e))
   } finally {
     actionId.value = null
   }
@@ -370,7 +371,7 @@ async function equipItem(item) {
     })
     showSuccess('物品已装备！')
   } catch (e) {
-    showError(e.response?.data?.detail || '装备物品失败，请重试。')
+    showError(getErrorMessage(e))
   } finally {
     actionId.value = null
   }
@@ -405,7 +406,7 @@ async function confirmDiscard() {
     }
     showSuccess('物品已丢弃。')
   } catch (e) {
-    showError(e.response?.data?.detail || '丢弃物品失败，请重试。')
+    showError(getErrorMessage(e))
   } finally {
     actionId.value = null
   }

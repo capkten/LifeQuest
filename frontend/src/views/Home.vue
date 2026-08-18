@@ -313,6 +313,7 @@ import { todoService } from '../services/todo'
 import { checkinService } from '../services/checkin'
 import { useToast } from '../composables/useToast'
 import { useUserStats } from '../composables/useUserStats'
+import { getErrorMessage } from '../utils/errorMessage'
 import CultivationStatusBar from '../components/cultivation/CultivationStatusBar.vue'
 
 const authStore = useAuthStore()
@@ -381,7 +382,7 @@ async function doCheckin() {
     const exp = result.exp_earned || 0
     showSuccess(`签到成功！获得 ${coins} 金币、${exp} 经验值`)
   } catch (e) {
-    showError(e.response?.data?.detail || '签到失败，请重试。')
+    showError(getErrorMessage(e))
   } finally {
     checkinLoading.value = false
   }
@@ -418,7 +419,7 @@ async function completeDailyHabit(habitId) {
     await fetchDailySummary()
     await authStore.fetchUser()
   } catch (e) {
-    showError(e.response?.data?.detail || '操作失败，请重试。')
+    showError(getErrorMessage(e))
   } finally {
     completingHabitId.value = null
   }

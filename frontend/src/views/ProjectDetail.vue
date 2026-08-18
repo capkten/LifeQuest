@@ -562,6 +562,7 @@ import { ref, computed, onMounted, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { projectService } from '../services/project'
 import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const route = useRoute()
 const router = useRouter()
@@ -721,7 +722,7 @@ function addTaskToPhase(phaseId, event) {
       project.value.total_tasks = (project.value.total_tasks || 0) + 1
     }
   }).catch(e => {
-    showError(e.response?.data?.detail || '创建任务失败')
+    showError(getErrorMessage(e))
   })
 }
 
@@ -736,7 +737,7 @@ function addKanbanTask(event) {
       project.value.total_tasks = (project.value.total_tasks || 0) + 1
     }
   }).catch(e => {
-    showError(e.response?.data?.detail || '创建任务失败')
+    showError(getErrorMessage(e))
   })
 }
 
@@ -751,7 +752,7 @@ async function completeTaskCard(task) {
       project.value.completed_tasks = (project.value.completed_tasks || 0) + 1
     }
   } catch (e) {
-    showError(e.response?.data?.detail || '操作失败')
+    showError(getErrorMessage(e))
   }
 }
 
@@ -782,7 +783,7 @@ async function onDrop(event, newStatus) {
     }
   } catch (e) {
     task.status = oldStatus
-    showError(e.response?.data?.detail || '移动任务失败')
+    showError(getErrorMessage(e))
   }
 }
 
@@ -813,7 +814,7 @@ async function savePhase() {
     }
     cancelPhaseDialog()
   } catch (e) {
-    phaseDialogError.value = e.response?.data?.detail || '操作失败'
+    phaseDialogError.value = getErrorMessage(e)
   }
 }
 
@@ -824,7 +825,7 @@ async function deletePhase(phase) {
     // Move tasks to unphased
     tasks.value.forEach(t => { if (t.phase_id === phase.id) t.phase_id = null })
   } catch (e) {
-    showError(e.response?.data?.detail || '删除阶段失败')
+    showError(getErrorMessage(e))
   }
 }
 
@@ -860,7 +861,7 @@ async function saveMilestone() {
     }
     cancelMilestoneDialog()
   } catch (e) {
-    msDialogError.value = e.response?.data?.detail || '操作失败'
+    msDialogError.value = getErrorMessage(e)
   }
 }
 
@@ -894,7 +895,7 @@ async function saveEditProject() {
     cancelEditProjectDialog()
     showSuccess('项目已更新')
   } catch (e) {
-    editDialogError.value = e.response?.data?.detail || '保存失败'
+    editDialogError.value = getErrorMessage(e)
   }
 }
 
@@ -904,7 +905,7 @@ async function completeProject() {
     project.value = updated
     showSuccess('项目已完成')
   } catch (e) {
-    showError(e.response?.data?.detail || '操作失败')
+    showError(getErrorMessage(e))
   }
 }
 
@@ -914,7 +915,7 @@ async function confirmDeleteProject() {
     await projectService.deleteProject(projectId)
     router.push('/projects')
   } catch (e) {
-    showError(e.response?.data?.detail || '删除失败')
+    showError(getErrorMessage(e))
     showDeleteDialog.value = false
   } finally {
     deleting.value = false

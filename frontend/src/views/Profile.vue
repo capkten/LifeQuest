@@ -256,6 +256,7 @@ import { titleService } from '../services/title'
 import { useToast } from '../composables/useToast'
 import { useAuthStore } from '../stores/auth'
 import { useResolvedImage } from '../composables/useResolvedImage'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -373,7 +374,7 @@ async function activateTitle(title) {
     showSuccess(`称号已更换为「${title.name}」`)
     showTitleModal.value = false
   } catch (e) {
-    showError(e.response?.data?.detail || '更换称号失败，请重试。')
+    showError(getErrorMessage(e))
   }
 }
 

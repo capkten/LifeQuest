@@ -329,6 +329,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { financeService } from '../services/finance'
 import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -538,7 +539,7 @@ async function saveTransaction() {
     showSuccess(wasEditing ? '流水已更新' : '记账成功')
     await fetchTransactions()
   } catch (e) {
-    txDialogError.value = e.response?.data?.detail || '保存失败，请重试。'
+    txDialogError.value = getErrorMessage(e)
   } finally {
     savingTx.value = false
   }
@@ -553,7 +554,7 @@ async function deleteTransaction() {
     showSuccess('流水已删除')
     cancelDelete()
   } catch (e) {
-    showError(e.response?.data?.detail || '删除失败，请重试。')
+    showError(getErrorMessage(e))
     cancelDelete()
   } finally {
     deleting.value = false

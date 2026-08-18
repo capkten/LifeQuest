@@ -27,11 +27,12 @@
 
 <script setup>
 import { computed } from 'vue'
+import { getErrorMessage } from '../../utils/errorMessage'
 
 const props = defineProps({ preview: { type: Object, default: null }, loading: Boolean, error: { type: [Object, String], default: null }, attempting: Boolean, submitting: Boolean })
 defineEmits(['attempt', 'retry'])
 const operationBusy = computed(() => props.loading || props.attempting || props.submitting)
-const errorMessage = computed(() => props.error?.response?.data?.detail || props.error?.message || '渡劫预览暂时无法读取。')
+const errorMessage = computed(() => typeof props.error === 'string' ? props.error : getErrorMessage(props.error))
 const lockReasonLabel = computed(() => ({
   FINAL_MINOR_STAGE_REQUIRED: '尚未达到当前境界的最终小境界阈值。',
   TRIBULATION_COOLDOWN_ACTIVE: '渡劫冷却中，请稍后再试。',

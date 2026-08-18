@@ -225,6 +225,7 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { projectService } from '../services/project'
 import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const { errorToast, showError } = useToast()
 
@@ -367,7 +368,7 @@ async function saveProject() {
     projects.value.push(project)
     cancelDialog()
   } catch (e) {
-    dialogError.value = e.response?.data?.detail || '创建失败，请重试。'
+    dialogError.value = getErrorMessage(e)
   } finally {
     creating.value = false
   }

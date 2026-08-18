@@ -278,6 +278,7 @@ import NoteTree from '../components/notes/NoteTree.vue'
 import NoteViewer from '../components/notes/NoteViewer.vue'
 import { useNoteWorkspace } from '../composables/useNoteWorkspace'
 import { noteService } from '../services/note'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const route = useRoute()
 const router = useRouter()
@@ -322,7 +323,7 @@ let loadRequest = 0
 
 const workspaceLoading = computed(() => loading.value || !notebook.value && !notebookError.value)
 const workspaceError = computed(() => notebookError.value || workspaceErrorCause.value)
-const errorMessage = computed(() => workspaceError.value?.response?.data?.detail || '请检查网络后重试。')
+const errorMessage = computed(() => getErrorMessage(workspaceError.value))
 const isNewNoteRoute = computed(() => route.name === 'NewNoteInWorkspace')
 const routeModeLabel = computed(() => route.name === 'NotebookWorkspaceEdit' ? '编辑上下文' : '已选择笔记')
 
@@ -455,7 +456,7 @@ async function toggleViewerPin() {
     viewerNote.value = await noteService.updateNote(viewerNote.value.id, { is_pinned: !viewerNote.value.is_pinned })
     showToast(viewerNote.value.is_pinned ? '已置顶' : '已取消置顶')
   } catch (cause) {
-    showToast(cause.response?.data?.detail || '置顶失败', 'error')
+    showToast(getErrorMessage(cause), 'error')
   }
 }
 
@@ -544,7 +545,7 @@ async function submitCreateFolder() {
     closeDialog()
     showToast('文件夹已创建')
   } catch (cause) {
-    dialogError.value = cause.response?.data?.detail || cause.message || '创建失败，请重试。'
+    dialogError.value = getErrorMessage(cause)
   }
 }
 
@@ -558,7 +559,7 @@ async function submitCreateNote() {
       router.push({ name: 'NotebookWorkspaceView', params: { notebookId: notebookId.value, noteId: node.id } })
     }
   } catch (cause) {
-    dialogError.value = cause.response?.data?.detail || cause.message || '创建失败，请重试。'
+    dialogError.value = getErrorMessage(cause)
   }
 }
 
@@ -568,7 +569,7 @@ async function submitRename() {
     closeDialog()
     showToast('名称已更新')
   } catch (cause) {
-    dialogError.value = cause.response?.data?.detail || cause.message || '重命名失败，请重试。'
+    dialogError.value = getErrorMessage(cause)
   }
 }
 
@@ -578,7 +579,7 @@ async function submitMove() {
     closeDialog()
     showToast('节点已移动')
   } catch (cause) {
-    dialogError.value = cause.response?.data?.detail || cause.message || '移动失败，请重试。'
+    dialogError.value = getErrorMessage(cause)
   }
 }
 
@@ -593,7 +594,7 @@ async function handleDelete(node) {
     }
     showToast('已删除')
   } catch (cause) {
-    showToast(cause.response?.data?.detail || '删除失败，请重试。', 'error')
+    showToast(getErrorMessage(cause), 'error')
   }
 }
 

@@ -291,7 +291,7 @@ test('task 12 exposes technique learning and tribulation lock states', async () 
 
   assert.match(service, /learnTechnique\(/)
   assert.match(techniques, /!technique\.learned[\s\S]*学习|学习[\s\S]*learnTechnique/)
-  assert.match(techniques, /response\??\.data\??\.detail/)
+  assert.match(techniques, /getErrorMessage/)
   assert.match(component, /preview\.available\s*===\s*false|!preview\.available/)
   assert.match(component, /lock_reason/)
   assert.doesNotMatch(component, /开始渡劫[\s\S]*v-if/)

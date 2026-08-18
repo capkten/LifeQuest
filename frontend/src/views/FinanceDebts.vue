@@ -264,6 +264,7 @@
 import { ref, onMounted } from 'vue'
 import { financeService } from '../services/finance'
 import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -387,7 +388,7 @@ async function saveDebt() {
     }
     cancelDialog()
   } catch (e) {
-    dialogError.value = e.response?.data?.detail || '保存失败，请重试。'
+    dialogError.value = getErrorMessage(e)
   } finally {
     saving.value = false
   }
@@ -407,7 +408,7 @@ async function doPayment() {
     cancelPayment()
     await fetchDebts()
   } catch (e) {
-    paymentError.value = e.response?.data?.detail || '还款失败，请重试。'
+    paymentError.value = getErrorMessage(e)
   } finally {
     paying.value = false
   }
@@ -422,7 +423,7 @@ async function deleteDebt() {
     showSuccess('借贷记录已删除')
     cancelDelete()
   } catch (e) {
-    showError(e.response?.data?.detail || '删除失败，请重试。')
+    showError(getErrorMessage(e))
     cancelDelete()
   } finally {
     deleting.value = false

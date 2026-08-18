@@ -92,6 +92,7 @@
 import { ref, reactive } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { ElMessage } from 'element-plus'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const authStore = useAuthStore()
 const formRef = ref(null)
@@ -124,11 +125,7 @@ async function handleLogin() {
     await authStore.login(form)
     ElMessage.success('登录成功')
   } catch (error) {
-    ElMessage.error(
-      error.response
-        ? `[${error.response.status}] ${error.response.data?.detail || JSON.stringify(error.response.data)}`
-        : `[Network] ${error.message} | API: ${import.meta.env.VITE_API_BASE_URL || '/api'}`
-    )
+    ElMessage.error(getErrorMessage(error))
   } finally {
     loading.value = false
   }

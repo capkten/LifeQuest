@@ -355,6 +355,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { financeService } from '../services/finance'
 import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -498,7 +499,7 @@ async function saveTransaction() {
     showSuccess(editingTx.value ? '流水已更新' : '记账成功！')
     await fetchDashboard()
   } catch (e) {
-    txError.value = e.response?.data?.detail || '保存失败，请重试。'
+    txError.value = getErrorMessage(e)
   } finally {
     savingTx.value = false
   }

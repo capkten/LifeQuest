@@ -272,6 +272,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { financeService } from '../services/finance'
 import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -401,7 +402,7 @@ async function saveAccount() {
     }
     cancelDialog()
   } catch (e) {
-    dialogError.value = e.response?.data?.detail || '保存失败，请重试。'
+    dialogError.value = getErrorMessage(e)
   } finally {
     saving.value = false
   }
@@ -416,7 +417,7 @@ async function deleteAccount() {
     showSuccess('账户已删除')
     cancelDelete()
   } catch (e) {
-    showError(e.response?.data?.detail || '删除失败，请重试。')
+    showError(getErrorMessage(e))
     cancelDelete()
   } finally {
     deleting.value = false
@@ -438,7 +439,7 @@ async function doTransfer() {
     cancelTransfer()
     await fetchAccounts()
   } catch (e) {
-    transferError.value = e.response?.data?.detail || '转账失败，请重试。'
+    transferError.value = getErrorMessage(e)
   } finally {
     transferring.value = false
   }
