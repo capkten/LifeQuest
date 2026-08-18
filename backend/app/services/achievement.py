@@ -287,6 +287,20 @@ class AchievementService:
     def get_user_achievements(self, user_id: UUID) -> List[UserAchievement]:
         return self.user_achievement_repo.get_by_user(user_id)
 
+    @staticmethod
+    def _is_duplicate_claim_integrity_error(exc: IntegrityError) -> bool:
+        details = " ".join(
+            str(value)
+            for value in (exc, getattr(exc, "orig", None))
+            if value is not None
+        ).lower()
+        if "uq_user_achievement_user_achievement" in details:
+            return True
+        return (
+            "unique constraint failed: user_achievements.user_id, "
+            "user_achievements.achievement_id"
+        ) in details
+
     def check_and_unlock(
         self, user_id: UUID, condition_type: str, current_value: int, commit: bool = True
     ) -> List[Achievement]:
@@ -316,7 +330,9 @@ class AchievementService:
                             }
                         )
                         self.db.flush()
-                except IntegrityError:
+                except IntegrityError as exc:
+                    if not self._is_duplicate_claim_integrity_error(exc):
+                        raise
                     # Another request won the unique user/achievement claim.
                     continue
 

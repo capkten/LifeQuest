@@ -1,4 +1,6 @@
 from multiprocessing import get_context
+from queue import Empty
+from time import monotonic
 from uuid import UUID, uuid4
 
 import pytest
@@ -14,6 +16,20 @@ from app.models.user import User
 from app.services.todo import TodoService
 
 from app.models.coin_transaction import CoinTransaction
+
+
+def _collect_process_messages(results, expected, timeout=5):
+    messages = []
+    deadline = monotonic() + timeout
+    while len(messages) < expected:
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            break
+        try:
+            messages.append(results.get(timeout=remaining))
+        except Empty:
+            break
+    return messages
 
 
 def _run_achievement_threshold_process(db_path, user_id, achievement_id, barrier, results):
@@ -39,6 +55,7 @@ def _run_achievement_threshold_process(db_path, user_id, achievement_id, barrier
         nonlocal synchronized
         if not synchronized and "from user_achievements" in statement.lower():
             synchronized = True
+            results.put(("barrier_reached",))
             barrier.wait(timeout=20)
 
     session = sessionmaker(autocommit=False, autoflush=False, bind=engine)()
@@ -86,6 +103,7 @@ def _run_todo_completion_process(db_path, kind, todo_id, user_id, barrier, resul
         nonlocal synchronized
         if not synchronized and f"update {table_name}" in statement.lower():
             synchronized = True
+            results.put(("barrier_reached",))
             barrier.wait(timeout=20)
 
     session = sessionmaker(autocommit=False, autoflush=False, bind=engine)()
@@ -365,7 +383,11 @@ def test_achievement_threshold_race_uses_database_constraint_not_process_lock(
         assert not process.is_alive()
         assert process.exitcode == 0
 
-    outcomes = [results.get(timeout=5) for _ in processes]
+    messages = _collect_process_messages(results, expected=len(processes) * 2)
+    markers = [message for message in messages if message[0] == "barrier_reached"]
+    outcomes = [message for message in messages if message[0] in {"ok", "error"}]
+    assert len(markers) == 2, messages
+    assert len(outcomes) == 2, messages
     assert all(outcome[0] == "ok" for outcome in outcomes), outcomes
     assert sum(outcome[1] for outcome in outcomes) == 1
 
@@ -437,7 +459,11 @@ def test_distinct_process_completion_claims_one_settlement_per_source(
             assert not process.is_alive()
             assert process.exitcode == 0
 
-        outcomes = [results.get(timeout=5) for _ in processes]
+        messages = _collect_process_messages(results, expected=len(processes) * 2)
+        markers = [message for message in messages if message[0] == "barrier_reached"]
+        outcomes = [message for message in messages if message[0] in {"ok", "error"}]
+        assert len(markers) == 2, messages
+        assert len(outcomes) == 2, messages
         assert all(outcome[0] == "ok" for outcome in outcomes), outcomes
 
         verify = sessionmaker(autocommit=False, autoflush=False, bind=engine)()
