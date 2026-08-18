@@ -1,6 +1,7 @@
 <template>
   <div class="tribulations-page">
     <header class="tribulations-header"><div><p class="cultivation-eyebrow">修炼 · 渡劫</p><h1>渡劫准备</h1><p>所有判定由服务器执行，先确认风险，再决定是否开始。</p></div></header>
+    <Transition name="toast"><div v-if="errorToast" class="cultivation-state cultivation-state--error" role="alert" aria-live="polite">{{ errorToast }}</div></Transition>
     <div v-if="loading && !preview" class="cultivation-state" aria-live="polite">正在读取渡劫状态...</div>
     <div v-else-if="error && !preview" class="cultivation-state cultivation-state--error" role="alert"><span>{{ errorMessage }}</span><button type="button" class="cultivation-action" @click="load">重试</button></div>
     <div v-else-if="!preview" class="cultivation-state" aria-live="polite">正在准备渡劫预览...</div>
@@ -25,10 +26,12 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import TribulationProbability from '../components/cultivation/TribulationProbability.vue'
 import { cultivationService } from '../services/cultivation'
 import { useCultivationStore } from '../stores/cultivation'
+import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelFromServer, labelRealm } from '../utils/displayLabels'
 
 const preview = ref(null), overview = ref(null), result = ref(null), error = ref(null), loading = ref(false), attempting = ref(false), pillCount = ref(0)
+const { errorToast, showError } = useToast()
 const cultivationStore = useCultivationStore()
 let previewRequestId = 0
 let previewController = null
@@ -51,7 +54,7 @@ async function loadPreview() {
 }
 async function load() {
   loading.value = true; error.value = null
-  try { overview.value = await cultivationService.getOverview(); await loadPreview() } catch (cause) { error.value = cause } finally { loading.value = false }
+  try { overview.value = await cultivationService.getOverview(); await loadPreview() } catch (cause) { error.value = cause; showError(errorMessage.value) } finally { loading.value = false }
 }
 async function syncAndLoad() {
   let syncError = null
@@ -60,13 +63,16 @@ async function syncAndLoad() {
   if (syncError) error.value = syncError
 }
 async function attempt() {
-  if (attempting.value || preview.value?.cooldown_until) return
+  if (attempting.value) return
+  if (!preview.value?.available) { explainBlocked('渡劫前置条件未满足，请先完成渡劫试炼并达到要求。'); return }
+  if (preview.value?.cooldown_until) { explainBlocked('渡劫冷却中，请等待冷却结束后再试。'); return }
   attempting.value = true; error.value = null
   try {
     result.value = await cultivationService.attemptTribulation({ pill_count: pillCount.value })
     await syncAndLoad()
-  } catch (cause) { error.value = cause } finally { attempting.value = false }
+  } catch (cause) { error.value = cause; showError(errorMessage.value) } finally { attempting.value = false }
 }
+function explainBlocked(message) { showError(message) }
 watch(pillCount, (value) => { const bounded = Math.max(0, Math.min(15, Number(value) || 0)); if (bounded !== value) pillCount.value = bounded; if (!attempting.value) loadPreview() })
 onMounted(load)
 onBeforeUnmount(() => previewController?.abort())

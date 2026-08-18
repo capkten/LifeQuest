@@ -105,8 +105,9 @@
                 <button
                   class="daily-check-btn"
                   :class="{ 'daily-check-btn--done': habit.completed_today }"
-                  :disabled="habit.completed_today || completingHabitId === habit.id"
-                  @click="completeDailyHabit(habit.id)"
+                  :disabled="completingHabitId === habit.id"
+                  :aria-disabled="habit.completed_today"
+                  @click="completeDailyHabit(habit)"
                 >
                   <svg v-if="habit.completed_today" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
                     <path d="M20 6L9 17l-5-5" />
@@ -369,11 +370,12 @@ async function fetchCheckinStatus() {
   try {
     checkinStatus.value = await checkinService.getStatus()
   } catch (e) {
-    // Non-critical: silently ignore
+    showError(getErrorMessage(e))
   }
 }
 
 async function doCheckin() {
+  if (checkinStatus.value?.checked_in) { showError('今天已经签到过了。'); return }
   checkinLoading.value = true
   try {
     const result = await checkinService.checkin()
@@ -406,16 +408,17 @@ async function fetchDailySummary() {
   try {
     dailySummary.value = await todoService.getDailySummary()
   } catch (e) {
-    // Non-critical: silently ignore
+    showError(getErrorMessage(e))
   } finally {
     loadingDaily.value = false
   }
 }
 
-async function completeDailyHabit(habitId) {
-  completingHabitId.value = habitId
+async function completeDailyHabit(habit) {
+  if (habit.completed_today) { showError('该习惯今天已经完成，明天再来继续。'); return }
+  completingHabitId.value = habit.id
   try {
-    await todoService.completeHabit(habitId)
+    await todoService.completeHabit(habit.id)
     showSuccess('习惯完成！')
     await fetchDailySummary()
     await authStore.fetchUser()
@@ -432,7 +435,7 @@ function isOverdue(deadline) {
 }
 
 onMounted(() => {
-  loadCultivation().catch(() => {})
+  loadCultivation().catch((e) => showError(getErrorMessage(e)))
   fetchCheckinStatus()
   fetchTasks()
   fetchGoals()

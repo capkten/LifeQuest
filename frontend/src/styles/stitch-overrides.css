@@ -147,6 +147,12 @@
   opacity: 0.55;
 }
 
+.cultivation-action[aria-disabled='true'],
+.cultivation-slot[aria-disabled='true'] {
+  cursor: pointer;
+  opacity: 0.72;
+}
+
 .cultivation-state {
   display: flex;
   align-items: center;

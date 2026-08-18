@@ -109,14 +109,15 @@
           v-for="habit in habits"
           :key="habit.id"
           class="todo-card"
-          :class="{ 'todo-card--completed': !habit.is_active }"
+          :class="{ 'todo-card--completed': habit.completed_today }"
         >
           <div class="todo-card-header">
             <div class="todo-card-main">
               <button
                 class="complete-btn"
-                :class="{ 'complete-btn--done': !habit.is_active }"
+                :class="{ 'complete-btn--done': habit.completed_today }"
                 :disabled="completingId === habit.id"
+                :aria-disabled="habit.completed_today"
                 @click="completeHabit(habit)"
                 :aria-label="'完成 ' + habit.title"
               >
@@ -126,7 +127,7 @@
                 </svg>
               </button>
               <div class="todo-card-info">
-                <h3 class="todo-card-title" :class="{ 'todo-card-title--done': !habit.is_active }">{{ habit.title }}</h3>
+                <h3 class="todo-card-title" :class="{ 'todo-card-title--done': habit.completed_today }">{{ habit.title }}</h3>
                 <p v-if="habit.description" class="todo-card-desc">{{ habit.description }}</p>
                 <div class="todo-card-meta todo-card-meta--inline">
                   <span class="difficulty-badge" :class="'difficulty-badge--' + habit.difficulty">
@@ -194,7 +195,8 @@
               <button
                 class="complete-btn"
                 :class="{ 'complete-btn--done': task.status === 'completed' }"
-                :disabled="task.status === 'completed' || completingId === task.id"
+                :disabled="completingId === task.id"
+                :aria-disabled="task.status === 'completed'"
                 @click="completeTask(task)"
                 :aria-label="'完成 ' + task.title"
               >
@@ -278,7 +280,8 @@
                     <button
                       class="subtask-complete-btn"
                       :class="{ 'subtask-complete-btn--done': subtask.is_completed }"
-                      :disabled="subtask.is_completed || completingSubtaskId === subtask.id"
+                      :disabled="completingSubtaskId === subtask.id"
+                      :aria-disabled="subtask.is_completed"
                       @click="completeSubtask(subtask, task.id)"
                     >
                       <span v-if="completingSubtaskId === subtask.id" class="loading-spinner loading-spinner--sm"></span>
@@ -319,7 +322,8 @@
                   <button
                     type="submit"
                     class="subtask-add-btn"
-                    :disabled="!newSubtaskTitle.trim() || creatingSubtask"
+                    :disabled="creatingSubtask"
+                    :aria-disabled="!newSubtaskTitle.trim()"
                   >
                     <span v-if="creatingSubtask" class="loading-spinner loading-spinner--sm"></span>
                     <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -371,7 +375,8 @@
               <button
                 class="complete-btn"
                 :class="{ 'complete-btn--done': goal.status === 'completed' }"
-                :disabled="goal.status === 'completed' || completingId === goal.id"
+                :disabled="completingId === goal.id"
+                :aria-disabled="goal.status === 'completed'"
                 @click="completeGoal(goal)"
                 :aria-label="'完成 ' + goal.title"
               >
@@ -570,7 +575,7 @@
             <div v-if="dialogError" class="dialog-error" role="alert">{{ dialogError }}</div>
             <div class="dialog-actions">
               <button type="button" class="btn-secondary" @click="cancelDialog">取消</button>
-              <button type="submit" class="btn-primary" :disabled="creating || !form.title.trim()">
+              <button type="submit" class="btn-primary" :disabled="creating" :aria-disabled="!form.title.trim()">
                 <span v-if="creating" class="loading-spinner loading-spinner--sm"></span>
                 {{ creating ? (isEditing ? '保存中...' : '创建中...') : (isEditing ? '保存' : '创建') }}
               </button>
@@ -834,6 +839,10 @@ function showError(message, retry) {
   }, 4000)
 }
 
+function explainBlocked(message) {
+  showError(message)
+}
+
 onUnmounted(() => {
   if (rewardToastTimeout.value) clearTimeout(rewardToastTimeout.value)
   if (errorToastTimeout.value) clearTimeout(errorToastTimeout.value)
@@ -905,7 +914,8 @@ async function fetchProjects() {
 }
 
 async function completeHabit(habit) {
-  if (!habit.is_active || completingId.value) return
+  if (habit.completed_today) { explainBlocked('该习惯今天已经完成，明天再来继续。'); return }
+  if (completingId.value) return
   beginCompletion(habit.id)
   try {
     const updated = await todoService.completeHabit(habit.id)
@@ -925,7 +935,8 @@ async function completeHabit(habit) {
 }
 
 async function completeTask(task) {
-  if (task.status === 'completed' || completingId.value) return
+  if (task.status === 'completed') { explainBlocked('该任务已经完成，无需重复提交。'); return }
+  if (completingId.value) return
   beginCompletion(task.id)
   try {
     const updated = await todoService.completeTask(task.id)
@@ -945,7 +956,8 @@ async function completeTask(task) {
 }
 
 async function completeGoal(goal) {
-  if (goal.status === 'completed' || completingId.value) return
+  if (goal.status === 'completed') { explainBlocked('该目标已经完成，无需重复提交。'); return }
+  if (completingId.value) return
   beginCompletion(goal.id)
   try {
     const updated = await todoService.completeGoal(goal.id)
@@ -997,7 +1009,7 @@ async function fetchSubtasks(taskId) {
 
 async function addSubtask(taskId) {
   const title = newSubtaskTitle.value.trim()
-  if (!title) return
+  if (!title) { explainBlocked('请先填写子任务标题。'); return }
   creatingSubtask.value = true
   try {
     const subtask = await todoService.createSubtask(taskId, { title })
@@ -1015,7 +1027,8 @@ async function addSubtask(taskId) {
 }
 
 async function completeSubtask(subtask, taskId) {
-  if (subtask.is_completed || completingSubtaskId.value) return
+  if (subtask.is_completed) { explainBlocked('该子任务已经完成，无需重复提交。'); return }
+  if (completingSubtaskId.value) return
   completingSubtaskId.value = subtask.id
   try {
     const updated = await todoService.completeSubtask(subtask.id)
@@ -1059,7 +1072,7 @@ function cancelDialog() {
 }
 
 async function createItem() {
-  if (!form.value.title.trim()) return
+  if (!form.value.title.trim()) { dialogError.value = '请先填写标题。'; explainBlocked('请先填写标题。'); return }
   creating.value = true
   dialogError.value = null
   try {
@@ -1118,7 +1131,7 @@ function openEditDialog(item, type) {
 }
 
 async function saveItem() {
-  if (!form.value.title.trim()) return
+  if (!form.value.title.trim()) { dialogError.value = '请先填写标题。'; explainBlocked('请先填写标题。'); return }
   if (!isEditing.value) {
     return createItem()
   }

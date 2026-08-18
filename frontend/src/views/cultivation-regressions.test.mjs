@@ -366,3 +366,26 @@ test('multi-slot techniques assign contiguous purchased slots or show insufficie
   assert.match(source, /连续|不足|insufficient/i)
   assert.match(source, /updateLoadout\(assignments\)/)
 })
+
+test('technique locks explain realm, stone, slot and purchase prerequisites', async () => {
+  const source = await readFile(new URL('./Techniques.vue', import.meta.url), 'utf8')
+
+  assert.match(source, /useToast\(/)
+  assert.match(source, /function explainBlocked\(/)
+  assert.match(source, /aria-disabled/)
+  assert.match(source, /境界不足|灵石不足|连续格子不足|购买/)
+})
+
+test('tribulation locks explain prerequisites and cooldown without native disabled', async () => {
+  const [page, probability] = await Promise.all([
+    readFile(new URL('./Tribulations.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../components/cultivation/TribulationProbability.vue', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(page, /useToast\(/)
+  assert.match(page, /function explainBlocked\(/)
+  assert.match(page + probability, /aria-disabled/)
+  assert.match(page, /冷却|渡劫前置条件/)
+  assert.match(probability, /aria-disabled/)
+  assert.match(probability, /lockReasonLabel|cooldownLabel/)
+})

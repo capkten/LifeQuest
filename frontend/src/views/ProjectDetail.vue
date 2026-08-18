@@ -172,7 +172,7 @@
           <div v-if="expandedPhases.has(phase.id)" class="phase-body">
             <div v-for="task in getPhaseTasks(phase.id)" :key="task.id" class="task-card" :class="{ 'task-card--done': task.status === 'completed' }" :style="{ borderLeftColor: getPriorityColor(task.priority) }">
               <div class="task-card-main">
-                <button class="task-complete-btn" :class="{ 'task-complete-btn--done': task.status === 'completed' }" :disabled="task.status === 'completed'" @click="completeTaskCard(task)">
+                <button class="task-complete-btn" :class="{ 'task-complete-btn--done': task.status === 'completed' }" :disabled="completingTaskId === task.id" :aria-disabled="task.status === 'completed'" @click="completeTaskCard(task)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12" /></svg>
                 </button>
                 <div class="task-card-info">
@@ -208,7 +208,7 @@
           <div v-if="expandedPhases.has('__unphased')" class="phase-body">
             <div v-for="task in unphasedTasks" :key="task.id" class="task-card" :class="{ 'task-card--done': task.status === 'completed' }" :style="{ borderLeftColor: getPriorityColor(task.priority) }">
               <div class="task-card-main">
-                <button class="task-complete-btn" :class="{ 'task-complete-btn--done': task.status === 'completed' }" :disabled="task.status === 'completed'" @click="completeTaskCard(task)">
+                <button class="task-complete-btn" :class="{ 'task-complete-btn--done': task.status === 'completed' }" :disabled="completingTaskId === task.id" :aria-disabled="task.status === 'completed'" @click="completeTaskCard(task)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12" /></svg>
                 </button>
                 <div class="task-card-info">
@@ -405,7 +405,7 @@
             <div v-if="taskDialogError" class="dialog-error">{{ taskDialogError }}</div>
             <div class="dialog-actions">
               <button type="button" class="btn-secondary" @click="cancelTaskDialog">取消</button>
-              <button type="submit" class="btn-primary" :disabled="!taskForm.title.trim()">保存</button>
+              <button type="submit" class="btn-primary" :aria-disabled="!taskForm.title.trim()">保存</button>
             </div>
           </form>
         </div>
@@ -430,7 +430,7 @@
             <div v-if="phaseDialogError" class="dialog-error">{{ phaseDialogError }}</div>
             <div class="dialog-actions">
               <button type="button" class="btn-secondary" @click="cancelPhaseDialog">取消</button>
-              <button type="submit" class="btn-primary" :disabled="!phaseForm.name.trim()">保存</button>
+              <button type="submit" class="btn-primary" :aria-disabled="!phaseForm.name.trim()">保存</button>
             </div>
           </form>
         </div>
@@ -459,7 +459,7 @@
             <div v-if="msDialogError" class="dialog-error">{{ msDialogError }}</div>
             <div class="dialog-actions">
               <button type="button" class="btn-secondary" @click="cancelMilestoneDialog">取消</button>
-              <button type="submit" class="btn-primary" :disabled="!msForm.name.trim()">保存</button>
+              <button type="submit" class="btn-primary" :aria-disabled="!msForm.name.trim()">保存</button>
             </div>
           </form>
         </div>
@@ -504,7 +504,7 @@
             <div v-if="editDialogError" class="dialog-error">{{ editDialogError }}</div>
             <div class="dialog-actions">
               <button type="button" class="btn-secondary" @click="cancelEditProjectDialog">取消</button>
-              <button type="submit" class="btn-primary" :disabled="!editForm.name.trim()">保存</button>
+              <button type="submit" class="btn-primary" :aria-disabled="!editForm.name.trim()">保存</button>
             </div>
           </form>
         </div>
@@ -578,6 +578,7 @@ const tasks = ref([])
 const loading = ref(true)
 const error = ref(null)
 const deleting = ref(false)
+const completingTaskId = ref(null)
 const descCollapsed = ref(true)
 
 // View state
@@ -714,7 +715,7 @@ async function fetchData() {
 function addTaskToPhase(phaseId, event) {
   const input = event.target.querySelector('input')
   const title = input?.value?.trim()
-  if (!title) return
+  if (!title) { showError('请先填写任务标题。'); return }
   projectService.createTask(projectId, { title, phase_id: phaseId }).then(task => {
     tasks.value.push(task)
     input.value = ''
@@ -729,7 +730,7 @@ function addTaskToPhase(phaseId, event) {
 function addKanbanTask(event) {
   const input = event.target.querySelector('input')
   const title = input?.value?.trim()
-  if (!title) return
+  if (!title) { showError('请先填写任务标题。'); return }
   projectService.createTask(projectId, { title, status: 'pending' }).then(task => {
     tasks.value.push(task)
     input.value = ''
@@ -742,7 +743,10 @@ function addKanbanTask(event) {
 }
 
 async function completeTaskCard(task) {
-  if (!task || task.status === 'completed') return
+  if (!task) { showError('任务不存在，无法完成。'); return }
+  if (task.status === 'completed') { showError('该任务已经完成，无需重复提交。'); return }
+  if (completingTaskId.value) return
+  completingTaskId.value = task.id
   const oldStatus = task.status
   try {
     const updated = await projectService.moveTask(task.id, { status: 'completed' })
@@ -753,6 +757,8 @@ async function completeTaskCard(task) {
     }
   } catch (e) {
     showError(getErrorMessage(e))
+  } finally {
+    completingTaskId.value = null
   }
 }
 
@@ -802,7 +808,7 @@ function cancelPhaseDialog() {
 }
 
 async function savePhase() {
-  if (!phaseForm.value.name.trim()) return
+  if (!phaseForm.value.name.trim()) { phaseDialogError.value = '请先填写阶段名称。'; showError('请先填写阶段名称。'); return }
   try {
     if (editingPhase.value) {
       const updated = await projectService.updatePhase(editingPhase.value.id, { name: phaseForm.value.name.trim() })
@@ -847,7 +853,7 @@ function cancelMilestoneDialog() {
 }
 
 async function saveMilestone() {
-  if (!msForm.value.name.trim()) return
+  if (!msForm.value.name.trim()) { msDialogError.value = '请先填写里程碑名称。'; showError('请先填写里程碑名称。'); return }
   try {
     const data = { name: msForm.value.name.trim() }
     if (msForm.value.due_date) data.due_date = msForm.value.due_date
@@ -883,7 +889,7 @@ function cancelEditProjectDialog() {
 }
 
 async function saveEditProject() {
-  if (!editForm.value.name.trim()) return
+  if (!editForm.value.name.trim()) { editDialogError.value = '请先填写项目名称。'; showError('请先填写项目名称。'); return }
   try {
     const data = { name: editForm.value.name.trim(), color: editForm.value.color }
     if (editForm.value.description) data.description = editForm.value.description.trim()
@@ -900,6 +906,7 @@ async function saveEditProject() {
 }
 
 async function completeProject() {
+  if (project.value?.status === 'completed') { showError('项目已经完成，无需重复提交。'); return }
   try {
     const updated = await projectService.completeProject(projectId)
     project.value = updated

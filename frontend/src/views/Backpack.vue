@@ -139,6 +139,7 @@
               v-if="item.item_type === 'consumable'"
               class="btn-action btn-action--use"
               :disabled="actionId === item.id"
+              :aria-disabled="item.item_type !== 'consumable'"
               @click="useItem(item)"
             >
               <span v-if="actionId === item.id" class="loading-spinner loading-spinner--sm"></span>
@@ -151,6 +152,7 @@
               v-if="(item.item_type === 'gear' || item.item_type === 'collectible') && !item.is_equipped"
               class="btn-action btn-action--equip"
               :disabled="actionId === item.id"
+              :aria-disabled="item.is_equipped"
               @click="equipItem(item)"
             >
               <span v-if="actionId === item.id" class="loading-spinner loading-spinner--sm"></span>
@@ -162,6 +164,7 @@
             <button
               class="btn-action btn-action--discard"
               :disabled="actionId === item.id"
+              :aria-disabled="item.quantity <= 0"
               @click="requestDiscard(item)"
             >
               <span v-if="actionId === item.id" class="loading-spinner loading-spinner--sm"></span>
@@ -327,8 +330,13 @@ async function fetchAll() {
   }
 }
 
+function explainBlocked(message) {
+  showError(message)
+}
+
 async function useItem(item) {
   if (actionId.value) return
+  if (item.item_type !== 'consumable') { explainBlocked('该物品不可使用。'); return }
   actionId.value = item.id
   try {
     const updated = await backpackService.useItem(item.id)
@@ -351,6 +359,8 @@ async function useItem(item) {
 
 async function equipItem(item) {
   if (actionId.value) return
+  if (item.is_equipped) { explainBlocked('该物品已经装备。'); return }
+  if (item.item_type !== 'gear' && item.item_type !== 'collectible') { explainBlocked('该物品不可装备。'); return }
   actionId.value = item.id
   try {
     const updated = await backpackService.equipItem(item.id)

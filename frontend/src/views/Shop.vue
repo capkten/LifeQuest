@@ -178,7 +178,8 @@
         <div class="item-card-footer">
           <button
             class="btn-purchase"
-            :disabled="purchasingId === item.id || (user?.coins || 0) < item.coin_price || (item.stock !== -1 && item.stock <= 0)"
+            :disabled="purchasingId === item.id"
+            :aria-disabled="isPurchaseBlocked(item)"
             @click="purchaseItem(item)"
           >
             <span v-if="purchasingId === item.id" class="loading-spinner loading-spinner--sm"></span>
@@ -319,7 +320,7 @@
             <div v-if="dialogError" class="dialog-error" role="alert">{{ dialogError }}</div>
             <div class="dialog-actions">
               <button type="button" class="btn-secondary" @click="cancelDialog">取消</button>
-              <button type="submit" class="btn-primary" :disabled="creating || !form.name.trim()">
+              <button type="submit" class="btn-primary" :disabled="creating" :aria-disabled="!form.name.trim()">
                 <span v-if="creating" class="loading-spinner loading-spinner--sm"></span>
                 {{ creating ? (dialogMode === 'edit' ? '更新中...' : '创建中...') : (dialogMode === 'edit' ? '更新' : '创建') }}
               </button>
@@ -523,8 +524,23 @@ async function fetchItems() {
   }
 }
 
+function explainBlocked(message) {
+  showError(message)
+}
+
+function isPurchaseBlocked(item) {
+  return (user.value?.coins || 0) < item.coin_price || (item.stock !== -1 && item.stock <= 0)
+}
+
+function purchaseLockReason(item) {
+  if (item.stock !== -1 && item.stock <= 0) return '商品已售罄，请选择其他商品。'
+  if ((user.value?.coins || 0) < item.coin_price) return '金币不足，请先获得更多金币后再兑换。'
+  return ''
+}
+
 async function purchaseItem(item) {
   if (purchasingId.value) return
+  if (isPurchaseBlocked(item)) { explainBlocked(purchaseLockReason(item)); return }
   purchasingId.value = item.id
   try {
     await shopService.purchaseItem(item.id)
@@ -595,7 +611,7 @@ async function deleteItem() {
 }
 
 async function createItem() {
-  if (!form.value.name.trim()) return
+  if (!form.value.name.trim()) { dialogError.value = '请先填写商品名称。'; explainBlocked('请先填写商品名称。'); return }
   creating.value = true
   dialogError.value = null
   try {
@@ -619,7 +635,8 @@ async function createItem() {
 }
 
 async function updateItem() {
-  if (!form.value.name.trim() || !editingItem.value) return
+  if (!form.value.name.trim()) { dialogError.value = '请先填写商品名称。'; explainBlocked('请先填写商品名称。'); return }
+  if (!editingItem.value) { explainBlocked('请先选择要编辑的商品。'); return }
   creating.value = true
   dialogError.value = null
   try {

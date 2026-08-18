@@ -1,6 +1,7 @@
 <template>
   <div class="techniques-page">
     <header><p class="cultivation-eyebrow">功法配置</p><h1>功法配置</h1><p>购买格子并配置已学会的功法。</p></header>
+    <Transition name="toast"><div v-if="errorToast" class="cultivation-state cultivation-state--error" role="alert" aria-live="polite">{{ errorToast }}</div></Transition>
     <div v-if="loading" class="cultivation-state">正在读取功法...</div>
     <div v-else-if="error" class="cultivation-state cultivation-state--error" role="alert"><span>{{ error }}</span><button type="button" class="cultivation-action" :disabled="busy" @click="load">重试</button></div>
     <template v-else>
@@ -12,8 +13,8 @@
           <li v-for="technique in techniques" :key="technique.id" :class="{ 'technique-card--conflict': conflicts(technique).length, 'technique-card--locked': !technique.learned || technique.realm_confirmed === false }">
             <div><h3>{{ technique.name }}</h3><p>{{ technique.description || '暂无描述' }}</p></div>
             <dl><div><dt>功法类型</dt><dd>{{ techniqueTypeLabel(technique) }}</dd></div><div><dt>需要境界</dt><dd>{{ requiredRealmLabel(technique) }}</dd></div><div><dt>灵石</dt><dd>{{ technique.spirit_stone_cost }}</dd></div><div><dt>占用格数</dt><dd>{{ technique.slot_count }}</dd></div><div><dt>状态</dt><dd>{{ statusLabel(technique) }}</dd></div></dl>
-            <button v-if="!technique.learned" type="button" class="cultivation-action" :disabled="busy || technique.realm_confirmed === false || spiritStones < technique.spirit_stone_cost" @click="learn(technique)">{{ technique.realm_confirmed === false ? '境界不足' : spiritStones < technique.spirit_stone_cost ? '灵石不足' : '学习' }}</button>
-            <button v-else type="button" class="cultivation-action" :disabled="busy || !selectedSlot || technique.realm_confirmed === false || conflicts(technique).length || !hasRequiredSlots(technique)" @click="equip(technique)">{{ conflicts(technique).length ? '⚠ 冲突' : hasRequiredSlots(technique) ? '配置到选中格' : '连续格子不足' }}</button>
+            <button v-if="!technique.learned" type="button" class="cultivation-action" :disabled="busy" :aria-disabled="isLearnBlocked(technique)" @click="learn(technique)">{{ technique.realm_confirmed === false ? '境界不足' : spiritStones < technique.spirit_stone_cost ? '灵石不足' : '学习' }}</button>
+            <button v-else type="button" class="cultivation-action" :disabled="busy" :aria-disabled="isEquipBlocked(technique)" @click="equip(technique)">{{ conflicts(technique).length ? '⚠ 冲突' : hasRequiredSlots(technique) ? '配置到选中格' : '连续格子不足' }}</button>
           </li>
         </ul>
       </section>
@@ -21,7 +22,7 @@
         <div class="cultivation-section-heading"><h2 id="purchase-title">购买确认</h2><span>{{ slotLabel(selectedSlot.slot_type) }}</span></div>
         <p>当前灵石：{{ spiritStones }}</p><p>目标格子：{{ slotLabel(selectedSlot.slot_type) }}第 {{ selectedSlot.slot_index + 1 }} 格</p><p>需要境界：{{ requiredRealmLabel(selectedSlot) }} · 灵石：{{ selectedSlot.price }} · 购买后余额：{{ selectedSlot.balance }}</p>
         <p v-if="selectedSlot.can_purchase === false" class="cultivation-state cultivation-state--error" role="alert">{{ purchaseLockMessage }}</p>
-        <button type="button" class="cultivation-action" :disabled="busy || selectedSlot.purchased || selectedSlot.can_purchase === false" @click="purchase">{{ selectedSlot.purchased ? '已购买' : selectedSlot.can_purchase === false ? '暂不可购买' : '购买格子' }}</button>
+        <button type="button" class="cultivation-action" :disabled="busy" :aria-disabled="selectedSlot.purchased || selectedSlot.can_purchase === false" @click="purchase">{{ selectedSlot.purchased ? '已购买' : selectedSlot.can_purchase === false ? '暂不可购买' : '购买格子' }}</button>
       </section>
     </template>
   </div>
@@ -31,10 +32,12 @@
 import { computed, onMounted, ref } from 'vue'
 import TechniqueSlotGrid from '../components/cultivation/TechniqueSlotGrid.vue'
 import { cultivationService } from '../services/cultivation'
+import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelFromServer, labelRealm, labelSlotType, labelTechniqueType } from '../utils/displayLabels'
 
 const slotTypes = ['main', 'auxiliary', 'mind', 'body']
+const { errorToast, showError } = useToast()
 const techniques = ref([]); const slots = ref([]); const loadout = ref({}); const spiritStones = ref(0); const nextSlotPurchases = ref({}); const loading = ref(false); const error = ref(null); const busy = ref(false); const selectedSlot = ref(null)
 const purchaseLockMessage = computed(() => selectedSlot.value?.realm_confirmed === false
   ? `境界不足：需要达到${requiredRealmLabel(selectedSlot.value)}。`
@@ -51,9 +54,12 @@ function selectedTypeSlots() { return slots.value.filter((slot) => slot.slot_typ
 function requiredSlots(technique) { const owned = selectedTypeSlots(); const start = selectedSlot.value?.slot_index ?? -1; return owned.slice(start, start + technique.slot_count).filter((slot, offset) => slot.slot_index === start + offset) }
 function hasRequiredSlots(technique) { return Boolean(selectedSlot.value?.purchased && requiredSlots(technique).length === technique.slot_count) }
 function statusLabel(technique) { return labelFromServer(technique, 'status_label', technique?.status, () => { if (!technique.learned) return '未学会'; if (technique.realm_confirmed === false) return '境界不足'; if (conflicts(technique).length) return '⚠ 冲突'; if (!hasRequiredSlots(technique)) return '连续格子不足'; return '可配置' }) }
-async function purchase() { if (!selectedSlot.value?.isNext) return; if (selectedSlot.value.can_purchase === false) { error.value = `${purchaseLockMessage.value}`; return } busy.value = true; error.value = null; try { await cultivationService.purchaseSlot(selectedSlot.value.slot_type); applyLibrary(await cultivationService.getTechniques()); selectedSlot.value = displaySlots.value.find((slot) => slot.slot_type === selectedSlot.value.slot_type && slot.isNext) } catch (requestError) { error.value = getErrorMessage(requestError) } finally { busy.value = false } }
-async function learn(technique) { if (technique.learned || technique.realm_confirmed === false || spiritStones.value < technique.spirit_stone_cost) return; busy.value = true; error.value = null; try { await cultivationService.learnTechnique(technique.technique_key); applyLibrary(await cultivationService.getTechniques()) } catch (requestError) { error.value = getErrorMessage(requestError) } finally { busy.value = false } }
-async function equip(technique) { if (!selectedSlot.value?.purchased || !technique.learned || technique.realm_confirmed === false || !hasRequiredSlots(technique)) return; busy.value = true; error.value = null; try { const assignments = Object.fromEntries(slotTypes.map((type) => { const count = slots.value.filter((slot) => slot.slot_type === type).length; const current = Array.isArray(loadout.value[type]) ? loadout.value[type] : [loadout.value[type]]; return [type, Array.from({ length: count }, (_, index) => current[index] ?? null)] })); for (const slot of requiredSlots(technique)) assignments[selectedSlot.value.slot_type][slot.slot_index] = technique.id; applyLibrary(await cultivationService.updateLoadout(assignments)) } catch (requestError) { error.value = getErrorMessage(requestError) } finally { busy.value = false } }
+function explainBlocked(message) { showError(message) }
+function isLearnBlocked(technique) { return Boolean(technique.learned || technique.realm_confirmed === false || spiritStones.value < technique.spirit_stone_cost) }
+function isEquipBlocked(technique) { return Boolean(!selectedSlot.value || !selectedSlot.value.purchased || technique.realm_confirmed === false || conflicts(technique).length || !hasRequiredSlots(technique)) }
+async function purchase() { if (!selectedSlot.value?.isNext) { explainBlocked('请先选择要购买的功法格子。'); return } if (selectedSlot.value.can_purchase === false) { error.value = `购买失败：${purchaseLockMessage.value}`; explainBlocked(purchaseLockMessage.value); return } busy.value = true; error.value = null; try { await cultivationService.purchaseSlot(selectedSlot.value.slot_type); applyLibrary(await cultivationService.getTechniques()); selectedSlot.value = displaySlots.value.find((slot) => slot.slot_type === selectedSlot.value.slot_type && slot.isNext) } catch (requestError) { const message = getErrorMessage(requestError); error.value = message; showError(message) } finally { busy.value = false } }
+async function learn(technique) { if (technique.learned) { explainBlocked('该功法已经学会。'); return } if (technique.realm_confirmed === false) { explainBlocked('境界不足：请先提升境界后再学习。'); return } if (spiritStones.value < technique.spirit_stone_cost) { explainBlocked('灵石不足：请先完成任务获得灵石后再学习。'); return } busy.value = true; error.value = null; try { await cultivationService.learnTechnique(technique.technique_key); applyLibrary(await cultivationService.getTechniques()) } catch (requestError) { const message = getErrorMessage(requestError); error.value = message; showError(message) } finally { busy.value = false } }
+async function equip(technique) { if (!selectedSlot.value?.purchased) { explainBlocked('请先选择已购买的功法格子。'); return } if (technique.realm_confirmed === false) { explainBlocked('境界不足：请先提升境界后再配置。'); return } if (conflicts(technique).length) { explainBlocked('功法冲突：请先移除其他类型中的重复配置。'); return } if (!hasRequiredSlots(technique)) { explainBlocked('连续格子不足：请先购买足够的连续格子。'); return } busy.value = true; error.value = null; try { const assignments = Object.fromEntries(slotTypes.map((type) => { const count = slots.value.filter((slot) => slot.slot_type === type).length; const current = Array.isArray(loadout.value[type]) ? loadout.value[type] : [loadout.value[type]]; return [type, Array.from({ length: count }, (_, index) => current[index] ?? null)] })); for (const slot of requiredSlots(technique)) assignments[selectedSlot.value.slot_type][slot.slot_index] = technique.id; applyLibrary(await cultivationService.updateLoadout(assignments)) } catch (requestError) { const message = getErrorMessage(requestError); error.value = message; showError(message) } finally { busy.value = false } }
 onMounted(load)
 </script>
 

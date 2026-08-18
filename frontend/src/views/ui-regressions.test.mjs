@@ -20,3 +20,36 @@ test('shop search overrides the desktop flex basis on mobile', async () => {
   assert.match(source, /@media \(max-width: 767px\) \{[\s\S]*?\.shop-search \{[\s\S]*?flex: 0 0 44px[\s\S]*?height: 44px/)
   assert.match(source, /@media \(max-width: 767px\) \{[\s\S]*?\.shop-search input \{[\s\S]*?height: 100%/)
 })
+
+test('business-locked todo and shop actions stay clickable and explain their lock', async () => {
+  const [todos, shop] = await Promise.all([
+    readFile(new URL('./Todos.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('./Shop.vue', viewsDirectory), 'utf8'),
+  ])
+
+  assert.match(todos, /function explainBlocked\(/)
+  assert.match(todos, /function explainBlocked\(message\)[\s\S]*showError\(message\)/)
+  assert.match(todos, /已完成|不可完成/)
+  assert.match(todos, /aria-disabled/)
+  assert.match(shop, /function explainBlocked\(/)
+  assert.match(shop, /金币不足|售罄/)
+  assert.match(shop, /aria-disabled/)
+})
+
+test('todo habit completion uses the server completed_today field for all lock states', async () => {
+  const source = await readFile(new URL('./Todos.vue', viewsDirectory), 'utf8')
+
+  assert.match(source, /'todo-card--completed': habit\.completed_today/)
+  assert.match(source, /'complete-btn--done': habit\.completed_today/)
+  assert.match(source, /:aria-disabled="habit\.completed_today"/)
+  assert.match(source, /if \(habit\.completed_today\)/)
+  assert.doesNotMatch(source, /habit\.is_active/)
+})
+
+test('backpack business actions expose a visible blocked-action feedback path', async () => {
+  const source = await readFile(new URL('./Backpack.vue', viewsDirectory), 'utf8')
+
+  assert.match(source, /function explainBlocked\(/)
+  assert.match(source, /不可使用|不可装备|不可丢弃/)
+  assert.match(source, /aria-disabled/)
+})

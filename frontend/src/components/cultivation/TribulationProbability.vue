@@ -18,8 +18,8 @@
         <div><dt>失败损失</dt><dd>{{ preview.failure_loss_percent }}%</dd></div>
         <div><dt>冷却</dt><dd>{{ cooldownLabel }}</dd></div>
       </dl>
-      <button v-if="preview.available" type="button" class="cultivation-action tribulation-submit" :disabled="loading || operationBusy" @click="$emit('attempt')">
-        <span v-if="operationBusy" aria-hidden="true" class="tribulation-spinner"></span>{{ operationBusy ? '渡劫判定中...' : '开始渡劫' }}
+      <button type="button" class="cultivation-action tribulation-submit" :disabled="loading || operationBusy" :aria-disabled="!preview.available || Boolean(preview.cooldown_until)" @click="$emit('attempt')">
+        <span v-if="operationBusy" aria-hidden="true" class="tribulation-spinner"></span>{{ operationBusy ? '渡劫判定中...' : preview.available ? '开始渡劫' : '暂不可渡劫' }}
       </button>
     </template>
   </section>

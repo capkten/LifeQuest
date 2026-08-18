@@ -311,7 +311,7 @@
             <div v-if="txError" class="dialog-error" role="alert">{{ txError }}</div>
             <div class="dialog-actions">
               <button type="button" class="btn-secondary" @click="cancelQuickAdd">取消</button>
-              <button type="submit" class="btn-primary" :disabled="savingTx || !txForm.amount || !txForm.account_id">
+              <button type="submit" class="btn-primary" :disabled="savingTx" :aria-disabled="isTransactionBlocked">
                 <span v-if="savingTx" class="loading-spinner loading-spinner--sm"></span>
                 {{ savingTx ? '保存中...' : '保存' }}
               </button>
@@ -444,11 +444,11 @@ async function fetchDashboard() {
   error.value = null
   try {
     const [dash, accts, bds, txs, cats] = await Promise.all([
-      financeService.getDashboard().catch(() => ({})),
-      financeService.getAccounts().catch(() => []),
-      financeService.getBudgets().catch(() => []),
-      financeService.getTransactions({ limit: 5 }).catch(() => []),
-      financeService.getCategories().catch(() => [])
+      financeService.getDashboard(),
+      financeService.getAccounts(),
+      financeService.getBudgets(),
+      financeService.getTransactions({ limit: 5 }),
+      financeService.getCategories()
     ])
     dashboard.value = dash || {}
     accounts.value = Array.isArray(accts) ? accts : (accts.items || accts.accounts || [])
@@ -462,8 +462,17 @@ async function fetchDashboard() {
   }
 }
 
+const isTransactionBlocked = computed(() => !txForm.value.amount || !txForm.value.account_id || (txForm.value.type === 'transfer' && !txForm.value.to_account_id))
+
+function explainBlocked(message) {
+  txError.value = message
+  showError(message)
+}
+
 async function saveTransaction() {
-  if (!txForm.value.amount || !txForm.value.account_id) return
+  if (!txForm.value.amount) { explainBlocked('请输入金额后再保存。'); return }
+  if (!txForm.value.account_id) { explainBlocked('请先选择账户。'); return }
+  if (txForm.value.type === 'transfer' && !txForm.value.to_account_id) { explainBlocked('转账还需要选择目标账户。'); return }
   savingTx.value = true
   txError.value = null
   try {
