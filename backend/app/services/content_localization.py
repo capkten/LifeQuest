@@ -86,7 +86,6 @@ class ContentLocalizationService:
             if (
                 sect is None
                 or legacy_sect_name is None
-                or not ContentLocalizationService._is_fixed_core_name_match(npc)
                 or npc.description != f"{legacy_sect_name}的固定核心人物。"
             ):
                 continue
@@ -179,6 +178,11 @@ class ContentLocalizationService:
             if any(len(candidates_by_role[role]) != 1 for role in FIXED_CORE_ROLES):
                 continue
             sect = sects_by_id[sect_id]
+            if any(
+                not ContentLocalizationService._is_fixed_core_name_match(candidates_by_role[role][0])
+                for role in FIXED_CORE_ROLES
+            ):
+                continue
             for role in FIXED_CORE_ROLES:
                 npc = candidates_by_role[role][0]
                 changed = ContentLocalizationService._set_if_changed(
@@ -189,6 +193,9 @@ class ContentLocalizationService:
                 ) or changed
                 if changed:
                     counts["npcs"] += 1
+
+        # Historical cores become event targets in this same session.
+        db.flush()
 
         old_event_summary = "Met ordinary disciple"
         events = db.query(NpcEvent).join(Npc, Npc.id == NpcEvent.npc_id).filter(
