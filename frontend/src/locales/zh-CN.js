@@ -48,7 +48,9 @@ export const STATUS_LABELS = Object.freeze({
   active: '进行中',
   awaiting_messenger: '等待接引',
   awaiting_trial: '等待试炼',
+  available: '可进入',
   completed: '已完成',
+  current: '当前所在',
   failed: '失败',
   locked: '已锁定',
   left: '已离开',
@@ -65,6 +67,7 @@ export const RESOURCE_LABELS = Object.freeze({
   contribution: '宗门贡献',
   aptitude_points: '资质点',
   experience: '经验',
+  mind_state: '心境',
 })
 
 export const NPC_ROLE_LABELS = Object.freeze({

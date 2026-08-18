@@ -5,7 +5,7 @@
   }">
     <div class="sidebar-header">
       <h1 class="logo">LifeQuest</h1>
-      <p v-if="!isCollapsed" class="logo-subtitle">Life Quest</p>
+      <p v-if="!isCollapsed" class="logo-subtitle">修行与生活</p>
     </div>
 
     <div v-if="!isCollapsed" class="user-card">
@@ -30,7 +30,7 @@
           </svg>
         </span>
         <span class="stat-label">{{ cultivationOverview ? '境界' : '等级' }}</span>
-        <span class="stat-value">{{ cultivationOverview ? `${cultivationOverview.realm_key} ${cultivationOverview.minor_stage}` : (user?.level || 1) }}</span>
+        <span class="stat-value">{{ cultivationOverview ? `${cultivationOverview.realm_label || labelRealm(cultivationOverview.realm_key)} ${cultivationOverview.minor_stage}` : (user?.level || 1) }}</span>
       </div>
       <div class="stat-item">
         <span class="stat-icon">
@@ -55,7 +55,7 @@
         :aria-valuenow="expPercent"
         aria-valuemin="0"
         aria-valuemax="100"
-        :aria-label="`Experience progress: ${expPercent}% toward next level`"
+        :aria-label="`经验进度：距离下一等级 ${expPercent}%`"
       >
         <div class="exp-bar-fill" :style="{ width: expPercent + '%' }"></div>
       </div>
@@ -72,7 +72,7 @@
     </div>
 
     <nav class="sidebar-nav">
-      <span v-if="!isCollapsed" class="nav-section-label">PLAN</span>
+      <span v-if="!isCollapsed" class="nav-section-label">规划</span>
       <router-link to="/" class="nav-item" :class="{ 'nav-item--active': isHomeActive }" :title="isCollapsed ? '首页' : ''">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z" />
@@ -112,7 +112,7 @@
         </svg>
         <span v-if="!isCollapsed">笔记</span>
       </router-link>
-      <span v-if="!isCollapsed && cultivationUnlocked" class="nav-section-label">CULTIVATION</span>
+      <span v-if="!isCollapsed && cultivationUnlocked" class="nav-section-label">修炼</span>
       <router-link v-if="cultivationUnlocked" to="/cultivation" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '修炼' : ''">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M12 3v18M5 8h14M7 16h10" />
@@ -149,7 +149,7 @@
         </svg>
         <span v-if="!isCollapsed">渡劫</span>
       </router-link>
-      <span v-if="!isCollapsed" class="nav-section-label">REWARDS</span>
+      <span v-if="!isCollapsed" class="nav-section-label">奖励</span>
       <router-link to="/shop" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '商城' : ''">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
@@ -167,7 +167,7 @@
         </svg>
         <span v-if="!isCollapsed">背包</span>
       </router-link>
-      <span v-if="!isCollapsed" class="nav-section-label">INSIGHTS</span>
+      <span v-if="!isCollapsed" class="nav-section-label">洞察</span>
       <router-link to="/finance" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '记账' : ''">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <rect x="2" y="4" width="20" height="16" rx="2" />
@@ -200,6 +200,7 @@ import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStats } from '../../composables/useUserStats'
 import { useResolvedImage } from '../../composables/useResolvedImage'
+import { labelRealm } from '../../utils/displayLabels'
 
 const route = useRoute()
 

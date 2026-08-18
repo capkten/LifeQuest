@@ -1,12 +1,12 @@
 <template>
   <div class="sects-page">
-    <header><p class="cultivation-eyebrow">SECT COMPARISON</p><h1>宗门选择</h1><p>比较传承、任务偏好与入门条件。</p></header>
+    <header><p class="cultivation-eyebrow">宗门对比</p><h1>宗门选择</h1><p>比较传承、任务偏好与入门条件。</p></header>
     <section class="sects-filters cultivation-surface" aria-labelledby="sect-filter-title">
       <div class="cultivation-section-heading"><h2 id="sect-filter-title">比较筛选</h2><span>{{ sects.length }} 个结果</span></div>
       <div class="sects-filter-grid">
         <label>星级<select v-model="filters.star" @change="load"><option :value="null">全部星级</option><option v-for="star in 9" :key="star" :value="star">{{ star }} 星</option></select></label>
         <label>类型<select v-model="filters.kind" @change="load"><option :value="null">普通与特殊</option><option value="normal">普通</option><option value="special">特殊</option></select></label>
-        <label>任务偏好<input v-model.trim="filters.task_preference" placeholder="例如 discipline-1" @change="load"></label>
+        <label>任务偏好<input v-model.trim="filters.task_preference" placeholder="输入任务偏好标识" @change="load"></label>
       </div>
     </section>
     <div v-if="loading" class="cultivation-state">正在读取宗门...</div>
@@ -15,17 +15,17 @@
     <section v-else class="sect-list" aria-label="宗门比较结果">
       <article v-for="sect in sects" :key="sect.id || sect.sect_key" class="sect-card cultivation-surface" :class="{ 'sect-card--special': sect.kind === 'special' }">
         <div class="sect-card__heading"><div><span class="sect-card__legacy-icon" aria-hidden="true">{{ sect.kind === 'special' ? '✦' : '◈' }}</span><h2>{{ sect.name }}</h2></div><span>{{ sect.star }} 星</span></div>
-        <dl class="sect-card__details"><div><dt>类型</dt><dd>{{ kindLabel(sect.kind) }}</dd></div><div><dt>核心传承</dt><dd>{{ sect.core_legacy || '传承资料待服务器返回' }}</dd></div><div><dt>任务偏好</dt><dd>{{ sect.task_preference || '未设定' }}</dd></div><div><dt>入门境界</dt><dd>{{ sect.entry_realm || '服务器确认' }}</dd></div><div><dt>试炼状态</dt><dd>{{ sect.trial_status || '等待服务器确认' }}</dd></div></dl>
+        <dl class="sect-card__details"><div><dt>类型</dt><dd>{{ kindLabel(sect) }}</dd></div><div><dt>核心传承</dt><dd>{{ sect.core_legacy || '传承资料待服务器返回' }}</dd></div><div><dt>任务偏好</dt><dd>{{ sect.task_preference_label || labelTaskPreference(sect.task_preference) }}</dd></div><div><dt>入门境界</dt><dd>{{ sect.entry_realm_label || labelRealm(sect.entry_realm) }}</dd></div><div><dt>试炼状态</dt><dd>{{ sect.trial_status_label || labelStatus(sect.trial_status) }}</dd></div></dl>
         <div class="sect-card__actions"><span v-if="sect.joined" role="status">已加入</span><span v-else>{{ eligibilityMessage(sect) }}</span><div v-if="!sect.joined" class="sect-card__action-group"><button type="button" class="cultivation-action" :disabled="busyId === sect.sect_key || sect.visible !== true || sect.realm_confirmed !== true || sect.messenger_contacted === true" @click="contactMessenger(sect)">{{ busyId === sect.sect_key ? '处理中...' : sect.messenger_contacted ? '已联系使者' : '联系使者' }}</button><button type="button" class="cultivation-action" :disabled="busyId === sect.sect_key || sect.visible !== true || sect.messenger_contacted !== true || sect.trial_confirmed === true" @click="completeTrial(sect)">{{ sect.trial_confirmed ? '试炼已完成' : '完成试炼' }}</button><button type="button" class="cultivation-action" :disabled="busyId === sect.sect_key || sect.joined || sect.visible !== true || sect.can_join !== true" @click="join(sect)">{{ busyId === sect.sect_key ? '确认中...' : '加入宗门' }}</button></div></div>
       </article>
     </section>
     <section class="sect-npc-section cultivation-surface" aria-labelledby="sect-npc-title">
-      <div class="cultivation-section-heading"><div><p class="cultivation-eyebrow">SERVER RELATIONSHIPS</p><h2 id="sect-npc-title">已接触宗门的人物</h2></div><router-link to="/npcs" class="cultivation-action">查看人物关系</router-link></div>
+      <div class="cultivation-section-heading"><div><p class="cultivation-eyebrow">人物关系</p><h2 id="sect-npc-title">已接触宗门的人物</h2></div><router-link to="/npcs" class="cultivation-action">查看人物关系</router-link></div>
       <p v-if="!recentlyMet.length" class="cultivation-fixed-state">暂无已接触的人物记录。</p>
       <ul v-else class="sect-npc-list">
         <li v-for="npc in recentlyMet" :key="npc.id" class="sect-npc-item">
           <div><strong>{{ npc.name }}</strong><span>{{ sectNameForNpc(npc) }}</span></div>
-          <span>{{ npc.role || '普通弟子' }}</span>
+          <span>{{ npc.role_label || (npc.role ? labelNpcRole(npc.role) : '普通弟子') }}</span>
         </li>
       </ul>
     </section>
@@ -37,6 +37,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { cultivationService } from '../services/cultivation'
 import { createSequencedRequest } from './sects-request-state'
 import { getErrorMessage } from '../utils/errorMessage'
+import { labelNpcRole, labelRealm, labelSectKind, labelStatus, labelTaskPreference } from '../utils/displayLabels'
 
 const filters = reactive({ star: null, kind: null, task_preference: null })
 const sects = ref([]); const loading = ref(false); const error = ref(null); const busyId = ref(null)
@@ -57,7 +58,7 @@ function load() {
     cultivationService.getNpcs(),
   ]))
 }
-function kindLabel(kind) { return ({ normal: '普通', special: '特殊', hidden: '隐藏' })[kind] || kind || '未知' }
+function kindLabel(sect) { return sect.kind_label || labelSectKind(sect.kind) }
 function eligibilityMessage(sect) { if (sect.realm_confirmed !== true) return '境界不足，暂不可推进'; if (sect.messenger_contacted !== true) return '请先联系使者'; if (sect.trial_confirmed !== true) return '请完成入门试炼'; return sect.realm_confirmed === true && sect.can_join === true ? '入门条件已满足' : '等待服务器确认' }
 function sectNameForNpc(npc) { return sects.value.find((sect) => sect.id === npc.sect_id)?.name || '已接触宗门' }
 function applySectState(result) { sects.value = sects.value.map((item) => item.sect_key === result.sect_key ? { ...item, ...result } : item) }

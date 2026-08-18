@@ -11,16 +11,17 @@
   >
     <span class="cultivation-map-node__icon" aria-hidden="true">{{ statusIcon }}</span>
     <span class="cultivation-map-node__copy">
-      <span class="cultivation-map-node__name">{{ node?.name || 'Unknown node' }}</span>
-      <span>{{ node?.description || 'No description available.' }}</span>
+      <span class="cultivation-map-node__name">{{ node?.name || '未知节点' }}</span>
+      <span>{{ node?.description || '暂无节点描述。' }}</span>
     </span>
     <small>{{ statusLabel }}</small>
-    <small v-if="isLocked && node?.required_realm">解锁条件：{{ node.required_realm }}</small>
+    <small v-if="isLocked && (node?.required_realm_label || node?.required_realm)">解锁条件：{{ node.required_realm_label || realmLabel }}</small>
   </button>
 </template>
 
 <script setup>
 import { computed } from 'vue'
+import { labelRealm, labelStatus } from '../../utils/displayLabels'
 
 const props = defineProps({
   node: { type: Object, default: null },
@@ -32,6 +33,7 @@ defineEmits(['select'])
 const isLocked = computed(() => props.locked || props.node?.locked || props.node?.is_locked || props.node?.is_hidden)
 const status = computed(() => isLocked.value ? 'locked' : props.status)
 const statusIcon = computed(() => ({ current: '●', available: '○', completed: '✓', locked: '锁' }[status.value] || '○'))
-const statusLabel = computed(() => ({ current: '当前所在', available: '可进入', completed: '已完成', locked: '已锁定' }[status.value] || '可进入'))
-const nodeLabel = computed(() => `${props.node?.name || 'World node'}，${statusLabel.value}`)
+const statusLabel = computed(() => props.node?.status_label || labelStatus(status.value))
+const realmLabel = computed(() => props.node?.required_realm_label || labelRealm(props.node?.required_realm))
+const nodeLabel = computed(() => `${props.node?.name || '未知节点'}，${statusLabel.value}`)
 </script>

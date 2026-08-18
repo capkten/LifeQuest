@@ -11,7 +11,7 @@
     </div>
 
     <!-- Bottom Navigation (mobile only) -->
-    <nav class="bottom-nav" aria-label="Main navigation">
+    <nav class="bottom-nav" aria-label="主导航">
       <router-link to="/" class="bottom-nav-item" active-class="bottom-nav-item--active">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z" />
@@ -131,10 +131,10 @@ const pageTitle = computed(() => {
     Backpack: '背包',
     Profile: '个人',
     Cultivation: '修炼',
-    World: '仙界',
+    World: '凡界',
     Sects: '宗门',
     Techniques: '功法',
-    Npcs: '仙官',
+    Npcs: '人物关系',
     Tribulations: '渡劫'
   }
   return titles[route.name] || 'LifeQuest'

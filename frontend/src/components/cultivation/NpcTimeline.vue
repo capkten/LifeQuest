@@ -14,6 +14,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { labelEventSummary, labelNpcRole } from '../../utils/displayLabels'
 
 const props = defineProps({ npcs: { type: [Array, Object], default: () => [] }, events: { type: Array, default: () => [] } })
 const items = computed(() => {
@@ -22,9 +23,9 @@ const items = computed(() => {
     : props.npcs || {}
 
   return [
-    ...toArray(relationship.fixed_core).map((item, index) => normalizeItem(item, 'core', index, 'NPC record')),
-    ...toArray(relationship.recently_met).map((item, index) => normalizeItem(item, 'recent', index, 'NPC record')),
-    ...toArray(relationship.events).map((item, index) => normalizeItem(item, 'event', index, 'Cultivation event')),
+    ...toArray(relationship.fixed_core).map((item, index) => normalizeItem(item, 'core', index)),
+    ...toArray(relationship.recently_met).map((item, index) => normalizeItem(item, 'recent', index)),
+    ...toArray(relationship.events).map((item, index) => normalizeItem(item, 'event', index)),
   ]
 })
 
@@ -32,12 +33,17 @@ function toArray(value) {
   return Array.isArray(value) ? value : []
 }
 
-function normalizeItem(item, source, index, fallbackDetail) {
-  const label = firstText(item?.name, item?.title, item?.event, item?.event_key, item?.type, item?.kind) || (source === 'event' ? 'Cultivation event ' : 'NPC record ') + (index + 1)
+function normalizeItem(item, source, index) {
+  const label = source === 'event'
+    ? firstText(item?.summary_label, item?.summary, item?.title) || labelEventSummary(item?.event_key) || `关系事件${index + 1}`
+    : firstText(item?.name, item?.title) || `人物记录${index + 1}`
+  const roleLabel = firstText(item?.role_label) || labelNpcRole(item?.role)
   return {
     key: source + '-' + index + '-' + (item?.id || item?.event_id || item?.key || 'record'),
     label,
-    detail: firstText(item?.role, item?.description, item?.text, item?.summary, item?.message) || fallbackDetail,
+    detail: source === 'event'
+      ? firstText(item?.detail, item?.text, item?.message) || '关系事件记录'
+      : roleLabel !== '未知身份' ? roleLabel : firstText(item?.description, item?.text, item?.message) || '人物信息待补充',
     date: firstText(item?.date, item?.created_at, item?.occurred_at),
   }
 }

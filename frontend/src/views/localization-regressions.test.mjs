@@ -5,9 +5,12 @@ import {
   labelRealm,
   labelResource,
   labelSectKind,
+  labelSlotType,
   labelStatus,
   labelTaskPreference,
   labelTechniqueType,
+  labelNpcRole,
+  labelEventSummary,
 } from '../utils/displayLabels.js'
 import { SLOT_TYPE_LABELS, TECHNIQUE_TYPE_LABELS } from '../locales/zh-CN.js'
 import { getErrorMessage } from '../utils/errorMessage.js'
@@ -113,6 +116,10 @@ test('display labels translate stable server keys', () => {
   assert.equal(labelTechniqueType('mind'), '心法')
   assert.equal(labelTaskPreference('discipline-1'), '纪律修行')
   assert.equal(labelStatus('completed'), '已完成')
+  assert.equal(labelResource('mind_state'), '心境')
+  assert.equal(labelSlotType('body'), '身法')
+  assert.equal(labelNpcRole('ordinary disciple'), '普通弟子')
+  assert.equal(labelEventSummary('met'), '与普通弟子相遇')
 })
 
 test('display labels preserve unknown values and use Chinese empty fallbacks', () => {
@@ -125,6 +132,83 @@ test('slot labels keep body distinct from technique type labels', () => {
   assert.equal(TECHNIQUE_TYPE_LABELS.body, '炼体')
   assert.equal(SLOT_TYPE_LABELS.body, '身法')
   assert.notStrictEqual(SLOT_TYPE_LABELS, TECHNIQUE_TYPE_LABELS)
+})
+
+test('cultivation surfaces keep Chinese fallback and state copy', async () => {
+  const files = [
+    '../components/cultivation/CultivationStatusBar.vue',
+    '../components/cultivation/RealmProgress.vue',
+    '../components/cultivation/ResourceSummary.vue',
+    '../components/cultivation/RewardToast.vue',
+    '../components/cultivation/TechniqueSlotGrid.vue',
+    '../components/cultivation/NpcTimeline.vue',
+    '../components/cultivation/MapNode.vue',
+    './Cultivation.vue',
+    './World.vue',
+    './Sects.vue',
+    './Techniques.vue',
+    './Npcs.vue',
+    './Tribulations.vue',
+    '../components/cultivation/TribulationProbability.vue',
+    '../components/layout/AppLayout.vue',
+    '../components/layout/Header.vue',
+    '../components/layout/Sidebar.vue',
+  ]
+  const sources = await Promise.all(files.map((file) => readFile(new URL(file, import.meta.url), 'utf8')))
+  const source = sources.join('\n')
+
+  for (const literal of [
+    'Retry',
+    'Cultivation data could not be loaded.',
+    'Realm progress',
+    'Resources',
+    'Reward received',
+    'Dismiss reward',
+    'No technique slots available.',
+    'NPC record',
+    'Cultivation event',
+    'Unknown node',
+    'No description available.',
+    'World node',
+    'Toggle sidebar',
+    'User menu',
+    'Main navigation',
+    'PLAN',
+    'CULTIVATION',
+    'REWARDS',
+    'INSIGHTS',
+    'Life Quest',
+  ]) {
+    const escapedLiteral = literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    assert.doesNotMatch(source, new RegExp("['\"]" + escapedLiteral + "['\"]"), `known English UI literal remains: ${literal}`)
+  }
+
+  assert.match(source, /正在读取|正在准备|正在计算/)
+  assert.match(source, /重试/)
+  assert.match(source, /暂无|尚未|未命名|未知/)
+  assert.match(source, /获得奖励|修为|灵石|关系事件/)
+})
+
+test('cultivation pages prefer server labels before shared display labels', async () => {
+  const files = [
+    './Cultivation.vue',
+    './World.vue',
+    './Sects.vue',
+    './Techniques.vue',
+    './Tribulations.vue',
+    '../components/cultivation/RealmProgress.vue',
+    '../components/cultivation/ResourceSummary.vue',
+    '../components/cultivation/NpcTimeline.vue',
+  ]
+  const sources = await Promise.all(files.map((file) => readFile(new URL(file, import.meta.url), 'utf8')))
+  const source = sources.join('\n')
+
+  assert.match(source, /realm_label\s*\|\||[A-Za-z]+\.realm_label\s*\|\|/)
+  assert.match(source, /kind_label\s*\|\||[A-Za-z]+\.kind_label\s*\|\|/)
+  assert.match(source, /technique_type_label\s*\|\||[A-Za-z]+\.technique_type_label\s*\|\|/)
+  assert.match(source, /required_realm_label\s*\|\||[A-Za-z]+\.required_realm_label\s*\|\|/)
+  assert.match(source, /role_label\s*\|\||[A-Za-z]+\.role_label\s*\|\|/)
+  assert.match(source, /labelRealm|labelResource|labelSectKind|labelTechniqueType|labelStatus/)
 })
 
 test('error messages translate backend details and machine codes', () => {

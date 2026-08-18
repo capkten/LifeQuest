@@ -15,7 +15,7 @@
           <section class="tribulation-surface" aria-labelledby="pill-title"><div class="tribulation-heading"><h2 id="pill-title">渡劫丹</h2><span>每颗 +5%</span></div><label for="pill-count">本次使用数量（最多 15 颗）</label><input id="pill-count" v-model.number="pillCount" type="number" min="0" max="15" step="1" :disabled="attempting" aria-describedby="pill-help"><p id="pill-help" class="tribulation-help">数量变化后，服务端会重新计算预览。</p></section>
         </aside>
       </section>
-      <section v-if="result" class="tribulation-result" :class="result.success ? 'tribulation-result--success' : 'tribulation-result--failure'" role="status" aria-live="polite"><strong>{{ result.success ? '渡劫成功' : '渡劫失败' }}</strong><span>{{ result.success ? (result.terminal ? '已完成渡劫并进入飞升终点状态。' : `已进入${result.target_realm}初期。`) : `当前境界保留，损失 ${result.cultivation_loss} 点修为。` }}</span><small>结果日志：{{ result.log_id || '已记录' }} · {{ result.cooldown_until ? '次日可再次尝试' : '现在可再次尝试' }}</small></section>
+      <section v-if="result" class="tribulation-result" :class="result.success ? 'tribulation-result--success' : 'tribulation-result--failure'" role="status" aria-live="polite"><strong>{{ result.success ? '渡劫成功' : '渡劫失败' }}</strong><span>{{ result.success ? (result.terminal ? '已完成渡劫并进入飞升终点状态。' : `已进入${resultRealmLabel}初期。`) : `当前境界保留，损失 ${result.cultivation_loss} 点修为。` }}</span><small>结果日志：{{ result.log_id || '已记录' }} · {{ result.cooldown_until ? '次日可再次尝试' : '现在可再次尝试' }}</small></section>
     </template>
   </div>
 </template>
@@ -25,14 +25,17 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import TribulationProbability from '../components/cultivation/TribulationProbability.vue'
 import { cultivationService } from '../services/cultivation'
 import { useCultivationStore } from '../stores/cultivation'
+import { getErrorMessage } from '../utils/errorMessage'
+import { labelRealm } from '../utils/displayLabels'
 
 const preview = ref(null), overview = ref(null), result = ref(null), error = ref(null), loading = ref(false), attempting = ref(false), pillCount = ref(0)
 const cultivationStore = useCultivationStore()
 let previewRequestId = 0
 let previewController = null
 const readinessItems = [{ key: 'mind_state', label: '心境状态' }, { key: 'habit', label: '最近 7 天习惯' }, { key: 'task_quality', label: '最近 7 天任务质量' }, { key: 'trial', label: '渡劫试炼质量' }, { key: 'compatibility', label: '功法宗门契合度' }]
-const realmLabel = computed(() => `${overview.value?.realm_key || '未知境界'} ${overview.value?.minor_stage || ''}`.trim())
-const errorMessage = computed(() => error.value?.message || '渡劫状态暂时无法读取。')
+const realmLabel = computed(() => `${overview.value?.realm_label || labelRealm(overview.value?.realm_key)} ${overview.value?.minor_stage || ''}`.trim())
+const resultRealmLabel = computed(() => result.value?.target_realm_label || labelRealm(result.value?.target_realm))
+const errorMessage = computed(() => getErrorMessage(error.value, '渡劫状态暂时无法读取。'))
 
 async function loadPreview() {
   const requestId = ++previewRequestId

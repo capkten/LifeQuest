@@ -1,7 +1,10 @@
 import {
+  EVENT_SUMMARY_LABELS,
+  NPC_ROLE_LABELS,
   REALM_LABELS,
   RESOURCE_LABELS,
   SECT_KIND_LABELS,
+  SLOT_TYPE_LABELS,
   STATUS_LABELS,
   TASK_PREFERENCE_LABELS,
   TECHNIQUE_TYPE_LABELS,
@@ -29,4 +32,16 @@ export function labelStatus(value) {
 
 export function labelResource(value) {
   return RESOURCE_LABELS[value] || value || '未知资源'
+}
+
+export function labelSlotType(value) {
+  return SLOT_TYPE_LABELS[value] || value || '未知格子类型'
+}
+
+export function labelNpcRole(value) {
+  return NPC_ROLE_LABELS[value] || value || '未知身份'
+}
+
+export function labelEventSummary(value) {
+  return EVENT_SUMMARY_LABELS[value] || value || '未知事件'
 }

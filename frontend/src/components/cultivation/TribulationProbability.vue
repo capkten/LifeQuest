@@ -1,8 +1,8 @@
 <template>
   <section class="tribulation-probability stitch-surface" aria-labelledby="tribulation-probability-title" :aria-busy="operationBusy">
     <div class="tribulation-section-heading">
-      <div><p class="tribulation-eyebrow">RISK PREVIEW</p><h2 id="tribulation-probability-title">成功概率</h2></div>
-      <span class="tribulation-target">目标：{{ preview?.target_realm || '读取中' }}</span>
+      <div><p class="tribulation-eyebrow">风险预览</p><h2 id="tribulation-probability-title">成功概率</h2></div>
+      <span class="tribulation-target">目标：{{ targetRealmLabel }}</span>
     </div>
     <div v-if="loading" class="tribulation-loading" aria-live="polite">正在计算渡劫概率...</div>
     <div v-else-if="error" class="cultivation-state cultivation-state--error" role="alert">
@@ -28,11 +28,13 @@
 <script setup>
 import { computed } from 'vue'
 import { getErrorMessage } from '../../utils/errorMessage'
+import { labelRealm } from '../../utils/displayLabels'
 
 const props = defineProps({ preview: { type: Object, default: null }, loading: Boolean, error: { type: [Object, String], default: null }, attempting: Boolean, submitting: Boolean })
 defineEmits(['attempt', 'retry'])
 const operationBusy = computed(() => props.loading || props.attempting || props.submitting)
 const errorMessage = computed(() => typeof props.error === 'string' ? props.error : getErrorMessage(props.error))
+const targetRealmLabel = computed(() => props.preview?.target_realm_label || labelRealm(props.preview?.target_realm))
 const lockReasonLabel = computed(() => ({
   FINAL_MINOR_STAGE_REQUIRED: '尚未达到当前境界的最终小境界阈值。',
   TRIBULATION_COOLDOWN_ACTIVE: '渡劫冷却中，请稍后再试。',

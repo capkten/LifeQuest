@@ -4,7 +4,7 @@
     <div v-if="loading" class="cultivation-slot-grid" aria-hidden="true"><span v-for="type in slotTypes" :key="type" class="cultivation-slot cultivation-slot--skeleton"></span></div>
     <div v-else-if="error" class="cultivation-state cultivation-state--error" role="alert">
       <span>{{ errorMessage }}</span>
-      <button type="button" class="cultivation-action" :disabled="busy" @click="$emit('retry')">Retry</button>
+      <button type="button" class="cultivation-action" :disabled="busy" @click="$emit('retry')">重试</button>
     </div>
     <div v-else class="cultivation-slot-grid">
       <button v-for="slot in visibleSlots" :key="`${slot.slot_type}-${slot.slot_index}`" type="button" class="cultivation-slot" :class="{ 'cultivation-slot--conflict': slot.conflict, 'cultivation-slot--next': slot.isNext }" :aria-label="`${slotLabel(slot.slot_type)}第${slot.slot_index + 1}格`" :disabled="busy" @click="$emit('select', slot)">
@@ -18,6 +18,8 @@
 
 <script setup>
 import { computed } from 'vue'
+import { getErrorMessage } from '../../utils/errorMessage'
+import { labelSlotType } from '../../utils/displayLabels'
 
 const props = defineProps({
   slots: { type: Array, default: () => [] },
@@ -27,7 +29,7 @@ const props = defineProps({
   error: { type: [Object, String], default: null },
 })
 defineEmits(['select', 'retry'])
-const errorMessage = computed(() => props.error?.message || 'No technique slots available.')
+const errorMessage = computed(() => getErrorMessage(props.error, '暂无可用功法格子。'))
 const visibleSlots = computed(() => props.slotTypes.flatMap((slotType) => props.slots.filter((slot) => slot.slot_type === slotType)))
-function slotLabel(slotType) { return ({ main: '主修', auxiliary: '辅修', mind: '心法', body: '身法' })[slotType] || slotType }
+function slotLabel(slotType) { return labelSlotType(slotType) }
 </script>

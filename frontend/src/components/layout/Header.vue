@@ -4,7 +4,7 @@
       <button
         type="button"
         class="sidebar-toggle"
-        aria-label="Toggle sidebar"
+        aria-label="切换侧边栏"
         @click="handleToggle"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -16,7 +16,7 @@
       <h2 class="page-title">{{ title }}</h2>
     </div>
     <div class="header-right">
-      <div class="user-dropdown" @click="toggleDropdown" @keydown.escape="dropdownOpen = false" @keydown.enter.prevent="toggleDropdown" @keydown.space.prevent="toggleDropdown" ref="dropdownRef" role="button" tabindex="0" :aria-expanded="dropdownOpen" aria-haspopup="true" aria-label="User menu">
+      <div class="user-dropdown" @click="toggleDropdown" @keydown.escape="dropdownOpen = false" @keydown.enter.prevent="toggleDropdown" @keydown.space.prevent="toggleDropdown" ref="dropdownRef" role="button" tabindex="0" :aria-expanded="dropdownOpen" aria-haspopup="true" aria-label="用户菜单">
         <div class="user-avatar-sm">
           <img v-if="avatarSrc" :src="avatarSrc" alt="头像" class="user-avatar-sm-img" />
           <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">

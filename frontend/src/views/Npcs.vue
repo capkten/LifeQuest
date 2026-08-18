@@ -10,7 +10,7 @@
       </div>
     </form>
     <div v-if="loading" class="cultivation-state">正在读取关系记录...</div>
-    <div v-else-if="error" class="cultivation-state cultivation-state--error" role="alert"><span>关系记录暂时无法读取。</span><button type="button" class="cultivation-action" @click="load">重试</button></div>
+    <div v-else-if="error" class="cultivation-state cultivation-state--error" role="alert"><span>{{ errorMessage }}</span><button type="button" class="cultivation-action" @click="load">重试</button></div>
     <template v-else>
       <section class="npc-population cultivation-surface" aria-labelledby="npc-population-title"><div class="cultivation-section-heading"><h2 id="npc-population-title">人口统计</h2><span>{{ totalCount }} 位记录</span></div><dl><div><dt>固定核心</dt><dd>{{ fixedCore.length }}</dd></div><div><dt>最近遇见</dt><dd>{{ recentlyMet.length }}</dd></div><div><dt>关系事件</dt><dd>{{ events.length }}</dd></div></dl></section>
       <section class="npc-groups">
@@ -26,6 +26,8 @@
 import { computed, defineComponent, h, onMounted, ref } from 'vue'
 import { cultivationService } from '../services/cultivation'
 import NpcTimeline from '../components/cultivation/NpcTimeline.vue'
+import { getErrorMessage } from '../utils/errorMessage'
+import { labelNpcRole } from '../utils/displayLabels'
 
 const relationship = ref({ fixed_core: [], recently_met: [], events: [] })
 const loading = ref(false)
@@ -40,9 +42,11 @@ const totalCount = computed(() => fixedCore.value.length + recentlyMet.value.len
 
 const NpcGroup = defineComponent({
   props: { title: String, items: { type: Array, default: () => [] }, empty: String },
-  setup(props) { return () => h('section', { class: 'npc-group cultivation-surface' }, [h('div', { class: 'cultivation-section-heading' }, [h('h2', props.title), h('span', `${props.items.length} 位`)]), props.items.length ? h('ul', { class: 'npc-list' }, props.items.map((npc) => h('li', { key: npc.id || npc.name }, [h('strong', npc.name || '未命名 NPC'), h('small', npc.role || npc.description || '关系信息待补充')]))) : h('p', { class: 'cultivation-fixed-state' }, props.empty)]) }
+  setup(props) { return () => h('section', { class: 'npc-group cultivation-surface' }, [h('div', { class: 'cultivation-section-heading' }, [h('h2', props.title), h('span', `${props.items.length} 位`)]), props.items.length ? h('ul', { class: 'npc-list' }, props.items.map((npc) => h('li', { key: npc.id || npc.name }, [h('strong', npc.name || '未命名人物'), h('small', npcRoleLabel(npc))]))) : h('p', { class: 'cultivation-fixed-state' }, props.empty)]) }
 })
 
+const errorMessage = computed(() => getErrorMessage(error.value, '关系记录暂时无法读取。'))
+function npcRoleLabel(npc) { return npc.role_label || (npc.role ? labelNpcRole(npc.role) : '') || npc.description || '关系信息待补充' }
 async function load() { loading.value = true; error.value = null; try { relationship.value = await cultivationService.getNpcs() || { fixed_core: [], recently_met: [], events: [] } } catch (requestError) { error.value = requestError } finally { loading.value = false } }
 async function meetNpc() { meeting.value = true; error.value = null; try { await cultivationService.meetNpc({ sect_key: sectKey.value, population_index: Number(populationIndex.value) }); await load() } catch (requestError) { error.value = requestError } finally { meeting.value = false } }
 onMounted(load)
