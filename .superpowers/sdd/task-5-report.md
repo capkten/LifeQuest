@@ -106,3 +106,46 @@ exit code 0; no output
 - 构建保留已有 npm `always-auth` 配置弃用提示、`@vueuse/core` 的两个 Rollup `#__PURE__` 注释提示，以及主 chunk 超过 500 kB 的 warning；均未导致构建失败。
 - 当前 Codex 工作区没有模型切换接口，无法从工具侧切换或验证用户要求的 `gpt-5.6-luna`。
 - 用户已有的 `frontend/components.d.ts` 修改，以及 `.agents/`、`.claude/skills/`、`.codex/`、计划文档和 `frontend/vite-check.log` 未跟踪项未纳入本次提交。
+
+## Final Review Fix
+
+### Status
+
+PASS_WITH_CONCERNS
+
+修复未知 server `*_label` 直出 raw key：新增共享 `isTrustedLabel` / `labelFromServer` helper。只有含中文的本地化 server label 才能覆盖前端 fallback；空值、raw stable key 和非本地化未知值统一回退到对应 `displayLabels.js` 中文提示。已覆盖 Cultivation、Sidebar、Sects、Techniques、Npcs、NpcTimeline、TribulationProbability，以及相关 World、Tribulations 和 cultivation 子组件。未修改后端 raw-key 兼容、API、DB、props、stable keys、CSS class 或事件名。
+
+新增对象级回归测试，覆盖未知 realm、sect、technique、task preference、status、resource、slot、NPC、event、lock reason label；独立断言 Sidebar 使用 shared server-label 链路，并保留已知中文 server label 优先行为。
+
+### TDD Evidence
+
+RED：先加入对象级 raw-label 测试和 Sidebar 独立链路断言，在 helper 尚未实现时运行 focused suite，得到 `28 passed, 1 failed`；失败为缺少 `isTrustedLabel` 导出，属于待实现行为缺失。
+
+GREEN：实现 shared helper 并替换所有 cultivation server-label 直出链路；focused suite 为 `42 passed, 0 failed`。
+
+### Verification
+
+```text
+cd frontend
+node --test src/views/localization-regressions.test.mjs src/views/cultivation-regressions.test.mjs
+42 passed, 0 failed
+
+npm run build
+exit code 0; Vite built 1963 modules
+
+git diff --check
+exit code 0; no output
+
+raw *_label shortcut scan
+NO_RAW_LABEL_SHORTCUTS
+```
+
+### Commit
+
+`6d6c79d58d15f5e682025d4128dc796e73fe74fa fix(localization): sanitize server cultivation labels`
+
+### Concerns
+
+- `npm run build` 保留已有 npm `always-auth` 配置弃用提示、`@vueuse/core` 的两个 Rollup `#__PURE__` 注释提示，以及主 chunk 超过 500 kB 的 warning；均未导致构建失败。
+- 当前 Codex 工作区没有模型切换接口，无法从工具侧切换或验证用户要求的 `gpt-5.6-luna`。
+- 用户已有的 `frontend/components.d.ts` 修改，以及 `.agents/`、`.claude/skills/`、`.codex/`、计划文档和 `frontend/vite-check.log` 未纳入本次提交。
