@@ -101,7 +101,7 @@ class CheckinService:
             amount=reward_coins,
             coin_type=CoinType.EARN,
             source=CoinSource.CHECKIN,
-            description=f"Daily check-in (streak: {streak})",
+            description=f"每日签到（连续第{streak}天）",
         )
 
         # Check achievements: login_streak, checkin_count

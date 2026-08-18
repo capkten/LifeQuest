@@ -21,6 +21,7 @@ from app.repositories.user import UserRepository
 from app.services.content_catalog import (
     EVENT_SUMMARY_LABELS,
     NPC_ROLE_LABELS,
+    REALM_LABELS,
     SECT_CATALOG,
     TECHNIQUE_CATALOG,
     WORLD_NODE_CATALOG,
@@ -93,6 +94,31 @@ SLOT_REALMS = ["qi_refining", "foundation", "golden_core", "nascent_soul", "spir
 _TRIBULATION_PROCESS_LOCK = threading.Lock()
 
 
+def _catalog_label(catalog, raw_value, label_field):
+    if raw_value is None:
+        return None
+    for content in catalog.values():
+        if content.get(label_field.replace("_label", "")) == raw_value:
+            return content.get(label_field, raw_value)
+    return raw_value
+
+
+def _realm_label(realm_key):
+    if realm_key is None:
+        return None
+    return REALM_LABELS.get(realm_key, realm_key)
+
+
+def _cultivation_log_description(source, cultivation, spirit_stones):
+    source_labels = {
+        "task": "任务",
+        "habit": "习惯",
+        "goal": "目标",
+    }
+    source_label = source_labels.get(source, source)
+    return f"完成{source_label}，获得{cultivation}点修为和{spirit_stones}枚灵石。"
+
+
 class CultivationService:
     def __init__(self, db: Session):
         self.db = db
@@ -127,6 +153,9 @@ class CultivationService:
             {
                 "id": log.id,
                 "source": log.source,
+                "description": _cultivation_log_description(
+                    log.source, log.cultivation_delta, log.spirit_stones_delta
+                ),
                 "cultivation": log.cultivation_delta,
                 "spirit_stones": log.spirit_stones_delta,
                 "merit": log.merit_delta,
@@ -149,6 +178,7 @@ class CultivationService:
             aptitude_points=profile.aptitude_points,
             cultivation_efficiency=profile.cultivation_efficiency,
             ascended=profile.realm_key == ASCENDED_REALM_KEY,
+            realm_label=_realm_label(profile.realm_key),
             next_stage=progress,
             realm={"key": profile.realm_key, "minor_stage": profile.minor_stage},
             today=today,
@@ -313,7 +343,16 @@ class CultivationService:
             techniques=[TechniqueSummary(
                 id=t.id, technique_key=t.technique_key, name=t.name,
                 description=t.description, technique_type=t.technique_type,
+                technique_type_label=(
+                    TECHNIQUE_CATALOG.get(t.technique_key, {}).get(
+                        "technique_type_label"
+                    )
+                    if TECHNIQUE_CATALOG.get(t.technique_key, {}).get("technique_type")
+                    == t.technique_type
+                    else _catalog_label(TECHNIQUE_CATALOG, t.technique_type, "technique_type_label")
+                ),
                 required_realm=t.required_realm, spirit_stone_cost=t.spirit_stone_cost,
+                required_realm_label=_realm_label(t.required_realm),
                 slot_count=t.slot_count, learned=t.id in learned,
                 realm_confirmed=not t.required_realm or self._realm_at_least(profile.realm_key, t.required_realm),
             ) for t in techniques],
@@ -468,8 +507,19 @@ class CultivationService:
             name=sect.name,
             star=sect.star,
             kind=sect.kind,
+            kind_label=(
+                SECT_CATALOG.get(sect.sect_key, {}).get("kind_label")
+                if SECT_CATALOG.get(sect.sect_key, {}).get("kind") == sect.kind
+                else _catalog_label(SECT_CATALOG, sect.kind, "kind_label")
+            ),
             task_preference=sect.task_preference,
+            task_preference_label=(
+                SECT_CATALOG.get(sect.sect_key, {}).get("task_preference_label")
+                if SECT_CATALOG.get(sect.sect_key, {}).get("task_preference") == sect.task_preference
+                else _catalog_label(SECT_CATALOG, sect.task_preference, "task_preference_label")
+            ),
             entry_realm=sect.entry_realm,
+            entry_realm_label=_realm_label(sect.entry_realm),
             world_node_key=self.db.query(WorldNode.node_key).filter(WorldNode.id == sect.world_node_id).scalar(),
             core_legacy=sect.core_legacy,
             joined=bool(membership and membership.sect_id == sect.id),
@@ -526,7 +576,7 @@ class CultivationService:
                 event_id=event.id,
                 npc_id=npc.id,
                 event_key=event.event_key,
-                summary=event.summary,
+                summary=EVENT_SUMMARY_LABELS.get(event.event_key, event.event_key),
                 created_at=event.created_at,
             ))
             if npc.id in seen:
@@ -535,8 +585,8 @@ class CultivationService:
             recent.append(npc)
             seen.add(npc.id)
         return NpcRelationshipResponse(
-            fixed_core=[NpcSummary.model_validate(row) for row in fixed_core],
-            recently_met=[NpcSummary.model_validate(row) for row in recent],
+            fixed_core=[self._npc_summary(row) for row in fixed_core],
+            recently_met=[self._npc_summary(row) for row in recent],
             events=events,
         )
 
@@ -595,7 +645,30 @@ class CultivationService:
         ))
         self.db.commit()
         self.db.refresh(npc)
-        return NpcSummary.model_validate(npc)
+        return self._npc_summary(npc)
+
+    def _npc_summary(self, npc: Npc) -> NpcSummary:
+        summary = NpcSummary.model_validate(npc)
+        if not npc.is_generated:
+            return summary
+        sect = self.db.query(Sect).filter(Sect.id == npc.sect_id).first()
+        sect_name = (
+            SECT_CATALOG.get(sect.sect_key, {}).get("name", sect.name)
+            if sect is not None
+            else None
+        )
+        if sect_name is None:
+            return summary
+        if npc.is_core:
+            description = f"{sect_name}的固定核心人物。"
+        else:
+            role_label = NPC_ROLE_LABELS.get(npc.role, npc.role)
+            description = (
+                f"{sect_name}的{role_label}。"
+                if role_label
+                else npc.description
+            )
+        return summary.model_copy(update={"description": description})
 
     def refresh_npc_cultivation(self, npc: Npc, today: date = None) -> Npc:
         today = today or self._utc_today()

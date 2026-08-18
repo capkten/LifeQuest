@@ -324,17 +324,22 @@ class AchievementService:
         for achievement in unlocked:
             if achievement.coin_reward and achievement.coin_reward > 0:
                 create_transaction = self.coin_repo.create_transaction if commit else self.coin_repo._create_no_commit
-                data = {
-                    "user_id": user_id,
-                    "amount": achievement.coin_reward,
-                    "type": CoinType.EARN,
-                    "source": CoinSource.ACHIEVEMENT,
-                    "description": f"Achievement unlocked: {achievement.name}",
-                }
                 if commit:
-                    create_transaction(**data)
+                    create_transaction(
+                        user_id=user_id,
+                        amount=achievement.coin_reward,
+                        coin_type=CoinType.EARN,
+                        source=CoinSource.ACHIEVEMENT,
+                        description=f"解锁成就：{achievement.name}",
+                    )
                 else:
-                    create_transaction(data)
+                    create_transaction({
+                        "user_id": user_id,
+                        "amount": achievement.coin_reward,
+                        "type": CoinType.EARN,
+                        "source": CoinSource.ACHIEVEMENT,
+                        "description": f"解锁成就：{achievement.name}",
+                    })
         return unlocked
 
     def check_notes(self, user_id: UUID) -> List[Achievement]:

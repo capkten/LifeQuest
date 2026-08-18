@@ -33,7 +33,7 @@ def _service(db: Session) -> CultivationService:
 
 
 @router.get("/overview", response_model=CultivationOverview)
-def overview(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def overview(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> CultivationOverview:
     return _service(db).get_overview(current_user.id)
 
 
@@ -49,7 +49,7 @@ def sects(
     task_preference: Optional[str] = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-):
+) -> List[SectSummary]:
     return _service(db).get_sects(current_user.id, star=star, kind=kind, task_preference=task_preference)
 
 
@@ -91,7 +91,7 @@ def leave_sect(current_user: User = Depends(get_current_user), db: Session = Dep
 
 
 @router.get("/techniques", response_model=TechniqueLibraryResponse)
-def techniques(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def techniques(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> TechniqueLibraryResponse:
     return _service(db).get_techniques(current_user.id)
 
 
@@ -128,7 +128,7 @@ def update_loadout(payload: LoadoutRequest, current_user: User = Depends(get_cur
 
 
 @router.get("/npcs", response_model=NpcRelationshipResponse)
-def npcs(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def npcs(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> NpcRelationshipResponse:
     try:
         return _service(db).get_npcs(current_user.id)
     except PermissionError as exc:

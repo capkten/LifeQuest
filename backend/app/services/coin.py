@@ -1,4 +1,5 @@
 from datetime import datetime
+from copy import copy
 from typing import Optional
 from uuid import UUID
 
@@ -31,6 +32,7 @@ class CoinService:
             start_date=start_date,
             end_date=end_date,
         )
+        transactions = [self._localized_transaction(transaction) for transaction in transactions]
         totals = self.coin_repo.get_totals(user_id)
         count = self.coin_repo.count_by_user(user_id)
         return {
@@ -52,6 +54,8 @@ class CoinService:
         source_id: Optional[str] = None,
         description: str = "",
     ):
+        if not description:
+            description = self._default_description(source)
         return self.coin_repo.create_transaction(
             user_id=user_id,
             amount=amount,
@@ -60,3 +64,26 @@ class CoinService:
             source_id=source_id,
             description=description,
         )
+
+    @staticmethod
+    def _default_description(source: str) -> str:
+        source_value = getattr(source, "value", source)
+        source_labels = {
+            "task": "任务",
+            "habit": "习惯",
+            "goal": "目标",
+            "checkin": "签到",
+            "shop": "商店",
+            "achievement": "成就",
+            "other": "其他",
+        }
+        return f"{source_labels.get(source_value, source_value)}奖励"
+
+    @classmethod
+    def _localized_transaction(cls, transaction):
+        source_value = getattr(transaction.source, "value", transaction.source)
+        if transaction.description == f"Reward from {source_value}":
+            localized = copy(transaction)
+            localized.description = cls._default_description(source_value)
+            return localized
+        return transaction

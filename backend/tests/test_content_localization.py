@@ -5,6 +5,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
+from app.models.coin_transaction import CoinTransaction
+from app.models.cultivation import CultivationLog
 from app.models.technique import Technique
 from app.models.user import User
 from app.models.world import Npc, NpcEvent, Sect, WorldNode
@@ -567,3 +569,78 @@ def test_startup_runs_localization_after_seed_and_closes_session(monkeypatch):
         "backfill",
         "close",
     ]
+
+
+def test_generated_npc_and_event_text_is_localized_at_api_boundary(legacy_content):
+    from app.services.cultivation import CultivationService
+
+    db, user, _node, _sect, _technique, generated_npc, _user_npc = legacy_content
+
+    response = CultivationService(db).get_npcs(user.id)
+
+    assert response.recently_met[0].id == generated_npc.id
+    assert response.recently_met[0].description == "赤霞门的普通弟子。"
+    assert response.events[0].event_key == "met"
+    assert response.events[0].summary == "与普通弟子相遇"
+
+
+def test_generated_system_text_is_chinese_and_user_coin_text_is_preserved(isolated_db):
+    from app.services.achievement import AchievementService
+    from app.services.checkin import CheckinService
+    from app.services.coin import CoinService
+    from app.services.cultivation import CultivationService
+
+    user = User(
+        username=f"dynamic-{uuid4().hex}",
+        email=f"{uuid4().hex}@example.com",
+        password_hash="hashed",
+    )
+    isolated_db.add(user)
+    isolated_db.commit()
+
+    CheckinService(isolated_db).checkin(user.id)
+    checkin_transaction = isolated_db.query(CoinTransaction).filter_by(
+        user_id=user.id, source="checkin"
+    ).one()
+    assert checkin_transaction.description == "每日签到（连续第1天）"
+
+    achievement_service = AchievementService(isolated_db)
+    achievement_service.seed_achievements()
+    achievement_service.check_and_unlock(user.id, "task_count", 1)
+    achievement_transaction = isolated_db.query(CoinTransaction).filter_by(
+        user_id=user.id, source="achievement"
+    ).one()
+    assert achievement_transaction.description == "解锁成就：初出茅庐"
+
+    CultivationService(isolated_db).settle_todo_reward(
+        user.id, "task", 10, "medium", source_key="todo:task:dynamic"
+    )
+    isolated_db.expire_all()
+    log = isolated_db.query(CultivationLog).filter_by(
+        user_id=user.id, source="task"
+    ).one()
+    overview = CultivationService(isolated_db).get_overview(user.id)
+    assert overview.recent_rewards[0]["id"] == log.id
+    assert overview.recent_rewards[0]["description"] == "完成任务，获得10点修为和6枚灵石。"
+
+    isolated_db.add_all([
+        CoinTransaction(
+            user_id=user.id,
+            amount=5,
+            type="earn",
+            source="task",
+            description="Reward from task",
+        ),
+        CoinTransaction(
+            user_id=user.id,
+            amount=5,
+            type="earn",
+            source="task",
+            description="Reward from my task",
+        ),
+    ])
+    isolated_db.commit()
+    history = CoinService(isolated_db).get_history(user.id)
+    descriptions = [transaction.description for transaction in history["transactions"]]
+    assert "任务奖励" in descriptions
+    assert "Reward from my task" in descriptions

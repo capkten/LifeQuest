@@ -41,6 +41,7 @@ class CultivationOverview(BaseModel):
     aptitude_points: int
     cultivation_efficiency: float
     ascended: bool = False
+    realm_label: str
     next_stage: StageProgress
     realm: Optional[Dict[str, Any]] = None
     today: List[Dict[str, Any]] = Field(default_factory=list)
@@ -68,8 +69,11 @@ class SectSummary(BaseModel):
     name: str
     star: int
     kind: str
+    kind_label: str
     task_preference: Optional[str] = None
+    task_preference_label: Optional[str] = None
     entry_realm: Optional[str] = None
+    entry_realm_label: Optional[str] = None
     world_node_key: Optional[str] = None
     core_legacy: Optional[str] = None
     joined: bool = False
@@ -94,7 +98,9 @@ class TechniqueSummary(BaseModel):
     name: str
     description: Optional[str] = None
     technique_type: str
+    technique_type_label: str
     required_realm: Optional[str] = None
+    required_realm_label: Optional[str] = None
     spirit_stone_cost: int
     slot_count: int
     learned: bool = False

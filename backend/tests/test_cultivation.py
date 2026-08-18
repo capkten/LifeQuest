@@ -724,6 +724,37 @@ def test_overview_creates_profile_for_current_user(client, auth_headers):
     assert response.json()["realm"]["key"] == "qi_refining"
 
 
+def test_cultivation_api_returns_labels_without_removing_keys(client, auth_headers):
+    response = client.get("/api/cultivation/sects?star=1", headers=auth_headers)
+
+    assert response.status_code == 200
+    item = response.json()[0]
+    assert item["kind"] == "normal"
+    assert item["kind_label"] == "普通宗门"
+    assert item["entry_realm"] == "foundation"
+    assert item["entry_realm_label"] == "筑基期"
+    assert item["task_preference"] == "discipline-1"
+    assert item["task_preference_label"] == "纪律修行"
+
+
+def test_cultivation_api_returns_technique_and_overview_labels(client, auth_headers):
+    overview = client.get("/api/cultivation/overview", headers=auth_headers)
+    techniques = client.get("/api/cultivation/techniques", headers=auth_headers)
+
+    assert overview.status_code == 200
+    assert overview.json()["realm_key"] == "qi_refining"
+    assert overview.json()["realm_label"] == "炼气期"
+    assert techniques.status_code == 200
+    technique = next(
+        item for item in techniques.json()["techniques"]
+        if item["technique_key"] == "steady-breath"
+    )
+    assert technique["technique_type"] == "mind"
+    assert technique["technique_type_label"] == "心法"
+    assert technique["required_realm"] == "qi_refining"
+    assert technique["required_realm_label"] == "炼气期"
+
+
 def test_cultivation_routes_require_authentication(client):
     response = client.get("/api/cultivation/overview")
 
