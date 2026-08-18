@@ -1,6 +1,6 @@
 <template>
   <div class="npcs-page">
-    <header class="npcs-page__header"><div><p class="cultivation-eyebrow">RELATIONSHIPS</p><h1>人物关系</h1><p>记录固定核心人物、最近相遇与修炼变化。</p></div></header>
+    <header class="npcs-page__header"><div><p class="cultivation-eyebrow">人物关系</p><h1>人物关系</h1><p>记录固定核心人物、最近相遇与修炼变化。</p></div></header>
     <form class="npc-meet cultivation-surface" @submit.prevent="meetNpc">
       <div class="cultivation-section-heading"><div><h2>遇见普通弟子</h2><p>输入宗门标识和人口槽位，记录一次真实相遇。</p></div></div>
       <div class="npc-meet__fields">

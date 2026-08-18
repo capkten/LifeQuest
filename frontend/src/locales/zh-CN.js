@@ -81,6 +81,12 @@ export const EVENT_SUMMARY_LABELS = Object.freeze({
   met: '与普通弟子相遇',
 })
 
+export const LOCK_REASON_LABELS = Object.freeze({
+  FINAL_MINOR_STAGE_REQUIRED: '尚未达到当前境界的最终小境界阈值。',
+  TRIBULATION_COOLDOWN_ACTIVE: '渡劫冷却中，请稍后再试。',
+  ASCENDED: '已达飞升终点。',
+})
+
 export const ERROR_MESSAGES = Object.freeze({
   'Task not found': '任务不存在。',
   'TECHNIQUE_NOT_FOUND:technique not found': '功法不存在。',
@@ -101,5 +107,6 @@ export default {
   RESOURCE_LABELS,
   NPC_ROLE_LABELS,
   EVENT_SUMMARY_LABELS,
+  LOCK_REASON_LABELS,
   ERROR_MESSAGES,
 }

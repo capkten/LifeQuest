@@ -28,18 +28,14 @@
 <script setup>
 import { computed } from 'vue'
 import { getErrorMessage } from '../../utils/errorMessage'
-import { labelRealm } from '../../utils/displayLabels'
+import { labelLockReason, labelRealm } from '../../utils/displayLabels'
 
 const props = defineProps({ preview: { type: Object, default: null }, loading: Boolean, error: { type: [Object, String], default: null }, attempting: Boolean, submitting: Boolean })
 defineEmits(['attempt', 'retry'])
 const operationBusy = computed(() => props.loading || props.attempting || props.submitting)
 const errorMessage = computed(() => typeof props.error === 'string' ? props.error : getErrorMessage(props.error))
 const targetRealmLabel = computed(() => props.preview?.target_realm_label || labelRealm(props.preview?.target_realm))
-const lockReasonLabel = computed(() => ({
-  FINAL_MINOR_STAGE_REQUIRED: '尚未达到当前境界的最终小境界阈值。',
-  TRIBULATION_COOLDOWN_ACTIVE: '渡劫冷却中，请稍后再试。',
-  ASCENDED: '已达飞升终点。',
-}[props.preview?.lock_reason] || props.preview?.lock_reason || '当前暂不可渡劫。'))
+const lockReasonLabel = computed(() => props.preview?.lock_reason_label || labelLockReason(props.preview?.lock_reason))
 const cooldownLabel = computed(() => props.preview?.cooldown_until ? `下一次可尝试：${formatCooldown(props.preview.cooldown_until)}` : '现在可尝试')
 function formatCooldown(value) {
   return new Date(value).toLocaleString('zh-CN', { dateStyle: 'medium', timeStyle: 'short' })

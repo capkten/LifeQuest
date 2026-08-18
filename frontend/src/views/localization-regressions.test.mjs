@@ -15,6 +15,26 @@ import {
 import { SLOT_TYPE_LABELS, TECHNIQUE_TYPE_LABELS } from '../locales/zh-CN.js'
 import { getErrorMessage } from '../utils/errorMessage.js'
 
+const cultivationFiles = [
+  '../components/cultivation/CultivationStatusBar.vue',
+  '../components/cultivation/RealmProgress.vue',
+  '../components/cultivation/ResourceSummary.vue',
+  '../components/cultivation/RewardToast.vue',
+  '../components/cultivation/TechniqueSlotGrid.vue',
+  '../components/cultivation/NpcTimeline.vue',
+  '../components/cultivation/MapNode.vue',
+  './Cultivation.vue',
+  './World.vue',
+  './Sects.vue',
+  './Techniques.vue',
+  './Npcs.vue',
+  './Tribulations.vue',
+  '../components/cultivation/TribulationProbability.vue',
+  '../components/layout/AppLayout.vue',
+  '../components/layout/Header.vue',
+  '../components/layout/Sidebar.vue',
+]
+
 function readBracedBody(source, openBraceIndex) {
   let depth = 1
   let quote = null
@@ -109,6 +129,18 @@ function readBranchBody(source, pattern, label) {
 
 const hasVisibleError = (body) => /(?:\b(?:error\w*|\w*Error)\.value\s*=|\bshowError\s*\(|\bshowToast\s*\(|\bElMessage\.error\s*\(|\balert\s*\()/.test(body)
 
+function templateText(source) {
+  const template = source.match(/<template\b[^>]*>([\s\S]*?)<\/template>/i)?.[1] || ''
+  return template
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/{{[\s\S]*?}}/g, ' ')
+    .replace(/<[^>]*>/g, ' ')
+}
+
+function templateEnglish(source) {
+  return templateText(source).match(/\b[A-Za-z][A-Za-z-]*\b/g) || []
+}
+
 test('display labels translate stable server keys', () => {
   assert.equal(labelRealm('foundation'), '筑基期')
   assert.equal(labelResource('spirit_stones'), '灵石')
@@ -122,10 +154,25 @@ test('display labels translate stable server keys', () => {
   assert.equal(labelEventSummary('met'), '与普通弟子相遇')
 })
 
-test('display labels preserve unknown values and use Chinese empty fallbacks', () => {
-  assert.equal(labelRealm('future_realm'), 'future_realm')
-  assert.equal(labelRealm(''), '未知境界')
-  assert.equal(labelResource(null), '未知资源')
+test('display labels hide unknown stable keys and use Chinese empty fallbacks', async () => {
+  for (const [label, fallback] of [
+    [labelRealm, '未知境界'],
+    [labelSectKind, '未知宗门类型'],
+    [labelTechniqueType, '未知功法类型'],
+    [labelTaskPreference, '未知任务偏好'],
+    [labelStatus, '未知状态'],
+    [labelResource, '未知资源'],
+    [labelSlotType, '未知格子类型'],
+    [labelNpcRole, '未知身份'],
+    [labelEventSummary, '未知事件'],
+  ]) {
+    assert.equal(label('future_stable_key'), fallback)
+    assert.equal(label(''), fallback)
+    assert.equal(label(null), fallback)
+  }
+  const displayLabels = await import('../utils/displayLabels.js')
+  assert.equal(displayLabels.labelLockReason?.('future_lock_reason'), '未知渡劫状态')
+  assert.equal(displayLabels.labelLockReason?.(''), '未知渡劫状态')
 })
 
 test('slot labels keep body distinct from technique type labels', () => {
@@ -135,80 +182,50 @@ test('slot labels keep body distinct from technique type labels', () => {
 })
 
 test('cultivation surfaces keep Chinese fallback and state copy', async () => {
-  const files = [
-    '../components/cultivation/CultivationStatusBar.vue',
-    '../components/cultivation/RealmProgress.vue',
-    '../components/cultivation/ResourceSummary.vue',
-    '../components/cultivation/RewardToast.vue',
-    '../components/cultivation/TechniqueSlotGrid.vue',
-    '../components/cultivation/NpcTimeline.vue',
-    '../components/cultivation/MapNode.vue',
-    './Cultivation.vue',
-    './World.vue',
-    './Sects.vue',
-    './Techniques.vue',
-    './Npcs.vue',
-    './Tribulations.vue',
-    '../components/cultivation/TribulationProbability.vue',
-    '../components/layout/AppLayout.vue',
-    '../components/layout/Header.vue',
-    '../components/layout/Sidebar.vue',
-  ]
-  const sources = await Promise.all(files.map((file) => readFile(new URL(file, import.meta.url), 'utf8')))
-  const source = sources.join('\n')
+  const sources = await Promise.all(cultivationFiles.map((file) => readFile(new URL(file, import.meta.url), 'utf8')))
 
-  for (const literal of [
-    'Retry',
-    'Cultivation data could not be loaded.',
-    'Realm progress',
-    'Resources',
-    'Reward received',
-    'Dismiss reward',
-    'No technique slots available.',
-    'NPC record',
-    'Cultivation event',
-    'Unknown node',
-    'No description available.',
-    'World node',
-    'Toggle sidebar',
-    'User menu',
-    'Main navigation',
-    'PLAN',
-    'CULTIVATION',
-    'REWARDS',
-    'INSIGHTS',
-    'Life Quest',
-  ]) {
-    const escapedLiteral = literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    assert.doesNotMatch(source, new RegExp("['\"]" + escapedLiteral + "['\"]"), `known English UI literal remains: ${literal}`)
+  for (const [file, source] of cultivationFiles.map((file, index) => [file, sources[index]])) {
+    const english = templateEnglish(source).filter((word) => !['EXP', 'LifeQuest', 'NPC'].includes(word))
+    assert.deepEqual(english, [], `${file} contains bare English template text: ${english.join(', ')}`)
   }
 
-  assert.match(source, /正在读取|正在准备|正在计算/)
-  assert.match(source, /重试/)
-  assert.match(source, /暂无|尚未|未命名|未知/)
-  assert.match(source, /获得奖励|修为|灵石|关系事件/)
+  assert.match(sources.join('\n'), /正在读取|正在准备|正在计算/)
+  assert.match(sources.join('\n'), /重试/)
+  assert.match(sources.join('\n'), /暂无|尚未|未命名|未知/)
+  assert.match(sources.join('\n'), /获得奖励|修为|灵石|关系事件/)
 })
 
 test('cultivation pages prefer server labels before shared display labels', async () => {
-  const files = [
-    './Cultivation.vue',
-    './World.vue',
-    './Sects.vue',
-    './Techniques.vue',
-    './Tribulations.vue',
-    '../components/cultivation/RealmProgress.vue',
-    '../components/cultivation/ResourceSummary.vue',
-    '../components/cultivation/NpcTimeline.vue',
-  ]
-  const sources = await Promise.all(files.map((file) => readFile(new URL(file, import.meta.url), 'utf8')))
-  const source = sources.join('\n')
+  const assertions = {
+    './Cultivation.vue': [/realm_label\s*\|\|/, /labelRealm/],
+    './World.vue': [/status_label\s*\|\|\s*labelStatus/, /required_realm_label\s*\|\|\s*realmLabel/],
+    './Sects.vue': [
+      /sect\.kind_label\s*\|\|\s*labelSectKind/,
+      /sect\.task_preference_label\s*\|\|\s*labelTaskPreference/,
+      /sect\.entry_realm_label\s*\|\|\s*labelRealm/,
+      /sect\.trial_status_label\s*\|\|\s*labelStatus/,
+      /npc\.role_label\s*\|\|/,
+    ],
+    './Techniques.vue': [
+      /technique\.technique_type_label\s*\|\|\s*labelTechniqueType/,
+      /technique\.required_realm_label\s*\|\|\s*labelRealm/,
+      /selectedSlot\.required_realm_label\s*\|\|\s*labelRealm/,
+    ],
+    './Tribulations.vue': [/realm_label\s*\|\|\s*labelRealm/, /target_realm_label\s*\|\|\s*labelRealm/],
+    '../components/cultivation/CultivationStatusBar.vue': [/realm_label\s*\|\|\s*labelRealm/, /\$\{key\}_label`\]\s*\|\|\s*labelResource/],
+    '../components/cultivation/RealmProgress.vue': [/realm_label\s*\|\|\s*labelRealm/],
+    '../components/cultivation/ResourceSummary.vue': [/\$\{item\.key\}_label`\]\s*\|\|\s*labelResource/],
+    '../components/cultivation/RewardToast.vue': [/cultivation_label\s*\|\|\s*resourceLabel/, /spirit_stones_label\s*\|\|\s*resourceLabel/, /labelResource/],
+    '../components/cultivation/MapNode.vue': [/status_label\s*\|\|\s*labelStatus/, /required_realm_label\s*\|\|\s*labelRealm/],
+    '../components/cultivation/NpcTimeline.vue': [/summary_label/, /role_label\)\s*\|\|\s*labelNpcRole/],
+    './Npcs.vue': [/npc\.role_label\s*\|\|/, /labelNpcRole/],
+    '../components/cultivation/TribulationProbability.vue': [/target_realm_label\s*\|\|\s*labelRealm/, /lock_reason_label\s*\|\|\s*labelLockReason/],
+  }
 
-  assert.match(source, /realm_label\s*\|\||[A-Za-z]+\.realm_label\s*\|\|/)
-  assert.match(source, /kind_label\s*\|\||[A-Za-z]+\.kind_label\s*\|\|/)
-  assert.match(source, /technique_type_label\s*\|\||[A-Za-z]+\.technique_type_label\s*\|\|/)
-  assert.match(source, /required_realm_label\s*\|\||[A-Za-z]+\.required_realm_label\s*\|\|/)
-  assert.match(source, /role_label\s*\|\||[A-Za-z]+\.role_label\s*\|\|/)
-  assert.match(source, /labelRealm|labelResource|labelSectKind|labelTechniqueType|labelStatus/)
+  for (const [file, patterns] of Object.entries(assertions)) {
+    const source = await readFile(new URL(file, import.meta.url), 'utf8')
+    for (const pattern of patterns) assert.match(source, pattern, `${file} must prefer server labels before fallback`)
+  }
 })
 
 test('error messages translate backend details and machine codes', () => {

@@ -1,6 +1,6 @@
 <template>
   <div class="tribulations-page">
-    <header class="tribulations-header"><div><p class="cultivation-eyebrow">CULTIVATION / TRIBULATION</p><h1>渡劫准备</h1><p>所有判定由服务器执行，先确认风险，再决定是否开始。</p></div></header>
+    <header class="tribulations-header"><div><p class="cultivation-eyebrow">修炼 · 渡劫</p><h1>渡劫准备</h1><p>所有判定由服务器执行，先确认风险，再决定是否开始。</p></div></header>
     <div v-if="loading && !preview" class="cultivation-state" aria-live="polite">正在读取渡劫状态...</div>
     <div v-else-if="error && !preview" class="cultivation-state cultivation-state--error" role="alert"><span>{{ errorMessage }}</span><button type="button" class="cultivation-action" @click="load">重试</button></div>
     <div v-else-if="!preview" class="cultivation-state" aria-live="polite">正在准备渡劫预览...</div>

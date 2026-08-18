@@ -35,7 +35,7 @@ function toArray(value) {
 
 function normalizeItem(item, source, index) {
   const label = source === 'event'
-    ? firstText(item?.summary_label, item?.summary, item?.title) || labelEventSummary(item?.event_key) || `关系事件${index + 1}`
+    ? eventLabel(item)
     : firstText(item?.name, item?.title) || `人物记录${index + 1}`
   const roleLabel = firstText(item?.role_label) || labelNpcRole(item?.role)
   return {
@@ -46,6 +46,15 @@ function normalizeItem(item, source, index) {
       : roleLabel !== '未知身份' ? roleLabel : firstText(item?.description, item?.text, item?.message) || '人物信息待补充',
     date: firstText(item?.date, item?.created_at, item?.occurred_at),
   }
+}
+
+function eventLabel(item) {
+  const serverLabel = firstText(item?.summary_label)
+  if (serverLabel) return serverLabel
+  const eventKey = firstText(item?.event_key)
+  const summary = firstText(item?.summary)
+  if (summary && summary !== eventKey) return summary
+  return labelEventSummary(eventKey || summary)
 }
 
 function firstText(...values) {
