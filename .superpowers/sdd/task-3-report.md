@@ -155,3 +155,25 @@ git diff --check
 
 - 现有 schema 没有独立 system ownership 字段，因此无法证明一个用户伪造的、同时具备合法 `source/type/source_id` 形状的完整 legacy 流水不是系统流水；实现采取保守策略，仅识别稳定 Todo source key，未匹配者原样返回。要完全消除该歧义需要新增系统身份字段，本任务未改数据库 schema。
 - 指定未过滤回归仍包含上述日期敏感测试失败；新增与本次修复相关的测试均通过。
+
+## P1 review follow-up: Todo reward source_id length
+
+Status: fixed in `ec36cb4` (`fix(todos): keep reward source ids within limit`).
+
+The Todo reward coin `source_id` now uses compact, type-distinct IDs that fit the existing `String(36)` column: `t:` for tasks, `h:` plus `YYYYMMDD` for habits, and `g:` for goals, each using URL-safe UUID encoding. The longest generated value is 33 characters. Existing cultivation source keys, API field shape, source labels, and legacy `todo:<source>:` coin-history localization remain unchanged. Coin history localization also recognizes the new compact IDs for all three Todo sources.
+
+Regression coverage verifies all three real reward writes stay within the column limit and remain type-distinct, plus all three compact IDs display as `任务奖励`、`习惯奖励`、and `目标奖励`.
+
+Verification evidence:
+
+```powershell
+cd D:\codes\LifeQuest\backend
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; pytest tests/test_content_localization.py tests/test_todos.py -q
+# 31 passed, 63 existing warnings
+python -m compileall -q app
+# exit code 0
+git diff --check
+# exit code 0
+```
+
+The report-only follow-up does not change implementation files or database schema.
