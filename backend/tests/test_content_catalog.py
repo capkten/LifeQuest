@@ -48,3 +48,23 @@ def test_catalog_covers_every_generated_content_key():
             for field in ("name", "description", "core_legacy"):
                 if field in content:
                     assert not re.search(r"[A-Za-z]", content[field])
+
+
+def test_sect_task_preference_labels_follow_stable_preference_keys():
+    from app.services.content_catalog import SECT_CATALOG
+
+    expected_labels = {
+        "discipline-1": "纪律修行",
+        "discipline-2": "专注修行",
+        "discipline-3": "持久修行",
+        "discipline-4": "探索历练",
+        "discipline-5": "资源积累",
+        "discipline-6": "团队协作",
+        "discipline-7": "专精突破",
+        "discipline-8": "高难试炼",
+        "discipline-9": "传承研究",
+        "discipline-10": "隐秘探索",
+    }
+
+    for sect in SECT_CATALOG.values():
+        assert sect["task_preference_label"] == expected_labels[sect["task_preference"]]

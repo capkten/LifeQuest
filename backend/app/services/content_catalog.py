@@ -87,6 +87,19 @@ _SECT_DEFINITIONS = (
 
 _SECT_KINDS = ("normal", "normal", "normal", "normal", "normal", "normal", "special", "special", "special", "hidden")
 
+_TASK_PREFERENCE_LABELS = {
+    "discipline-1": "纪律修行",
+    "discipline-2": "专注修行",
+    "discipline-3": "持久修行",
+    "discipline-4": "探索历练",
+    "discipline-5": "资源积累",
+    "discipline-6": "团队协作",
+    "discipline-7": "专精突破",
+    "discipline-8": "高难试炼",
+    "discipline-9": "传承研究",
+    "discipline-10": "隐秘探索",
+}
+
 SECT_CATALOG = {
     f"sect-{star}-{kind}-{ordinal}": {
         "name": name,
@@ -95,7 +108,7 @@ SECT_CATALOG = {
         "kind": kind,
         "kind_label": {"normal": "普通宗门", "special": "特殊宗门", "hidden": "隐藏宗门"}[kind],
         "task_preference": f"discipline-{ordinal}",
-        "task_preference_label": "纪律修行",
+        "task_preference_label": _TASK_PREFERENCE_LABELS[f"discipline-{ordinal}"],
         "entry_realm": _SECT_ENTRY_REALMS[star],
         "entry_realm_label": REALM_LABELS[_SECT_ENTRY_REALMS[star]],
         "trial_key": f"trial-{star}-{ordinal}",

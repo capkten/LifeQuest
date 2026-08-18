@@ -24,7 +24,12 @@ export const TECHNIQUE_TYPE_LABELS = Object.freeze({
   body: '炼体',
 })
 
-export const SLOT_TYPE_LABELS = TECHNIQUE_TYPE_LABELS
+export const SLOT_TYPE_LABELS = Object.freeze({
+  main: '主修',
+  auxiliary: '辅修',
+  mind: '心法',
+  body: '身法',
+})
 
 export const TASK_PREFERENCE_LABELS = Object.freeze({
   'discipline-1': '纪律修行',

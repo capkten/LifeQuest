@@ -8,6 +8,7 @@ import {
   labelTaskPreference,
   labelTechniqueType,
 } from '../utils/displayLabels.js'
+import { SLOT_TYPE_LABELS, TECHNIQUE_TYPE_LABELS } from '../locales/zh-CN.js'
 import { getErrorMessage } from '../utils/errorMessage.js'
 
 test('display labels translate stable server keys', () => {
@@ -23,6 +24,12 @@ test('display labels preserve unknown values and use Chinese empty fallbacks', (
   assert.equal(labelRealm('future_realm'), 'future_realm')
   assert.equal(labelRealm(''), '未知境界')
   assert.equal(labelResource(null), '未知资源')
+})
+
+test('slot labels keep body distinct from technique type labels', () => {
+  assert.equal(TECHNIQUE_TYPE_LABELS.body, '炼体')
+  assert.equal(SLOT_TYPE_LABELS.body, '身法')
+  assert.notStrictEqual(SLOT_TYPE_LABELS, TECHNIQUE_TYPE_LABELS)
 })
 
 test('error messages translate backend details and machine codes', () => {
