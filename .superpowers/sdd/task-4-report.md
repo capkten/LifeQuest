@@ -105,3 +105,39 @@ git diff --check
 - `npm run build` 仍输出已有 npm `always-auth` 配置弃用提示、`@vueuse/core` 的两个 Rollup `#__PURE__` 注释提示，以及主 chunk 超过 500 kB 的 warning；均未导致构建失败。
 - Task 4 要求的 `gpt-5.6-luna` 未暴露在当前 Codex 工作区的模型切换接口中，无法从工具侧切换。
 - 工作树中仍保留用户已有的 `frontend/components.d.ts` 修改，以及 `.agents/`、`.claude/skills/`、`.codex/`、计划文档和 `frontend/vite-check.log` 未跟踪项；本任务未修改、未提交这些无关内容。
+
+## Review Fix: Visible Page Catches
+
+本次 review-fix 仅处理页面 catch 的统一错误转换器接入，未进行 Task 5/6 静态文案重构：
+
+- Home、Backpack、Finance、FinanceAccounts、FinanceTransactions、FinanceDebts、FinanceBudgets、Projects、ProjectDetail、Shop 的可见加载错误状态改为 `getErrorMessage(error)` 路径。
+- Notes 的两个可见 catch（加载笔记本、删除笔记本）改为使用捕获错误转换后的提示。
+- EditProfile 的头像上传失败提示改为使用捕获错误转换后的 toast。
+- 新增页面级静态回归断言，逐个检查目标页面 catch 中的可见 `error` 赋值、`showError` 和 `alert` 是否调用对应 caught error 的 `getErrorMessage`；全局 raw `detail` 扫描确认仅保留 converter 边界入口。
+
+### TDD and Verification
+
+新增断言后的 RED 结果：`33 passed, 1 failed`，失败命中 `Backpack.vue` 的固定 catch 提示。
+
+修复后的回归结果：
+
+```text
+node --test src/views/localization-regressions.test.mjs src/views/cultivation-regressions.test.mjs
+ℹ tests 34
+ℹ pass 34
+ℹ fail 0
+```
+
+```text
+npm run build
+exit code: 0
+```
+
+```text
+git diff --check
+exit code: 0, no output
+```
+
+### Review-Fix Commit
+
+`5838c09dbad5eec7ccd52cc5bae796f5ac008034 fix(task-4): route page errors through shared converter`
