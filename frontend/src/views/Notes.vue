@@ -41,6 +41,10 @@
         <label class="pin-filter"><input v-model="discoveryFilters.pinned" type="checkbox" /> 仅置顶</label>
         <button v-if="hasDiscoveryFilters" type="button" class="discovery-clear" @click="resetDiscovery">清除筛选</button>
       </div>
+      <div v-if="discoveryError" class="inline-error" role="alert">
+        <span>{{ discoveryError }}</span>
+        <button type="button" class="retry-btn" @click="fetchDiscovery">重试</button>
+      </div>
       <div class="discovery-columns">
         <section class="discovery-section"><div class="section-heading"><h3>最近打开</h3><span>{{ recentNotes.length }}</span></div><p v-if="recentLoading" class="discovery-muted">加载中…</p><p v-else-if="!recentNotes.length" class="discovery-muted">还没有最近打开的笔记</p><button v-for="note in recentNotes" :key="`recent-${note.id}`" type="button" class="discovery-card" @click="openNote(note)"><strong>{{ note.name }}</strong><span>{{ note.summary || note.path || '笔记' }}</span><small>{{ note.word_count || 0 }} 字 · {{ formatDiscoveryDate(note.last_opened_at || note.updated_at) }}</small></button></section>
         <section class="discovery-section"><div class="section-heading"><h3>置顶笔记</h3><span>{{ pinnedNotes.length }}</span></div><p v-if="discoveryLoading" class="discovery-muted">加载中…</p><p v-else-if="!pinnedNotes.length" class="discovery-muted">暂无置顶笔记</p><button v-for="note in pinnedNotes" :key="`pinned-${note.id}`" type="button" class="discovery-card" @click="openNote(note)"><strong>{{ note.name }}</strong><span>{{ note.summary || note.path || '笔记' }}</span><small>{{ note.tags || '无标签' }} · {{ formatDiscoveryDate(note.updated_at) }}</small></button></section>
@@ -51,6 +55,11 @@
     <div v-if="isSearching">
       <div v-if="searchLoading" class="loading-state">
         <span class="loading-spinner"></span>
+      </div>
+
+      <div v-else-if="searchError" class="error-state" role="alert">
+        <p>{{ searchError }}</p>
+        <button class="retry-btn" @click="performSearch(searchQuery.trim())">重试</button>
       </div>
 
       <div v-else-if="searchResults.length === 0" class="empty-state">
@@ -110,16 +119,18 @@
       </button>
     </div>
 
-    <div v-if="loading" class="loading-state">
+    <div v-if="loading && !notebooks.length" class="loading-state">
       <span class="loading-spinner"></span>
     </div>
 
-    <div v-else-if="error" class="error-state">
+    <div v-else-if="error && !notebooks.length" class="error-state">
       <p>{{ error }}</p>
       <button class="retry-btn" @click="fetchNotebooks">重试</button>
     </div>
 
-    <div v-else-if="notebooks.length === 0" class="empty-state">
+    <div v-else>
+    <div v-if="error" class="inline-error" role="alert"><span>{{ error }}</span><button type="button" class="retry-btn" @click="fetchNotebooks">重试</button></div>
+    <div v-if="notebooks.length === 0" class="empty-state">
       <div class="empty-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -170,6 +181,7 @@
           <p class="notebook-description">{{ notebook.description || '暂无描述' }}</p>
         </div>
       </div>
+    </div>
     </div>
     </template>
 
@@ -265,17 +277,22 @@ const router = useRouter()
 const notebooks = ref([])
 const loading = ref(true)
 const error = ref(null)
+let notebooksRequestId = 0
 
 // Search state
 const searchQuery = ref('')
 const searchResults = ref([])
 const isSearching = ref(false)
 const searchLoading = ref(false)
+const searchError = ref(null)
+let searchRequestId = 0
 let searchTimer = null
 const recentNotes = ref([])
 const pinnedNotes = ref([])
 const recentLoading = ref(false)
 const discoveryLoading = ref(false)
+const discoveryError = ref(null)
+let discoveryRequestId = 0
 const discoveryFilters = ref({ sort: 'updated', notebook_id: '', tag: '', pinned: false, updated_after: '', updated_before: '' })
 const hasDiscoveryFilters = computed(() => discoveryFilters.value.notebook_id || discoveryFilters.value.tag || discoveryFilters.value.pinned || discoveryFilters.value.updated_after || discoveryFilters.value.updated_before || discoveryFilters.value.sort !== 'updated')
 
@@ -312,29 +329,35 @@ function openNote(result) {
 function formatDiscoveryDate(value) { return value ? new Date(value).toLocaleDateString('zh-CN') : '未记录时间' }
 function resetDiscovery() { discoveryFilters.value = { sort: 'updated', notebook_id: '', tag: '', pinned: false, updated_after: '', updated_before: '' } }
 async function fetchDiscovery() {
+  const requestId = ++discoveryRequestId
   recentLoading.value = true
   discoveryLoading.value = true
-  try {
-    recentNotes.value = await noteService.getRecentNotes(8)
-    const params = { sort: discoveryFilters.value.sort, limit: 12 }
-    if (discoveryFilters.value.notebook_id) params.notebook_id = discoveryFilters.value.notebook_id
-    if (discoveryFilters.value.tag.trim()) params.tag = discoveryFilters.value.tag.trim()
-    if (discoveryFilters.value.pinned) params.pinned = true
-    if (discoveryFilters.value.updated_after) params.updated_after = discoveryFilters.value.updated_after
-    if (discoveryFilters.value.updated_before) params.updated_before = discoveryFilters.value.updated_before
-    const discovered = await noteService.discoverNotes(params)
-    pinnedNotes.value = discovered.filter(note => note.is_pinned)
-  } finally {
-    recentLoading.value = false
-    discoveryLoading.value = false
-  }
+  discoveryError.value = null
+  const params = { sort: discoveryFilters.value.sort, limit: 12 }
+  if (discoveryFilters.value.notebook_id) params.notebook_id = discoveryFilters.value.notebook_id
+  if (discoveryFilters.value.tag.trim()) params.tag = discoveryFilters.value.tag.trim()
+  if (discoveryFilters.value.pinned) params.pinned = true
+  if (discoveryFilters.value.updated_after) params.updated_after = discoveryFilters.value.updated_after
+  if (discoveryFilters.value.updated_before) params.updated_before = discoveryFilters.value.updated_before
+
+  const recentRequest = noteService.getRecentNotes(8)
+    .then((result) => { if (requestId === discoveryRequestId) recentNotes.value = result })
+    .catch((cause) => { if (requestId === discoveryRequestId) discoveryError.value = getErrorMessage(cause, '加载笔记发现失败，请重试。') })
+    .finally(() => { if (requestId === discoveryRequestId) recentLoading.value = false })
+  const pinnedRequest = noteService.discoverNotes(params)
+    .then((result) => { if (requestId === discoveryRequestId) pinnedNotes.value = result.filter(note => note.is_pinned) })
+    .catch((cause) => { if (requestId === discoveryRequestId) discoveryError.value = getErrorMessage(cause, '加载笔记发现失败，请重试。') })
+    .finally(() => { if (requestId === discoveryRequestId) discoveryLoading.value = false })
+  await Promise.allSettled([recentRequest, pinnedRequest])
 }
 
 function onSearchInput() {
   if (searchTimer) clearTimeout(searchTimer)
   if (!searchQuery.value.trim()) {
+    searchRequestId += 1
     isSearching.value = false
     searchResults.value = []
+    searchError.value = null
     return
   }
   searchTimer = setTimeout(() => {
@@ -343,18 +366,22 @@ function onSearchInput() {
 }
 
 async function performSearch(query) {
+  const requestId = ++searchRequestId
   isSearching.value = true
   searchLoading.value = true
+  searchError.value = null
   try {
-    searchResults.value = await noteService.searchNotes(query)
+    const result = await noteService.searchNotes(query)
+    if (requestId === searchRequestId) searchResults.value = result
   } catch (e) {
-    searchResults.value = []
+    if (requestId === searchRequestId) searchError.value = getErrorMessage(e, '搜索笔记失败，请重试。')
   } finally {
-    searchLoading.value = false
+    if (requestId === searchRequestId) searchLoading.value = false
   }
 }
 
 function clearSearch() {
+  searchRequestId += 1
   searchQuery.value = ''
   isSearching.value = false
   searchResults.value = []
@@ -383,14 +410,16 @@ function trapFocus(event) {
 }
 
 async function fetchNotebooks() {
+  const requestId = ++notebooksRequestId
   loading.value = true
   error.value = null
   try {
-    notebooks.value = await noteService.getNotebooks()
+    const result = await noteService.getNotebooks()
+    if (requestId === notebooksRequestId) notebooks.value = result
   } catch (e) {
-    error.value = getErrorMessage(e)
+    if (requestId === notebooksRequestId) error.value = getErrorMessage(e)
   } finally {
-    loading.value = false
+    if (requestId === notebooksRequestId) loading.value = false
   }
 }
 

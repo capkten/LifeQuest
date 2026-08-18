@@ -97,6 +97,7 @@
         </div>
         <div class="chart-body">
           <div v-if="loadingTasks" class="chart-loading"><span class="loading-spinner"></span></div>
+          <div v-else-if="taskError" class="chart-error" role="alert">{{ taskError }} <button type="button" @click="fetchTaskTrends">重试</button></div>
           <div v-else-if="taskTrends.length === 0" class="chart-empty">暂无数据</div>
           <div v-else class="bar-chart">
             <div class="bar-chart-y-axis">
@@ -158,6 +159,7 @@
         </div>
         <div class="chart-body">
           <div v-if="loadingHabits" class="chart-loading"><span class="loading-spinner"></span></div>
+          <div v-else-if="habitError" class="chart-error" role="alert">{{ habitError }} <button type="button" @click="fetchHabitStats">重试</button></div>
           <div v-else-if="habitStats.length === 0" class="chart-empty">暂无数据</div>
           <div v-else class="line-chart-wrapper">
             <svg
@@ -223,6 +225,7 @@
         </div>
         <div class="chart-body">
           <div v-if="loadingCoins" class="chart-loading"><span class="loading-spinner"></span></div>
+          <div v-else-if="coinError" class="chart-error" role="alert">{{ coinError }} <button type="button" @click="fetchCoinTrends">重试</button></div>
           <div v-else-if="coinTrends.length === 0" class="chart-empty">暂无数据</div>
           <div v-else class="line-chart-wrapper">
             <svg
@@ -343,6 +346,12 @@ const coinTrends = ref([])
 const loadingTasks = ref(false)
 const loadingHabits = ref(false)
 const loadingCoins = ref(false)
+const taskError = ref(null)
+const habitError = ref(null)
+const coinError = ref(null)
+let taskRequestId = 0
+let habitRequestId = 0
+let coinRequestId = 0
 
 const taskPeriods = [
   { value: 'week' },
@@ -492,29 +501,44 @@ async function fetchLevel() {
 }
 
 async function fetchTaskTrends() {
+  const requestId = ++taskRequestId
   loadingTasks.value = true
+  taskError.value = null
   try {
-    taskTrends.value = await statsService.getTaskTrends(taskPeriod.value)
+    const result = await statsService.getTaskTrends(taskPeriod.value)
+    if (requestId === taskRequestId) taskTrends.value = result
+  } catch (e) {
+    if (requestId === taskRequestId) taskError.value = getErrorMessage(e, '加载任务趋势失败，请重试。')
   } finally {
-    loadingTasks.value = false
+    if (requestId === taskRequestId) loadingTasks.value = false
   }
 }
 
 async function fetchHabitStats() {
+  const requestId = ++habitRequestId
   loadingHabits.value = true
+  habitError.value = null
   try {
-    habitStats.value = await statsService.getHabitStats(habitPeriod.value)
+    const result = await statsService.getHabitStats(habitPeriod.value)
+    if (requestId === habitRequestId) habitStats.value = result
+  } catch (e) {
+    if (requestId === habitRequestId) habitError.value = getErrorMessage(e, '加载习惯统计失败，请重试。')
   } finally {
-    loadingHabits.value = false
+    if (requestId === habitRequestId) loadingHabits.value = false
   }
 }
 
 async function fetchCoinTrends() {
+  const requestId = ++coinRequestId
   loadingCoins.value = true
+  coinError.value = null
   try {
-    coinTrends.value = await statsService.getCoinTrends(coinPeriod.value)
+    const result = await statsService.getCoinTrends(coinPeriod.value)
+    if (requestId === coinRequestId) coinTrends.value = result
+  } catch (e) {
+    if (requestId === coinRequestId) coinError.value = getErrorMessage(e, '加载金币趋势失败，请重试。')
   } finally {
-    loadingCoins.value = false
+    if (requestId === coinRequestId) loadingCoins.value = false
   }
 }
 

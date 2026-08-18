@@ -347,6 +347,7 @@ const dailySummary = ref(null)
 const loadingDaily = ref(true)
 const dailyError = ref(null)
 const completingHabitId = ref(null)
+let dailyRequestId = 0
 
 const recentTasks = computed(() => tasks.value.slice(0, 5))
 const recentGoals = computed(() => goals.value.slice(0, 5))
@@ -409,16 +410,19 @@ async function fetchGoals() {
 }
 
 async function fetchDailySummary() {
+  const requestId = ++dailyRequestId
   loadingDaily.value = true
   dailyError.value = null
   try {
-    dailySummary.value = await todoService.getDailySummary()
+    const summary = await todoService.getDailySummary()
+    if (requestId === dailyRequestId) dailySummary.value = summary
   } catch (e) {
-    dailySummary.value = null
-    dailyError.value = getErrorMessage(e, '今日待办加载失败，请重试。')
-    showError(dailyError.value)
+    if (requestId === dailyRequestId) {
+      dailyError.value = getErrorMessage(e, '今日待办加载失败，请重试。')
+      showError(dailyError.value)
+    }
   } finally {
-    loadingDaily.value = false
+    if (requestId === dailyRequestId) loadingDaily.value = false
   }
 }
 

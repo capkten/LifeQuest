@@ -18,7 +18,7 @@
           <span class="save-status-dot" aria-hidden="true"></span>
           {{ statusLabel }}
         </span>
-        <button type="button" class="save-btn" :disabled="status === 'saving'" @click="saveNote">
+        <button type="button" class="save-btn" :disabled="status === 'saving' || (isEditing && !hydrated)" @click="saveNote">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
             <polyline points="17 21 17 13 7 13 7 21" />
@@ -34,7 +34,12 @@
       <span>正在加载笔记...</span>
     </div>
 
-    <main v-else class="editor-body">
+    <div v-else-if="loadError" class="error-state" role="alert">
+      <span>{{ loadError }}</span>
+      <button type="button" class="retry-btn" @click="loadRoute">重试</button>
+    </div>
+
+    <main v-else-if="hydrated" class="editor-body">
       <section class="editor-meta" aria-label="笔记详情">
         <label class="field field--title" for="note-title">
           <span class="sr-only">标题</span>
@@ -93,6 +98,7 @@ const notebookId = ref(null)
 const folderId = ref(null)
 const loading = ref(false)
 const hydrated = ref(false)
+const loadError = ref(null)
 const suppressRouteWarning = ref(false)
 const toast = ref({ show: false, message: '', type: 'success' })
 
@@ -154,6 +160,7 @@ async function loadRoute() {
   const context = routeContext()
   autosave.cancel()
   hydrated.value = false
+  loadError.value = null
   noteId.value = context.noteId
   notebookId.value = context.notebookId
   folderId.value = context.folderId
@@ -183,7 +190,10 @@ async function loadRoute() {
     autosave.reset(snapshot(), note.updated_at)
     hydrated.value = true
   } catch (error) {
-    if (requestId === loadRequest) showToast(getErrorMessage(error, '加载笔记失败，请重试。'), 'error')
+    if (requestId === loadRequest) {
+      loadError.value = getErrorMessage(error, '加载笔记失败，请重试。')
+      showToast(loadError.value, 'error')
+    }
   } finally {
     if (requestId === loadRequest) loading.value = false
   }
@@ -215,6 +225,10 @@ async function persistNote(payload) {
 }
 
 async function saveNote() {
+  if (isEditing.value && !hydrated.value) {
+    showToast(loadError.value || '笔记尚未加载完成，请先重试加载。', 'error')
+    return
+  }
   if (!noteTitle.value.trim()) {
     showTitleRequiredError()
     return

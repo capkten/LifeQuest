@@ -69,6 +69,11 @@
       </article>
     </section>
 
+    <div v-if="profileError" class="state-copy profile-error" role="alert">
+      <span>{{ profileError }}</span>
+      <button type="button" class="retry-btn" @click="fetchProfile">重试</button>
+    </div>
+
     <section class="content-grid">
       <article class="surface-card">
         <div class="section-heading">
@@ -279,6 +284,8 @@ const allAchievements = ref([])
 const unlockedIds = ref(new Set())
 const unlockDates = ref({})
 const achievementsLoading = ref(true)
+const profileError = ref(null)
+let profileRequestId = 0
 
 const mergedAchievements = computed(() => {
   return allAchievements.value.map((ach) => ({
@@ -327,7 +334,10 @@ function formatDate(dateStr) {
   return d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 
-onMounted(async () => {
+async function fetchProfile() {
+  const requestId = ++profileRequestId
+  profileError.value = null
+  achievementsLoading.value = true
   fetchTitles()
   try {
     const [all, userAchs, tasks, habits] = await Promise.all([
@@ -337,6 +347,7 @@ onMounted(async () => {
       todoService.getHabits().catch(() => [])
     ])
 
+    if (requestId !== profileRequestId) return
     allAchievements.value = all || []
     const ids = new Set()
     const dates = {}
@@ -356,11 +367,13 @@ onMounted(async () => {
     const habitList = Array.isArray(habits) ? habits : (habits?.data || [])
     stats.maxHabitStreak = habitList.reduce((max, h) => Math.max(max, h.best_streak || h.streak || 0), 0)
   } catch (e) {
-    console.error('Failed to load profile data:', e)
+    if (requestId === profileRequestId) profileError.value = getErrorMessage(e, '加载个人资料失败，请重试。')
   } finally {
-    achievementsLoading.value = false
+    if (requestId === profileRequestId) achievementsLoading.value = false
   }
-})
+}
+
+onMounted(fetchProfile)
 
 function isUnlocked(titleId) {
   return unlockedTitleIds.value.has(titleId)

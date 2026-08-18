@@ -13,16 +13,20 @@
       </button>
     </div>
 
-    <div v-if="loading" class="loading-state">
+    <div v-if="loading && !hasDashboardData" class="loading-state">
       <span class="loading-spinner"></span>
     </div>
 
-    <div v-else-if="error" class="error-state">
+    <div v-else-if="error && !hasDashboardData" class="error-state">
       <p>{{ error }}</p>
       <button class="retry-btn" @click="fetchDashboard">重试</button>
     </div>
 
     <template v-else>
+      <div v-if="error" class="inline-error" role="alert">
+        <span>{{ error }}</span>
+        <button type="button" class="retry-btn" @click="fetchDashboard">重试</button>
+      </div>
       <!-- Account Cards -->
       <div class="accounts-row">
         <div v-if="accounts.length === 0" class="accounts-empty">
@@ -366,6 +370,11 @@ const accounts = ref([])
 const budgets = ref([])
 const recentTransactions = ref([])
 const categories = ref([])
+let dashboardRequestId = 0
+const dashboardError = error
+const hasDashboardData = computed(() => Boolean(
+  Object.keys(dashboard.value).length || accounts.value.length || budgets.value.length || recentTransactions.value.length || categories.value.length
+))
 
 const showQuickAdd = ref(false)
 const savingTx = ref(false)
@@ -440,6 +449,7 @@ function cancelQuickAdd() {
 }
 
 async function fetchDashboard() {
+  const requestId = ++dashboardRequestId
   loading.value = true
   error.value = null
   try {
@@ -450,15 +460,16 @@ async function fetchDashboard() {
       financeService.getTransactions({ limit: 5 }),
       financeService.getCategories()
     ])
+    if (requestId !== dashboardRequestId) return
     dashboard.value = dash || {}
     accounts.value = Array.isArray(accts) ? accts : (accts.items || accts.accounts || [])
     budgets.value = Array.isArray(bds) ? bds : (bds.items || bds.budgets || [])
     recentTransactions.value = Array.isArray(txs) ? txs : (txs.items || txs.transactions || [])
     categories.value = Array.isArray(cats) ? cats : (cats.items || cats.categories || [])
   } catch (e) {
-    error.value = getErrorMessage(e)
+    if (requestId === dashboardRequestId) error.value = getErrorMessage(e)
   } finally {
-    loading.value = false
+    if (requestId === dashboardRequestId) loading.value = false
   }
 }
 

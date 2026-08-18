@@ -86,3 +86,69 @@ test('home daily summary keeps request failures separate from the legitimate emp
   assert.match(source, /v-else-if="dailyError"[\s\S]*重试[\s\S]*fetchDailySummary/)
   assert.match(source, /dailyError\.value\s*=\s*getErrorMessage\(e/)
 })
+
+test('notes preserve prior results and expose retryable errors for search and discovery', async () => {
+  const source = await readFile(new URL('./Notes.vue', viewsDirectory), 'utf8')
+
+  assert.match(source, /searchError/)
+  assert.match(source, /discoveryError/)
+  assert.match(source, /searchRequestId|searchSequence|searchAbortController/)
+  assert.match(source, /discoveryRequestId|discoverySequence|discoveryAbortController/)
+  assert.match(source, /searchError[\s\S]*重试|重试[\s\S]*searchError/)
+  assert.match(source, /discoveryError[\s\S]*重试|重试[\s\S]*discoveryError/)
+  assert.doesNotMatch(source, /catch\s*\([^)]*\)\s*\{\s*searchResults\.value\s*=\s*\[\]/)
+})
+
+test('note editor cannot save an unhydrated document after load failure', async () => {
+  const source = await readFile(new URL('./NoteEditor.vue', viewsDirectory), 'utf8')
+
+  assert.match(source, /loadError/)
+  assert.match(source, /加载笔记失败，请重试/)
+  assert.match(source, /loadError[\s\S]*重试|重试[\s\S]*loadError/)
+  assert.match(source, /!hydrated\.value/)
+  assert.match(source, /hydrated\.value\s*=\s*false[\s\S]*catch[\s\S]*loadError\.value/)
+  assert.match(source, /:disabled="[^"]*hydrated[^"]*"|v-if="loadError"/)
+})
+
+test('protected list pages retain data and expose explicit refresh errors', async () => {
+  const files = [
+    './Finance.vue',
+    './FinanceTransactions.vue',
+    './CoinHistory.vue',
+    './Calendar.vue',
+    './Home.vue',
+    './Profile.vue',
+    './Stats.vue',
+  ]
+  const sources = await Promise.all(files.map((file) => readFile(new URL(file, viewsDirectory), 'utf8')))
+
+  for (const [file, source] of files.map((file, index) => [file, sources[index]])) {
+    assert.match(source, /(?:refresh|load|fetch|dashboard|transactions|history|events|detail|profile|task|habit|coin)[A-Za-z]*Error|\berror\b/, `${file} needs an explicit load error state`)
+    assert.match(source, /重试/, `${file} needs a retry control`)
+    assert.doesNotMatch(source, /catch\s*\([^)]*\)\s*\{[\s\S]{0,180}(?:transactions|records|events|stats|achievements|dashboard|overview|taskTrends|habitStats|coinTrends)\.value\s*=\s*\[\]/, `${file} must not turn a failed refresh into empty success data`)
+  }
+})
+
+test('note, finance and stats filters apply only the latest response', async () => {
+  const files = [
+    './Notes.vue',
+    './FinanceTransactions.vue',
+    './CoinHistory.vue',
+    './NoteEditor.vue',
+    './Stats.vue',
+  ]
+  const sources = await Promise.all(files.map((file) => readFile(new URL(file, viewsDirectory), 'utf8')))
+
+  for (const [file, source] of files.map((file, index) => [file, sources[index]])) {
+    assert.match(source, /requestId|requestSequence|requestSeq|AbortController|sequence/, `${file} needs latest-response protection`)
+  }
+})
+
+test('note workspace writes use independent action locks and visible failures', async () => {
+  const source = await readFile(new URL('../composables/useNoteWorkspace.js', import.meta.url), 'utf8')
+
+  assert.match(source, /actionLocks|mutationLocks|withActionLock/)
+  assert.match(source, /createFolder|createNote|renameNode|moveNode|deleteNode/)
+  assert.match(source, /error\.value\s*=\s*cause/)
+  assert.match(source, /finally[\s\S]*(actionLocks|mutationLocks)/)
+})

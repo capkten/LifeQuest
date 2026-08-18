@@ -19,6 +19,10 @@
     </div>
 
     <div class="calendar-body">
+      <div v-if="eventsError" class="inline-error" role="alert">
+        <span>{{ eventsError }}</span>
+        <button type="button" class="retry-btn" @click="fetchEvents">重试</button>
+      </div>
       <!-- Calendar Grid -->
       <div class="calendar-grid-wrapper">
         <!-- Weekday headers -->
@@ -68,6 +72,11 @@
 
           <div v-if="loadingDetail" class="detail-loading">
             <span class="loading-spinner"></span>
+          </div>
+
+          <div v-else-if="detailError" class="detail-error" role="alert">
+            <p>{{ detailError }}</p>
+            <button type="button" class="retry-btn" @click="selectDate(selectedDate)">重试</button>
           </div>
 
           <div v-else-if="dayDetail" class="detail-content">
@@ -300,6 +309,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { calendarService } from '../services/calendar'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const router = useRouter()
 
@@ -312,6 +322,10 @@ const selectedDate = ref(null)
 const dayDetail = ref(null)
 const loadingDetail = ref(false)
 const loadingEvents = ref(false)
+const eventsError = ref(null)
+const detailError = ref(null)
+let eventsRequestId = 0
+let detailRequestId = 0
 const isMobile = ref(false)
 
 function checkMobile() {
@@ -426,27 +440,32 @@ function getMonthRange(year, month) {
 }
 
 async function fetchEvents() {
+  const requestId = ++eventsRequestId
   loadingEvents.value = true
+  eventsError.value = null
   try {
     const range = getMonthRange(currentYear.value, currentMonth.value)
-    events.value = await calendarService.getEvents(range.start, range.end)
+    const nextEvents = await calendarService.getEvents(range.start, range.end)
+    if (requestId === eventsRequestId) events.value = nextEvents
   } catch (e) {
-    events.value = []
+    if (requestId === eventsRequestId) eventsError.value = getErrorMessage(e, '加载日历事件失败，请重试。')
   } finally {
-    loadingEvents.value = false
+    if (requestId === eventsRequestId) loadingEvents.value = false
   }
 }
 
 async function selectDate(dateStr) {
+  const requestId = ++detailRequestId
   selectedDate.value = dateStr
   loadingDetail.value = true
-  dayDetail.value = null
+  detailError.value = null
   try {
-    dayDetail.value = await calendarService.getDayDetail(dateStr)
+    const detail = await calendarService.getDayDetail(dateStr)
+    if (requestId === detailRequestId) dayDetail.value = detail
   } catch (e) {
-    dayDetail.value = null
+    if (requestId === detailRequestId) detailError.value = getErrorMessage(e, '加载日期详情失败，请重试。')
   } finally {
-    loadingDetail.value = false
+    if (requestId === detailRequestId) loadingDetail.value = false
   }
 }
 

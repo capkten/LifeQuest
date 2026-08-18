@@ -109,16 +109,18 @@
       </article>
     </section>
 
-    <div v-if="loading" class="loading-state">
+    <div v-if="loading && !transactions.length" class="loading-state">
       <span class="loading-spinner"></span>
     </div>
 
-    <div v-else-if="error" class="error-state stitch-surface">
+    <div v-else-if="error && !transactions.length" class="error-state stitch-surface">
       <p>{{ error }}</p>
       <button class="retry-btn" @click="fetchTransactions">重试</button>
     </div>
 
-    <div v-else-if="transactions.length === 0" class="empty-state stitch-surface">
+    <div v-else>
+    <div v-if="error" class="inline-error" role="alert"><span>{{ error }}</span><button type="button" class="retry-btn" @click="fetchTransactions">重试</button></div>
+    <div v-if="transactions.length === 0" class="empty-state stitch-surface">
       <div class="empty-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
           <circle cx="12" cy="12" r="10" />
@@ -201,6 +203,7 @@
         </button>
       </div>
     </section>
+    </div>
 
     <Teleport to="body">
       <div v-if="showDialog" class="dialog-overlay" @click.self="cancelDialog">
@@ -340,8 +343,10 @@ const categories = ref([])
 const loading = ref(true)
 const loadingMore = ref(false)
 const error = ref(null)
+const transactionsError = error
 const page = ref(1)
 const hasMore = ref(false)
+let requestSequence = 0
 
 const filters = ref({
   type: '',
@@ -445,6 +450,7 @@ function openDelete(tx) { deletingTx.value = tx; showDeleteDialog.value = true }
 function cancelDelete() { showDeleteDialog.value = false; deletingTx.value = null }
 
 async function fetchTransactions() {
+  const requestId = ++requestSequence
   loading.value = true
   error.value = null
   page.value = 1
@@ -456,16 +462,18 @@ async function fetchTransactions() {
     if (filters.value.start_date) params.start_date = filters.value.start_date
     if (filters.value.end_date) params.end_date = filters.value.end_date
     const data = await financeService.getTransactions(params)
+    if (requestId !== requestSequence) return
     transactions.value = Array.isArray(data) ? data : (data.items || data.transactions || [])
     hasMore.value = data.has_more || (Array.isArray(data) ? false : (data.total > transactions.value.length))
   } catch (e) {
-    error.value = getErrorMessage(e)
+    if (requestId === requestSequence) error.value = getErrorMessage(e)
   } finally {
-    loading.value = false
+    if (requestId === requestSequence) loading.value = false
   }
 }
 
 async function loadMore() {
+  const requestId = ++requestSequence
   loadingMore.value = true
   page.value++
   try {
@@ -477,12 +485,13 @@ async function loadMore() {
     if (filters.value.end_date) params.end_date = filters.value.end_date
     const data = await financeService.getTransactions(params)
     const items = Array.isArray(data) ? data : (data.items || data.transactions || [])
+    if (requestId !== requestSequence) return
     transactions.value.push(...items)
     hasMore.value = data.has_more || false
   } catch (e) {
-    page.value--
+    if (requestId === requestSequence) page.value--
   } finally {
-    loadingMore.value = false
+    if (requestId === requestSequence) loadingMore.value = false
   }
 }
 

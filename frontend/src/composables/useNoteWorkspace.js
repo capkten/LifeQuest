@@ -50,6 +50,7 @@ export function useNoteWorkspace(notebookId) {
   const expandedIds = ref(new Set())
   const loading = ref(false)
   const error = ref(null)
+  const actionLocks = ref(new Set())
 
   function resolveNotebookId(value = notebookId) {
     return toValue(value)
@@ -136,7 +137,13 @@ export function useNoteWorkspace(notebookId) {
     return node
   }
 
-  async function runMutation(operation, { selectResult = false } = {}) {
+  async function runMutation(operation, { selectResult = false, action = 'mutation' } = {}) {
+    if (actionLocks.value.has(action)) {
+      const cause = new Error('NOTE_ACTION_IN_PROGRESS')
+      error.value = cause
+      throw cause
+    }
+    actionLocks.value = new Set([...actionLocks.value, action])
     error.value = null
     try {
       const result = await operation()
@@ -146,6 +153,10 @@ export function useNoteWorkspace(notebookId) {
     } catch (cause) {
       error.value = cause
       throw cause
+    } finally {
+      const next = new Set(actionLocks.value)
+      next.delete(action)
+      actionLocks.value = next
     }
   }
 
@@ -158,7 +169,7 @@ export function useNoteWorkspace(notebookId) {
     const result = await runMutation(() => noteService.createFolder(resolveNotebookId(), {
       name,
       parent_id: targetParentId,
-    }))
+    }), { action: 'create-folder' })
     if (targetParentId != null) setExpanded(targetParentId, true)
     currentFolderId.value = targetParentId
     return result
@@ -178,7 +189,7 @@ export function useNoteWorkspace(notebookId) {
       if (options[key] !== undefined) payload[key] = options[key]
     }
 
-    const result = await runMutation(() => noteService.createNote(resolveNotebookId(), payload), { selectResult: true })
+    const result = await runMutation(() => noteService.createNote(resolveNotebookId(), payload), { selectResult: true, action: 'create-note' })
     if (targetParentId != null) setExpanded(targetParentId, true)
     currentFolderId.value = targetParentId
     return result
@@ -188,7 +199,7 @@ export function useNoteWorkspace(notebookId) {
     const nodeId = getId(nodeOrId)
     const nextName = String(name ?? '').trim()
     if (nodeId == null || !nextName) throw new Error('Node id and name are required')
-    return runMutation(() => noteService.renameNode(nodeId, nextName))
+    return runMutation(() => noteService.renameNode(nodeId, nextName), { action: 'rename' })
   }
 
   async function moveNode(nodeOrId, parentId = null) {
@@ -199,7 +210,7 @@ export function useNoteWorkspace(notebookId) {
       throw new Error('A node cannot be moved inside itself')
     }
 
-    const result = await runMutation(() => noteService.moveNode(nodeId, targetParentId))
+    const result = await runMutation(() => noteService.moveNode(nodeId, targetParentId), { action: 'move' })
     if (nodeIdEquals(selectedNoteId.value, nodeId)) currentFolderId.value = targetParentId
     if (targetParentId != null) setExpanded(targetParentId, true)
     return result
@@ -211,7 +222,7 @@ export function useNoteWorkspace(notebookId) {
 
     const deletesSelection = nodeIdEquals(selectedNoteId.value, nodeId) || nodeIsInside(tree.value, nodeId, selectedNoteId.value)
     const deletesFolder = nodeIdEquals(currentFolderId.value, nodeId) || nodeIsInside(tree.value, nodeId, currentFolderId.value)
-    const result = await runMutation(() => noteService.deleteNode(nodeId))
+    const result = await runMutation(() => noteService.deleteNode(nodeId), { action: 'delete' })
     if (deletesSelection) selectedNoteId.value = null
     if (deletesFolder) currentFolderId.value = null
     expandedIds.value = new Set([...expandedIds.value].filter((id) => !nodeIdEquals(id, nodeId)))
@@ -225,6 +236,7 @@ export function useNoteWorkspace(notebookId) {
     expandedIds,
     loading,
     error,
+    actionLocks,
     loadTree,
     selectNote,
     toggleFolder,

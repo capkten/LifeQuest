@@ -70,12 +70,14 @@
       <span class="loading-spinner"></span>
     </div>
 
-    <div v-else-if="error" class="error-state">
+    <div v-else-if="error && !transactions.length" class="error-state">
       <p>{{ error }}</p>
       <button class="retry-btn" @click="fetchHistory">重试</button>
     </div>
 
-    <div v-else-if="groupedTransactions.length === 0" class="empty-state">
+    <div v-else>
+    <div v-if="error" class="inline-error" role="alert"><span>{{ error }}</span><button type="button" class="retry-btn" @click="fetchHistory">重试</button></div>
+    <div v-if="groupedTransactions.length === 0" class="empty-state">
       <div class="empty-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
           <circle cx="12" cy="12" r="10" />
@@ -112,6 +114,7 @@
         </div>
       </div>
     </div>
+    </div>
 
     <div v-if="hasMore && !loading" class="load-more">
       <button class="retry-btn" @click="loadMore">加载更多</button>
@@ -132,10 +135,12 @@ const transactions = ref([])
 const totals = ref({ total_earned: 0, total_spent: 0 })
 const loading = ref(true)
 const error = ref(null)
+const historyError = error
 const typeFilter = ref('')
 const sourceFilter = ref('')
 const page = ref(1)
 const hasMore = ref(false)
+let requestSequence = 0
 
 const typeOptions = [
   { label: '全部', value: '' },
@@ -159,6 +164,7 @@ const groupedTransactions = computed(() => {
 })
 
 async function fetchHistory() {
+  const requestId = ++requestSequence
   loading.value = true
   error.value = null
   page.value = 1
@@ -167,12 +173,13 @@ async function fetchHistory() {
     if (typeFilter.value) params.type = typeFilter.value
     if (sourceFilter.value) params.source = sourceFilter.value
     const result = await coinService.getHistory(params)
+    if (requestId !== requestSequence) return
     transactions.value = Array.isArray(result) ? result : (result?.data || [])
     hasMore.value = transactions.value.length >= 20
   } catch (e) {
-    error.value = getErrorMessage(e, '加载金币记录失败，请重试。')
+    if (requestId === requestSequence) error.value = getErrorMessage(e, '加载金币记录失败，请重试。')
   } finally {
-    loading.value = false
+    if (requestId === requestSequence) loading.value = false
   }
 }
 
