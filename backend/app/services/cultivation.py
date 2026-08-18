@@ -18,6 +18,13 @@ from app.models.user import User
 from app.models.world import Npc, NpcEvent, Sect, SectAccessProgress, SectMembership, WorldNode
 from app.repositories.cultivation import CultivationRepository
 from app.repositories.user import UserRepository
+from app.services.content_catalog import (
+    EVENT_SUMMARY_LABELS,
+    NPC_ROLE_LABELS,
+    SECT_CATALOG,
+    TECHNIQUE_CATALOG,
+    WORLD_NODE_CATALOG,
+)
 from app.schemas.cultivation import (
     CultivationOverview,
     NpcEventSummary,
@@ -164,15 +171,14 @@ class CultivationService:
     @staticmethod
     def _seed_world_once(db: Session):
         nodes = []
-        for index in range(1, 10):
-            key = f"mortal-domain-{index}"
+        for index, (key, content) in enumerate(WORLD_NODE_CATALOG.items(), 1):
             node = db.query(WorldNode).filter(WorldNode.node_key == key).first()
             if node is None:
                 node = WorldNode(
                     node_key=key,
-                    name=f"Mortal Domain {index}",
-                    description=f"Cultivation region {index}",
-                    required_realm=None if index == 1 else "foundation",
+                    name=content["name"],
+                    description=content["description"],
+                    required_realm=content["required_realm"],
                     sort_order=index,
                     is_hidden=False,
                 )
@@ -180,42 +186,35 @@ class CultivationService:
             nodes.append(node)
         db.flush()
 
-        kinds = ["normal"] * 6 + ["special"] * 3 + ["hidden"]
-        for star in range(1, 10):
-            node = nodes[(star - 1) % len(nodes)]
-            for ordinal, kind in enumerate(kinds, 1):
-                key = f"sect-{star}-{kind}-{ordinal}"
-                sect = db.query(Sect).filter(Sect.sect_key == key).first()
-                if sect is None:
-                    sect = Sect(
-                        sect_key=key,
-                        name=f"{star}-Star {kind.title()} Sect {ordinal}",
-                        star=star,
-                        kind=kind,
-                        task_preference=f"discipline-{ordinal}",
-                        core_legacy=f"Legacy of the {star}-star sect",
-                        entry_realm=SECT_ENTRY_REALMS[star],
-                        trial_key=f"trial-{star}-{ordinal}",
-                        world_node_id=node.id,
-                    )
-                    db.add(sect)
-                sect.entry_realm = SECT_ENTRY_REALMS[star]
+        nodes_by_key = {node.node_key: node for node in nodes}
+        for key, content in SECT_CATALOG.items():
+            sect = db.query(Sect).filter(Sect.sect_key == key).first()
+            if sect is None:
+                star = int(key.split("-", 2)[1])
+                sect = Sect(
+                    sect_key=key,
+                    name=content["name"],
+                    star=star,
+                    kind=content["kind"],
+                    task_preference=content["task_preference"],
+                    core_legacy=content["core_legacy"],
+                    entry_realm=content["entry_realm"],
+                    trial_key=content["trial_key"],
+                    world_node_id=nodes_by_key[content["world_node_key"]].id,
+                )
+                db.add(sect)
+            sect.entry_realm = content["entry_realm"]
 
-        techniques = [
-            ("steady-breath", "Steady Breath", "mind", "qi_refining"),
-            ("stone-channel", "Stone Channel", "body", "foundation"),
-            ("golden-intent", "Golden Intent", "main", "golden_core"),
-        ]
-        for key, name, kind, realm in techniques:
+        for key, content in TECHNIQUE_CATALOG.items():
             if not db.query(Technique).filter(Technique.technique_key == key).first():
                 db.add(Technique(
                     technique_key=key,
-                    name=name,
-                    description=f"A {kind} cultivation technique.",
-                    technique_type=kind,
-                    required_realm=realm,
-                    spirit_stone_cost=10,
-                    slot_count=1,
+                    name=content["name"],
+                    description=content["description"],
+                    technique_type=content["technique_type"],
+                    required_realm=content["required_realm"],
+                    spirit_stone_cost=content["spirit_stone_cost"],
+                    slot_count=content["slot_count"],
                 ))
         db.commit()
 
@@ -570,7 +569,7 @@ class CultivationService:
                 sect_id=sect.id,
                 name=self._ordinary_npc_name(seed),
                 role="ordinary disciple",
-                description=f"A disciple of {sect.name}.",
+                description=f"{sect.name}的{NPC_ROLE_LABELS['ordinary disciple']}。",
                 is_core=False,
                 population_index=population_index,
                 is_generated=True,
@@ -588,7 +587,12 @@ class CultivationService:
         else:
             raise RuntimeError("NPC creation conflict could not be resolved")
 
-        self.db.add(NpcEvent(user_id=user_id, npc_id=npc.id, event_key="met", summary="Met ordinary disciple"))
+        self.db.add(NpcEvent(
+            user_id=user_id,
+            npc_id=npc.id,
+            event_key="met",
+            summary=EVENT_SUMMARY_LABELS["met"],
+        ))
         self.db.commit()
         self.db.refresh(npc)
         return NpcSummary.model_validate(npc)

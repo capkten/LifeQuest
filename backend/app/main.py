@@ -749,7 +749,9 @@ def startup_event():
         from app.services.finance import FinanceService
         FinanceService.seed_categories(db)
         from app.services.cultivation import CultivationService
+        from app.services.content_localization import ContentLocalizationService
         CultivationService.seed_world(db)
+        ContentLocalizationService.backfill_system_content(db)
     except Exception:
         logger.exception("Seed data failed")
         raise
