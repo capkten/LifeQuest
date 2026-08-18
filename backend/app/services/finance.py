@@ -248,7 +248,7 @@ class FinanceService:
             limit=page_size,
             **filters,
         )
-        total = self.transaction_repo.count_by_user(user_id)
+        total = self.transaction_repo.count_by_user(user_id, **filters)
         return {
             "items": txns,
             "total": total,
