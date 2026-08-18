@@ -488,3 +488,41 @@ def test_complete_habit_idempotent(client):
     user_after_second = client.get("/api/users/me", headers=headers).json()
     assert user_after_second["coins"] == user_after_first["coins"]
     assert user_after_second["experience"] == user_after_first["experience"]
+
+
+def test_subtask_crud_uses_task_path_and_is_completed(client):
+    headers = _register_and_login(client)
+    task = client.post(
+        "/api/todos/tasks",
+        json={"title": "Parent task"},
+        headers=headers,
+    ).json()
+
+    created = client.post(
+        "/api/todos/subtasks",
+        json={"task_id": task["id"], "title": "Child task"},
+        headers=headers,
+    )
+    assert created.status_code == 200
+    assert created.json()["is_completed"] is False
+
+    listed = client.get(
+        f"/api/todos/subtasks/task/{task['id']}",
+        headers=headers,
+    )
+    assert listed.status_code == 200
+    assert listed.json()[0]["task_id"] == task["id"]
+
+    updated = client.put(
+        f"/api/todos/subtasks/{created.json()['id']}",
+        json={"is_completed": True},
+        headers=headers,
+    )
+    assert updated.status_code == 200
+    assert updated.json()["is_completed"] is True
+
+    deleted = client.delete(
+        f"/api/todos/subtasks/{created.json()['id']}",
+        headers=headers,
+    )
+    assert deleted.status_code == 200

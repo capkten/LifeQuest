@@ -1,4 +1,6 @@
 import base64
+import threading
+from functools import wraps
 from datetime import date, datetime, timezone
 from typing import List
 from uuid import UUID
@@ -31,6 +33,18 @@ from app.services.achievement import AchievementService
 from app.services.content_catalog import TODO_SOURCE_PREFIXES, source_label
 from app.services.title import TitleService
 from app.services.cultivation import CultivationService
+
+
+_TODO_COMPLETION_LOCK = threading.Lock()
+
+
+def _completion_guard(method):
+    @wraps(method)
+    def guarded(self, *args, **kwargs):
+        with _TODO_COMPLETION_LOCK:
+            return method(self, *args, **kwargs)
+
+    return guarded
 
 
 class TodoService:
@@ -126,6 +140,7 @@ class TodoService:
     def delete_habit(self, habit_id: UUID) -> bool:
         return self.habit_repo.delete(habit_id)
 
+    @_completion_guard
     def complete_habit(self, habit: Habit, user_id: UUID) -> Habit:
         """Mark habit as completed for today, incrementing streak and awarding rewards."""
         now = datetime.now(timezone.utc)
@@ -179,6 +194,7 @@ class TodoService:
     def delete_task(self, task_id: UUID) -> bool:
         return self.task_repo.delete(task_id)
 
+    @_completion_guard
     def complete_task(self, task: Task, user_id: UUID) -> Task:
         """Complete a task and award coins and experience to the user."""
         changed = self.db.execute(update(Task).where(
@@ -224,6 +240,7 @@ class TodoService:
     def delete_goal(self, goal_id: UUID) -> bool:
         return self.goal_repo.delete(goal_id)
 
+    @_completion_guard
     def complete_goal(self, goal: Goal, user_id: UUID) -> Goal:
         """Complete a goal and award coins and experience to the user."""
         changed = self.db.execute(update(Goal).where(

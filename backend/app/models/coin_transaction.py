@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Uuid
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Uuid, UniqueConstraint
 
 from app.database import Base
 
@@ -23,6 +23,12 @@ class CoinType(str, Enum):
 
 class CoinTransaction(Base):
     __tablename__ = "coin_transactions"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "source", "source_id",
+            name="uq_coin_transaction_reward_source",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)

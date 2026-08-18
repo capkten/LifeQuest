@@ -70,3 +70,25 @@ def test_achievement_does_not_double_unlock(client):
     assert ach_resp.status_code == 200
     achievements = ach_resp.json()
     assert len(achievements) == 1
+
+
+def test_achievement_reward_has_stable_source_id(client, db_session):
+    headers = _register_and_login(client)
+    task = client.post(
+        "/api/todos/tasks",
+        json={"title": "Achievement source", "coins_reward": 1, "exp_reward": 1},
+        headers=headers,
+    ).json()
+
+    assert client.post(f"/api/todos/tasks/{task['id']}/complete", headers=headers).status_code == 200
+    from app.models.coin_transaction import CoinTransaction
+    from app.models.user import User
+
+    user = db_session.query(User).filter(User.username == "testuser").one()
+    rewards = db_session.query(CoinTransaction).filter(
+        CoinTransaction.user_id == user.id,
+        CoinTransaction.source == "achievement",
+    ).all()
+    assert len(rewards) == 1
+    assert rewards[0].source_id.startswith("a:")
+    assert len(rewards[0].source_id) <= 36

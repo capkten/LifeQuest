@@ -1,6 +1,7 @@
 from typing import List
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.achievement import Achievement, UserAchievement
@@ -301,45 +302,44 @@ class AchievementService:
                 achievement.condition_type == condition_type
                 and achievement.condition_value <= current_value
             ):
-                existing = self.user_achievement_repo.get_by_user_and_achievement(
-                    user_id, achievement.id
-                )
-                if not existing:
-                    create = self.user_achievement_repo.create if commit else self.user_achievement_repo._create_no_commit
-                    create(
-                        {
-                            "user_id": user_id,
-                            "achievement_id": achievement.id,
-                        }
-                    )
-                    # Award rewards in the same transaction
-                    user = self.user_repo.get_by_id(user_id)
-                    if user:
-                        self.user_repo._update_coins_no_commit(user, achievement.coin_reward)
-                        self.user_repo._update_experience_no_commit(user, achievement.exp_reward)
-                    unlocked.append(achievement)
-        if unlocked and commit:
-            self.db.commit()
-        # Record coin transactions for each unlocked achievement.
+                try:
+                    with self.db.begin_nested():
+                        existing = self.user_achievement_repo.get_by_user_and_achievement(
+                            user_id, achievement.id
+                        )
+                        if existing:
+                            continue
+                        self.user_achievement_repo._create_no_commit(
+                            {
+                                "user_id": user_id,
+                                "achievement_id": achievement.id,
+                            }
+                        )
+                        self.db.flush()
+                except IntegrityError:
+                    # Another request won the unique user/achievement claim.
+                    continue
+
+                user = self.user_repo.get_by_id(user_id)
+                if user:
+                    self.user_repo._update_coins_no_commit(user, achievement.coin_reward)
+                    self.user_repo._update_experience_no_commit(user, achievement.exp_reward)
+                unlocked.append(achievement)
+
+        # Keep the achievement claim, balance updates, and ledger row in one
+        # transaction. source_id is the stable idempotency key for the reward.
         for achievement in unlocked:
             if achievement.coin_reward and achievement.coin_reward > 0:
-                create_transaction = self.coin_repo.create_transaction if commit else self.coin_repo._create_no_commit
-                if commit:
-                    create_transaction(
-                        user_id=user_id,
-                        amount=achievement.coin_reward,
-                        coin_type=CoinType.EARN,
-                        source=CoinSource.ACHIEVEMENT,
-                        description=f"解锁成就：{achievement.name}",
-                    )
-                else:
-                    create_transaction({
-                        "user_id": user_id,
-                        "amount": achievement.coin_reward,
-                        "type": CoinType.EARN,
-                        "source": CoinSource.ACHIEVEMENT,
-                        "description": f"解锁成就：{achievement.name}",
-                    })
+                self.coin_repo._create_no_commit({
+                    "user_id": user_id,
+                    "amount": achievement.coin_reward,
+                    "type": CoinType.EARN,
+                    "source": CoinSource.ACHIEVEMENT,
+                    "source_id": f"a:{achievement.id.hex}",
+                    "description": f"解锁成就：{achievement.name}",
+                })
+        if unlocked and commit:
+            self.db.commit()
         return unlocked
 
     def check_notes(self, user_id: UUID) -> List[Achievement]:
