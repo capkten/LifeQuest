@@ -1,4 +1,5 @@
 import { ERROR_MESSAGES } from '../locales/zh-CN.js'
+import { labelRealm } from './displayLabels.js'
 
 const STATUS_MESSAGES = Object.freeze({
   400: '请求参数错误',
@@ -40,16 +41,21 @@ function translateCode(code, parameters = []) {
   if (!code) return null
   if (code === 'TECHNIQUE_REALM_REQUIRED' && parameters.length) {
     const realm = parameters.join(':').replace(/^technique requires\s+/i, '').replace(/\s+realm$/i, '')
-    return `境界不足，需要达到${realm}后再学习或配置功法。`
+    return `境界不足，需要达到${localizeRealm(realm)}后再学习或配置功法。`
   }
   if (code === 'SLOT_REALM_REQUIRED' && parameters.length) {
     const realm = parameters.join(':')
-    return `境界不足，需要达到${realm}后购买功法格。`
+    return `境界不足，需要达到${localizeRealm(realm)}后购买功法格。`
   }
   const direct = translateDetail(code) || CODE_MESSAGES[code]
   if (direct) return direct
   const parameterized = parameters.length ? translateDetail(`${code}:${parameters.join(':')}`) : null
   return parameterized || CODE_MESSAGES[`${code}:${parameters.join(':')}`] || null
+}
+
+function localizeRealm(value) {
+  const localized = labelRealm(value)
+  return localized === '未知境界' && /[\u3400-\u9fff]/.test(value) ? value : localized
 }
 
 export function getErrorMessage(error, fallback = '操作失败，请重试。') {

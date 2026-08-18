@@ -295,6 +295,7 @@
                     <button
                       class="subtask-delete-btn"
                       :disabled="deletingSubtaskId === subtask.id"
+                      :aria-disabled="Boolean(deletingSubtaskId)"
                       @click="deleteSubtask(subtask, task.id)"
                       aria-label="删除子任务"
                     >
@@ -1048,6 +1049,7 @@ async function completeSubtask(subtask, taskId) {
 }
 
 async function deleteSubtask(subtask, taskId) {
+  if (deletingSubtaskId.value) { explainBlocked('已有其他子任务正在删除，请等待完成后再试。'); return }
   deletingSubtaskId.value = subtask.id
   try {
     await todoService.deleteSubtask(subtask.id)

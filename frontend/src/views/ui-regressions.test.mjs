@@ -69,6 +69,16 @@ test('cross-item in-flight actions explain the shared lock without submitting', 
   assert.match(project, /if \(completingTaskId\.value\) \{\s*showError\(/)
 })
 
+test('subtask deletion blocks cross-item requests with handler feedback and loading semantics', async () => {
+  const source = await readFile(new URL('./Todos.vue', viewsDirectory), 'utf8')
+  const handler = source.match(/async function deleteSubtask\(subtask, taskId\) \{([\s\S]*?)\n\}/)?.[1]
+
+  assert.ok(handler, 'deleteSubtask handler must remain available for the template contract')
+  assert.match(handler, /if \(deletingSubtaskId\.value\) \{\s*explainBlocked\(['"]已有其他子任务正在删除，请等待完成后再试。['"]\);\s*return\s*\}/)
+  assert.match(source, /:aria-disabled="Boolean\(deletingSubtaskId\)"/)
+  assert.match(source, /v-if="deletingSubtaskId === subtask\.id"[\s\S]*loading-spinner/)
+})
+
 test('home daily summary keeps request failures separate from the legitimate empty state', async () => {
   const source = await readFile(new URL('./Home.vue', viewsDirectory), 'utf8')
 

@@ -499,6 +499,18 @@ test('error messages translate backend details and machine codes', () => {
   )
 })
 
+test('parameterized realm lock errors use localized realm labels', () => {
+  const cases = [
+    ['TECHNIQUE_REALM_REQUIRED:foundation', '境界不足，需要达到筑基期后再学习或配置功法。'],
+    ['TECHNIQUE_REALM_REQUIRED:technique requires golden_core realm', '境界不足，需要达到金丹期后再学习或配置功法。'],
+    ['SLOT_REALM_REQUIRED:golden_core', '境界不足，需要达到金丹期后购买功法格。'],
+  ]
+
+  for (const [detail, expected] of cases) {
+    assert.equal(getErrorMessage({ response: { data: { detail } } }), expected)
+  }
+})
+
 test('api and pages use the shared error converter', async () => {
   const apiSource = await readFile(new URL('../services/api.js', import.meta.url), 'utf8')
   const files = [
