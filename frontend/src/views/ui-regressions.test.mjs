@@ -207,6 +207,8 @@ test('pagination refreshes release stale loading locks and expose retryable fail
   assert.match(finance, /filterGeneration/)
   assert.match(finance, /generation !== filterGeneration/)
   assert.match(finance, /supportLoading/)
+  assert.match(finance, /transactions\.length === 0 && !supportError/)
+  assert.match(finance, /transactions\.length === 0 && supportError/)
   assert.match(coins, /loadMoreError/)
   assert.match(coins, /filterGeneration/)
   assert.match(coins, /loadingMore\.value = false/)

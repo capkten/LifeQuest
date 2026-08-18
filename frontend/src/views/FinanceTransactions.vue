@@ -130,7 +130,7 @@
 
     <div v-else>
     <div v-if="error" class="inline-error" role="alert"><span>{{ error }}</span><button type="button" class="retry-btn" @click="fetchTransactions">重试</button></div>
-    <div v-if="transactions.length === 0" class="empty-state stitch-surface">
+    <div v-if="transactions.length === 0 && !supportError" class="empty-state stitch-surface">
       <div class="empty-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
           <circle cx="12" cy="12" r="10" />
@@ -139,6 +139,10 @@
       </div>
       <h3 class="empty-title">暂无流水记录</h3>
       <p class="empty-text">开始记账后，这里会按日期展示最近交易。</p>
+    </div>
+
+    <div v-else-if="transactions.length === 0 && supportError" class="error-state stitch-surface" role="alert">
+      <p>账户和分类加载失败，流水暂不可完整展示。</p>
     </div>
 
     <section v-else class="transactions-section">
