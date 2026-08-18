@@ -148,6 +148,15 @@ function readBracedBody(source, openBraceIndex) {
   throw new Error('Unclosed source block')
 }
 
+function readNamedFunction(source, name, parameter) {
+  const pattern = new RegExp(`function\\s+${name}\\s*\\(\\s*${parameter}\\s*\\)\\s*\\{`)
+  const match = pattern.exec(source)
+  assert.ok(match, `${name} must exist`)
+  const openBraceIndex = source.indexOf('{', match.index)
+  const body = readBracedBody(source, openBraceIndex)
+  return new Function(`return function ${name}(${parameter}) {${body}}`)()
+}
+
 function readCatchBlocks(source) {
   const catches = []
   const catchPattern = /catch\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*\{/g
@@ -450,10 +459,29 @@ test('cultivation resource projections preserve server labels', async () => {
     readFile(new URL('../components/layout/Sidebar.vue', import.meta.url), 'utf8'),
   ])
 
-  for (const resource of ['spirit_stones', 'merit', 'contribution', 'mind_state']) {
-    assert.match(cultivation, new RegExp(`${resource}_label: overview\\.value\\?\\.${resource}_label`))
-  }
+  assert.match(cultivation, /const resources = computed\(\(\) => projectResources\(overview\.value\)\)/)
+  assert.match(cultivation, /function projectResources\(overview\)/)
   assert.match(sidebar, /labelFromServer\(cultivationOverview,\s*['"]spirit_stones_label['"],\s*['"]spirit_stones['"],\s*labelResource\)/)
+})
+
+test('cultivation resource projection merges nested resources with top-level labels at runtime', async () => {
+  const source = await readFile(new URL('./Cultivation.vue', import.meta.url), 'utf8')
+  const projectResources = readNamedFunction(source, 'projectResources', 'overview')
+  const projected = projectResources({
+    resources: { spirit_stones: 10, merit: 4 },
+    spirit_stones: 12,
+    spirit_stones_label: '服务器中文灵石',
+    cultivation: 88,
+    cultivation_label: '服务器中文修为',
+    merit_label: '服务器中文功德',
+  })
+
+  assert.equal(projected.spirit_stones, 12)
+  assert.equal(projected.merit, 4)
+  assert.equal(projected.spirit_stones_label, '服务器中文灵石')
+  assert.equal(projected.cultivation_label, '服务器中文修为')
+  assert.equal(projected.merit_label, '服务器中文功德')
+  assert.equal(labelFromServer(projected, 'spirit_stones_label', 'spirit_stones', labelResource), '服务器中文灵石')
 })
 
 test('Sidebar sanitizes the server realm label through the shared helper', async () => {

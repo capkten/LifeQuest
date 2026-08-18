@@ -60,18 +60,25 @@ const error = computed(() => store.error)
 const realm = computed(() => overview.value?.realm || { key: overview.value?.realm_key, minor_stage: overview.value?.minor_stage })
 const realmLabel = computed(() => `${labelFromServer(overview.value, 'realm_label', realm.value?.key, () => labelFromServer(realm.value, 'realm_label', realm.value?.key, labelRealm))} ${realm.value?.minor_stage || ''}`.trim())
 const progress = computed(() => overview.value?.next_stage || overview.value?.progress)
-const resources = computed(() => overview.value?.resources || {
-  spirit_stones: overview.value?.spirit_stones,
-  spirit_stones_label: overview.value?.spirit_stones_label,
-  merit: overview.value?.merit,
-  merit_label: overview.value?.merit_label,
-  contribution: overview.value?.contribution,
-  contribution_label: overview.value?.contribution_label,
-  mind_state: overview.value?.mind_state,
-  mind_state_label: overview.value?.mind_state_label,
-})
+const resources = computed(() => projectResources(overview.value))
 const todayItems = computed(() => toArray(overview.value?.today))
 const recentRewards = computed(() => toArray(overview.value?.recent_rewards))
+
+function projectResources(overview) {
+  const nestedResources = overview?.resources && typeof overview.resources === 'object' && !Array.isArray(overview.resources)
+    ? overview.resources
+    : {}
+  const resourceKeys = ['cultivation', 'spirit_stones', 'merit', 'contribution', 'mind_state']
+
+  return resourceKeys.reduce((projected, key) => {
+    const value = overview?.[key] ?? nestedResources[key]
+    const labelKey = `${key}_label`
+    const label = overview?.[labelKey] ?? nestedResources[labelKey]
+    if (value !== undefined) projected[key] = value
+    if (label !== undefined) projected[labelKey] = label
+    return projected
+  }, { ...nestedResources })
+}
 
 function toArray(value) {
   return Array.isArray(value) ? value : []

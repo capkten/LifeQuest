@@ -171,3 +171,26 @@ exit code 0; no output
 ```
 
 Task 5 修改范围和最终工作区的 `git diff --check` 均通过。未修改或暂存 Task 4 文件；`localization-regressions.test.mjs` 的差异仅为本次新增断言，没有覆盖既有测试内容。
+
+## Reviewer Rework
+
+修复 `Cultivation.vue` 资源投影在嵌套 `resources` 存在时短路的问题。新增 `projectResources`：先保留嵌套资源字段，再用顶层资源数值和 `*_label` 覆盖同名字段；`ResourceSummary` 仍通过 `labelFromServer` 和 `labelResource` 处理可信服务器中文标签与 fallback。报告文件虽然不在 brief Step 4 的 add 路径清单中，但按用户要求作为必要交付记录保留并随本次修复提交。
+
+TDD 证据：
+
+- RED：先加入运行时投影测试，执行后为 `25 passed, 1 failed`，失败为 `projectResources must exist`，证明测试依赖真实实现而非仅正则匹配。
+- GREEN：实现嵌套资源与顶层数值/标签合并；focused 测试为 `58 passed, 0 failed`。运行时 fixture 覆盖 `{ resources: { spirit_stones: 10 }, spirit_stones: 12, spirit_stones_label: '服务器中文灵石' }`，并验证最终 label 经过可信 helper 返回服务器中文标签。
+
+本次 rework 最终验证：
+
+```text
+cd frontend
+node --test src/views/localization-regressions.test.mjs src/views/cultivation-regressions.test.mjs
+58 passed, 0 failed
+
+npm run build
+exit code 0; Vite built 1963 modules
+
+git diff --check
+exit code 0; no output
+```
