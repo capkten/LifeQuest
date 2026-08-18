@@ -15,6 +15,14 @@ from app.services.content_catalog import (
 )
 
 
+FIXED_CORE_NPC_NAMES = {
+    "sect master": "玄衡宗主",
+    "transmission elder": "传法长老",
+    "trial envoy": "入门使者",
+}
+FIXED_CORE_LEGACY_DESCRIPTIONS = {"A fixed core character."}
+
+
 @dataclass(frozen=True)
 class ContentBackfillSummary:
     world_nodes: int = 0
@@ -31,6 +39,14 @@ class ContentLocalizationService:
             return False
         setattr(record, field, value)
         return True
+
+    @staticmethod
+    def _is_system_fixed_core_npc(npc: Npc, sect: Sect) -> bool:
+        expected_name = FIXED_CORE_NPC_NAMES.get(npc.role)
+        if expected_name is None or npc.name != expected_name:
+            return False
+        current_description = f"{sect.name}的固定核心人物。"
+        return npc.description == current_description or npc.description in FIXED_CORE_LEGACY_DESCRIPTIONS
 
     @staticmethod
     def backfill_system_content(db: Session) -> ContentBackfillSummary:
@@ -97,11 +113,17 @@ class ContentLocalizationService:
             Npc.is_core.is_(True),
             Npc.is_generated.is_(False),
             Npc.sect_id.is_not(None),
-            Npc.role.in_(generated_roles),
+            Npc.role.in_(tuple(FIXED_CORE_NPC_NAMES)),
+            Npc.population_index.is_(None),
+            Npc.cultivation_locked.is_(True),
         ).all()
         for npc in fixed_npcs:
             sect = sects_by_id.get(npc.sect_id)
-            if sect is None:
+            if (
+                sect is None
+                or sect.sect_key not in SECT_CATALOG
+                or not ContentLocalizationService._is_system_fixed_core_npc(npc, sect)
+            ):
                 continue
             if ContentLocalizationService._set_if_changed(
                 npc, "description", f"{sect.name}的固定核心人物。"

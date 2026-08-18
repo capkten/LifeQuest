@@ -176,7 +176,7 @@ def test_backfill_updates_fixed_core_npcs_by_role_without_replacing_their_relati
     core = Npc(
         user_id=user.id,
         sect_id=sect.id,
-        name="既有核心 NPC",
+        name="玄衡宗主",
         role="sect master",
         description="A fixed core character.",
         is_core=True,
@@ -191,10 +191,68 @@ def test_backfill_updates_fixed_core_npcs_by_role_without_replacing_their_relati
     isolated_db.expire_all()
     refreshed = isolated_db.query(Npc).filter_by(id=core.id).one()
     assert refreshed.description == "赤霞门的固定核心人物。"
-    assert refreshed.name == "既有核心 NPC"
+    assert refreshed.name == "玄衡宗主"
     assert refreshed.role == "sect master"
     assert refreshed.sect_id == sect.id
     assert summary.npcs == 1
+
+
+def test_backfill_does_not_match_user_core_npc_with_similar_flags(isolated_db):
+    from app.services.content_localization import ContentLocalizationService
+    from app.services.cultivation import CultivationService
+
+    user = User(
+        username=f"core-collision-{uuid4().hex}",
+        email=f"{uuid4().hex}@example.com",
+        password_hash="hashed",
+    )
+    isolated_db.add(user)
+    isolated_db.commit()
+
+    CultivationService.seed_world(isolated_db)
+    sect = isolated_db.query(Sect).filter_by(sect_key="sect-1-normal-1").one()
+    user_npc = Npc(
+        user_id=user.id,
+        sect_id=sect.id,
+        name="自建宗主",
+        role="sect master",
+        description="用户保留的核心 NPC 描述",
+        is_core=True,
+        is_generated=False,
+        cultivation=731,
+        cultivation_locked=False,
+    )
+    same_name_user_npc = Npc(
+        user_id=user.id,
+        sect_id=sect.id,
+        name="玄衡宗主",
+        role="sect master",
+        description="用户改写过的同名 NPC",
+        is_core=True,
+        is_generated=False,
+        cultivation=732,
+        cultivation_locked=True,
+    )
+    isolated_db.add_all([user_npc, same_name_user_npc])
+    isolated_db.commit()
+
+    ContentLocalizationService.backfill_system_content(isolated_db)
+
+    isolated_db.expire_all()
+    refreshed = isolated_db.query(Npc).filter_by(id=user_npc.id).one()
+    assert refreshed.name == "自建宗主"
+    assert refreshed.role == "sect master"
+    assert refreshed.description == "用户保留的核心 NPC 描述"
+    assert refreshed.sect_id == sect.id
+    assert refreshed.is_core is True
+    assert refreshed.is_generated is False
+    assert refreshed.cultivation == 731
+    assert refreshed.cultivation_locked is False
+    same_name_refreshed = isolated_db.query(Npc).filter_by(id=same_name_user_npc.id).one()
+    assert same_name_refreshed.name == "玄衡宗主"
+    assert same_name_refreshed.description == "用户改写过的同名 NPC"
+    assert same_name_refreshed.sect_id == sect.id
+    assert same_name_refreshed.cultivation == 732
 
 
 def test_backfill_is_safe_for_an_empty_database(isolated_db):
@@ -220,3 +278,121 @@ def test_seed_world_uses_chinese_catalog_for_fresh_database(isolated_db):
     assert isolated_db.query(WorldNode).count() == 9
     assert isolated_db.query(Sect).count() == 90
     assert isolated_db.query(Technique).count() == 3
+
+
+def test_repeated_seed_and_backfill_preserve_rows_relationships_and_existing_fields(legacy_content):
+    from app.services.content_localization import ContentLocalizationService
+    from app.services.cultivation import CultivationService
+
+    db, user, node, sect, technique, generated_npc, user_npc = legacy_content
+    CultivationService.seed_world(db)
+    ContentLocalizationService.backfill_system_content(db)
+
+    counts = {
+        "world_nodes": db.query(WorldNode).count(),
+        "sects": db.query(Sect).count(),
+        "techniques": db.query(Technique).count(),
+        "npcs": db.query(Npc).count(),
+        "events": db.query(NpcEvent).count(),
+    }
+    snapshot = {
+        "node": (node.id, node.name, node.description, node.required_realm, node.sort_order, node.is_hidden),
+        "sect": (sect.id, sect.name, sect.world_node_id, sect.entry_realm),
+        "technique": (technique.id, technique.name, technique.description),
+        "generated_npc": (generated_npc.id, generated_npc.user_id, generated_npc.sect_id, generated_npc.name, generated_npc.description),
+        "user_npc": (user_npc.id, user_npc.user_id, user_npc.sect_id, user_npc.name, user_npc.role, user_npc.description),
+        "events": [
+            (event.id, event.user_id, event.npc_id, event.event_key, event.summary)
+            for event in db.query(NpcEvent).order_by(NpcEvent.id).all()
+        ],
+    }
+
+    CultivationService.seed_world(db)
+    second = ContentLocalizationService.backfill_system_content(db)
+
+    assert second.world_nodes == 0
+    assert second.sects == 0
+    assert second.techniques == 0
+    assert second.npcs == 0
+    assert second.events == 0
+    assert {
+        "world_nodes": db.query(WorldNode).count(),
+        "sects": db.query(Sect).count(),
+        "techniques": db.query(Technique).count(),
+        "npcs": db.query(Npc).count(),
+        "events": db.query(NpcEvent).count(),
+    } == counts
+    refreshed_node = db.query(WorldNode).filter_by(id=node.id).one()
+    assert (
+        refreshed_node.id,
+        refreshed_node.name,
+        refreshed_node.description,
+        refreshed_node.required_realm,
+        refreshed_node.sort_order,
+        refreshed_node.is_hidden,
+    ) == snapshot["node"]
+    assert (sect.id, sect.name, sect.world_node_id, sect.entry_realm) == snapshot["sect"]
+    assert (technique.id, technique.name, technique.description) == snapshot["technique"]
+    assert (generated_npc.id, generated_npc.user_id, generated_npc.sect_id, generated_npc.name, generated_npc.description) == snapshot["generated_npc"]
+    assert (user_npc.id, user_npc.user_id, user_npc.sect_id, user_npc.name, user_npc.role, user_npc.description) == snapshot["user_npc"]
+    assert [
+        (event.id, event.user_id, event.npc_id, event.event_key, event.summary)
+        for event in db.query(NpcEvent).order_by(NpcEvent.id).all()
+    ] == snapshot["events"]
+
+
+def test_seed_then_backfill_is_safe_for_an_empty_database(isolated_db):
+    from app.services.content_localization import ContentLocalizationService
+    from app.services.cultivation import CultivationService
+
+    CultivationService.seed_world(isolated_db)
+    first = ContentLocalizationService.backfill_system_content(isolated_db)
+    CultivationService.seed_world(isolated_db)
+    second = ContentLocalizationService.backfill_system_content(isolated_db)
+
+    assert first == second
+    assert first.world_nodes == 0
+    assert first.sects == 0
+    assert first.techniques == 0
+    assert first.npcs == 0
+    assert first.events == 0
+    assert isolated_db.query(WorldNode).count() == 9
+    assert isolated_db.query(Sect).count() == 90
+    assert isolated_db.query(Technique).count() == 3
+
+
+def test_startup_runs_localization_after_seed_and_closes_session(monkeypatch):
+    from app import main
+    from app.services.achievement import AchievementService
+    from app.services.content_localization import ContentLocalizationService
+    from app.services.cultivation import CultivationService
+    from app.services.finance import FinanceService
+    from app.services.title import TitleService
+
+    calls = []
+
+    class FakeSession:
+        def close(self):
+            calls.append("close")
+
+    monkeypatch.setattr(main, "_migrate_columns", lambda: calls.append("columns"))
+    monkeypatch.setattr(main, "_migrate_note_data", lambda: calls.append("notes"))
+    monkeypatch.setattr(main, "SessionLocal", lambda: FakeSession())
+    monkeypatch.setattr(AchievementService, "seed_achievements", lambda self: calls.append("achievements"))
+    monkeypatch.setattr(TitleService, "seed_titles", lambda self: calls.append("titles"))
+    monkeypatch.setattr(FinanceService, "seed_categories", lambda db: calls.append("finance"))
+    monkeypatch.setattr(CultivationService, "seed_world", lambda db: calls.append("seed"))
+    monkeypatch.setattr(ContentLocalizationService, "backfill_system_content", lambda db: calls.append("backfill"))
+
+    main.startup_event()
+
+    assert calls == [
+        "columns",
+        "notes",
+        "achievements",
+        "titles",
+        "finance",
+        "seed",
+        "backfill",
+        "close",
+    ]
