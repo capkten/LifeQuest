@@ -18,8 +18,13 @@ class WorldNode(Base):
     name = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
     required_realm = Column(String(32), nullable=True)
+    region_key = Column(String(64), nullable=False, default="mortal")
+    required_project_phase = Column(Integer, nullable=False, default=0)
     sort_order = Column(Integer, nullable=False, default=0)
     is_hidden = Column(Boolean, nullable=False, default=False)
+    completed = Column(Boolean, nullable=False, default=False)
+    visible = Column(Boolean, nullable=False, default=True)
+    lock_reason = Column(String(128), nullable=True)
 
 
 class Sect(Base):
@@ -57,6 +62,22 @@ class SectAccessProgress(Base):
     sect_id = Column(Uuid, ForeignKey("sects.id"), nullable=False, index=True)
     messenger_contacted = Column(Boolean, nullable=False, default=False)
     trial_confirmed = Column(Boolean, nullable=False, default=False)
+    trial_status = Column(String(32), nullable=False, default="awaiting_messenger")
+    objective_snapshot = Column(Text, nullable=True)
+    objective_progress = Column(Text, nullable=True)
+    trial_score = Column(Integer, nullable=False, default=0)
+    completed_at = Column(DateTime, nullable=True)
+
+
+class WorldNodeProgress(Base):
+    __tablename__ = "world_node_progress"
+    __table_args__ = (UniqueConstraint("user_id", "node_id", name="uq_world_node_progress_user_node"),)
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
+    node_id = Column(Uuid, ForeignKey("world_nodes.id"), nullable=False, index=True)
+    completed = Column(Boolean, nullable=False, default=False)
+    completed_at = Column(DateTime, nullable=True)
 
 
 class Npc(Base):

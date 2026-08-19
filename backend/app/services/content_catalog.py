@@ -15,9 +15,14 @@ REALM_LABELS = {
 
 SOURCE_LABELS = {
     "task": "任务",
+    "subtask": "子任务",
     "habit": "习惯",
     "goal": "目标",
+    "project_phase": "项目阶段",
+    "milestone": "里程碑",
+    "trial_objective": "试炼目标",
     "checkin": "签到",
+    "npc": "NPC事件",
     "shop": "商店",
     "achievement": "成就",
     "other": "其他",
@@ -27,6 +32,59 @@ TODO_SOURCE_PREFIXES = {
     "task": "t",
     "habit": "h",
     "goal": "g",
+}
+
+# These values are the server-owned reward contract for real-life actions. The
+# legacy User.exp_reward field remains separate so existing todo APIs keep
+# their historical wallet behavior.
+CULTIVATION_REWARD_BASES = {
+    "habit": 10,
+    "task": 15,
+    "subtask": 8,
+    "goal": 45,
+    "project_phase": 75,
+    "milestone": 120,
+    "trial_objective": 180,
+}
+
+DIFFICULTY_FACTORS = {
+    "easy": 0.8,
+    "medium": 1.0,
+    "hard": 1.35,
+    "very_hard": 1.8,
+}
+
+QUALITY_FACTORS = {
+    "on_time": 1.0,
+    "early": 1.05,
+    "delayed": 0.75,
+}
+
+# Stable source semantics keep resource changes explainable in the ledger.
+CULTIVATION_RESOURCE_RULES = {
+    "habit": {"merit": 2, "contribution": 0, "mind_state_delta": 1},
+    "task": {"merit": 1, "contribution": 0, "mind_state_delta": 0},
+    "subtask": {"merit": 1, "contribution": 0, "mind_state_delta": 0},
+    "goal": {"merit": 4, "contribution": 0, "mind_state_delta": 0},
+    "project_phase": {"merit": 5, "contribution": 10, "mind_state_delta": 0},
+    "milestone": {"merit": 8, "contribution": 20, "mind_state_delta": 0},
+    "trial_objective": {"merit": 12, "contribution": 30, "mind_state_delta": 0},
+    "checkin": {"merit": 1, "contribution": 0, "mind_state_delta": 1},
+    "npc": {"merit": 2, "contribution": 5, "mind_state_delta": 1},
+}
+
+TECHNIQUE_EFFICIENCY_BONUSES = {
+    "steady-breath": 0.05,
+    "clear-mind-mantra": 0.07,
+    "stone-channel": 0.08,
+    "golden-intent": 0.10,
+    "sword-heart": 0.12,
+    "cloud-step": 0.07,
+    "five-elements-array": 0.06,
+    "spirit-gathering-mantra": 0.09,
+    "iron-bone-tempering": 0.12,
+    "body-as-mountain": 0.14,
+    "shadow-step": 0.10,
 }
 
 # Keep named exports available for callers that need a source-specific catalog.
@@ -43,47 +101,90 @@ WORLD_NODE_CATALOG = {
         "name": "青云凡域",
         "description": "凡尘散修启程之地，记录最初的修行足迹。",
         "required_realm": None,
+        "region_key": "mortal-frontier",
+        "required_project_phase": 0,
     },
     "mortal-domain-2": {
         "name": "灵台域",
         "description": "灵台初明之地，汇聚完整流派与初级秘境。",
         "required_realm": "foundation",
+        "region_key": "lingtai-region",
+        "required_project_phase": 1,
     },
     "mortal-domain-3": {
         "name": "紫府域",
         "description": "紫府洞开之地，传承高阶功法与专精构筑。",
         "required_realm": "foundation",
+        "region_key": "zifu-region",
+        "required_project_phase": 2,
     },
     "mortal-domain-4": {
         "name": "天罡域",
         "description": "天罡星力交汇之地，宗门战争在此展开。",
         "required_realm": "foundation",
+        "region_key": "tiangang-region",
+        "required_project_phase": 3,
     },
     "mortal-domain-5": {
         "name": "玄冥域",
         "description": "玄冥法则沉降之地，通往灵界与高难试炼。",
         "required_realm": "foundation",
+        "region_key": "xuanming-region",
+        "required_project_phase": 4,
     },
     "mortal-domain-6": {
         "name": "太虚域",
         "description": "太虚空间变幻之地，连接星海与多域事件。",
         "required_realm": "foundation",
+        "region_key": "taixu-region",
+        "required_project_phase": 5,
     },
     "mortal-domain-7": {
         "name": "九曜域",
         "description": "九曜星辉照临之地，承载顶级传承与宗门联盟。",
         "required_realm": "foundation",
+        "region_key": "jiuyao-region",
+        "required_project_phase": 6,
     },
     "mortal-domain-8": {
         "name": "仙阙域",
         "description": "仙阙遗泽留存之地，指向仙道遗产与天劫路线。",
         "required_realm": "foundation",
+        "region_key": "immortal-gate-region",
+        "required_project_phase": 7,
     },
     "mortal-domain-9": {
         "name": "天门域",
         "description": "天门试炼终点之前的疆域，连接天道与飞升之路。",
         "required_realm": "foundation",
+        "region_key": "heaven-gate-region",
+        "required_project_phase": 8,
     },
+}
+
+# Trial definitions are copied into a user's access row when the messenger is
+# contacted.  They must remain stable after catalog changes or a retry.
+SECT_TRIAL_CATALOG = {
+    "default": {
+        "three_star_expedition": {
+            "label": "完成一次三星历练",
+            "required": True,
+        },
+        "anonymous-sword-path": {
+            "label": "发现无名剑路",
+            "required": False,
+        },
+    }
+}
+
+HIDDEN_SECT_REVEAL_CATALOG = {
+    f"sect-{star}-hidden-10": {
+        "required_npc_event": "met",
+        "required_mind_state": 70 + (star - 1) * 2,
+        "required_world_node": f"mortal-domain-{star}",
+        "required_sect": f"sect-{star}-normal-1",
+    }
+    for star in range(1, 10)
 }
 
 _SECT_ENTRY_REALMS = {
@@ -153,6 +254,20 @@ TECHNIQUE_CATALOG = {
         "required_realm_label": REALM_LABELS["qi_refining"],
         "spirit_stone_cost": 10,
         "slot_count": 1,
+        "effect_config": {"efficiency_bonus": 0.05},
+        "conflict_tags": ["breath"],
+    },
+    "clear-mind-mantra": {
+        "name": "澄心诀",
+        "description": "澄澈心念，稳定心境，为持续修行提供额外助力。",
+        "technique_type": "mind",
+        "technique_type_label": "心法",
+        "required_realm": "foundation",
+        "required_realm_label": REALM_LABELS["foundation"],
+        "spirit_stone_cost": 20,
+        "slot_count": 1,
+        "effect_config": {"efficiency_bonus": 0.07},
+        "conflict_tags": ["breath"],
     },
     "stone-channel": {
         "name": "磐石引脉术",
@@ -163,6 +278,8 @@ TECHNIQUE_CATALOG = {
         "required_realm_label": REALM_LABELS["foundation"],
         "spirit_stone_cost": 10,
         "slot_count": 1,
+        "effect_config": {"efficiency_bonus": 0.08},
+        "conflict_tags": ["body"],
     },
     "golden-intent": {
         "name": "金丹明意诀",
@@ -173,6 +290,92 @@ TECHNIQUE_CATALOG = {
         "required_realm_label": REALM_LABELS["golden_core"],
         "spirit_stone_cost": 10,
         "slot_count": 1,
+        "effect_config": {"efficiency_bonus": 0.10},
+        "conflict_tags": ["intent"],
+    },
+    "sword-heart": {
+        "name": "剑心通明诀",
+        "description": "以专注磨砺剑心，强化主修功法的持续收益。",
+        "technique_type": "main",
+        "technique_type_label": "主修",
+        "required_realm": "foundation",
+        "required_realm_label": REALM_LABELS["foundation"],
+        "spirit_stone_cost": 25,
+        "slot_count": 1,
+        "effect_config": {"efficiency_bonus": 0.12},
+        "conflict_tags": ["intent"],
+    },
+    "cloud-step": {
+        "name": "踏云步",
+        "description": "借风行气，提升行动与历练中的修炼效率。",
+        "technique_type": "movement",
+        "technique_type_label": "身法",
+        "required_realm": "foundation",
+        "required_realm_label": REALM_LABELS["foundation"],
+        "spirit_stone_cost": 20,
+        "slot_count": 1,
+        "effect_config": {"efficiency_bonus": 0.07},
+        "conflict_tags": ["movement"],
+    },
+    "five-elements-array": {
+        "name": "五行辅阵",
+        "description": "以五行相生辅助主修，稳定多路径修行。",
+        "technique_type": "auxiliary",
+        "technique_type_label": "辅修",
+        "required_realm": "qi_refining",
+        "required_realm_label": REALM_LABELS["qi_refining"],
+        "spirit_stone_cost": 15,
+        "slot_count": 1,
+        "effect_config": {"efficiency_bonus": 0.06},
+        "conflict_tags": ["elements"],
+    },
+    "spirit-gathering-mantra": {
+        "name": "聚灵辅诀",
+        "description": "引导周天灵气，为主修功法提供稳定助力。",
+        "technique_type": "auxiliary",
+        "technique_type_label": "辅修",
+        "required_realm": "foundation",
+        "required_realm_label": REALM_LABELS["foundation"],
+        "spirit_stone_cost": 30,
+        "slot_count": 1,
+        "effect_config": {"efficiency_bonus": 0.09},
+        "conflict_tags": ["elements"],
+    },
+    "iron-bone-tempering": {
+        "name": "铁骨淬身法",
+        "description": "循序淬炼筋骨，提升身心承载修为的能力。",
+        "technique_type": "body",
+        "technique_type_label": "炼体",
+        "required_realm": "foundation",
+        "required_realm_label": REALM_LABELS["foundation"],
+        "spirit_stone_cost": 25,
+        "slot_count": 1,
+        "effect_config": {"efficiency_bonus": 0.12},
+        "conflict_tags": ["body"],
+    },
+    "body-as-mountain": {
+        "name": "山岳炼体篇",
+        "description": "以山岳之势锻造根基，强化高强度修行的稳定性。",
+        "technique_type": "body",
+        "technique_type_label": "炼体",
+        "required_realm": "golden_core",
+        "required_realm_label": REALM_LABELS["golden_core"],
+        "spirit_stone_cost": 45,
+        "slot_count": 1,
+        "effect_config": {"efficiency_bonus": 0.14},
+        "conflict_tags": ["body"],
+    },
+    "shadow-step": {
+        "name": "无痕遁影",
+        "description": "收束身形与气息，提升探索历练的行动效率。",
+        "technique_type": "movement",
+        "technique_type_label": "身法",
+        "required_realm": "golden_core",
+        "required_realm_label": REALM_LABELS["golden_core"],
+        "spirit_stone_cost": 40,
+        "slot_count": 1,
+        "effect_config": {"efficiency_bonus": 0.10},
+        "conflict_tags": ["movement"],
     },
 }
 

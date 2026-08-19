@@ -21,10 +21,18 @@ class Technique(Base):
     required_realm = Column(String(32), nullable=True)
     spirit_stone_cost = Column(Integer, nullable=False, default=0)
     slot_count = Column(Integer, nullable=False, default=1)
+    effect_config = Column(Text, nullable=False, default="{}")
+    conflict_tags = Column(Text, nullable=False, default="[]")
 
 
 class TechniqueSlot(Base):
     __tablename__ = "technique_slots"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "slot_type", "slot_index",
+            name="uq_technique_slot_user_type_index",
+        ),
+    )
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)

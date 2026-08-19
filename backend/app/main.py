@@ -85,6 +85,49 @@ def _deduplicate_learned_techniques(connection):
             seen.add(key)
 
 
+def _deduplicate_technique_slots(connection):
+    """Keep one slot per user/type/index and compact surviving slots."""
+    rows = connection.execute(text(
+        "SELECT id, user_id, slot_type, slot_index "
+        "FROM technique_slots "
+        "ORDER BY user_id, slot_type, slot_index, id"
+    )).fetchall()
+    seen = set()
+    for slot_id, user_id, slot_type, slot_index in rows:
+        key = (user_id, slot_type, slot_index)
+        if key in seen:
+            connection.execute(
+                text("DELETE FROM technique_slots WHERE id = :id"),
+                {"id": slot_id},
+            )
+        else:
+            seen.add(key)
+
+    grouped = connection.execute(text(
+        "SELECT id, user_id, slot_type FROM technique_slots "
+        "ORDER BY user_id, slot_type, slot_index, id"
+    )).fetchall()
+    positions = {}
+    for slot_id, user_id, slot_type in grouped:
+        key = (user_id, slot_type)
+        position = positions.get(key, 0)
+        connection.execute(
+            text("UPDATE technique_slots SET slot_index = :slot_index WHERE id = :id"),
+            {"slot_index": -(position + 1), "id": slot_id},
+        )
+        positions[key] = position + 1
+
+    next_index = {}
+    for slot_id, user_id, slot_type in grouped:
+        key = (user_id, slot_type)
+        position = next_index.get(key, 0)
+        connection.execute(
+            text("UPDATE technique_slots SET slot_index = :slot_index WHERE id = :id"),
+            {"slot_index": position, "id": slot_id},
+        )
+        next_index[key] = position + 1
+
+
 def _has_unique_definition(inspector, table_name, column_names):
     column_names = list(column_names)
     try:
@@ -682,6 +725,23 @@ def _migrate_columns():
             ))
             logger.info("Migration: added finance_transactions.recurring_id")
 
+        # System shop products use a stable key; nullable legacy user items
+        # remain valid and are intentionally not backfilled.
+        try:
+            shop_item_cols = {c["name"] for c in inspector.get_columns("shop_items")}
+        except (KeyError, NoSuchTableError):
+            shop_item_cols = None
+        if shop_item_cols is not None:
+            if "item_key" not in shop_item_cols:
+                conn.execute(text("ALTER TABLE shop_items ADD COLUMN item_key VARCHAR(64)"))
+                logger.info("Migration: added shop_items.item_key")
+            _ensure_unique_index(
+                conn,
+                "shop_items",
+                "uq_shop_items_item_key",
+                ["item_key"],
+            )
+
         # Task 2 reward idempotency. Deduplicate only exact non-null keys and
         # keep the deterministic lowest-id legacy row before creating guards.
         _migrate_reward_idempotency_constraints(conn)
@@ -718,6 +778,21 @@ def _migrate_columns():
             if "source_key" not in cultivation_log_cols:
                 conn.execute(text("ALTER TABLE cultivation_logs ADD COLUMN source_key VARCHAR(128)"))
                 logger.info("Migration: added cultivation_logs.source_key")
+                cultivation_log_cols.add("source_key")
+            new_cultivation_log_cols = {
+                "aptitude_points_delta": "INTEGER NOT NULL DEFAULT 0",
+                "mind_state_delta": "INTEGER NOT NULL DEFAULT 0",
+                "efficiency_delta": "FLOAT NOT NULL DEFAULT 0",
+                "efficiency": "FLOAT NOT NULL DEFAULT 1",
+                "ready_for_tribulation": "BOOLEAN NOT NULL DEFAULT 0",
+            }
+            for column_name, column_definition in new_cultivation_log_cols.items():
+                if column_name in cultivation_log_cols:
+                    continue
+                conn.execute(text(
+                    f"ALTER TABLE cultivation_logs ADD COLUMN {column_name} {column_definition}"
+                ))
+                logger.info("Migration: added cultivation_logs.%s", column_name)
             _deduplicate_cultivation_logs(conn)
             _ensure_unique_index(
                 conn,
@@ -735,6 +810,35 @@ def _migrate_columns():
             "uq_techniques_technique_key",
             (("learned_techniques", "technique_id"), ("technique_slots", "technique_id")),
         )
+        try:
+            technique_cols = {c["name"] for c in inspect(conn).get_columns("techniques")}
+        except (KeyError, NoSuchTableError):
+            technique_cols = None
+        if technique_cols is not None:
+            for column_name, column_definition in {
+                "effect_config": "TEXT NOT NULL DEFAULT '{}'",
+                "conflict_tags": "TEXT NOT NULL DEFAULT '[]'",
+            }.items():
+                if column_name in technique_cols:
+                    continue
+                conn.execute(text(
+                    f"ALTER TABLE techniques ADD COLUMN {column_name} {column_definition}"
+                ))
+                logger.info("Migration: added techniques.%s", column_name)
+        try:
+            inspect(conn).get_columns("technique_slots")
+        except (KeyError, NoSuchTableError):
+            technique_slot_table_exists = False
+        else:
+            technique_slot_table_exists = True
+        if technique_slot_table_exists:
+            _deduplicate_technique_slots(conn)
+            _ensure_unique_index(
+                conn,
+                "technique_slots",
+                "uq_technique_slot_user_type_index",
+                ["user_id", "slot_type", "slot_index"],
+            )
         _migrate_learned_technique_constraint(inspector, conn)
         _migrate_unique_key_table(
             inspector,
@@ -745,6 +849,65 @@ def _migrate_columns():
             (("sect_access_progress", "sect_id"), ("sect_memberships", "sect_id"), ("npcs", "sect_id")),
         )
         _migrate_sect_access_constraint(conn)
+
+        # Task 8 sect trial and per-user world progression state.  Each column
+        # is migrated independently so partially upgraded databases remain
+        # readable while the process is restarted.
+        try:
+            sect_access_cols = {c["name"] for c in inspector.get_columns("sect_access_progress")}
+        except (KeyError, NoSuchTableError):
+            sect_access_cols = None
+        if sect_access_cols is not None:
+            new_access_cols = {
+                "trial_status": "VARCHAR(32) NOT NULL DEFAULT 'awaiting_messenger'",
+                "objective_snapshot": "TEXT",
+                "objective_progress": "TEXT",
+                "trial_score": "INTEGER NOT NULL DEFAULT 0",
+                "completed_at": "DATETIME",
+            }
+            for column_name, column_definition in new_access_cols.items():
+                if column_name not in sect_access_cols:
+                    conn.execute(text(
+                        f"ALTER TABLE sect_access_progress ADD COLUMN {column_name} {column_definition}"
+                    ))
+            conn.execute(text(
+                "UPDATE sect_access_progress SET trial_status = "
+                "CASE WHEN trial_confirmed = 1 THEN 'completed' "
+                "WHEN messenger_contacted = 1 THEN 'awaiting_trial' "
+                "ELSE 'awaiting_messenger' END"
+            ))
+
+        try:
+            world_node_cols = {c["name"] for c in inspector.get_columns("world_nodes")}
+        except (KeyError, NoSuchTableError):
+            world_node_cols = None
+        if world_node_cols is not None:
+            new_node_cols = {
+                "region_key": "VARCHAR(64) NOT NULL DEFAULT 'mortal'",
+                "required_project_phase": "INTEGER NOT NULL DEFAULT 0",
+                "completed": "BOOLEAN NOT NULL DEFAULT 0",
+                "visible": "BOOLEAN NOT NULL DEFAULT 1",
+                "lock_reason": "VARCHAR(128)",
+            }
+            for column_name, column_definition in new_node_cols.items():
+                if column_name not in world_node_cols:
+                    conn.execute(text(
+                        f"ALTER TABLE world_nodes ADD COLUMN {column_name} {column_definition}"
+                    ))
+        # Keep this migration compatible with the lightweight migration
+        # connection doubles used by the existing startup tests.  The ORM
+        # model is still the authoritative runtime shape; this statement only
+        # bootstraps the table for databases created before Task 8.
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS world_node_progress ("
+            "id VARCHAR(36) PRIMARY KEY, "
+            "user_id VARCHAR(36) NOT NULL, "
+            "node_id VARCHAR(36) NOT NULL, "
+            "completed BOOLEAN NOT NULL DEFAULT 0, "
+            "completed_at DATETIME, "
+            "CONSTRAINT uq_world_node_progress_user_node UNIQUE (user_id, node_id)"
+            ")"
+        ))
 
         # note_nodes.last_opened_at
         note_node_cols = {c["name"] for c in inspector.get_columns("note_nodes")}
@@ -801,6 +964,8 @@ def startup_event():
         # Seed default finance categories
         from app.services.finance import FinanceService
         FinanceService.seed_categories(db)
+        from app.services.shop import ShopService
+        ShopService.seed_system_items(db)
         from app.services.cultivation import CultivationService
         from app.services.content_localization import ContentLocalizationService
         CultivationService.seed_world(db)

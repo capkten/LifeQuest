@@ -221,7 +221,9 @@
             <p v-if="dialogError" class="form-error" role="alert">{{ dialogError }}</p>
             <div class="dialog-actions">
               <button type="button" class="button button--quiet" @click="closeDialog">取消</button>
-              <button type="submit" class="button button--primary" :disabled="!folderForm.name.trim()">创建文件夹</button>
+              <button type="submit" class="button button--primary" :disabled="pendingActions.folder || !folderForm.name.trim()">
+                {{ pendingActions.folder ? '创建中...' : '创建文件夹' }}
+              </button>
             </div>
           </form>
 
@@ -231,7 +233,9 @@
             <p v-if="dialogError" class="form-error" role="alert">{{ dialogError }}</p>
             <div class="dialog-actions">
               <button type="button" class="button button--quiet" @click="closeDialog">取消</button>
-              <button type="submit" class="button button--primary" :disabled="!noteForm.title.trim()">创建笔记</button>
+              <button type="submit" class="button button--primary" :disabled="pendingActions.note || !noteForm.title.trim()">
+                {{ pendingActions.note ? '创建中...' : '创建笔记' }}
+              </button>
             </div>
           </form>
 
@@ -241,7 +245,9 @@
             <p v-if="dialogError" class="form-error" role="alert">{{ dialogError }}</p>
             <div class="dialog-actions">
               <button type="button" class="button button--quiet" @click="closeDialog">取消</button>
-              <button type="submit" class="button button--primary" :disabled="!renameForm.name.trim()">保存名称</button>
+              <button type="submit" class="button button--primary" :disabled="pendingActions.rename || !renameForm.name.trim()">
+                {{ pendingActions.rename ? '保存中...' : '保存名称' }}
+              </button>
             </div>
           </form>
 
@@ -256,7 +262,9 @@
             <p v-if="dialogError" class="form-error" role="alert">{{ dialogError }}</p>
             <div class="dialog-actions">
               <button type="button" class="button button--quiet" @click="closeDialog">取消</button>
-              <button type="submit" class="button button--primary">移动</button>
+              <button type="submit" class="button button--primary" :disabled="pendingActions.move">
+                {{ pendingActions.move ? '移动中...' : '移动' }}
+              </button>
             </div>
           </form>
         </div>
@@ -272,7 +280,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import NoteTree from '../components/notes/NoteTree.vue'
 import NoteViewer from '../components/notes/NoteViewer.vue'
@@ -311,6 +319,7 @@ const folderForm = ref({ name: '', parentId: null })
 const noteForm = ref({ title: '', parentId: null })
 const renameForm = ref({ name: '', nodeId: null })
 const moveForm = ref({ nodeId: null, parentId: null })
+const pendingActions = reactive({ folder: false, note: false, rename: false, move: false })
 const dialogTrigger = ref(null)
 const toast = ref({ show: false, message: '', type: 'success' })
 const viewerNote = ref(null)
@@ -500,7 +509,17 @@ function handleCreateNoteRequest(payload = {}) {
   openCreateNote(payload.parentId ?? currentFolderId.value)
 }
 
+function hasPendingDialogAction() {
+  return Boolean(dialogMode.value && pendingActions[dialogMode.value])
+}
+
 function openCreateFolder(parentId = currentFolderId.value) {
+  if (hasPendingDialogAction()) {
+    showToast('当前操作正在进行，请等待完成后再试。', 'error')
+    return
+  }
+  dialogTrigger.value = document.activeElement
+  dialogMode.value = 'folder'
   dialogTrigger.value = document.activeElement
   dialogMode.value = 'folder'
   dialogError.value = null
@@ -509,6 +528,10 @@ function openCreateFolder(parentId = currentFolderId.value) {
 }
 
 function openCreateNote(parentId = currentFolderId.value) {
+  if (hasPendingDialogAction()) {
+    showToast('当前操作正在进行，请等待完成后再试。', 'error')
+    return
+  }
   dialogTrigger.value = document.activeElement
   dialogMode.value = 'note'
   dialogError.value = null
@@ -517,6 +540,10 @@ function openCreateNote(parentId = currentFolderId.value) {
 }
 
 function openRename(node) {
+  if (hasPendingDialogAction()) {
+    showToast('当前操作正在进行，请等待完成后再试。', 'error')
+    return
+  }
   dialogTrigger.value = document.activeElement
   dialogMode.value = 'rename'
   dialogError.value = null
@@ -525,6 +552,10 @@ function openRename(node) {
 }
 
 function openMove(node) {
+  if (hasPendingDialogAction()) {
+    showToast('当前操作正在进行，请等待完成后再试。', 'error')
+    return
+  }
   dialogTrigger.value = document.activeElement
   dialogMode.value = 'move'
   dialogError.value = null
@@ -532,6 +563,10 @@ function openMove(node) {
 }
 
 function closeDialog() {
+  if (hasPendingDialogAction()) {
+    showToast('当前操作正在进行，请等待完成后再试。', 'error')
+    return
+  }
   dialogMode.value = null
   dialogError.value = null
   nextTick(() => dialogTrigger.value?.focus?.())
@@ -546,18 +581,26 @@ function focusDialogInput(select = false) {
 }
 
 async function submitCreateFolder() {
+  if (pendingActions.folder) return
+  pendingActions.folder = true
   try {
     await createFolder({ name: folderForm.value.name, parentId: folderForm.value.parentId })
+    pendingActions.folder = false
     closeDialog()
     showToast('文件夹已创建')
   } catch (cause) {
     dialogError.value = getErrorMessage(cause)
+  } finally {
+    pendingActions.folder = false
   }
 }
 
 async function submitCreateNote() {
+  if (pendingActions.note) return
+  pendingActions.note = true
   try {
     const node = await createNote({ title: noteForm.value.title, parentId: noteForm.value.parentId })
+    pendingActions.note = false
     closeDialog()
     treeOpen.value = false
     showToast('笔记已创建')
@@ -566,26 +609,38 @@ async function submitCreateNote() {
     }
   } catch (cause) {
     dialogError.value = getErrorMessage(cause)
+  } finally {
+    pendingActions.note = false
   }
 }
 
 async function submitRename() {
+  if (pendingActions.rename) return
+  pendingActions.rename = true
   try {
     await renameNode(renameForm.value.nodeId, renameForm.value.name)
+    pendingActions.rename = false
     closeDialog()
     showToast('名称已更新')
   } catch (cause) {
     dialogError.value = getErrorMessage(cause)
+  } finally {
+    pendingActions.rename = false
   }
 }
 
 async function submitMove() {
+  if (pendingActions.move) return
+  pendingActions.move = true
   try {
     await moveNode(moveForm.value.nodeId, moveForm.value.parentId)
+    pendingActions.move = false
     closeDialog()
     showToast('节点已移动')
   } catch (cause) {
     dialogError.value = getErrorMessage(cause)
+  } finally {
+    pendingActions.move = false
   }
 }
 
@@ -607,7 +662,13 @@ async function handleDelete(node) {
 watch(notebookId, loadWorkspace, { immediate: true })
 watch(() => route.params.noteId, syncRouteSelection)
 watch(isNewNoteRoute, (isNew) => {
-  if (isNew) openCreateNote(currentFolderId.value)
+  if (isNew) {
+    if (dialogMode.value && pendingActions[dialogMode.value]) {
+      showToast('当前操作正在进行，请等待完成后再试。', 'error')
+      return
+    }
+    openCreateNote(currentFolderId.value)
+  }
 })
 watch(dialogMode, (mode) => {
   if (mode) nextTick(focusDialogInput)

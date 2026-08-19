@@ -22,6 +22,10 @@ from app.schemas.cultivation import (
     TribulationPreview,
     TribulationResult,
     WorldResponse,
+    WorldNodeResponse,
+    SectAccessResponse,
+    HiddenSectSummary,
+    TrialObjectiveRequest,
 )
 from app.services.cultivation import CultivationService
 
@@ -85,9 +89,50 @@ def complete_sect_trial(sect_id: str, current_user: User = Depends(get_current_u
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.get("/sects/{sect_id}/access", response_model=SectAccessResponse)
+def sect_access(sect_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    try:
+        return _service(db).get_sect_access(current_user.id, sect_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/sects/{sect_id}/trial/objectives/{objective_key}", response_model=SectAccessResponse)
+def update_trial_objective(
+    sect_id: str,
+    objective_key: str,
+    payload: TrialObjectiveRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return _service(db).update_trial_objective(
+            current_user.id, sect_id, objective_key, payload.completed
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/sects/hidden/evaluate", response_model=List[HiddenSectSummary])
+def evaluate_hidden_sects(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return _service(db).evaluate_hidden_sects(current_user.id)
+
+
 @router.post("/sects/leave")
 def leave_sect(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return _service(db).leave_sect(current_user.id)
+
+
+@router.post("/world/{node_key}/complete", response_model=WorldNodeResponse)
+def complete_world_node(node_key: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    try:
+        return _service(db).complete_world_node(current_user.id, node_key)
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/techniques", response_model=TechniqueLibraryResponse)

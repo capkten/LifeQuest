@@ -144,8 +144,16 @@ class ProjectService:
         return self.phase_repo.update(phase, update_data)
 
     def delete_phase(self, phase: ProjectPhase) -> None:
-        # Nullify tasks referencing this phase
-        self.db.query(Task).filter(Task.phase_id == phase.id).update({Task.phase_id: None})
+        task_count = self.phase_repo.count_tasks(phase.id)
+        if task_count:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "PROJECT_PHASE_HAS_TASKS",
+                    "message": f"阶段仍有 {task_count} 个任务，请先移动任务后再删除。",
+                    "task_count": task_count,
+                },
+            )
         self.db.flush()
         self.phase_repo.delete(phase.id)
 

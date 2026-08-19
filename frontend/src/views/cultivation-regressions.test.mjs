@@ -107,6 +107,9 @@ test('cultivation error details from the backend map to actionable messages', ()
   const details = [
     ['TECHNIQUE_REALM_REQUIRED:筑基', '筑基'],
     ['SLOT_REALM_REQUIRED:金丹', '金丹'],
+    ['TRIAL_MESSENGER_REQUIRED:messenger contact required before trial', '使者'],
+    ['TRIAL_OBJECTIVE_UNMET:three_star_expedition', '试炼目标'],
+    ['WORLD_NODE_PREVIOUS_REQUIRED:mortal-domain-1', '前置节点'],
     ['FINAL_MINOR_STAGE_REQUIRED', '最终小境界'],
     ['tribulation already complete', '已经完成'],
     ['tribulation cooldown active', '冷却'],
@@ -177,7 +180,8 @@ test('cultivation shared states expose accessible stable contracts', async () =>
   assert.match(slots, /:disabled="[^"]*(busy|loading)/)
   assert.match(mapNode, /locked/)
   assert.match(mapNode, /labelStatus/)
-  assert.match(mapNode, /:disabled="isLocked"/)
+  assert.match(mapNode, /:aria-disabled="isLocked"/)
+  assert.doesNotMatch(mapNode, /:disabled="isLocked"/)
   assert.match(npcTimeline, /fixed_core/)
   assert.match(npcTimeline, /recently_met/)
   assert.match(npcTimeline, /events/)
@@ -202,7 +206,7 @@ test('world page has lock and selection semantics', async () => {
   assert.match(source, /completed/)
   assert.match(source, /ascended/)
   assert.match(source, /:disabled|locked/)
-  assert.doesNotMatch(source, /node\.is_current|node\.status === ['"]current['"]|node\.completed/)
+  assert.match(source, /node\.completed/)
 })
 
 test('sidebar uses the explicit API ascended state', async () => {
@@ -303,6 +307,10 @@ test('technique page shows price and conflict without relying on color', async (
   assert.match(source, /灵石/)
   assert.match(source, /冲突/)
   assert.match(source, /TechniqueSlotGrid/)
+  assert.match(source, /const slotTypes = \['main', 'auxiliary', 'mind', 'movement', 'body'\]/)
+
+  const slotGrid = await readFile(new URL('../components/cultivation/TechniqueSlotGrid.vue', import.meta.url), 'utf8')
+  assert.match(slotGrid, /\['main', 'auxiliary', 'mind', 'movement', 'body'\]/)
 })
 
 test('task 12 exposes technique learning and tribulation lock states', async () => {
@@ -334,7 +342,7 @@ test('task 7 fixes preserve authoritative state and honest empty/locked states',
   assert.match(techniques, /conflict/)
   assert.match(techniques, /暂无已学功法|功法库为空|empty/i)
   assert.match(sects, /can_join/)
-  assert.match(sects, /visible === true/)
+  assert.match(sects, /visible !== true/)
   assert.doesNotMatch(sects, /concat\(\[['"]宗主|传功长老|试炼使者/)
   assert.match(slots, /visibleSlots/)
 })
@@ -345,8 +353,34 @@ test('technique confirmation uses authoritative server preview values', async ()
   assert.match(source, /spirit_stones/)
   assert.match(source, /next_slot_purchases/)
   assert.match(source, /post_purchase_balance/)
+  assert.match(source, /realm_confirmed:\s*preview\?\.realm_confirmed/)
   assert.doesNotMatch(source, /const prices\s*=/)
   assert.doesNotMatch(source, /服务器返回后显示/)
+})
+
+test('technique slot purchase always explains blocked clicks', async () => {
+  const source = await readFile(new URL('./Techniques.vue', import.meta.url), 'utf8')
+  const purchaseFunction = source.match(/async function purchase\(\)[\s\S]*?(?=\nasync function learn)/)?.[0] || ''
+
+  assert.match(source, /purchaseFeedback/)
+  assert.match(source, /cultivation-state--action[\s\S]*purchaseFeedback/)
+  assert.match(source, /function explainPurchaseBlocked\(/)
+  assert.match(source, /!slot\?\.isNext[\s\S]*explainPurchaseBlocked/)
+  assert.match(source, /slot\.can_purchase !== true[\s\S]*explainPurchaseBlocked/)
+  assert.doesNotMatch(purchaseFunction, /error\.value\s*=/, 'purchase action failures must stay in the action feedback region')
+  assert.match(source, /:disabled="busy"[^>]*:aria-disabled="selectedSlot\.purchased \|\| selectedSlot\.can_purchase === false"/)
+})
+
+test('clicking the next technique slot surfaces the purchase panel', async () => {
+  const source = await readFile(new URL('./Techniques.vue', import.meta.url), 'utf8')
+
+  assert.match(source, /import \{ computed, nextTick, onMounted, ref \} from 'vue'/)
+  assert.match(source, /ref="purchasePanel"/)
+  assert.match(source, /tabindex="-1"/)
+  assert.match(source, /function selectSlot\(slot\)[\s\S]*purchaseFeedback\.value[\s\S]*nextTick/)
+  assert.match(source, /purchasePanel\.value\.scrollIntoView/)
+  assert.match(source, /purchasePanel\.value\.focus/)
+  assert.match(source, /已选择.*购买|已选择.*格子/)
 })
 
 test('technique purchase preview locks unavailable purchases with an actionable error', async () => {
@@ -354,7 +388,8 @@ test('technique purchase preview locks unavailable purchases with an actionable 
 
   assert.match(source, /can_purchase\s*===\s*false/)
   assert.match(source, /境界不足|灵石不足|无法购买|不可购买/)
-  assert.match(source, /error\.value\s*=\s*new Error|error\.value\s*=\s*['"`]/)
+  assert.match(source, /purchaseFeedback/)
+  assert.match(source, /explainPurchaseBlocked/)
 })
 
 test('sect joining follows server eligibility fields', async () => {
@@ -411,4 +446,36 @@ test('tribulation locks explain prerequisites and cooldown without native disabl
   assert.match(page, /冷却|渡劫前置条件/)
   assert.match(probability, /aria-disabled/)
   assert.match(probability, /lockReasonLabel|cooldownLabel/)
+})
+
+test('sect actions stay clickable and expose trial objectives and blocked reasons', async () => {
+  const [page, service] = await Promise.all([
+    readFile(new URL('./Sects.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../services/cultivation.js', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(page, /getErrorMessage/)
+  assert.match(page, /function explainBlocked\(/)
+  assert.match(page, /aria-disabled/)
+  assert.doesNotMatch(page, /:disabled="[^\"]*(?:visible|realm_confirmed|messenger_contacted|can_join)/)
+  assert.match(page, /getSectAccess/)
+  assert.match(page, /updateTrialObjective/)
+  assert.match(page, /objective\.completed/)
+  assert.match(service, /updateTrialObjective[\s\S]*trial\/objectives/)
+})
+
+test('world node actions use server progression and explain locked clicks', async () => {
+  const [page, node, service] = await Promise.all([
+    readFile(new URL('./World.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../components/cultivation/MapNode.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../services/cultivation.js', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(page, /completeWorldNode/)
+  assert.match(page, /function explainBlocked\(/)
+  assert.match(page, /lock_reason/)
+  assert.match(page, /node\.completed/)
+  assert.match(node, /aria-disabled/)
+  assert.doesNotMatch(node, /:disabled="isLocked"/)
+  assert.match(service, /completeWorldNode[\s\S]*world\/\$\{nodeKey\}\/complete/)
 })

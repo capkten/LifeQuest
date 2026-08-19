@@ -38,6 +38,11 @@ class CultivationLog(Base):
     spirit_stones_delta = Column(Integer, nullable=False, default=0)
     merit_delta = Column(Integer, nullable=False, default=0)
     contribution_delta = Column(Integer, nullable=False, default=0)
+    aptitude_points_delta = Column(Integer, nullable=False, default=0)
+    mind_state_delta = Column(Integer, nullable=False, default=0)
+    efficiency_delta = Column(Float, nullable=False, default=0.0)
+    efficiency = Column(Float, nullable=False, default=1.0)
+    ready_for_tribulation = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, nullable=False, default=utc_now)
 
 

@@ -352,7 +352,7 @@ def test_complete_task_creates_one_cultivation_log_and_keeps_legacy_rewards(clie
         ).one()
         assert user.experience == 15
         assert user.coins == 70
-        assert profile.cultivation == 33
+        assert profile.cultivation == 32
         assert profile.spirit_stones == 19
     finally:
         db.close()

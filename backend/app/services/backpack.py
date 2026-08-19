@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.backpack import BackpackItem, ItemType, ItemStatus, UsageAction, UsageHistory
+from app.models.shop import ShopItem
 from app.repositories.backpack import BackpackItemRepository, UsageHistoryRepository
 from app.repositories.shop import ShopItemRepository
 
@@ -138,6 +139,47 @@ class BackpackService:
 
     def get_usage_history(self, user_id: UUID) -> List[UsageHistory]:
         return self.history_repo.get_by_user(user_id)
+
+    def get_items_by_key(self, user_id: UUID, item_key: str, lock: bool = False) -> List[BackpackItem]:
+        query = self.db.query(BackpackItem).join(
+            ShopItem, ShopItem.id == BackpackItem.shop_item_id
+        ).filter(
+            BackpackItem.user_id == user_id,
+            ShopItem.item_key == item_key,
+            BackpackItem.status.in_((ItemStatus.ACTIVE, ItemStatus.EQUIPPED)),
+            BackpackItem.quantity > 0,
+        ).order_by(BackpackItem.id)
+        if lock:
+            query = query.with_for_update()
+        return query.all()
+
+    def consume_by_key(self, user_id: UUID, item_key: str, quantity: int) -> int:
+        if quantity < 0:
+            raise ValueError("quantity must be non-negative")
+        if quantity == 0:
+            return 0
+
+        rows = self.get_items_by_key(user_id, item_key, lock=True)
+        owned = sum(row.quantity for row in rows)
+        if owned < quantity:
+            raise PermissionError(
+                f"TRIBULATION_PILL_INSUFFICIENT:{quantity}:{owned}"
+            )
+
+        remaining = quantity
+        for row in rows:
+            consumed = min(row.quantity, remaining)
+            row.quantity -= consumed
+            self._log_history_no_commit(
+                user_id, row.id, row.shop_item_id, UsageAction.USE, consumed
+            )
+            remaining -= consumed
+            if row.quantity <= 0:
+                self.db.delete(row)
+            if remaining == 0:
+                break
+        self.db.flush()
+        return quantity
 
     def get_usage_history_with_names(
         self, user_id: UUID

@@ -22,6 +22,9 @@ class RewardSettlement(BaseModel):
     cultivation: int
     spirit_stones: int
     merit: int
+    aptitude_points: int
+    mind_state_delta: int
+    contribution: int
     efficiency: float
     log_id: UUID
     legacy_exp: int
@@ -54,12 +57,38 @@ class WorldNodeResponse(BaseModel):
     name: str
     description: Optional[str] = None
     required_realm: Optional[str] = None
+    region_key: str = "mortal"
+    required_project_phase: int = 0
     sort_order: int
     is_hidden: bool
+    completed: bool = False
+    visible: bool = True
+    lock_reason: Optional[str] = None
 
 
 class WorldResponse(BaseModel):
     nodes: List[WorldNodeResponse]
+
+
+class SectAccessResponse(BaseModel):
+    sect_key: str
+    status: str
+    objectives: Dict[str, Any] = Field(default_factory=dict)
+    score: int = 0
+    messenger_contacted: bool = False
+    trial_confirmed: bool = False
+    completed_at: Optional[datetime] = None
+
+
+class HiddenSectSummary(BaseModel):
+    sect_key: str
+    name: Optional[str] = None
+    star: int
+    kind: str = "hidden"
+    visible: bool = False
+    can_join: bool = False
+    lock_reason: Optional[str] = None
+    missing_conditions: List[str] = Field(default_factory=list)
 
 
 class SectSummary(BaseModel):
@@ -83,6 +112,8 @@ class SectSummary(BaseModel):
     messenger_contacted: bool = False
     trial_confirmed: bool = False
     trial_status: str = "awaiting"
+    lock_reason: Optional[str] = None
+    missing_conditions: List[str] = Field(default_factory=list)
 
 
 class SectMembershipResponse(BaseModel):
@@ -103,6 +134,8 @@ class TechniqueSummary(BaseModel):
     required_realm_label: Optional[str] = None
     spirit_stone_cost: int
     slot_count: int
+    effect_config: Dict[str, Any] = Field(default_factory=dict)
+    conflict_tags: List[str] = Field(default_factory=list)
     learned: bool = False
     realm_confirmed: bool = True
 
@@ -170,6 +203,11 @@ class NpcMeetRequest(BaseModel):
     population_index: int = Field(ge=0)
 
 
+class TrialObjectiveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    completed: bool = True
+
+
 class NpcEventSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     event_id: UUID
@@ -190,6 +228,14 @@ class TribulationAttemptRequest(BaseModel):
     pill_count: int = Field(default=0, ge=0)
 
 
+class TribulationPrerequisite(BaseModel):
+    key: str
+    label: str
+    required: Any
+    current: Any
+    satisfied: bool
+
+
 class TribulationPreview(BaseModel):
     target_realm: str
     base_probability: float
@@ -197,6 +243,7 @@ class TribulationPreview(BaseModel):
     readiness_breakdown: Dict[str, float]
     readiness_bonus: float
     pill_count: int
+    owned_pills: int = 0
     pill_bonus: float
     final_probability: float
     failure_loss_percent: float
@@ -205,6 +252,7 @@ class TribulationPreview(BaseModel):
     terminal: bool = False
     available: bool = True
     lock_reason: Optional[str] = None
+    prerequisites: List[TribulationPrerequisite] = Field(default_factory=list)
 
 
 class TribulationResult(BaseModel):

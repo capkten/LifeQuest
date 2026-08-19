@@ -44,13 +44,13 @@
               </svg>
               编辑
             </button>
-            <button v-if="project.status !== 'completed'" class="btn-outline btn-outline--success" @click="completeProject">
+            <button v-if="project.status !== 'completed'" class="btn-outline btn-outline--success" @click="completeProject" :disabled="finishing" :aria-disabled="finishing">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <path d="M20 6L9 17l-5-5" />
               </svg>
-              完成项目
+              {{ finishing ? '完成中...' : '完成项目' }}
             </button>
-            <button class="btn-outline btn-outline--danger" @click="showDeleteDialog = true">
+            <button class="btn-outline btn-outline--danger" @click="showDeleteDialog = true" :disabled="deleting">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <polyline points="3 6 5 6 21 6" />
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -164,7 +164,7 @@
               <button class="btn-icon" @click="openPhaseDialog(phase)" aria-label="编辑">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
               </button>
-              <button class="btn-icon btn-icon--danger" @click="deletePhase(phase)" aria-label="删除">
+              <button class="btn-icon btn-icon--danger" @click="deletePhase(phase)" aria-label="删除" :disabled="deletingPhaseId === phase.id" :aria-disabled="deletingPhaseId === phase.id">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
               </button>
             </div>
@@ -469,7 +469,7 @@
     <!-- Edit Project Dialog -->
     <Teleport to="body">
       <div v-if="showEditProjectDialog" class="dialog-overlay" @click.self="cancelEditProjectDialog">
-        <div class="dialog" role="dialog" aria-modal="true">
+        <div class="dialog" role="dialog" aria-modal="true" tabindex="-1" @keydown.esc="cancelEditProjectDialog">
           <div class="dialog-header">
             <h3 class="dialog-title">编辑项目</h3>
             <button class="dialog-close" @click="cancelEditProjectDialog" aria-label="关闭">
@@ -504,7 +504,9 @@
             <div v-if="editDialogError" class="dialog-error">{{ editDialogError }}</div>
             <div class="dialog-actions">
               <button type="button" class="btn-secondary" @click="cancelEditProjectDialog">取消</button>
-              <button type="submit" class="btn-primary" :aria-disabled="!editForm.name.trim()">保存</button>
+              <button type="submit" class="btn-primary" :disabled="saving || !editForm.name.trim()" :aria-disabled="saving || !editForm.name.trim()">
+                {{ saving ? '保存中...' : '保存' }}
+              </button>
             </div>
           </form>
         </div>
@@ -577,7 +579,10 @@ const milestones = ref([])
 const tasks = ref([])
 const loading = ref(true)
 const error = ref(null)
+const saving = ref(false)
+const finishing = ref(false)
 const deleting = ref(false)
+const deletingPhaseId = ref(null)
 const completingTaskId = ref(null)
 const descCollapsed = ref(true)
 
@@ -825,13 +830,18 @@ async function savePhase() {
 }
 
 async function deletePhase(phase) {
+  if (!phase || deletingPhaseId.value) {
+    if (deletingPhaseId.value) showError('已有阶段正在删除，请等待完成后再试。')
+    return
+  }
+  deletingPhaseId.value = phase.id
   try {
     await projectService.deletePhase(phase.id)
     phases.value = phases.value.filter(p => p.id !== phase.id)
-    // Move tasks to unphased
-    tasks.value.forEach(t => { if (t.phase_id === phase.id) t.phase_id = null })
   } catch (e) {
     showError(getErrorMessage(e))
+  } finally {
+    deletingPhaseId.value = null
   }
 }
 
@@ -884,12 +894,25 @@ function openEditProject() {
   showEditProjectDialog.value = true
 }
 
-function cancelEditProjectDialog() {
+function closeEditProjectDialog({ force = false } = {}) {
+  if (!force && saving.value) {
+    showError('项目正在保存，请等待完成后再试。')
+    return false
+  }
   showEditProjectDialog.value = false
+  editDialogError.value = null
+  editForm.value = { name: '', description: '', color: '', start_date: '', end_date: '' }
+  return true
+}
+
+function cancelEditProjectDialog() {
+  closeEditProjectDialog()
 }
 
 async function saveEditProject() {
   if (!editForm.value.name.trim()) { editDialogError.value = '请先填写项目名称。'; showError('请先填写项目名称。'); return }
+  if (saving.value) { showError('项目正在保存，请等待完成后再试。'); return }
+  saving.value = true
   try {
     const data = { name: editForm.value.name.trim(), color: editForm.value.color }
     if (editForm.value.description) data.description = editForm.value.description.trim()
@@ -898,25 +921,32 @@ async function saveEditProject() {
     data.end_date = editForm.value.end_date || null
     const updated = await projectService.updateProject(projectId, data)
     project.value = updated
-    cancelEditProjectDialog()
+    closeEditProjectDialog({ force: true })
     showSuccess('项目已更新')
   } catch (e) {
     editDialogError.value = getErrorMessage(e)
+  } finally {
+    saving.value = false
   }
 }
 
 async function completeProject() {
   if (project.value?.status === 'completed') { showError('项目已经完成，无需重复提交。'); return }
+  if (finishing.value) { showError('项目正在完成，请等待完成后再试。'); return }
+  finishing.value = true
   try {
     const updated = await projectService.completeProject(projectId)
     project.value = updated
     showSuccess('项目已完成')
   } catch (e) {
     showError(getErrorMessage(e))
+  } finally {
+    finishing.value = false
   }
 }
 
 async function confirmDeleteProject() {
+  if (deleting.value) { showError('项目正在删除，请等待完成后再试。'); return }
   deleting.value = true
   try {
     await projectService.deleteProject(projectId)

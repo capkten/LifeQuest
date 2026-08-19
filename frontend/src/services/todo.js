@@ -182,7 +182,7 @@ export const todoService = {
    * @returns {Promise<Object>} Updated subtask
    */
   async completeSubtask(subtaskId) {
-    const response = await api.put(`/todos/subtasks/${subtaskId}`, { is_completed: true })
+    const response = await api.post(`/todos/subtasks/${subtaskId}/complete`)
     return response.data
   },
 

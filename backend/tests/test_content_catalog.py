@@ -27,7 +27,12 @@ def test_catalog_covers_every_generated_content_key():
         for ordinal in ordinals
     }
     assert set(SECT_CATALOG) == expected_sects
-    assert set(TECHNIQUE_CATALOG) == {"steady-breath", "stone-channel", "golden-intent"}
+    assert set(TECHNIQUE_CATALOG) == {
+        "steady-breath", "stone-channel", "golden-intent", "sword-heart",
+        "cloud-step", "five-elements-array", "spirit-gathering-mantra",
+        "iron-bone-tempering", "body-as-mountain", "shadow-step",
+        "clear-mind-mantra",
+    }
     assert set(REALM_LABELS) == {
         "qi_refining",
         "foundation",
@@ -48,6 +53,34 @@ def test_catalog_covers_every_generated_content_key():
             for field in ("name", "description", "core_legacy"):
                 if field in content:
                     assert not re.search(r"[A-Za-z]", content[field])
+
+
+def test_reward_catalog_documents_real_action_bases_and_resource_sources():
+    from app.services.content_catalog import (
+        CULTIVATION_REWARD_BASES,
+        CULTIVATION_RESOURCE_RULES,
+        DIFFICULTY_FACTORS,
+        QUALITY_FACTORS,
+    )
+
+    assert CULTIVATION_REWARD_BASES == {
+        "habit": 10,
+        "task": 15,
+        "subtask": 8,
+        "goal": 45,
+        "project_phase": 75,
+        "milestone": 120,
+        "trial_objective": 180,
+    }
+    assert DIFFICULTY_FACTORS == {
+        "easy": 0.8,
+        "medium": 1.0,
+        "hard": 1.35,
+        "very_hard": 1.8,
+    }
+    assert QUALITY_FACTORS == {"on_time": 1.0, "early": 1.05, "delayed": 0.75}
+    assert CULTIVATION_RESOURCE_RULES["habit"]["mind_state_delta"] > 0
+    assert CULTIVATION_RESOURCE_RULES["project_phase"]["contribution"] > 0
 
 
 def test_sect_task_preference_labels_follow_stable_preference_keys():

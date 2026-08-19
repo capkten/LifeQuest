@@ -30,7 +30,12 @@ from app.schemas.todo import (
 from app.models.coin_transaction import CoinSource, CoinType
 from app.repositories.coin_transaction import CoinTransactionRepository
 from app.services.achievement import AchievementService
-from app.services.content_catalog import TODO_SOURCE_PREFIXES, source_label
+from app.services.content_catalog import (
+    CULTIVATION_REWARD_BASES,
+    QUALITY_FACTORS,
+    TODO_SOURCE_PREFIXES,
+    source_label,
+)
 from app.services.title import TitleService
 from app.services.cultivation import CultivationService
 
@@ -89,6 +94,20 @@ class TodoService:
         if source_value == "habit":
             source_id = f"{source_id}:{completed_on:%Y%m%d}"
         return source_id
+
+    @staticmethod
+    def _completion_quality(deadline, completed_at: datetime) -> float:
+        if deadline is None:
+            return 1.0
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
+        else:
+            deadline = deadline.astimezone(timezone.utc)
+        if completed_at < deadline:
+            return QUALITY_FACTORS["early"]
+        if completed_at > deadline:
+            return QUALITY_FACTORS["delayed"]
+        return QUALITY_FACTORS["on_time"]
 
     # --- Ownership verification (returns object or raises HTTPException) ---
     def get_habit_for_user(self, habit_id: UUID, user_id: UUID) -> Habit:
@@ -165,6 +184,7 @@ class TodoService:
                 user, habit.coins_reward, habit.exp_reward, CoinSource.HABIT,
                 habit.difficulty, source_key=f"todo:habit:{habit.id}:{now.date().isoformat()}",
                 coin_source_id=self._coin_source_id(CoinSource.HABIT, habit.id, now.date()),
+                cultivation_base_exp=CULTIVATION_REWARD_BASES["habit"],
             )
             self._check_achievements(user)
             self.db.commit()
@@ -197,9 +217,10 @@ class TodoService:
     @_completion_guard
     def complete_task(self, task: Task, user_id: UUID) -> Task:
         """Complete a task and award coins and experience to the user."""
+        now = datetime.now(timezone.utc)
         changed = self.db.execute(update(Task).where(
             Task.id == task.id, Task.user_id == user_id, Task.status != TaskStatus.COMPLETED
-        ).values(status=TaskStatus.COMPLETED, completed_at=datetime.now(timezone.utc))).rowcount
+        ).values(status=TaskStatus.COMPLETED, completed_at=now)).rowcount
         if not changed:
             self.db.refresh(task)
             return task
@@ -216,6 +237,8 @@ class TodoService:
                 importance=self.TASK_IMPORTANCE.get(task.priority, 1.0),
                 source_key=f"todo:task:{task.id}",
                 coin_source_id=self._coin_source_id(CoinSource.TASK, task.id),
+                cultivation_base_exp=CULTIVATION_REWARD_BASES["task"],
+                quality=self._completion_quality(task.deadline, now),
             )
             self._check_achievements(user)
             self.db.commit()
@@ -243,6 +266,7 @@ class TodoService:
     @_completion_guard
     def complete_goal(self, goal: Goal, user_id: UUID) -> Goal:
         """Complete a goal and award coins and experience to the user."""
+        now = datetime.now(timezone.utc)
         changed = self.db.execute(update(Goal).where(
             Goal.id == goal.id, Goal.user_id == user_id, Goal.status != TaskStatus.COMPLETED
         ).values(status=TaskStatus.COMPLETED, progress=GOAL_COMPLETED_PROGRESS)).rowcount
@@ -257,6 +281,8 @@ class TodoService:
                 user, goal.coins_reward, goal.exp_reward, CoinSource.GOAL,
                 goal.difficulty, source_key=f"todo:goal:{goal.id}",
                 coin_source_id=self._coin_source_id(CoinSource.GOAL, goal.id),
+                cultivation_base_exp=CULTIVATION_REWARD_BASES["goal"],
+                quality=self._completion_quality(goal.deadline, now),
             )
             self._check_achievements(user)
             self.db.commit()
@@ -273,25 +299,26 @@ class TodoService:
         source: str,
         difficulty: str = "medium",
         importance: float = 1.0,
+        quality: float = 1.0,
+        cultivation_base_exp: int | None = None,
         source_key: str | None = None,
         coin_source_id: str | None = None,
     ):
         """Update user coins and experience in a single transaction."""
         settlement = self.cultivation_service.settle_todo_reward(
-            user.id, source, exp, difficulty, importance=importance, source_key=source_key
+            user.id,
+            source,
+            cultivation_base_exp if cultivation_base_exp is not None else exp,
+            difficulty,
+            quality=quality,
+            importance=importance,
+            source_key=source_key,
+            apply_legacy_user_rewards=False,
         )
         if settlement._already_settled:
             return settlement
 
-        legacy_level = settlement._legacy_level
-        legacy_experience = settlement._legacy_experience
         self.user_repo._update_coins_no_commit(user, coins)
-        # Spirit stones are persisted in cultivation, while the legacy todo
-        # wallet must retain its pre-cultivation reward semantics.
-        user.coins -= settlement.spirit_stones
-        user.total_coins_earned -= settlement.spirit_stones
-        user.level = legacy_level
-        user.experience = legacy_experience
         self.user_repo._update_experience_no_commit(user, exp)
         self.coin_repo._create_no_commit(
             {
@@ -430,3 +457,20 @@ class TodoService:
 
     def delete_subtask(self, subtask_id: UUID) -> bool:
         return self.subtask_repo.delete(subtask_id)
+
+    @_completion_guard
+    def complete_subtask(self, subtask: Subtask, user_id: UUID) -> Subtask:
+        if not subtask.is_completed:
+            subtask.is_completed = True
+        settlement = self.cultivation_service.settle_todo_reward(
+            user_id,
+            "subtask",
+            CULTIVATION_REWARD_BASES["subtask"],
+            "medium",
+            source_key=f"todo:subtask:{subtask.id}",
+        )
+        subtask.cultivation_reward = settlement
+        self.db.commit()
+        self.db.refresh(subtask)
+        subtask.cultivation_reward = settlement
+        return subtask

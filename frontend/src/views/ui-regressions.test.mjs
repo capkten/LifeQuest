@@ -98,6 +98,13 @@ test('subtask deletion blocks cross-item requests with handler feedback and load
   assert.match(source, /v-if="deletingSubtaskId === subtask\.id"[\s\S]*loading-spinner/)
 })
 
+test('subtask completion uses the settlement endpoint', async () => {
+  const service = await readFile(new URL('../services/todo.js', viewsDirectory), 'utf8')
+
+  assert.match(service, /api\.post\(`\/todos\/subtasks\/\$\{subtaskId\}\/complete`\)/)
+  assert.doesNotMatch(service, /api\.put\(`\/todos\/subtasks\/\$\{subtaskId\}`\s*,\s*\{ is_completed: true \}\)/)
+})
+
 test('home daily summary keeps request failures separate from the legitimate empty state', async () => {
   const source = await readFile(new URL('./Home.vue', viewsDirectory), 'utf8')
 
@@ -246,4 +253,83 @@ test('note editor leaves loading state when opening a new note route', async () 
   const source = await readFile(new URL('./NoteEditor.vue', viewsDirectory), 'utf8')
 
   assert.match(source, /if \(!noteId\.value\) \{[\s\S]*loading\.value = false[\s\S]*hydrated\.value = true/)
+})
+
+test('project mutations use independent locks and phase deletion preserves task ownership', async () => {
+  const [source, service] = await Promise.all([
+    readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('../services/project.js', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(source, /const saving = ref\(false\)/)
+  assert.match(source, /const finishing = ref\(false\)/)
+  assert.match(source, /const deleting = ref\(false\)/)
+  assert.match(source, /if \(saving\.value\) \{[\s\S]*return[\s\S]*\}/)
+  assert.match(source, /if \(finishing\.value\) \{[\s\S]*return[\s\S]*\}/)
+  assert.match(source, /if \(deleting\.value\) \{[\s\S]*return[\s\S]*\}/)
+  assert.match(source, /finally \{[\s\S]*saving\.value = false/)
+  assert.match(source, /finally \{[\s\S]*finishing\.value = false/)
+  assert.doesNotMatch(source, /tasks\.value\.forEach\(t => \{ if \(t\.phase_id === phase\.id\) t\.phase_id = null \}\)/)
+  assert.match(service, /deletePhase\(phaseId, options = \{\}\)/)
+  assert.match(service, /params: options/)
+})
+
+test('notebook mutations expose independent pending action state and preserve failed forms', async () => {
+  const source = await readFile(new URL('./NotebookFileManage.vue', viewsDirectory), 'utf8')
+
+  assert.match(source, /pendingActions/)
+  for (const action of ['folder', 'note', 'rename', 'move']) {
+    assert.match(source, new RegExp(`pendingActions\\.${action}`))
+  }
+  assert.match(source, /finally \{[\s\S]*pendingActions\./)
+  assert.match(source, /:disabled="[^\"]*pendingActions\.(folder|note|rename|move)/)
+  assert.match(source, /dialogError\.value = getErrorMessage\(cause\)/)
+  assert.match(source, /closeDialog\(\)[\s\S]*showToast\(/)
+})
+
+test('project edit dialog stays open while its save request is pending', async () => {
+  const source = await readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8')
+  const closeHandler = source.match(/function closeEditProjectDialog\(\{ force = false \} = \{\}\) \{([\s\S]*?)\n\}/)?.[1]
+
+  assert.ok(closeHandler, 'project edit dialog close handler must remain available')
+  assert.match(closeHandler, /if \(!force && saving\.value\) \{[\s\S]*return false\s*\}/)
+  assert.match(source, /function cancelEditProjectDialog\(\) \{[\s\S]*closeEditProjectDialog\(\)/)
+  assert.match(source, /<div v-if="showEditProjectDialog"[\s\S]*?@click\.self="cancelEditProjectDialog"[\s\S]*?<div class="dialog"[^>]*@keydown\.esc="cancelEditProjectDialog"/)
+})
+
+test('notebook mutation dialogs stay open while the matching action is pending', async () => {
+  const source = await readFile(new URL('./NotebookFileManage.vue', viewsDirectory), 'utf8')
+  const pendingGuard = source.match(/function hasPendingDialogAction\(\) \{([\s\S]*?)\n\}/)?.[1]
+
+  assert.ok(pendingGuard, 'notebook pending dialog guard must remain available')
+  assert.match(pendingGuard, /dialogMode\.value && pendingActions\[dialogMode\.value\]/)
+  assert.match(source, /function closeDialog\(\) \{[\s\S]*if \(hasPendingDialogAction\(\)\)[\s\S]*return/)
+  assert.match(source, /<div v-if="dialogMode"[^>]*@click\.self="closeDialog"[\s\S]*@keydown\.esc="closeDialog"/)
+})
+
+test('successful project save force-closes and resets the edit dialog after the request', async () => {
+  const source = await readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8')
+  const saveHandler = source.match(/async function saveEditProject\(\) \{([\s\S]*?)\n\}/)?.[1]
+
+  assert.ok(saveHandler, 'project save handler must remain available')
+  assert.match(source, /function closeEditProjectDialog\(\{ force = false \} = \{\}\)/)
+  assert.match(saveHandler, /project\.value = updated[\s\S]*closeEditProjectDialog\(\{ force: true \}\)/)
+  assert.match(source, /editForm\.value = \{ name: '', description: '', color: '', start_date: '', end_date: '' \}/)
+})
+
+test('notebook route transitions do not replace a pending mutation dialog', async () => {
+  const source = await readFile(new URL('./NotebookFileManage.vue', viewsDirectory), 'utf8')
+  const routeWatcher = source.match(/watch\(isNewNoteRoute, \(isNew\) => \{([\s\S]*?)\n\}\)/)?.[1]
+
+  assert.ok(routeWatcher, 'new-note route watcher must remain available')
+  assert.match(routeWatcher, /if \(dialogMode\.value && pendingActions\[dialogMode\.value\]\) \{[\s\S]*return\s*\}/)
+  assert.match(source, /function openCreateNote\([\s\S]*if \(dialogMode\.value && pendingActions\[dialogMode\.value\]\)/)
+})
+
+test('header profile and logout actions stop propagation before closing the menu', async () => {
+  const source = await readFile(new URL('../components/layout/Header.vue', import.meta.url), 'utf8')
+
+  assert.match(source, /@click\.stop="dropdownOpen = false"/)
+  assert.match(source, /@click\.stop="handleLogout"/)
+  assert.match(source, /function handleLogout\(event\)[\s\S]*event\.stopPropagation\(\)/)
 })

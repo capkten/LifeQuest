@@ -35,8 +35,8 @@ export const projectService = {
     const r = await api.put(`/projects/phases/${phaseId}`, data)
     return r.data
   },
-  async deletePhase(phaseId) {
-    await api.delete(`/projects/phases/${phaseId}`)
+  async deletePhase(phaseId, options = {}) {
+    await api.delete(`/projects/phases/${phaseId}`, { params: options })
   },
 
   // Milestones

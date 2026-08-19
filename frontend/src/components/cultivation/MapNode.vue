@@ -6,7 +6,7 @@
     role="option"
     :aria-label="nodeLabel"
     :aria-selected="selected"
-    :disabled="isLocked"
+    :aria-disabled="isLocked"
     @click="$emit('select', node)"
   >
     <span class="cultivation-map-node__icon" aria-hidden="true">{{ statusIcon }}</span>

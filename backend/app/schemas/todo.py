@@ -163,3 +163,4 @@ class SubtaskResponse(BaseModel):
     title: str
     is_completed: bool
     created_at: datetime
+    cultivation_reward: Optional[RewardSettlement] = None

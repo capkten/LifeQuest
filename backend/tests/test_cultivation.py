@@ -55,6 +55,59 @@ def _prepare_npc_meeting(service, user_id):
         service.db.commit()
 
 
+def _satisfy_tribulation_prerequisites(service, user_id, realm_key):
+    from app.models.cultivation import CultivationLog
+    from app.models.project import Project, ProjectPhase, PhaseStatus
+    from app.models.todo import Goal, Habit, TaskStatus
+    from app.models.world import Sect, SectAccessProgress, SectMembership
+
+    service.seed_world(service.db)
+    profile = service.ensure_profile(user_id)
+    profile.realm_key = realm_key
+    profile.mind_state = 80
+    if realm_key == "qi_refining":
+        service.db.add(Goal(
+            user_id=user_id, title="Important goal", difficulty="hard",
+            status=TaskStatus.COMPLETED, progress=100,
+        ))
+        service.db.add(Habit(user_id=user_id, title="Streak", streak=7, best_streak=7))
+        sect = service.db.query(Sect).filter(Sect.star == 3, Sect.kind == "normal").first()
+        service.db.add(SectAccessProgress(user_id=user_id, sect_id=sect.id, trial_confirmed=True))
+    elif realm_key == "foundation":
+        project = Project(user_id=user_id, name="Main project")
+        service.db.add(project)
+        service.db.flush()
+        service.db.add(ProjectPhase(project_id=project.id, name="Completed phase", status=PhaseStatus.COMPLETED))
+        service.db.add(Habit(user_id=user_id, title="Streak", streak=14, best_streak=14))
+        sect = service.db.query(Sect).filter(Sect.star == 5, Sect.kind == "normal").first()
+        service.db.add(SectAccessProgress(user_id=user_id, sect_id=sect.id, trial_confirmed=True))
+        profile.contribution = 300
+    else:
+        required_star = 5 if realm_key == "golden_core" else 7
+        sect = service.db.query(Sect).filter(
+            Sect.star == required_star, Sect.kind == "normal"
+        ).first()
+        service.db.add(SectMembership(user_id=user_id, sect_id=sect.id, status="active"))
+        service.db.add(Goal(
+            user_id=user_id, title="Long term goal", difficulty="very_hard",
+            status=TaskStatus.IN_PROGRESS, progress=75,
+        ))
+        service.db.add(SectAccessProgress(user_id=user_id, sect_id=sect.id, trial_confirmed=True))
+        target = "ascension" if realm_key == "tribulation" else {
+            "golden_core": "nascent_soul",
+            "nascent_soul": "spirit_transformation",
+            "spirit_transformation": "void_refining",
+            "void_refining": "body_combination",
+            "body_combination": "great_vehicle",
+            "great_vehicle": "tribulation",
+        }[realm_key]
+        service.db.add(CultivationLog(
+            user_id=user_id, source="trial_objective",
+            source_key=f"realm-objective:{target}:{user_id}",
+        ))
+    service.db.commit()
+
+
 def test_cultivation_tables_are_registered(db_session):
     from app.models.cultivation import CultivationProfile, CultivationLog
     from app.models.technique import TechniqueSlot
@@ -226,7 +279,7 @@ def test_learning_rejects_realm_and_spirit_stone_gates(client, auth_headers, db_
     db_session.commit()
 
     insufficient = client.post("/api/cultivation/techniques/steady-breath/learn", headers=auth_headers)
-    locked = client.post("/api/cultivation/techniques/stone-channel/learn", headers=auth_headers)
+    locked = client.post("/api/cultivation/techniques/sword-heart/learn", headers=auth_headers)
 
     assert insufficient.status_code == 409
     assert "SPIRIT_STONES" in insufficient.json()["detail"]
@@ -256,6 +309,125 @@ def test_tribulation_preview_exposes_lock_reason_for_non_final_stage_and_cooldow
     cooldown = service.get_tribulation_preview(user.id)
     assert cooldown.available is False
     assert cooldown.lock_reason == "TRIBULATION_COOLDOWN_ACTIVE"
+
+
+def test_tribulation_preview_is_server_bounded_by_owned_pills(db_session, user):
+    from app.models.shop import ShopItem
+    from app.services.backpack import BackpackService
+    from app.services.cultivation import CultivationService
+    from app.services.shop import ShopService
+
+    service = CultivationService(db_session)
+    service.set_realm(user.id, "qi_refining", 9, 235)
+    ShopService.seed_system_items(db_session)
+    pill = db_session.query(ShopItem).filter_by(item_key="tribulation-pill").one()
+    BackpackService(db_session).add_item(user.id, pill.id, quantity=2)
+
+    preview = service.get_tribulation_preview(user.id, pill_count=99)
+
+    assert preview.owned_pills == 2
+    assert preview.pill_count == 2
+    assert preview.pill_bonus == 10
+
+
+def test_tribulation_preview_exposes_structured_prerequisites(db_session, user):
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    service.set_realm(user.id, "qi_refining", 9, 235)
+
+    preview = service.get_tribulation_preview(user.id)
+
+    assert preview.available is False
+    assert preview.lock_reason == "TRIBULATION_PREREQUISITE:important_goal"
+    keys = {item.key for item in preview.prerequisites}
+    assert {"important_goal", "habit_streak", "trial_star", "mind_state"} <= keys
+    assert all(
+        {"key", "label", "required", "current", "satisfied"}
+        <= set(type(item).model_fields)
+        for item in preview.prerequisites
+    )
+
+
+def test_early_tribulation_requires_goal_habit_trial_and_mind_state(db_session, user):
+    from datetime import datetime, timezone
+    from app.models.todo import Goal, Habit, TaskStatus
+    from app.models.world import Sect, SectAccessProgress
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    service.seed_world(db_session)
+    service.set_realm(user.id, "qi_refining", 9, 235)
+    profile = service.ensure_profile(user.id)
+    profile.mind_state = 60
+    goal = Goal(user_id=user.id, title="Important goal", difficulty="hard", status=TaskStatus.COMPLETED, progress=100)
+    habit = Habit(
+        user_id=user.id,
+        title="Seven day habit",
+        streak=7,
+        best_streak=7,
+        last_completed_at=datetime.now(timezone.utc),
+    )
+    sect = db_session.query(Sect).filter(Sect.star == 3, Sect.kind == "normal").first()
+    db_session.add_all([goal, habit, SectAccessProgress(user_id=user.id, sect_id=sect.id, trial_confirmed=True)])
+    db_session.commit()
+
+    preview = service.get_tribulation_preview(user.id)
+
+    assert preview.available is True
+    assert all(item.satisfied for item in preview.prerequisites)
+
+
+def test_tribulation_attempt_rejects_unowned_pills_before_writing_attempt(db_session, user):
+    from app.models.cultivation import TribulationAttempt
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    service.set_realm(user.id, "qi_refining", 9, 235)
+
+    with pytest.raises(PermissionError, match="TRIBULATION_PILL_INSUFFICIENT"):
+        service.attempt_tribulation(user.id, 1)
+
+    assert db_session.query(TribulationAttempt).filter_by(user_id=user.id).count() == 0
+
+
+def test_tribulation_attempt_rolls_back_pills_on_prerequisite_failure(db_session, user):
+    from app.models.backpack import BackpackItem
+    from app.models.shop import ShopItem
+    from app.services.backpack import BackpackService
+    from app.services.cultivation import CultivationService
+    from app.services.shop import ShopService
+
+    service = CultivationService(db_session)
+    service.set_realm(user.id, "qi_refining", 9, 235)
+    ShopService.seed_system_items(db_session)
+    pill = db_session.query(ShopItem).filter_by(item_key="tribulation-pill").one()
+    BackpackService(db_session).add_item(user.id, pill.id, quantity=2)
+
+    with pytest.raises(PermissionError, match="TRIBULATION_PREREQUISITE"):
+        service.attempt_tribulation(user.id, 1)
+
+    backpack_item = db_session.query(BackpackItem).filter_by(user_id=user.id, shop_item_id=pill.id).one()
+    assert backpack_item.quantity == 2
+
+
+def test_readiness_distinguishes_early_on_time_and_delayed_tasks(db_session, user):
+    from datetime import datetime, timedelta, timezone
+    from app.models.todo import Task, TaskStatus
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    now = datetime.now(timezone.utc)
+    db_session.add_all([
+        Task(user_id=user.id, title="early", status=TaskStatus.COMPLETED, difficulty="medium", deadline=now, completed_at=now - timedelta(hours=1)),
+        Task(user_id=user.id, title="on time", status=TaskStatus.COMPLETED, difficulty="medium", deadline=now, completed_at=now),
+        Task(user_id=user.id, title="delayed", status=TaskStatus.COMPLETED, difficulty="medium", deadline=now - timedelta(hours=1), completed_at=now),
+    ])
+    db_session.commit()
+
+    breakdown = service.get_tribulation_preview(user.id).readiness_breakdown
+
+    assert breakdown["task_quality"] == 76.67
 
 
 def test_ascended_tribulation_preview_has_terminal_lock_reason(db_session, user):
@@ -674,9 +846,96 @@ def test_reward_uses_difficulty_and_never_writes_negative_resources(db_session, 
     service = CultivationService(db_session)
     result = service.settle_todo_reward(user.id, "task", 25, "hard", quality=0.8)
 
-    assert result.cultivation == 28
+    assert result.cultivation == 27
     assert result.spirit_stones == 16
     assert result.cultivation >= 0
+
+
+def test_settlement_returns_and_records_all_resource_deltas(db_session, user):
+    from app.models.cultivation import CultivationLog
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    profile = service.ensure_profile(user.id)
+    before = {
+        "merit": profile.merit,
+        "contribution": profile.contribution,
+        "mind_state": profile.mind_state,
+        "aptitude_points": profile.aptitude_points,
+    }
+
+    result = service.settle_todo_reward(
+        user.id,
+        "habit",
+        10,
+        "medium",
+        source_key="todo:habit:resource-ledger",
+        content_star=2,
+    )
+    db_session.flush()
+    profile = service.ensure_profile(user.id)
+    log = db_session.query(CultivationLog).filter_by(
+        source_key="todo:habit:resource-ledger"
+    ).one()
+
+    assert result.cultivation == 10
+    assert result.spirit_stones == 6
+    assert result.merit > 0
+    assert result.aptitude_points == 2
+    assert result.mind_state_delta > 0
+    assert result.contribution == 0
+    assert result.efficiency >= 1.0
+    assert profile.merit == before["merit"] + result.merit
+    assert profile.contribution == before["contribution"] + result.contribution
+    assert profile.mind_state == before["mind_state"] + result.mind_state_delta
+    assert profile.aptitude_points == before["aptitude_points"] + result.aptitude_points
+    assert log.merit_delta == result.merit
+    assert log.contribution_delta == result.contribution
+    assert log.aptitude_points_delta == result.aptitude_points
+    assert log.mind_state_delta == result.mind_state_delta
+
+
+def test_daily_aptitude_gain_stops_after_eight_reward_events(db_session, user):
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    before = service.ensure_profile(user.id).aptitude_points
+    for index in range(9):
+        service.settle_todo_reward(
+            user.id,
+            "task",
+            15,
+            "medium",
+            source_key=f"daily:aptitude:{index}",
+            content_star=2,
+        )
+
+    assert service.ensure_profile(user.id).aptitude_points - before == 16
+
+
+def test_reward_formula_uses_catalog_bases_factors_and_quality(db_session, user):
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    early = service.settle_todo_reward(
+        user.id,
+        "task",
+        15,
+        "very_hard",
+        quality=1.05,
+        source_key="formula:early",
+    )
+    delayed = service.settle_todo_reward(
+        user.id,
+        "task",
+        15,
+        "easy",
+        quality=0.75,
+        source_key="formula:delayed",
+    )
+
+    assert early.cultivation == 28
+    assert delayed.cultivation == 9
 
 
 def test_reward_applies_explicit_importance_to_formula(db_session, user):
@@ -765,7 +1024,7 @@ def test_settlement_advances_minor_stage_but_does_not_bypass_tribulation(db_sess
     settlement = service.settle_todo_reward(user.id, "task", 10, "hard")
 
     profile = service.ensure_profile(user.id)
-    assert settlement.cultivation == 14
+    assert settlement.cultivation == 13
     assert profile.minor_stage == 2
     assert profile.realm_key == "qi_refining"
     assert settlement.ready_for_tribulation is False
@@ -952,6 +1211,33 @@ def test_tribulation_attempt_rejects_negative_pill_count(client, auth_headers):
     assert response.status_code == 422
 
 
+def test_tribulation_api_returns_owned_pills_and_stable_inventory_error(client, auth_headers, db_session):
+    from app.services.cultivation import CultivationService
+
+    current_user = client.get("/api/users/me", headers=auth_headers).json()
+    service = CultivationService(db_session)
+    service.set_realm(UUID(current_user["id"]), "qi_refining", 9, 235)
+
+    preview = client.get(
+        "/api/cultivation/tribulation/preview?pill_count=1",
+        headers=auth_headers,
+    )
+    attempt = client.post(
+        "/api/cultivation/tribulation/attempt",
+        json={"pill_count": 1},
+        headers=auth_headers,
+    )
+
+    assert preview.status_code == 200
+    assert preview.json()["owned_pills"] == 0
+    assert preview.json()["pill_count"] == 0
+    assert {item["key"] for item in preview.json()["prerequisites"]} >= {
+        "important_goal", "habit_streak", "trial_star", "mind_state"
+    }
+    assert attempt.status_code == 409
+    assert "TRIBULATION_PILL_INSUFFICIENT" in attempt.json()["detail"]
+
+
 def test_fresh_profile_cannot_attempt_tribulation_and_is_unchanged(db_session, user, monkeypatch):
     from app.models.cultivation import TribulationAttempt
     from app.services.cultivation import CultivationService
@@ -976,6 +1262,7 @@ def test_tribulation_persists_the_actual_random_roll_and_keeps_failure_loss(db_s
     profile = service.ensure_profile(user.id)
     profile.minor_stage = 9
     profile.cultivation = 235
+    _satisfy_tribulation_prerequisites(service, user.id, "qi_refining")
     monkeypatch.setattr("app.services.cultivation.random.random", lambda: 0.999)
 
     result = service.attempt_tribulation(user.id, 0)
@@ -1023,6 +1310,7 @@ def test_tribulation_to_ascension_has_explicit_terminal_target(db_session, user,
     profile.realm_key = "tribulation"
     profile.minor_stage = 4
     profile.cultivation = 49000
+    _satisfy_tribulation_prerequisites(service, user.id, "tribulation")
     monkeypatch.setattr(service, "roll", lambda probability: True)
 
     preview = service.get_tribulation_preview(user.id)
@@ -1043,6 +1331,7 @@ def test_failed_final_tribulation_is_not_marked_as_completed(db_session, user, m
     profile.realm_key = "tribulation"
     profile.minor_stage = 4
     profile.cultivation = 49000
+    _satisfy_tribulation_prerequisites(service, user.id, "tribulation")
     monkeypatch.setattr(service, "roll", lambda probability: False)
 
     result = service.attempt_tribulation(user.id, 0)
@@ -1061,7 +1350,7 @@ def test_readiness_normalizes_naive_habit_time_and_derives_trial_and_compatibili
 
     service = CultivationService(db_session)
     profile = service.ensure_profile(user.id)
-    habit = Habit(user_id=user.id, title="Daily", last_completed_at=datetime.now() - timedelta(days=1))
+    habit = Habit(user_id=user.id, title="Daily", streak=7, best_streak=7, last_completed_at=datetime.now() - timedelta(days=1))
     db_session.add(habit)
     service.seed_world(db_session)
     sect = db_session.query(Sect).first()
@@ -1090,6 +1379,7 @@ def test_concurrent_tribulation_attempts_allow_only_one_daily_attempt(db_session
     profile.realm_key = "foundation"
     profile.minor_stage = 4
     profile.cultivation = 950
+    _satisfy_tribulation_prerequisites(service, user.id, "foundation")
     db_session.commit()
     user_id = user.id
     monkeypatch.setattr(CultivationService, "roll", lambda self, probability: True)
@@ -1165,6 +1455,7 @@ def test_non_daily_integrity_error_is_not_reported_as_cooldown(db_session, user,
     profile.realm_key = "foundation"
     profile.minor_stage = 4
     profile.cultivation = 950
+    _satisfy_tribulation_prerequisites(service, user.id, "foundation")
     db_session.commit()
     monkeypatch.setattr(service, "roll", lambda probability: True)
     original_commit = db_session.commit
@@ -1187,6 +1478,7 @@ def test_similar_daily_fields_without_unique_error_are_not_reported_as_cooldown(
     profile.realm_key = "foundation"
     profile.minor_stage = 4
     profile.cultivation = 950
+    _satisfy_tribulation_prerequisites(service, user.id, "foundation")
     db_session.commit()
     monkeypatch.setattr(service, "roll", lambda probability: True)
     original_commit = db_session.commit
@@ -1211,6 +1503,7 @@ def test_failed_tribulation_keeps_realm_and_techniques(db_session, user, monkeyp
     profile.realm_key = "foundation"
     profile.minor_stage = 4
     profile.cultivation = 950
+    _satisfy_tribulation_prerequisites(service, user.id, "foundation")
     monkeypatch.setattr(service, "roll", lambda probability: False)
 
     result = service.attempt_tribulation(user.id, 0)
@@ -1231,6 +1524,7 @@ def test_tribulation_cooldown_blocks_second_attempt_same_day(db_session, user, m
     profile.realm_key = "foundation"
     profile.minor_stage = 4
     profile.cultivation = 950
+    _satisfy_tribulation_prerequisites(service, user.id, "foundation")
     monkeypatch.setattr(service, "roll", lambda probability: True)
 
     first = service.attempt_tribulation(user.id, 0)
@@ -1251,6 +1545,7 @@ def test_tribulation_persists_the_roll_used_for_the_decision(db_session, user, m
     profile.realm_key = "foundation"
     profile.minor_stage = 4
     profile.cultivation = 950
+    _satisfy_tribulation_prerequisites(service, user.id, "foundation")
     rolls = iter([0.91])
     monkeypatch.setattr("app.services.cultivation.random.random", lambda: next(rolls))
 
@@ -1325,6 +1620,7 @@ def test_sect_listing_and_join_share_realm_eligibility_rule(db_session, user):
     assert eligible.realm_confirmed is True
     assert eligible.can_join is False
     service.contact_sect_messenger(user.id, sect.sect_key)
+    service.update_trial_objective(user.id, sect.sect_key, "three_star_expedition")
     service.complete_sect_trial(user.id, sect.sect_key)
     assert service.join_sect(user.id, sect.sect_key).status == "active"
 
@@ -1356,6 +1652,7 @@ def test_sect_prerequisites_are_persisted_and_required_in_order(db_session, user
     assert contacted.trial_confirmed is False
     assert contacted.trial_status == "awaiting_trial"
 
+    service.update_trial_objective(user.id, sect.sect_key, "three_star_expedition")
     completed = service.complete_sect_trial(user.id, sect.sect_key)
     assert completed.messenger_contacted is True
     assert completed.trial_confirmed is True
@@ -1393,6 +1690,12 @@ def test_sect_prerequisite_endpoints_and_join_bypass_rejection(client, auth_head
     assert contact.json()["trial_confirmed"] is False
     assert contact.json()["trial_status"] == "awaiting_trial"
 
+    objective = client.post(
+        f"{path}/trial/objectives/three_star_expedition",
+        json={"completed": True},
+        headers=auth_headers,
+    )
+    assert objective.status_code == 200
     trial = client.post(f"{path}/trial/complete", headers=auth_headers)
     assert trial.status_code == 200
     assert trial.json()["trial_confirmed"] is True
@@ -1438,7 +1741,7 @@ def test_update_loadout_requires_owned_learned_technique_and_realm(db_session, u
     profile = service.ensure_profile(user.id)
     slot = TechniqueSlot(user_id=user.id, slot_type="main", slot_index=0)
     db_session.add(slot)
-    technique = db_session.query(Technique).filter_by(technique_key="stone-channel").one()
+    technique = db_session.query(Technique).filter_by(technique_key="sword-heart").one()
     high_technique = db_session.query(Technique).filter_by(technique_key="golden-intent").one()
     db_session.add(LearnedTechnique(user_id=other.id, technique_id=technique.id))
     db_session.add(LearnedTechnique(user_id=user.id, technique_id=high_technique.id))
@@ -1463,7 +1766,7 @@ def test_update_loadout_rejects_multi_slot_conflict_and_returns_all_assignments(
         TechniqueSlot(user_id=user.id, slot_type="main", slot_index=1),
         TechniqueSlot(user_id=user.id, slot_type="auxiliary", slot_index=0),
     ])
-    technique = db_session.query(Technique).filter_by(technique_key="stone-channel").one()
+    technique = db_session.query(Technique).filter_by(technique_key="sword-heart").one()
     technique.slot_count = 2
     db_session.add(LearnedTechnique(user_id=user.id, technique_id=technique.id))
     db_session.commit()
@@ -1471,7 +1774,7 @@ def test_update_loadout_rejects_multi_slot_conflict_and_returns_all_assignments(
     response = service.update_loadout(user.id, {"main": [technique.id, technique.id]})
     assert response.slot_assignments["main"] == [technique.id, technique.id]
 
-    with pytest.raises(ValueError, match="SLOT_CONFLICT"):
+    with pytest.raises(PermissionError, match="TECHNIQUE_TYPE_MISMATCH"):
         service.update_loadout(user.id, {"main": [technique.id, technique.id], "auxiliary": [technique.id]})
 
 
@@ -1490,12 +1793,12 @@ def test_update_loadout_rejects_multi_slot_technique_spanning_categories_before_
         TechniqueSlot(user_id=user.id, slot_type="auxiliary", slot_index=1),
     ]
     db_session.add_all(main_slots + auxiliary_slots)
-    technique = db_session.query(Technique).filter_by(technique_key="stone-channel").one()
+    technique = db_session.query(Technique).filter_by(technique_key="sword-heart").one()
     technique.slot_count = 2
     db_session.add(LearnedTechnique(user_id=user.id, technique_id=technique.id))
     db_session.commit()
 
-    with pytest.raises(ValueError, match="SLOT_CONFLICT:CATEGORY"):
+    with pytest.raises(PermissionError, match="TECHNIQUE_TYPE_MISMATCH"):
         service.update_loadout(
             user.id,
             {"main": [technique.id], "auxiliary": [None, technique.id]},
@@ -1517,6 +1820,7 @@ def test_sect_join_accepts_seeded_sect_uuid_after_unlock(db_session, user):
     sect = db_session.query(Sect).first()
 
     service.contact_sect_messenger(user.id, sect.sect_key)
+    service.update_trial_objective(user.id, sect.sect_key, "three_star_expedition")
     service.complete_sect_trial(user.id, sect.sect_key)
     membership = service.join_sect(user.id, str(sect.id))
 

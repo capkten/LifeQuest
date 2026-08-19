@@ -10,6 +10,7 @@ from app.models.cultivation import CultivationLog
 from app.models.technique import Technique
 from app.models.user import User
 from app.models.world import Npc, NpcEvent, Sect, WorldNode
+from app.services.content_catalog import TECHNIQUE_CATALOG
 
 
 @pytest.fixture
@@ -450,7 +451,7 @@ def test_seed_world_uses_chinese_catalog_for_fresh_database(isolated_db):
     assert isolated_db.query(Technique).filter_by(technique_key="steady-breath").one().name == "凝息诀"
     assert isolated_db.query(WorldNode).count() == 9
     assert isolated_db.query(Sect).count() == 90
-    assert isolated_db.query(Technique).count() == 3
+    assert isolated_db.query(Technique).count() == len(TECHNIQUE_CATALOG)
 
 
 def test_repeated_seed_and_backfill_preserve_rows_relationships_and_existing_fields(legacy_content):
@@ -531,7 +532,7 @@ def test_seed_then_backfill_is_safe_for_an_empty_database(isolated_db):
     assert first.events == 0
     assert isolated_db.query(WorldNode).count() == 9
     assert isolated_db.query(Sect).count() == 90
-    assert isolated_db.query(Technique).count() == 3
+    assert isolated_db.query(Technique).count() == len(TECHNIQUE_CATALOG)
 
 
 def test_startup_runs_localization_after_seed_and_closes_session(monkeypatch):
@@ -540,6 +541,7 @@ def test_startup_runs_localization_after_seed_and_closes_session(monkeypatch):
     from app.services.content_localization import ContentLocalizationService
     from app.services.cultivation import CultivationService
     from app.services.finance import FinanceService
+    from app.services.shop import ShopService
     from app.services.title import TitleService
 
     calls = []
@@ -554,6 +556,7 @@ def test_startup_runs_localization_after_seed_and_closes_session(monkeypatch):
     monkeypatch.setattr(AchievementService, "seed_achievements", lambda self: calls.append("achievements"))
     monkeypatch.setattr(TitleService, "seed_titles", lambda self: calls.append("titles"))
     monkeypatch.setattr(FinanceService, "seed_categories", lambda db: calls.append("finance"))
+    monkeypatch.setattr(ShopService, "seed_system_items", lambda db: calls.append("shop"))
     monkeypatch.setattr(CultivationService, "seed_world", lambda db: calls.append("seed"))
     monkeypatch.setattr(ContentLocalizationService, "backfill_system_content", lambda db: calls.append("backfill"))
 
@@ -565,6 +568,7 @@ def test_startup_runs_localization_after_seed_and_closes_session(monkeypatch):
         "achievements",
         "titles",
         "finance",
+        "shop",
         "seed",
         "backfill",
         "close",

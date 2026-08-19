@@ -213,6 +213,26 @@ def test_checkin_response_reports_written_rewards_and_repeat_is_not_rewarded(cli
     )
 
 
+def test_checkin_response_includes_authoritative_cultivation_settlement(client, db_session):
+    from app.models.cultivation import CultivationLog, CultivationProfile
+
+    headers = _register_and_login(client)
+    first = client.post("/api/checkin", headers=headers)
+
+    assert first.status_code == 200
+    settlement = first.json()["cultivation_reward"]
+    user_id = UUID(client.get("/api/users/me", headers=headers).json()["id"])
+    log = db_session.query(CultivationLog).filter_by(
+        user_id=user_id, source="checkin"
+    ).one()
+    profile = db_session.query(CultivationProfile).filter_by(user_id=user_id).one()
+
+    assert settlement["log_id"] == str(log.id)
+    assert settlement["cultivation"] == log.cultivation_delta
+    assert settlement["merit"] == log.merit_delta
+    assert profile.mind_state >= 50
+
+
 def test_coin_history_returns_filtered_transactions_and_totals(client, db_session):
     headers = _register_and_login(client)
     checkin = client.post("/api/checkin", headers=headers)

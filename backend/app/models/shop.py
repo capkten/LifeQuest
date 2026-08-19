@@ -19,6 +19,9 @@ class ShopItem(Base):
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     created_by = Column(Uuid, ForeignKey("users.id"))
+    # Null is retained for user-created legacy products; system products use
+    # this stable key for cross-service lookups.
+    item_key = Column(String(64), nullable=True, unique=True, index=True)
     name = Column(String(200), nullable=False)
     description = Column(Text)
     icon = Column(String(100))

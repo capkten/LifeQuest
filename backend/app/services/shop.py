@@ -15,12 +15,50 @@ from app.services.backpack import BackpackService
 
 class ShopService:
     logger = logging.getLogger(__name__)
+
+    SYSTEM_ITEMS = {
+        "tribulation-pill": {
+            "name": "渡劫丹",
+            "description": "渡劫时稳定心神、提升成功概率的消耗品。",
+            "icon": None,
+            "category": "consumable",
+            "coin_price": 100,
+            "stock": -1,
+            "is_active": True,
+        },
+    }
+
     def __init__(self, db: Session):
         self.db = db
         self.item_repo = ShopItemRepository(db)
         self.exchange_repo = ExchangeHistoryRepository(db)
         self.user_repo = UserRepository(db)
         self.achievement_service = AchievementService(db)
+
+    @classmethod
+    def seed_system_items(cls, db: Session) -> List[ShopItem]:
+        """Create or restore authoritative system products idempotently."""
+        seeded = []
+        for item_key, values in cls.SYSTEM_ITEMS.items():
+            item = db.query(ShopItem).filter(ShopItem.item_key == item_key).one_or_none()
+            if item is None:
+                # Pre-key installations stored system rows without item_key.
+                item = db.query(ShopItem).filter(
+                    ShopItem.item_key.is_(None),
+                    ShopItem.created_by.is_(None),
+                    ShopItem.name == values["name"],
+                ).order_by(ShopItem.created_at, ShopItem.id).first()
+            if item is None:
+                item = ShopItem(item_key=item_key, created_by=None, **values)
+                db.add(item)
+            else:
+                item.item_key = item_key
+                item.created_by = None
+                for field, value in values.items():
+                    setattr(item, field, value)
+            seeded.append(item)
+        db.commit()
+        return seeded
 
     # --- Ownership checks ---
     def get_item_for_user(self, item_id: UUID, user_id: UUID) -> ShopItem:
@@ -29,6 +67,16 @@ class ShopService:
             raise HTTPException(status_code=404, detail="Shop item not found")
         if item.created_by is not None and item.created_by != user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
+        return item
+
+    @classmethod
+    def _is_system_item(cls, item: ShopItem) -> bool:
+        return item.item_key in cls.SYSTEM_ITEMS
+
+    def get_mutable_item_for_user(self, item_id: UUID, user_id: UUID) -> ShopItem:
+        item = self.get_item_for_user(item_id, user_id)
+        if self._is_system_item(item):
+            raise HTTPException(status_code=403, detail="System shop items are immutable")
         return item
 
     def get_exchange_for_user(self, exchange_id: UUID, user_id: UUID) -> ExchangeHistory:
@@ -55,12 +103,14 @@ class ShopService:
         return item
 
     def update_item(self, item: ShopItem, item_in: ShopItemUpdate) -> ShopItem:
+        if self._is_system_item(item):
+            raise HTTPException(status_code=403, detail="System shop items are immutable")
         update_data = item_in.model_dump(exclude_unset=True)
         return self.item_repo.update(item, update_data)
 
     def delete_item(self, item_id: UUID, user_id: UUID) -> bool:
         """Delete a shop item, verifying ownership first."""
-        self.get_item_for_user(item_id, user_id)
+        self.get_mutable_item_for_user(item_id, user_id)
         return self.item_repo.delete(item_id)
 
     # --- Exchange (purchase) operations ---

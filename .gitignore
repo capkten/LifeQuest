@@ -20,6 +20,13 @@ dist/
 .superpowers/
 design-system/
 
+# Local agent and verification artifacts
+.agents/
+.claude/
+.codex/
+.harness/
+*.log
+
 # Runtime data
 backend/notes_data/
 backend/uploads/

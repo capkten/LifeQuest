@@ -2,6 +2,7 @@ import math
 import random
 import time
 import threading
+import json
 from contextlib import nullcontext
 from hashlib import sha256
 from datetime import date, datetime, timedelta, timezone
@@ -12,20 +13,27 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models.cultivation import CultivationLog, CultivationProfile, TribulationAttempt
+from app.models.project import Project, ProjectPhase, PhaseStatus
 from app.models.technique import LearnedTechnique, Technique, TechniqueSlot
-from app.models.todo import Habit, Task
+from app.models.todo import Goal, Habit, Task, TaskStatus
+from app.services.backpack import BackpackService
 from app.models.user import User
-from app.models.world import Npc, NpcEvent, Sect, SectAccessProgress, SectMembership, WorldNode
+from app.models.world import Npc, NpcEvent, Sect, SectAccessProgress, SectMembership, WorldNode, WorldNodeProgress
 from app.repositories.cultivation import CultivationRepository
 from app.repositories.user import UserRepository
 from app.services.content_catalog import (
+    CULTIVATION_RESOURCE_RULES,
+    DIFFICULTY_FACTORS,
     EVENT_SUMMARY_LABELS,
     NPC_ROLE_LABELS,
     REALM_LABELS,
     SECT_CATALOG,
     source_label,
     TECHNIQUE_CATALOG,
+    TECHNIQUE_EFFICIENCY_BONUSES,
     WORLD_NODE_CATALOG,
+    HIDDEN_SECT_REVEAL_CATALOG,
+    SECT_TRIAL_CATALOG,
 )
 from app.schemas.cultivation import (
     CultivationOverview,
@@ -41,10 +49,13 @@ from app.schemas.cultivation import (
     TechniqueSlotPurchasePreview,
     TechniqueSummary,
     LearnedTechniqueResponse,
+    TribulationPrerequisite,
     TribulationPreview,
     TribulationResult,
     WorldNodeResponse,
     WorldResponse,
+    SectAccessResponse,
+    HiddenSectSummary,
 )
 
 
@@ -89,9 +100,14 @@ SECT_ENTRY_REALMS = {
     9: "tribulation",
 }
 
-DIFFICULTY_FACTORS = {"easy": 0.8, "medium": 1.0, "hard": 1.4}
+SLOT_TYPES = ("main", "auxiliary", "mind", "movement", "body")
 SLOT_PRICES = [0, 100, 300, 800, 2000, 5000, 12000]
-SLOT_REALMS = ["qi_refining", "foundation", "golden_core", "nascent_soul", "spirit_transformation", "void_refining", "body_combination"]
+SLOT_REALMS = [
+    "qi_refining", "foundation", "golden_core", "nascent_soul",
+    "spirit_transformation", "void_refining", "body_combination",
+    "great_vehicle", "tribulation", "tribulation", "tribulation",
+    "tribulation", "tribulation", "tribulation",
+]
 _TRIBULATION_PROCESS_LOCK = threading.Lock()
 
 
@@ -204,10 +220,20 @@ class CultivationService:
                     name=content["name"],
                     description=content["description"],
                     required_realm=content["required_realm"],
+                    region_key=content.get("region_key", "mortal"),
+                    required_project_phase=content.get("required_project_phase", 0),
                     sort_order=index,
                     is_hidden=False,
+                    completed=False,
+                    visible=True,
                 )
                 db.add(node)
+            else:
+                node.name = content["name"]
+                node.description = content["description"]
+                node.required_realm = content["required_realm"]
+                node.region_key = content.get("region_key", "mortal")
+                node.required_project_phase = content.get("required_project_phase", 0)
             nodes.append(node)
         db.flush()
 
@@ -231,8 +257,9 @@ class CultivationService:
             sect.entry_realm = content["entry_realm"]
 
         for key, content in TECHNIQUE_CATALOG.items():
-            if not db.query(Technique).filter(Technique.technique_key == key).first():
-                db.add(Technique(
+            technique = db.query(Technique).filter(Technique.technique_key == key).first()
+            if technique is None:
+                technique = Technique(
                     technique_key=key,
                     name=content["name"],
                     description=content["description"],
@@ -240,14 +267,54 @@ class CultivationService:
                     required_realm=content["required_realm"],
                     spirit_stone_cost=content["spirit_stone_cost"],
                     slot_count=content["slot_count"],
-                ))
+                    effect_config=json.dumps(content.get("effect_config", {}), ensure_ascii=False, sort_keys=True),
+                    conflict_tags=json.dumps(content.get("conflict_tags", []), ensure_ascii=False, sort_keys=True),
+                )
+                db.add(technique)
+            else:
+                technique.name = content["name"]
+                technique.description = content["description"]
+                technique.technique_type = content["technique_type"]
+                technique.required_realm = content["required_realm"]
+                technique.spirit_stone_cost = content["spirit_stone_cost"]
+                technique.slot_count = content["slot_count"]
+                technique.effect_config = json.dumps(
+                    content.get("effect_config", {}), ensure_ascii=False, sort_keys=True
+                )
+                technique.conflict_tags = json.dumps(
+                    content.get("conflict_tags", []), ensure_ascii=False, sort_keys=True
+                )
         db.commit()
 
     def get_world(self, user_id: UUID) -> WorldResponse:
         self.seed_world(self.db)
-        self.ensure_profile(user_id)
+        profile = self.ensure_profile(user_id)
         nodes = self.db.query(WorldNode).order_by(WorldNode.sort_order).all()
-        return WorldResponse(nodes=[WorldNodeResponse.model_validate(node) for node in nodes])
+        completed_ids = {
+            row.node_id for row in self.db.query(WorldNodeProgress).filter_by(
+                user_id=user_id, completed=True
+            ).all()
+        }
+        visible_nodes = []
+        completed_count = len(completed_ids)
+        for index, node in enumerate(nodes):
+            completed = node.id in completed_ids
+            visible = self._world_node_visible(profile, node, nodes, completed_ids, completed_count)
+            lock_reason = None if visible else self._world_node_lock_reason(profile, node, nodes, completed_ids)
+            visible_nodes.append(WorldNodeResponse(
+                node_key=node.node_key,
+                name=node.name,
+                description=node.description,
+                required_realm=node.required_realm,
+                region_key=node.region_key,
+                required_project_phase=node.required_project_phase,
+                sort_order=node.sort_order,
+                is_hidden=node.is_hidden,
+                completed=completed,
+                visible=visible,
+                lock_reason=lock_reason,
+            ))
+        return WorldResponse(nodes=visible_nodes)
 
     def get_sects(self, user_id: UUID, star=None, kind=None, task_preference=None):
         self.seed_world(self.db)
@@ -255,7 +322,9 @@ class CultivationService:
             SectMembership.user_id == user_id, SectMembership.status == "active"
         ).first()
         profile = self.ensure_profile(user_id)
-        query = self.db.query(Sect).filter(Sect.kind != "hidden").order_by(Sect.star, Sect.sect_key)
+        query = self.db.query(Sect).order_by(Sect.star, Sect.sect_key)
+        if kind != "hidden":
+            query = query.filter(Sect.kind != "hidden")
         if star is not None:
             query = query.filter(Sect.star == star)
         if kind is not None:
@@ -263,17 +332,234 @@ class CultivationService:
         if task_preference is not None:
             query = query.filter(Sect.task_preference == task_preference)
         summaries = []
+        hidden_evaluation = {
+            item["sect_key"]: item for item in self.evaluate_hidden_sects(user_id)
+        } if kind == "hidden" else {}
         for sect in query.all():
-            summaries.append(self._sect_summary(user_id, profile, sect, membership))
+            summary = self._sect_summary(user_id, profile, sect, membership)
+            if sect.kind == "hidden" and sect.sect_key in hidden_evaluation:
+                evaluation = hidden_evaluation[sect.sect_key]
+                summary = summary.model_copy(update={
+                    "visible": evaluation["visible"],
+                    "can_join": evaluation["can_join"],
+                    "lock_reason": evaluation["lock_reason"],
+                    "missing_conditions": evaluation["missing_conditions"],
+                    "name": sect.name if evaluation["visible"] else "未显现宗门",
+                    "core_legacy": sect.core_legacy if evaluation["visible"] else None,
+                })
+            summaries.append(summary)
         return summaries
+
+    @staticmethod
+    def _trial_template():
+        return json.loads(json.dumps(SECT_TRIAL_CATALOG["default"], ensure_ascii=False))
+
+    def _initialize_trial_snapshot(self, access: SectAccessProgress):
+        if access.objective_snapshot:
+            return
+        template = self._trial_template()
+        access.objective_snapshot = json.dumps(template, ensure_ascii=False, sort_keys=True)
+        access.objective_progress = json.dumps(
+            {key: False for key in template}, ensure_ascii=False, sort_keys=True
+        )
+
+    def _trial_objectives(self, access: SectAccessProgress):
+        self._initialize_trial_snapshot(access)
+        definitions = json.loads(access.objective_snapshot or "{}")
+        progress = json.loads(access.objective_progress or "{}")
+        return {
+            key: {
+                **definition,
+                "completed": bool(progress.get(key, False)),
+            }
+            for key, definition in definitions.items()
+        }
+
+    def get_sect_access(self, user_id: UUID, sect_key: str) -> SectAccessResponse:
+        self.seed_world(self.db)
+        sect = self._get_sect(sect_key)
+        access = self.db.query(SectAccessProgress).filter_by(
+            user_id=user_id, sect_id=sect.id
+        ).first()
+        if access is None:
+            return SectAccessResponse(sect_key=sect.sect_key, status="awaiting_messenger")
+        if access.trial_confirmed:
+            access.trial_status = "completed"
+        objectives = self._trial_objectives(access)
+        return SectAccessResponse(
+            sect_key=sect.sect_key,
+            status=access.trial_status or (
+                "completed" if access.trial_confirmed else
+                "awaiting_trial" if access.messenger_contacted else "awaiting_messenger"
+            ),
+            objectives=objectives,
+            score=access.trial_score or 0,
+            messenger_contacted=bool(access.messenger_contacted),
+            trial_confirmed=bool(access.trial_confirmed),
+            completed_at=access.completed_at,
+        )
+
+    def update_trial_objective(
+        self, user_id: UUID, sect_key: str, objective_key: str, completed: bool = True
+    ) -> SectAccessResponse:
+        profile = self.ensure_profile(user_id)
+        self.seed_world(self.db)
+        sect = self._get_sect(sect_key)
+        self._require_sect_realm(profile, sect, user_id)
+        access = self._get_or_create_sect_access(user_id, sect.id)
+        if not access.messenger_contacted:
+            raise PermissionError("TRIAL_MESSENGER_REQUIRED:messenger contact required before trial")
+        objectives = self._trial_objectives(access)
+        if objective_key not in objectives:
+            raise LookupError(f"TRIAL_OBJECTIVE_NOT_FOUND:{objective_key}")
+        progress = json.loads(access.objective_progress or "{}")
+        progress[objective_key] = bool(completed)
+        access.objective_progress = json.dumps(progress, ensure_ascii=False, sort_keys=True)
+        if not access.trial_confirmed:
+            access.trial_status = "in_progress"
+        self.db.commit()
+        return self.get_sect_access(user_id, sect_key)
+
+    def _trial_score(self, profile: CultivationProfile, sect: Sect) -> int:
+        preference_bonus = 10 if sect.task_preference == f"discipline-{sect.star}" else 0
+        return min(100, 70 + min(20, profile.contribution // 25) + preference_bonus)
+
+    def get_sect_effects(self, user_id: UUID) -> dict:
+        membership = self.db.query(SectMembership).filter_by(
+            user_id=user_id, status="active"
+        ).first()
+        if membership is None:
+            return {
+                "sect_key": None,
+                "task_preference": None,
+                "core_legacy": None,
+                "efficiency_bonus": 0.0,
+                "contribution_bonus": 0,
+            }
+        sect = self.db.query(Sect).filter(Sect.id == membership.sect_id).one()
+        profile = self.ensure_profile(user_id)
+        access = self.db.query(SectAccessProgress).filter_by(
+            user_id=user_id, sect_id=sect.id
+        ).first()
+        return {
+            "sect_key": sect.sect_key,
+            "task_preference": sect.task_preference,
+            "core_legacy": sect.core_legacy,
+            "efficiency_bonus": 0.05,
+            "contribution_bonus": min(20, profile.contribution // 25),
+            "trial_score": access.trial_score if access else 0,
+        }
+
+    def evaluate_hidden_sects(self, user_id: UUID):
+        self.seed_world(self.db)
+        profile = self.ensure_profile(user_id)
+        results = []
+        for sect in self.db.query(Sect).filter(Sect.kind == "hidden").order_by(Sect.star, Sect.sect_key):
+            condition = HIDDEN_SECT_REVEAL_CATALOG.get(sect.sect_key, {
+                "required_npc_event": "met",
+                "required_mind_state": 70,
+                "required_world_node": f"mortal-domain-{sect.star}",
+                "required_sect": f"sect-{sect.star}-normal-1",
+            })
+            missing = []
+            event_exists = self.db.query(NpcEvent.id).join(
+                Npc, Npc.id == NpcEvent.npc_id
+            ).filter(
+                NpcEvent.user_id == user_id,
+                Npc.user_id == user_id,
+                Npc.sect_id == self._get_sect(condition["required_sect"]).id,
+                NpcEvent.event_key == condition["required_npc_event"],
+            ).first() is not None
+            if not event_exists:
+                missing.append("npc_event")
+            if profile.mind_state < condition["required_mind_state"]:
+                missing.append("mind_state")
+            node = self.db.query(WorldNode).filter_by(
+                node_key=condition["required_world_node"]
+            ).one_or_none()
+            completed_node = node is not None and self.db.query(WorldNodeProgress).filter_by(
+                user_id=user_id, node_id=node.id, completed=True
+            ).first() is not None
+            if not completed_node:
+                missing.append("world_node")
+            prerequisite = self._get_sect(condition["required_sect"])
+            prerequisite_complete = self.db.query(SectAccessProgress).filter_by(
+                user_id=user_id, sect_id=prerequisite.id, trial_confirmed=True
+            ).first() is not None
+            if not prerequisite_complete:
+                missing.append("prerequisite_sect")
+            visible = not missing
+            hidden_access = self.db.query(SectAccessProgress).filter_by(
+                user_id=user_id, sect_id=sect.id, trial_confirmed=True
+            ).first()
+            results.append({
+                "sect_key": sect.sect_key,
+                "name": sect.name if visible else None,
+                "star": sect.star,
+                "kind": sect.kind,
+                "visible": visible,
+                "can_join": visible and bool(hidden_access) and self._realm_at_least(profile.realm_key, sect.entry_realm or SECT_ENTRY_REALMS[sect.star]),
+                "lock_reason": None if visible else f"HIDDEN_SECT_LOCKED:{','.join(missing)}",
+                "missing_conditions": missing,
+            })
+        return results
+
+    def _world_node_lock_reason(self, profile, node, nodes, completed_ids):
+        if node.required_realm and not self._realm_at_least(profile.realm_key, node.required_realm):
+            return f"WORLD_NODE_REALM_REQUIRED:{node.required_realm}"
+        previous = next((item for item in nodes if item.sort_order == node.sort_order - 1), None)
+        if previous is not None and previous.id not in completed_ids:
+            return f"WORLD_NODE_PREVIOUS_REQUIRED:{previous.node_key}"
+        if node.required_project_phase:
+            phases = self.db.query(ProjectPhase).join(Project).filter(
+                Project.user_id == profile.user_id,
+                ProjectPhase.status == PhaseStatus.COMPLETED,
+            ).count()
+            if phases < node.required_project_phase:
+                return f"WORLD_NODE_PROJECT_PHASE_REQUIRED:{node.required_project_phase}"
+        return None
+
+    def _world_node_visible(self, profile, node, nodes, completed_ids, completed_count):
+        return node.id in completed_ids or self._world_node_lock_reason(
+            profile, node, nodes, completed_ids
+        ) is None
+
+    def complete_world_node(self, user_id: UUID, node_key: str) -> WorldNodeResponse:
+        self.seed_world(self.db)
+        profile = self.ensure_profile(user_id)
+        node = self.db.query(WorldNode).filter_by(node_key=node_key).one_or_none()
+        if node is None:
+            raise LookupError("WORLD_NODE_NOT_FOUND")
+        nodes = self.db.query(WorldNode).order_by(WorldNode.sort_order).all()
+        completed_ids = {
+            row.node_id for row in self.db.query(WorldNodeProgress).filter_by(
+                user_id=user_id, completed=True
+            ).all()
+        }
+        if node.id not in completed_ids and self._world_node_lock_reason(profile, node, nodes, completed_ids):
+            raise PermissionError(self._world_node_lock_reason(profile, node, nodes, completed_ids))
+        progress = self.db.query(WorldNodeProgress).filter_by(
+            user_id=user_id, node_id=node.id
+        ).one_or_none()
+        if progress is None:
+            progress = WorldNodeProgress(user_id=user_id, node_id=node.id, completed=True, completed_at=datetime.now(timezone.utc))
+            self.db.add(progress)
+        else:
+            progress.completed = True
+            progress.completed_at = progress.completed_at or datetime.now(timezone.utc)
+        self.db.commit()
+        return next(item for item in self.get_world(user_id).nodes if item.node_key == node_key)
 
     def contact_sect_messenger(self, user_id: UUID, sect_key: str) -> SectSummary:
         profile = self.ensure_profile(user_id)
         self.seed_world(self.db)
         sect = self._get_sect(sect_key)
-        self._require_sect_realm(profile, sect)
+        self._require_sect_realm(profile, sect, user_id)
         access = self._get_or_create_sect_access(user_id, sect.id)
         access.messenger_contacted = True
+        if not access.trial_confirmed:
+            access.trial_status = "awaiting_trial"
+            self._initialize_trial_snapshot(access)
         self.db.commit()
         return self._sect_summary(user_id, profile, sect)
 
@@ -281,11 +567,36 @@ class CultivationService:
         profile = self.ensure_profile(user_id)
         self.seed_world(self.db)
         sect = self._get_sect(sect_key)
-        self._require_sect_realm(profile, sect)
+        self._require_sect_realm(profile, sect, user_id)
         access = self._get_or_create_sect_access(user_id, sect.id)
+        if access.trial_confirmed:
+            access.trial_status = "completed"
+            self.db.commit()
+            return self._sect_summary(user_id, profile, sect)
         if not access.messenger_contacted:
-            raise PermissionError("messenger contact required before trial")
+            raise PermissionError("TRIAL_MESSENGER_REQUIRED:messenger contact required before trial")
+        objectives = self._trial_objectives(access)
+        unmet = [
+            key for key, objective in objectives.items()
+            if objective.get("required", True) and not objective.get("completed", False)
+        ]
+        if unmet:
+            access.trial_status = "in_progress"
+            self.db.commit()
+            raise PermissionError(f"TRIAL_OBJECTIVE_UNMET:{','.join(unmet)}")
+        access.trial_status = "in_progress"
+        access.trial_score = self._trial_score(profile, sect)
+        settlement = self.settle_todo_reward(
+            user_id,
+            "trial_objective",
+            180,
+            "medium",
+            source_key=f"sect-trial:{user_id}:{sect.sect_key}",
+            content_star=max(1, min(5, sect.star)),
+        )
         access.trial_confirmed = True
+        access.trial_status = "completed"
+        access.completed_at = datetime.now(timezone.utc)
         self.db.commit()
         return self._sect_summary(user_id, profile, sect)
 
@@ -296,7 +607,7 @@ class CultivationService:
         eligibility = self._sect_eligibility(profile, sect, user_id)
         if not eligibility["visible"]:
             raise PermissionError("sect is locked")
-        self._require_sect_realm(profile, sect)
+        self._require_sect_realm(profile, sect, user_id)
         if not eligibility["messenger_contacted"]:
             raise PermissionError("messenger contact required before trial")
         if not eligibility["trial_confirmed"]:
@@ -348,7 +659,10 @@ class CultivationService:
                 ),
                 required_realm=t.required_realm, spirit_stone_cost=t.spirit_stone_cost,
                 required_realm_label=_realm_label(t.required_realm),
-                slot_count=t.slot_count, learned=t.id in learned,
+                slot_count=t.slot_count,
+                effect_config=self._technique_effect_config(t),
+                conflict_tags=sorted(self._technique_conflict_tags(t)),
+                learned=t.id in learned,
                 realm_confirmed=not t.required_realm or self._realm_at_least(profile.realm_key, t.required_realm),
             ) for t in techniques],
             slots=[TechniqueSlotResponse(slot_type=s.slot_type, slot_index=s.slot_index, technique_id=s.technique_id) for s in slots],
@@ -357,7 +671,7 @@ class CultivationService:
             spirit_stones=profile.spirit_stones,
             next_slot_purchases={
                 slot_type: self._slot_purchase_preview(profile, slot_type, len([slot for slot in slots if slot.slot_type == slot_type]))
-                for slot_type in ("main", "auxiliary", "mind", "body")
+                for slot_type in SLOT_TYPES
             },
         )
 
@@ -401,23 +715,62 @@ class CultivationService:
             learned_at=learned.learned_at, level=learned.level,
         )
 
+    @staticmethod
+    def _slot_price(slot_index: int) -> int:
+        if slot_index < len(SLOT_PRICES):
+            return SLOT_PRICES[slot_index]
+        return math.floor(SLOT_PRICES[-1] * (2.4 ** (slot_index - len(SLOT_PRICES) + 1)))
+
     def purchase_slot(self, user_id: UUID, slot_type: str):
-        if slot_type not in {"main", "auxiliary", "mind", "body"}:
+        if slot_type not in SLOT_TYPES:
             raise ValueError("INVALID_SLOT_TYPE")
-        profile = self.ensure_profile(user_id)
+        # Capture pending caller changes before any lookup can autoflush them.
+        session_had_pending_work = bool(self.db.new or self.db.dirty or self.db.deleted)
+        profile = self.cultivation_repo.get_by_user(user_id)
+        if profile is None:
+            profile = self.ensure_profile(user_id)
+            self.db.commit()
+            profile = self.cultivation_repo.get_by_user(user_id)
+
+        if session_had_pending_work:
+            self.db.flush()
         existing = self.db.query(TechniqueSlot).filter(
             TechniqueSlot.user_id == user_id, TechniqueSlot.slot_type == slot_type
         ).order_by(TechniqueSlot.slot_index).all()
         next_index = len(existing)
+
+        # A clean session can reset its read snapshot before taking the
+        # profile write lock. Concurrent callers that observed the same slot
+        # count then cannot silently advance to a second purchase.
+        if not session_had_pending_work:
+            self.db.rollback()
+        self.db.execute(update(CultivationProfile).where(
+            CultivationProfile.user_id == user_id
+        ).values(spirit_stones=CultivationProfile.spirit_stones))
+        self.db.expire_all()
+        profile = self.cultivation_repo.get_by_user(user_id)
+        current_slots = self.db.query(TechniqueSlot).filter(
+            TechniqueSlot.user_id == user_id, TechniqueSlot.slot_type == slot_type
+        ).order_by(TechniqueSlot.slot_index).all()
+        if len(current_slots) != next_index:
+            self.db.rollback()
+            raise PermissionError("SLOT_PURCHASE_CONFLICT:slot state changed, refresh and retry")
+
         required_realm = SLOT_REALMS[min(next_index, len(SLOT_REALMS) - 1)]
         if not self._realm_at_least(profile.realm_key, required_realm):
+            self.db.rollback()
             raise PermissionError(f"SLOT_REALM_REQUIRED:{required_realm}")
-        price = SLOT_PRICES[next_index] if next_index < len(SLOT_PRICES) else SLOT_PRICES[-1] * (2 ** (next_index - len(SLOT_PRICES) + 1))
+        price = self._slot_price(next_index)
         if profile.spirit_stones < price:
+            self.db.rollback()
             raise PermissionError(f"INSUFFICIENT_SPIRIT_STONES:{price}:{profile.spirit_stones}")
         profile.spirit_stones -= price
         self.db.add(TechniqueSlot(user_id=user_id, slot_type=slot_type, slot_index=next_index))
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise PermissionError("SLOT_PURCHASE_CONFLICT:slot state changed, refresh and retry") from exc
         return {"slot_type": slot_type, "slot_index": next_index, "slot_count": next_index + 1, "price": price, "balance": profile.spirit_stones, "required_realm": required_realm}
 
     def update_loadout(self, user_id: UUID, loadout):
@@ -425,6 +778,8 @@ class CultivationService:
         updates = []
         occupied = {}
         for slot_type, technique_id in loadout.items():
+            if slot_type not in SLOT_TYPES:
+                raise ValueError("INVALID_SLOT_TYPE")
             ids = technique_id if isinstance(technique_id, list) else [technique_id]
             slots = self.db.query(TechniqueSlot).filter(
                 TechniqueSlot.user_id == user_id, TechniqueSlot.slot_type == slot_type
@@ -438,6 +793,10 @@ class CultivationService:
                 technique = self.db.query(Technique).filter(Technique.id == value).first()
                 if technique is None:
                     raise LookupError("TECHNIQUE_NOT_FOUND:technique or slot not found")
+                if technique.technique_type != slot_type:
+                    raise PermissionError(
+                        f"TECHNIQUE_TYPE_MISMATCH:{technique.technique_type}:{slot_type}"
+                    )
                 learned = self.db.query(LearnedTechnique).filter(
                     LearnedTechnique.user_id == user_id,
                     LearnedTechnique.technique_id == technique.id,
@@ -462,6 +821,8 @@ class CultivationService:
                 raise ValueError("SLOT_CONFLICT:NON_CONTIGUOUS")
         for slot, technique_id in updates:
             slot.technique_id = technique_id
+        self.db.flush()
+        profile.cultivation_efficiency = self._calculate_efficiency(profile, user_id)
         self.db.commit()
         return self.get_techniques(user_id)
 
@@ -482,10 +843,17 @@ class CultivationService:
             access = SectAccessProgress(user_id=user_id, sect_id=sect_id)
             self.db.add(access)
             self.db.flush()
+        if access.trial_confirmed:
+            access.trial_status = "completed"
+        elif access.messenger_contacted and not access.trial_status:
+            access.trial_status = "awaiting_trial"
         return access
 
-    def _require_sect_realm(self, profile: CultivationProfile, sect: Sect):
-        if sect.kind == "hidden":
+    def _require_sect_realm(self, profile: CultivationProfile, sect: Sect, user_id=None):
+        if sect.kind == "hidden" and (user_id is None or not any(
+            item["sect_key"] == sect.sect_key and item["visible"]
+            for item in self.evaluate_hidden_sects(user_id)
+        )):
             raise PermissionError("sect is locked")
         if not self._realm_at_least(profile.realm_key, sect.entry_realm or SECT_ENTRY_REALMS[sect.star]):
             required_realm = sect.entry_realm or SECT_ENTRY_REALMS[sect.star]
@@ -523,6 +891,14 @@ class CultivationService:
 
     def _sect_eligibility(self, profile: CultivationProfile, sect: Sect, user_id=None):
         visible = sect.kind != "hidden"
+        hidden_evaluation = None
+        if sect.kind == "hidden" and user_id is not None:
+            hidden_evaluation = next(
+                (item for item in self.evaluate_hidden_sects(user_id)
+                 if item["sect_key"] == sect.sect_key),
+                None,
+            )
+            visible = bool(hidden_evaluation and hidden_evaluation["visible"])
         required_realm = sect.entry_realm or SECT_ENTRY_REALMS[sect.star]
         realm_confirmed = visible and self._realm_at_least(profile.realm_key, required_realm)
         access = None
@@ -530,18 +906,25 @@ class CultivationService:
             access = self.db.query(SectAccessProgress).filter_by(user_id=user_id, sect_id=sect.id).first()
         messenger_contacted = bool(access and access.messenger_contacted)
         trial_confirmed = bool(access and access.trial_confirmed)
+        trial_status = (
+            access.trial_status if access and access.trial_status else
+            "completed" if trial_confirmed else
+            "awaiting_trial" if messenger_contacted else "awaiting_messenger"
+        )
         return {
             "visible": visible,
             "can_join": realm_confirmed and messenger_contacted and trial_confirmed,
             "realm_confirmed": realm_confirmed,
             "messenger_contacted": messenger_contacted,
             "trial_confirmed": trial_confirmed,
-            "trial_status": "completed" if trial_confirmed else "awaiting_trial" if messenger_contacted else "awaiting_messenger",
+            "trial_status": trial_status,
+            "lock_reason": hidden_evaluation.get("lock_reason") if hidden_evaluation else None,
+            "missing_conditions": hidden_evaluation.get("missing_conditions", []) if hidden_evaluation else [],
         }
 
     def _slot_purchase_preview(self, profile: CultivationProfile, slot_type: str, next_index: int):
         required_realm = SLOT_REALMS[min(next_index, len(SLOT_REALMS) - 1)]
-        price = SLOT_PRICES[next_index] if next_index < len(SLOT_PRICES) else SLOT_PRICES[-1] * (2 ** (next_index - len(SLOT_PRICES) + 1))
+        price = self._slot_price(next_index)
         realm_confirmed = self._realm_at_least(profile.realm_key, required_realm)
         return TechniqueSlotPurchasePreview(
             next_slot_index=next_index,
@@ -724,6 +1107,8 @@ class CultivationService:
 
     def get_tribulation_preview(self, user_id: UUID, pill_count=0) -> TribulationPreview:
         profile = self.ensure_profile(user_id)
+        owned_pills = self._owned_tribulation_pills(user_id)
+        requested_pills = self._bounded_tribulation_pill_count(pill_count)
         if profile.realm_key == ASCENDED_REALM_KEY:
             return TribulationPreview(
                 target_realm=ASCENDED_REALM_KEY,
@@ -732,6 +1117,7 @@ class CultivationService:
                 readiness_breakdown={key: 0 for key in ("mind_state", "habit", "task_quality", "trial", "compatibility")},
                 readiness_bonus=0,
                 pill_count=0,
+                owned_pills=owned_pills,
                 pill_bonus=0,
                 final_probability=0,
                 failure_loss_percent=0,
@@ -753,13 +1139,17 @@ class CultivationService:
             2,
         )
         readiness_bonus = round((readiness - 50) / 5)
-        bounded_pills = min(15, max(0, int(pill_count or 0)))
+        bounded_pills = min(15, owned_pills, requested_pills)
         pill_bonus = bounded_pills * 5
         cooldown_until = self._cooldown_until(user_id)
         final_stage = self._is_final_minor_stage(profile)
+        prerequisites = self._tribulation_prerequisites(profile)
+        first_missing = next((item.key for item in prerequisites if not item.satisfied), None)
         lock_reason = (
             "TRIBULATION_COOLDOWN_ACTIVE" if cooldown_until is not None
             else "FINAL_MINOR_STAGE_REQUIRED" if not final_stage
+            else f"TRIBULATION_PILL_INSUFFICIENT:{requested_pills}:{owned_pills}" if requested_pills > owned_pills
+            else f"TRIBULATION_PREREQUISITE:{first_missing}" if first_missing
             else None
         )
         return TribulationPreview(
@@ -769,6 +1159,7 @@ class CultivationService:
             readiness_breakdown=readiness_breakdown,
             readiness_bonus=readiness_bonus,
             pill_count=bounded_pills,
+            owned_pills=owned_pills,
             pill_bonus=pill_bonus,
             final_probability=max(20, min(95, base + readiness_bonus + pill_bonus)),
             failure_loss_percent=failure_loss_percent,
@@ -776,6 +1167,7 @@ class CultivationService:
             cooldown_until=cooldown_until,
             available=lock_reason is None,
             lock_reason=lock_reason,
+            prerequisites=prerequisites,
         )
 
     def attempt_tribulation(self, user_id: UUID, pill_count: int) -> TribulationResult:
@@ -788,23 +1180,32 @@ class CultivationService:
                         raise
                     self.db.rollback()
                     if self._has_attempt_today(user_id):
-                        raise PermissionError("tribulation cooldown active") from exc
+                        raise PermissionError(
+                            self._tribulation_lock_message("TRIBULATION_COOLDOWN_ACTIVE")
+                        ) from exc
                     if attempt == TRIBULATION_RETRY_COUNT - 1:
                         raise
                     time.sleep(TRIBULATION_RETRY_DELAY_SECONDS)
+                except PermissionError:
+                    # Validation failures happen before any state mutation;
+                    # preserve a newly-created profile for callers that want
+                    # to inspect it after a locked attempt.
+                    raise
+                except Exception:
+                    self.db.rollback()
+                    raise
         raise RuntimeError("tribulation retry loop exhausted")
 
     def _attempt_tribulation(self, user_id: UUID, pill_count: int) -> TribulationResult:
         profile = self.db.query(CultivationProfile).with_for_update().filter_by(user_id=user_id).one_or_none()
         if profile is None:
             profile = self.ensure_profile(user_id)
-        preview = self.get_tribulation_preview(user_id, pill_count)
-        if preview.terminal:
-            raise PermissionError("tribulation already complete")
-        if preview.cooldown_until is not None:
-            raise PermissionError("tribulation cooldown active")
-        if not self._is_final_minor_stage(profile):
-            raise PermissionError("tribulation requires final minor stage threshold")
+        requested_pills = self._bounded_tribulation_pill_count(pill_count)
+        preview = self.get_tribulation_preview(user_id, requested_pills)
+        if not preview.available:
+            raise PermissionError(self._tribulation_lock_message(preview.lock_reason))
+        if preview.pill_count:
+            self.consume_tribulation_pills(user_id, preview.pill_count)
         success = self.roll(preview.final_probability)
         roll = getattr(self, "_last_roll", None)
         if roll is None:
@@ -833,9 +1234,36 @@ class CultivationService:
         except IntegrityError as exc:
             self.db.rollback()
             if self._is_daily_attempt_conflict(exc):
-                raise PermissionError("tribulation cooldown active") from exc
+                raise PermissionError(
+                    self._tribulation_lock_message("TRIBULATION_COOLDOWN_ACTIVE")
+                ) from exc
             raise
         return TribulationResult(success=success, realm_key=profile.realm_key, target_realm=preview.target_realm, cultivation_loss=loss, log_id=attempt_id, cooldown_until=self._cooldown_until(user_id), terminal=success and preview.target_realm == "ascension")
+
+    def consume_tribulation_pills(self, user_id: UUID, count: int) -> int:
+        """Consume pills in the caller's transaction before a tribulation write."""
+        return BackpackService(self.db).consume_by_key(
+            user_id, "tribulation-pill", self._bounded_tribulation_pill_count(count)
+        )
+
+    @staticmethod
+    def _bounded_tribulation_pill_count(value: int) -> int:
+        try:
+            requested = int(value or 0)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("TRIBULATION_PILL_COUNT_INVALID") from exc
+        return max(0, min(15, requested))
+
+    @staticmethod
+    def _tribulation_lock_message(lock_reason: str | None) -> str:
+        compatibility_messages = {
+            "FINAL_MINOR_STAGE_REQUIRED": "tribulation requires final minor stage threshold",
+            "TRIBULATION_COOLDOWN_ACTIVE": "tribulation cooldown active",
+            "ASCENDED": "tribulation already complete",
+        }
+        if lock_reason in compatibility_messages:
+            return f"{lock_reason}: {compatibility_messages[lock_reason]}"
+        return lock_reason or "TRIBULATION_LOCKED"
 
     def roll(self, probability: float):
         roll = random.random() * 100
@@ -847,9 +1275,12 @@ class CultivationService:
         week_ago = now - timedelta(days=7)
         habits = self.db.query(Habit).filter(Habit.user_id == profile.user_id, Habit.is_active.is_(True)).all()
         recent_tasks = self.db.query(Task).filter(Task.user_id == profile.user_id, Task.completed_at >= week_ago).all()
-        habit_score = 50.0 if not habits else round(sum(1 for habit in habits if habit.last_completed_at and self._as_utc(habit.last_completed_at) >= week_ago) / len(habits) * 100, 2)
-        task_weights = {"easy": 60, "medium": 80, "hard": 100}
-        task_score = 50.0 if not recent_tasks else round(sum(task_weights.get(task.difficulty, 80) for task in recent_tasks) / len(recent_tasks), 2)
+        habit_score = 50.0 if not habits else round(
+            min(100, max((habit.streak or 0) for habit in habits) / 7 * 100), 2
+        )
+        task_score = 50.0 if not recent_tasks else round(
+            sum(self._task_quality_score(task) for task in recent_tasks) / len(recent_tasks), 2
+        )
         trial_score = 100.0 if self.db.query(SectAccessProgress).filter(SectAccessProgress.user_id == profile.user_id, SectAccessProgress.trial_confirmed.is_(True)).count() else 0.0
         has_membership = self.db.query(SectMembership).filter(SectMembership.user_id == profile.user_id, SectMembership.status == "active").count() > 0
         has_technique = self.db.query(LearnedTechnique).filter(LearnedTechnique.user_id == profile.user_id).count() > 0
@@ -861,6 +1292,156 @@ class CultivationService:
             "trial": trial_score,
             "compatibility": compatibility_score,
         }
+
+    @staticmethod
+    def _task_quality_score(task: Task) -> float:
+        if task.deadline is None or task.completed_at is None:
+            return 70.0
+        completed_at = CultivationService._as_utc(task.completed_at)
+        deadline = CultivationService._as_utc(task.deadline)
+        if completed_at < deadline:
+            return 100.0
+        if completed_at == deadline:
+            return 80.0
+        return 50.0
+
+    def _owned_tribulation_pills(self, user_id: UUID) -> int:
+        return sum(
+            item.quantity
+            for item in BackpackService(self.db).get_items_by_key(
+                user_id, "tribulation-pill"
+            )
+        )
+
+    def _tribulation_prerequisites(self, profile: CultivationProfile):
+        def item(key, label, required, current):
+            return TribulationPrerequisite(
+                key=key,
+                label=label,
+                required=required,
+                current=current,
+                satisfied=current >= required,
+            )
+
+        if profile.realm_key == "qi_refining":
+            important_goal = self.db.query(Goal).filter(
+                Goal.user_id == profile.user_id,
+                Goal.status == TaskStatus.COMPLETED,
+                Goal.progress >= 100,
+                Goal.difficulty.in_(("hard", "very_hard")),
+            ).count()
+            habit_streak = max(
+                [habit.streak or 0 for habit in self.db.query(Habit).filter(
+                    Habit.user_id == profile.user_id,
+                    Habit.is_active.is_(True),
+                ).all()] or [0]
+            )
+            trial_star = self._highest_completed_trial_star(profile.user_id)
+            return [
+                item("important_goal", "重要目标", 1, important_goal),
+                item("habit_streak", "连续习惯天数", 7, habit_streak),
+                item("trial_star", "历练星级", 3, trial_star),
+                item("mind_state", "心境", 60, profile.mind_state),
+            ]
+
+        if profile.realm_key == "foundation":
+            phase_count = self.db.query(ProjectPhase).join(
+                Project, Project.id == ProjectPhase.project_id
+            ).filter(
+                Project.user_id == profile.user_id,
+                ProjectPhase.status == PhaseStatus.COMPLETED,
+            ).count()
+            habit_streak = max(
+                [habit.streak or 0 for habit in self.db.query(Habit).filter(
+                    Habit.user_id == profile.user_id,
+                    Habit.is_active.is_(True),
+                ).all()] or [0]
+            )
+            return [
+                item("project_phase", "已完成项目阶段", 1, phase_count),
+                item("habit_streak", "连续习惯天数", 14, habit_streak),
+                item("trial_star", "历练星级", 5, self._highest_completed_trial_star(profile.user_id)),
+                item("contribution", "宗门贡献", 300, profile.contribution),
+            ]
+
+        if profile.realm_key == "golden_core":
+            highest_trial_star = self._highest_completed_trial_star(profile.user_id)
+            sect_mainline = self._completed_sect_mainline(profile)
+            long_term_goal = self.db.query(Goal).filter(
+                Goal.user_id == profile.user_id,
+                Goal.difficulty == "very_hard",
+                Goal.progress >= 50,
+                Goal.status != TaskStatus.CANCELLED,
+            ).count()
+            return [
+                item("sect_mainline", "宗门主线", 1, sect_mainline),
+                item("long_term_goal_stage", "长期目标阶段", 1, long_term_goal),
+                item("high_star_trial", "高星历练", 7, highest_trial_star),
+                item("realm_objective", "境界试炼目标", 1, self._completed_realm_objectives(profile)),
+                item("mind_state", "心境", 70, profile.mind_state),
+            ]
+
+        highest_trial_star = self._highest_completed_trial_star(profile.user_id)
+        sect_mainline = self._completed_sect_mainline(profile)
+        long_term_goal = self.db.query(Goal).filter(
+            Goal.user_id == profile.user_id,
+            Goal.difficulty == "very_hard",
+            Goal.progress >= 50,
+            Goal.status != TaskStatus.CANCELLED,
+        ).count()
+        return [
+            item("sect_mainline", "宗门主线", 1, sect_mainline),
+            item("long_term_goal_stage", "长期目标阶段", 1, long_term_goal),
+            item("high_star_trial", "高星历练", 7, highest_trial_star),
+            item("realm_objective", "境界试炼目标", 1, self._completed_realm_objectives(profile)),
+        ]
+
+    @staticmethod
+    def _next_tribulation_target(realm_key: str) -> str:
+        index = REALM_ORDER.index(realm_key)
+        return "ascension" if realm_key == "tribulation" else REALM_ORDER[index + 1]
+
+    def _completed_sect_mainline(self, profile: CultivationProfile) -> int:
+        required_star = 5 if profile.realm_key == "golden_core" else 7
+        completed = self.db.query(SectAccessProgress).join(
+            Sect, Sect.id == SectAccessProgress.sect_id
+        ).join(
+            SectMembership,
+            (SectMembership.sect_id == Sect.id)
+            & (SectMembership.user_id == profile.user_id),
+        ).filter(
+            SectAccessProgress.user_id == profile.user_id,
+            SectAccessProgress.trial_confirmed.is_(True),
+            SectMembership.status == "active",
+            Sect.star >= required_star,
+            Sect.trial_key.is_not(None),
+        ).first()
+        return int(completed is not None)
+
+    def _realm_objective_source_keys(self, profile: CultivationProfile) -> tuple[str, ...]:
+        target = self._next_tribulation_target(profile.realm_key)
+        return (
+            f"realm-objective:{target}",
+            f"realm-objective:{profile.realm_key}:{target}",
+            f"realm-objective:{target}:{profile.user_id}",
+            f"realm-objective:{profile.realm_key}:{target}:{profile.user_id}",
+        )
+
+    def _completed_realm_objectives(self, profile: CultivationProfile) -> int:
+        return self.db.query(CultivationLog).filter(
+            CultivationLog.user_id == profile.user_id,
+            CultivationLog.source == "trial_objective",
+            CultivationLog.source_key.in_(self._realm_objective_source_keys(profile)),
+        ).count()
+
+    def _highest_completed_trial_star(self, user_id: UUID) -> int:
+        value = self.db.query(Sect.star).join(
+            SectAccessProgress, SectAccessProgress.sect_id == Sect.id
+        ).filter(
+            SectAccessProgress.user_id == user_id,
+            SectAccessProgress.trial_confirmed.is_(True),
+        ).order_by(Sect.star.desc()).first()
+        return int(value[0]) if value else 0
 
     @staticmethod
     def _as_utc(value):
@@ -940,6 +1521,100 @@ class CultivationService:
             return False
         return star != 9 or cls._is_final_minor_stage(profile)
 
+    @staticmethod
+    def _source_value(source: str) -> str:
+        return getattr(source, "value", source)
+
+    def _equipped_technique_bonus(self, user_id: UUID) -> float:
+        return self.get_equipped_effects(user_id)["efficiency_bonus"]
+
+    @staticmethod
+    def _technique_effect_config(technique: Technique) -> dict:
+        try:
+            value = json.loads(technique.effect_config or "{}")
+        except (TypeError, json.JSONDecodeError):
+            value = {}
+        if not isinstance(value, dict):
+            return {}
+        return value
+
+    @staticmethod
+    def _technique_conflict_tags(technique: Technique) -> set[str]:
+        try:
+            value = json.loads(technique.conflict_tags or "[]")
+        except (TypeError, json.JSONDecodeError):
+            value = []
+        return set(value) if isinstance(value, list) else set()
+
+    def get_equipped_effects(self, user_id: UUID) -> dict:
+        rows = self.db.query(Technique, TechniqueSlot).join(
+            TechniqueSlot, TechniqueSlot.technique_id == Technique.id
+        ).filter(
+            TechniqueSlot.user_id == user_id,
+            TechniqueSlot.technique_id.is_not(None),
+        ).all()
+        learned_ids = {
+            row.technique_id
+            for row in self.db.query(LearnedTechnique).filter(
+                LearnedTechnique.user_id == user_id
+            ).all()
+        }
+        seen = set()
+        effects = []
+        bonus = 0.0
+        for technique, slot in rows:
+            if technique.id in seen or technique.id not in learned_ids:
+                continue
+            seen.add(technique.id)
+            config = self._technique_effect_config(technique)
+            technique_bonus = float(config.get(
+                "efficiency_bonus",
+                TECHNIQUE_EFFICIENCY_BONUSES.get(technique.technique_key, 0.0),
+            ))
+            bonus += technique_bonus
+            effects.append({
+                "technique_key": technique.technique_key,
+                "slot_type": slot.slot_type,
+                "efficiency_bonus": technique_bonus,
+                "conflict_tags": sorted(self._technique_conflict_tags(technique)),
+            })
+        return {
+            "efficiency_bonus": min(0.80, round(bonus, 4)),
+            "techniques": effects,
+        }
+
+    def _calculate_efficiency(self, profile: CultivationProfile, user_id: UUID) -> float:
+        aptitude_efficiency = min(0.60, 0.04 * math.sqrt(max(0, profile.aptitude_points)))
+        technique_bonus = self._equipped_technique_bonus(user_id)
+        sect_bonus = self.get_sect_effects(user_id).get("efficiency_bonus", 0.0)
+        # Realm base is intentionally explicit even while all mortal realms
+        # share 1.0; future realms can change without changing settlement math.
+        realm_base = 1.0
+        return round(realm_base + technique_bonus + aptitude_efficiency + sect_bonus, 4)
+
+    def _daily_reward_event_count(self, user_id: UUID) -> int:
+        start = datetime.combine(self._utc_today(), datetime.min.time(), tzinfo=timezone.utc)
+        return self.db.query(CultivationLog.id).filter(
+            CultivationLog.user_id == user_id,
+            CultivationLog.created_at >= start,
+        ).count()
+
+    @staticmethod
+    def _resource_deltas(source: str, content_star: int, quality: float, aptitude_allowed: bool):
+        source_value = CultivationService._source_value(source)
+        rule = CULTIVATION_RESOURCE_RULES.get(
+            source_value,
+            {"merit": 0, "contribution": 0, "mind_state_delta": 0},
+        )
+        star = max(1, min(5, int(content_star or 1)))
+        merit = rule["merit"] * star
+        contribution = rule["contribution"] * star
+        mind_state_delta = rule["mind_state_delta"] * star
+        if quality < 1.0 and mind_state_delta == 0:
+            mind_state_delta = -1
+        aptitude_points = star if aptitude_allowed else 0
+        return merit, contribution, mind_state_delta, aptitude_points
+
     def settle_todo_reward(
         self,
         user_id: UUID,
@@ -949,10 +1624,20 @@ class CultivationService:
         quality: float = 1.0,
         importance: float = 1.0,
         source_key: str | None = None,
+        content_star: int = 1,
+        apply_legacy_user_rewards: bool = True,
     ) -> RewardSettlement:
         if not source_key:
             return self._settle_todo_reward_in_session(
-                user_id, source, base_exp, difficulty, quality, importance, None
+                user_id,
+                source,
+                base_exp,
+                difficulty,
+                quality,
+                importance,
+                None,
+                content_star,
+                apply_legacy_user_rewards,
             )
         for attempt in range(SOURCE_KEY_RETRY_COUNT):
             try:
@@ -964,6 +1649,8 @@ class CultivationService:
                     quality,
                     importance,
                     source_key,
+                    content_star,
+                    apply_legacy_user_rewards,
                 )
             except IntegrityError:
                 self.db.expire_all()
@@ -1006,6 +1693,8 @@ class CultivationService:
         quality: float,
         importance: float,
         source_key: str | None,
+        content_star: int,
+        apply_legacy_user_rewards: bool,
     ) -> RewardSettlement:
         try:
             difficulty_factor = DIFFICULTY_FACTORS[difficulty]
@@ -1040,11 +1729,16 @@ class CultivationService:
                 ).one_or_none()
                 if existing_log is not None:
                     return self._settlement_from_existing_log(existing_log, user_id)
+            previous_efficiency = self._calculate_efficiency(profile, user_id)
+            aptitude_allowed = self._daily_reward_event_count(user_id) < 8
+            merit, contribution, mind_state_delta, aptitude_points = self._resource_deltas(
+                source, content_star, quality, aptitude_allowed
+            )
             cultivation = max(0, math.floor(
                 base_exp
                 * difficulty_factor
                 * importance
-                * profile.cultivation_efficiency
+                * previous_efficiency
                 * quality
             ))
             stones = max(1, math.floor(cultivation * 0.6))
@@ -1054,6 +1748,10 @@ class CultivationService:
                 source_key=source_key,
                 cultivation_delta=cultivation,
                 spirit_stones_delta=stones,
+                merit_delta=merit,
+                contribution_delta=contribution,
+                aptitude_points_delta=aptitude_points,
+                mind_state_delta=mind_state_delta,
             )
             # Claim the source key before changing balances. A competing
             # session loses on the unique key and returns the committed log.
@@ -1077,13 +1775,31 @@ class CultivationService:
                 and self._is_final_minor_stage(profile)
             )
             profile.spirit_stones += stones
+            profile.merit += merit
+            profile.contribution += contribution
+            profile.aptitude_points += aptitude_points
+            profile.mind_state = max(0, min(100, profile.mind_state + mind_state_delta))
+            profile.cultivation_efficiency = self._calculate_efficiency(profile, user_id)
+            log.efficiency_delta = round(
+                profile.cultivation_efficiency - previous_efficiency, 4
+            )
+            log.efficiency = profile.cultivation_efficiency
+            log.ready_for_tribulation = ready_for_tribulation
 
-        self.user_repo._update_experience_no_commit(user, cultivation)
-        self.user_repo._update_coins_no_commit(user, stones)
+            if apply_legacy_user_rewards:
+                # Keep legacy user rewards in the same write transaction as
+                # the cultivation log so independent sessions cannot
+                # overwrite them.
+                self.user_repo._update_experience_no_commit(user, cultivation)
+                self.user_repo._update_coins_no_commit(user, stones)
+
         settlement = RewardSettlement(
             cultivation=cultivation,
             spirit_stones=stones,
-            merit=0,
+            merit=merit,
+            aptitude_points=aptitude_points,
+            mind_state_delta=mind_state_delta,
+            contribution=contribution,
             efficiency=profile.cultivation_efficiency,
             log_id=log.id,
             legacy_exp=cultivation,
@@ -1123,14 +1839,17 @@ class CultivationService:
             cultivation=log.cultivation_delta,
             spirit_stones=log.spirit_stones_delta,
             merit=log.merit_delta,
-            efficiency=profile.cultivation_efficiency if profile else 1.0,
+            aptitude_points=getattr(log, "aptitude_points_delta", 0) or 0,
+            mind_state_delta=getattr(log, "mind_state_delta", 0) or 0,
+            contribution=log.contribution_delta,
+            efficiency=(
+                log.efficiency
+                if getattr(log, "efficiency", None) is not None
+                else (profile.cultivation_efficiency if profile else 1.0)
+            ),
             log_id=log.id,
             legacy_exp=log.cultivation_delta,
-            ready_for_tribulation=bool(
-                profile
-                and profile.realm_key != ASCENDED_REALM_KEY
-                and self._is_final_minor_stage(profile)
-            ),
+            ready_for_tribulation=bool(getattr(log, "ready_for_tribulation", False)),
         )
         settlement._already_settled = True
         return settlement

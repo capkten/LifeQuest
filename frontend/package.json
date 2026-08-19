@@ -26,6 +26,7 @@
     "@capacitor/android": "^8.4.0",
     "@capacitor/cli": "^8.4.0",
     "@vitejs/plugin-vue": "^4.5.2",
+    "playwright": "^1.62.1",
     "typescript": "^6.0.3",
     "unplugin-auto-import": "^21.0.0",
     "unplugin-vue-components": "^32.1.0",

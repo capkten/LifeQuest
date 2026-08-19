@@ -11,6 +11,29 @@ export const cultivationService = {
     return response.data
   },
 
+  async getSectAccess(sectKey) {
+    const response = await api.get(`/cultivation/sects/${sectKey}/access`)
+    return response.data
+  },
+
+  async updateTrialObjective(sectKey, objectiveKey, completed = true) {
+    const response = await api.post(
+      `/cultivation/sects/${sectKey}/trial/objectives/${objectiveKey}`,
+      { completed },
+    )
+    return response.data
+  },
+
+  async completeWorldNode(nodeKey) {
+    const response = await api.post(`/cultivation/world/${nodeKey}/complete`)
+    return response.data
+  },
+
+  async evaluateHiddenSects() {
+    const response = await api.get('/cultivation/sects/hidden/evaluate')
+    return response.data
+  },
+
   async getSects(params) {
     const filters = params || {}
     const response = await api.get('/cultivation/sects', {

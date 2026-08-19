@@ -23,7 +23,7 @@ import { labelSlotType } from '../../utils/displayLabels'
 
 const props = defineProps({
   slots: { type: Array, default: () => [] },
-  slotTypes: { type: Array, default: () => ['main', 'auxiliary', 'mind', 'body'] },
+  slotTypes: { type: Array, default: () => ['main', 'auxiliary', 'mind', 'movement', 'body'] },
   loading: Boolean,
   busy: Boolean,
   error: { type: [Object, String], default: null },

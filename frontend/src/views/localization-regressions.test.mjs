@@ -305,7 +305,8 @@ test('display labels translate stable server keys', () => {
   assert.equal(labelTaskPreference('discipline-1'), '纪律修行')
   assert.equal(labelStatus('completed'), '已完成')
   assert.equal(labelResource('mind_state'), '心境')
-  assert.equal(labelSlotType('body'), '身法')
+  assert.equal(labelSlotType('movement'), '身法')
+  assert.equal(labelSlotType('body'), '炼体')
   assert.equal(labelNpcRole('ordinary disciple'), '普通弟子')
   assert.equal(labelEventSummary('met'), '与普通弟子相遇')
   assert.equal(labelDifficulty('hard'), '困难')
@@ -399,9 +400,15 @@ test('server labels only override fallbacks when they are localized', () => {
   assert.equal(isTrustedLabel('筑基期', 'foundation'), true)
 })
 
-test('slot labels keep body distinct from technique type labels', () => {
+test('technique and slot labels cover all five categories', () => {
+  const expectedTypes = ['auxiliary', 'body', 'main', 'mind', 'movement']
+
+  assert.deepEqual(Object.keys(TECHNIQUE_TYPE_LABELS).sort(), expectedTypes)
+  assert.deepEqual(Object.keys(SLOT_TYPE_LABELS).sort(), expectedTypes)
   assert.equal(TECHNIQUE_TYPE_LABELS.body, '炼体')
-  assert.equal(SLOT_TYPE_LABELS.body, '身法')
+  assert.equal(TECHNIQUE_TYPE_LABELS.movement, '身法')
+  assert.equal(SLOT_TYPE_LABELS.body, '炼体')
+  assert.equal(SLOT_TYPE_LABELS.movement, '身法')
   assert.notStrictEqual(SLOT_TYPE_LABELS, TECHNIQUE_TYPE_LABELS)
 })
 
