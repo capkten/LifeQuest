@@ -291,7 +291,20 @@ def update_subtask(
 ):
     service = TodoService(db)
     subtask = service.get_subtask_for_user(subtask_id, current_user.id)
+    if subtask_in.is_completed is True:
+        return service.complete_subtask(subtask, current_user.id)
     return service.update_subtask(subtask, subtask_in)
+
+
+@router.post("/subtasks/{subtask_id}/complete", response_model=SubtaskResponse)
+def complete_subtask(
+    subtask_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = TodoService(db)
+    subtask = service.get_subtask_for_user(subtask_id, current_user.id)
+    return service.complete_subtask(subtask, current_user.id)
 
 
 @router.delete("/subtasks/{subtask_id}")

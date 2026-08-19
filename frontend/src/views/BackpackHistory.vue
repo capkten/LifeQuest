@@ -9,9 +9,9 @@
           </svg>
           返回背包
         </router-link>
-        <span class="history-kicker">INVENTORY LOG</span>
+        <span class="history-kicker">背包记录</span>
         <h1 class="history-title">使用历史</h1>
-        <p class="history-subtitle">集中查看背包物品的使用、装备与丢弃记录，同时保留现有 API 返回的动作轨迹。</p>
+        <p class="history-subtitle">集中查看背包物品的使用、装备与丢弃记录，同时保留现有服务返回的动作轨迹。</p>
       </div>
       <div class="history-hero-stats" v-if="!loading && !error && records.length">
         <div class="summary-chip">
@@ -65,14 +65,14 @@
         <article class="summary-card">
           <span class="summary-card-label">最近操作</span>
           <strong class="summary-card-value summary-card-value--small">{{ latestActionDate }}</strong>
-          <span class="summary-card-note">按 created_at 展示</span>
+          <span class="summary-card-note">按创建时间展示</span>
         </article>
       </section>
 
       <section class="timeline-card">
         <div class="section-heading">
           <div>
-            <span class="section-kicker">TIMELINE</span>
+            <span class="section-kicker">时间线</span>
             <h2>背包动作时间线</h2>
           </div>
           <span class="section-meta">{{ records.length }} 条动作</span>
@@ -139,16 +139,12 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue'
 import { backpackService } from '../services/backpack'
+import { labelActionType } from '../utils/displayLabels'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const records = ref([])
 const loading = ref(true)
 const error = ref(null)
-
-const actionMap = {
-  use: '使用',
-  equip: '装备',
-  discard: '丢弃'
-}
 
 const useCount = computed(() => records.value.filter((record) => record.action_type === 'use').length)
 const equipCount = computed(() => records.value.filter((record) => record.action_type === 'equip').length)
@@ -158,7 +154,7 @@ const latestActionDate = computed(() => {
 })
 
 function formatAction(action) {
-  return actionMap[action] || action
+  return labelActionType(action)
 }
 
 function formatDate(dateStr) {
@@ -183,7 +179,7 @@ async function fetchAll() {
   try {
     await fetchHistory()
   } catch (e) {
-    error.value = '加载使用历史失败，请重试。'
+    error.value = getErrorMessage(e, '加载使用历史失败，请重试。')
   } finally {
     loading.value = false
   }

@@ -42,6 +42,11 @@
         </div>
       </div>
     </div>
+    <div v-if="totalsError" class="inline-error" role="alert">
+      <span>{{ totalsError }}</span>
+      <button type="button" class="retry-btn" @click="fetchTotals">重试累计数据</button>
+    </div>
+    <div v-if="totalsLoading" class="inline-loading" aria-live="polite">正在加载累计数据...</div>
 
     <div class="filter-bar">
       <div class="filter-group">
@@ -66,16 +71,18 @@
       </select>
     </div>
 
-    <div v-if="loading" class="loading-state">
+    <div v-if="loading && !transactions.length" class="loading-state">
       <span class="loading-spinner"></span>
     </div>
 
-    <div v-else-if="error" class="error-state">
+    <div v-else-if="error && !transactions.length" class="error-state">
       <p>{{ error }}</p>
       <button class="retry-btn" @click="fetchHistory">重试</button>
     </div>
 
-    <div v-else-if="groupedTransactions.length === 0" class="empty-state">
+    <div v-else>
+    <div v-if="error" class="inline-error" role="alert"><span>{{ error }}</span><button type="button" class="retry-btn" @click="fetchHistory">重试</button></div>
+    <div v-if="groupedTransactions.length === 0" class="empty-state">
       <div class="empty-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
           <circle cx="12" cy="12" r="10" />
@@ -102,7 +109,7 @@
               </svg>
             </div>
             <div class="tx-info">
-              <span class="tx-desc">{{ tx.description || tx.source || '交易' }}</span>
+              <span class="tx-desc">{{ tx.description || sourceLabel(tx.source) }}</span>
               <span class="tx-source">{{ sourceLabel(tx.source) }}</span>
             </div>
             <span class="tx-amount" :class="tx.amount > 0 ? 'tx-amount--positive' : 'tx-amount--negative'">
@@ -112,9 +119,16 @@
         </div>
       </div>
     </div>
+    </div>
 
+    <div v-if="loadMoreError" class="inline-error" role="alert">
+      <span>{{ loadMoreError }}</span>
+      <button type="button" class="retry-btn" @click="loadMore">重试加载更多</button>
+    </div>
     <div v-if="hasMore && !loading" class="load-more">
-      <button class="retry-btn" @click="loadMore">加载更多</button>
+      <button class="retry-btn" :disabled="loadingMore" @click="loadMore">
+        {{ loadingMore ? '加载中...' : '加载更多' }}
+      </button>
     </div>
   </div>
 </template>
@@ -123,6 +137,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useUserStats } from '../composables/useUserStats'
 import { coinService } from '../services/coin'
+import { labelSource } from '../utils/displayLabels'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const { user } = useUserStats()
 
@@ -130,10 +146,17 @@ const transactions = ref([])
 const totals = ref({ total_earned: 0, total_spent: 0 })
 const loading = ref(true)
 const error = ref(null)
+const loadingMore = ref(false)
+const loadMoreError = ref(null)
+const totalsError = ref(null)
+const totalsLoading = ref(false)
 const typeFilter = ref('')
 const sourceFilter = ref('')
 const page = ref(1)
 const hasMore = ref(false)
+let requestSequence = 0
+let filterGeneration = 0
+let totalsRequestId = 0
 
 const typeOptions = [
   { label: '全部', value: '' },
@@ -141,17 +164,8 @@ const typeOptions = [
   { label: '支出', value: 'expense' }
 ]
 
-const sourceMap = {
-  task: '任务',
-  habit: '习惯',
-  goal: '目标',
-  checkin: '签到',
-  shop: '商城',
-  achievement: '成就'
-}
-
 function sourceLabel(source) {
-  return sourceMap[source] || source || '其他'
+  return labelSource(source)
 }
 
 const groupedTransactions = computed(() => {
@@ -166,43 +180,68 @@ const groupedTransactions = computed(() => {
 })
 
 async function fetchHistory() {
+  const requestId = ++requestSequence
+  const generation = ++filterGeneration
   loading.value = true
   error.value = null
+  loadMoreError.value = null
+  loadingMore.value = false
+  hasMore.value = false
   page.value = 1
   try {
     const params = { page: 1, limit: 20 }
     if (typeFilter.value) params.type = typeFilter.value
     if (sourceFilter.value) params.source = sourceFilter.value
     const result = await coinService.getHistory(params)
+    if (requestId !== requestSequence) return
     transactions.value = Array.isArray(result) ? result : (result?.data || [])
     hasMore.value = transactions.value.length >= 20
   } catch (e) {
-    error.value = '加载金币记录失败，请重试。'
+    if (requestId === requestSequence) error.value = getErrorMessage(e, '加载金币记录失败，请重试。')
   } finally {
-    loading.value = false
+    if (requestId === requestSequence) loading.value = false
   }
 }
 
 async function loadMore() {
-  page.value++
+  if (loadingMore.value || !hasMore.value) return
+  const requestId = ++requestSequence
+  const generation = filterGeneration
+  const nextPage = page.value + 1
+  const type = typeFilter.value
+  const source = sourceFilter.value
+  loadingMore.value = true
+  loadMoreError.value = null
   try {
-    const params = { page: page.value, limit: 20 }
-    if (typeFilter.value) params.type = typeFilter.value
-    if (sourceFilter.value) params.source = sourceFilter.value
+    const params = { page: nextPage, limit: 20 }
+    if (type) params.type = type
+    if (source) params.source = source
     const result = await coinService.getHistory(params)
+    if (requestId !== requestSequence || generation !== filterGeneration) return
     const items = Array.isArray(result) ? result : (result?.data || [])
     transactions.value.push(...items)
+    page.value = nextPage
     hasMore.value = items.length >= 20
   } catch (e) {
-    page.value--
+    if (requestId === requestSequence && generation === filterGeneration) {
+      loadMoreError.value = getErrorMessage(e, '加载更多金币记录失败，请重试。')
+    }
+  } finally {
+    if (requestId === requestSequence && generation === filterGeneration) loadingMore.value = false
   }
 }
 
 async function fetchTotals() {
+  const requestId = ++totalsRequestId
+  totalsLoading.value = true
+  totalsError.value = null
   try {
-    totals.value = await coinService.getTotals()
+    const result = await coinService.getTotals()
+    if (requestId === totalsRequestId) totals.value = result
   } catch (e) {
-    // Non-critical
+    if (requestId === totalsRequestId) totalsError.value = getErrorMessage(e, '加载金币累计数据失败，请重试。')
+  } finally {
+    if (requestId === totalsRequestId) totalsLoading.value = false
   }
 }
 

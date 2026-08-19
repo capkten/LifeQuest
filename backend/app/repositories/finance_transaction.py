@@ -74,9 +74,26 @@ class FinanceTransactionRepository(BaseRepository[FinanceTransaction]):
                 summary["expense"] = float(row.total or 0)
         return summary
 
-    def count_by_user(self, user_id: UUID) -> int:
-        return (
-            self.db.query(FinanceTransaction)
-            .filter(FinanceTransaction.user_id == user_id)
-            .count()
+    def count_by_user(
+        self,
+        user_id: UUID,
+        account_id: Optional[UUID] = None,
+        category_id: Optional[UUID] = None,
+        type: Optional[str] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+    ) -> int:
+        query = self.db.query(FinanceTransaction).filter(
+            FinanceTransaction.user_id == user_id
         )
+        if account_id:
+            query = query.filter(FinanceTransaction.account_id == account_id)
+        if category_id:
+            query = query.filter(FinanceTransaction.category_id == category_id)
+        if type:
+            query = query.filter(FinanceTransaction.type == type)
+        if start_date:
+            query = query.filter(FinanceTransaction.date >= start_date)
+        if end_date:
+            query = query.filter(FinanceTransaction.date <= end_date)
+        return query.count()

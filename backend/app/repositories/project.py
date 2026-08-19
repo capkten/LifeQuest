@@ -53,6 +53,9 @@ class PhaseRepository(BaseRepository[ProjectPhase]):
             ProjectPhase.project_id == project_id
         ).order_by(ProjectPhase.sort_order).all()
 
+    def count_tasks(self, phase_id: UUID) -> int:
+        return self.db.query(Task).filter(Task.phase_id == phase_id).count()
+
 
 class MilestoneRepository(BaseRepository[ProjectMilestone]):
     def __init__(self, db: Session):

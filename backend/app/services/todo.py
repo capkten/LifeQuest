@@ -1,8 +1,12 @@
+import base64
+import threading
+from functools import wraps
 from datetime import date, datetime, timezone
 from typing import List
 from uuid import UUID
 
 from fastapi import HTTPException
+from sqlalchemy import or_, update
 from sqlalchemy.orm import Session
 
 from app.models.todo import Habit, Task, Goal, Subtask, TaskStatus, GOAL_COMPLETED_PROGRESS
@@ -26,10 +30,36 @@ from app.schemas.todo import (
 from app.models.coin_transaction import CoinSource, CoinType
 from app.repositories.coin_transaction import CoinTransactionRepository
 from app.services.achievement import AchievementService
+from app.services.content_catalog import (
+    CULTIVATION_REWARD_BASES,
+    QUALITY_FACTORS,
+    TODO_SOURCE_PREFIXES,
+    source_label,
+)
 from app.services.title import TitleService
+from app.services.cultivation import CultivationService
+
+
+_TODO_COMPLETION_LOCK = threading.Lock()
+
+
+def _completion_guard(method):
+    @wraps(method)
+    def guarded(self, *args, **kwargs):
+        with _TODO_COMPLETION_LOCK:
+            return method(self, *args, **kwargs)
+
+    return guarded
 
 
 class TodoService:
+    TASK_IMPORTANCE = {
+        "low": 0.8,
+        "medium": 1.0,
+        "high": 1.3,
+        "urgent": 1.6,
+    }
+
     def __init__(self, db: Session):
         self.db = db
         self.habit_repo = HabitRepository(db)
@@ -40,6 +70,44 @@ class TodoService:
         self.coin_repo = CoinTransactionRepository(db)
         self.achievement_service = AchievementService(db)
         self.title_service = TitleService(db)
+        self.cultivation_service = CultivationService(db)
+
+    @staticmethod
+    def _set_completed_today(habit: Habit) -> Habit:
+        if habit.last_completed_at is None:
+            habit.completed_today = False
+            return habit
+
+        completed_at = habit.last_completed_at
+        if completed_at.tzinfo is None:
+            completed_at = completed_at.replace(tzinfo=timezone.utc)
+        else:
+            completed_at = completed_at.astimezone(timezone.utc)
+        habit.completed_today = completed_at.date() == datetime.now(timezone.utc).date()
+        return habit
+
+    @staticmethod
+    def _coin_source_id(source: str, entity_id: UUID, completed_on: date = None) -> str:
+        source_value = getattr(source, "value", source)
+        compact_uuid = base64.urlsafe_b64encode(entity_id.bytes).decode("ascii").rstrip("=")
+        source_id = f"{TODO_SOURCE_PREFIXES[source_value]}:{compact_uuid}"
+        if source_value == "habit":
+            source_id = f"{source_id}:{completed_on:%Y%m%d}"
+        return source_id
+
+    @staticmethod
+    def _completion_quality(deadline, completed_at: datetime) -> float:
+        if deadline is None:
+            return 1.0
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
+        else:
+            deadline = deadline.astimezone(timezone.utc)
+        if completed_at < deadline:
+            return QUALITY_FACTORS["early"]
+        if completed_at > deadline:
+            return QUALITY_FACTORS["delayed"]
+        return QUALITY_FACTORS["on_time"]
 
     # --- Ownership verification (returns object or raises HTTPException) ---
     def get_habit_for_user(self, habit_id: UUID, user_id: UUID) -> Habit:
@@ -48,7 +116,7 @@ class TodoService:
             raise HTTPException(status_code=404, detail="Habit not found")
         if habit.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
-        return habit
+        return self._set_completed_today(habit)
 
     def get_task_for_user(self, task_id: UUID, user_id: UUID) -> Task:
         task = self.task_repo.get_by_id(task_id)
@@ -79,38 +147,51 @@ class TodoService:
     def create_habit(self, user_id: UUID, habit_in: HabitCreate) -> Habit:
         data = habit_in.model_dump()
         data["user_id"] = user_id
-        return self.habit_repo.create(data)
+        return self._set_completed_today(self.habit_repo.create(data))
 
     def get_habits(self, user_id: UUID) -> List[Habit]:
-        return self.habit_repo.get_by_user(user_id)
+        return [self._set_completed_today(habit) for habit in self.habit_repo.get_by_user(user_id)]
 
     def update_habit(self, habit: Habit, habit_in: HabitUpdate) -> Habit:
         update_data = habit_in.model_dump(exclude_unset=True)
-        return self.habit_repo.update(habit, update_data)
+        return self._set_completed_today(self.habit_repo.update(habit, update_data))
 
     def delete_habit(self, habit_id: UUID) -> bool:
         return self.habit_repo.delete(habit_id)
 
+    @_completion_guard
     def complete_habit(self, habit: Habit, user_id: UUID) -> Habit:
         """Mark habit as completed for today, incrementing streak and awarding rewards."""
-        # Idempotency: block repeated completion on the same UTC day
         now = datetime.now(timezone.utc)
-        if habit.last_completed_at and habit.last_completed_at.date() == now.date():
-            return habit
-
-        habit.streak += 1
-        if habit.streak > habit.best_streak:
-            habit.best_streak = habit.streak
-        habit.last_completed_at = now
+        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        changed = self.db.execute(update(Habit).where(
+            Habit.id == habit.id, Habit.user_id == user_id,
+            or_(Habit.last_completed_at.is_(None), Habit.last_completed_at < day_start),
+        ).values(last_completed_at=now, streak=Habit.streak + 1).execution_options(
+            synchronize_session=False
+        )).rowcount
+        if not changed:
+            self.db.refresh(habit)
+            return self._set_completed_today(habit)
+        self.db.execute(update(Habit).where(
+            Habit.id == habit.id, Habit.streak > Habit.best_streak
+        ).values(best_streak=Habit.streak).execution_options(synchronize_session=False))
 
         user = self.user_repo.get_by_id(user_id)
+        settlement = None
         if user:
-            self._update_rewards(user, habit.coins_reward, habit.exp_reward, CoinSource.HABIT)
+            settlement = self._update_rewards(
+                user, habit.coins_reward, habit.exp_reward, CoinSource.HABIT,
+                habit.difficulty, source_key=f"todo:habit:{habit.id}:{now.date().isoformat()}",
+                coin_source_id=self._coin_source_id(CoinSource.HABIT, habit.id, now.date()),
+                cultivation_base_exp=CULTIVATION_REWARD_BASES["habit"],
+            )
             self._check_achievements(user)
             self.db.commit()
 
         self.habit_repo.db.refresh(habit)
-        return habit
+        habit.cultivation_reward = settlement
+        return self._set_completed_today(habit)
 
     # --- Task operations ---
     def create_task(self, user_id: UUID, task_in: TaskCreate) -> Task:
@@ -133,20 +214,37 @@ class TodoService:
     def delete_task(self, task_id: UUID) -> bool:
         return self.task_repo.delete(task_id)
 
+    @_completion_guard
     def complete_task(self, task: Task, user_id: UUID) -> Task:
         """Complete a task and award coins and experience to the user."""
-        if task.status == TaskStatus.COMPLETED:
+        now = datetime.now(timezone.utc)
+        changed = self.db.execute(update(Task).where(
+            Task.id == task.id, Task.user_id == user_id, Task.status != TaskStatus.COMPLETED
+        ).values(status=TaskStatus.COMPLETED, completed_at=now)).rowcount
+        if not changed:
+            self.db.refresh(task)
             return task
-        task.status = TaskStatus.COMPLETED
-        task.completed_at = datetime.now(timezone.utc)
 
         user = self.user_repo.get_by_id(user_id)
+        settlement = None
         if user:
-            self._update_rewards(user, task.coins_reward, task.exp_reward, CoinSource.TASK)
+            settlement = self._update_rewards(
+                user,
+                task.coins_reward,
+                task.exp_reward,
+                CoinSource.TASK,
+                task.difficulty,
+                importance=self.TASK_IMPORTANCE.get(task.priority, 1.0),
+                source_key=f"todo:task:{task.id}",
+                coin_source_id=self._coin_source_id(CoinSource.TASK, task.id),
+                cultivation_base_exp=CULTIVATION_REWARD_BASES["task"],
+                quality=self._completion_quality(task.deadline, now),
+            )
             self._check_achievements(user)
             self.db.commit()
 
         self.task_repo.db.refresh(task)
+        task.cultivation_reward = settlement
         return task
 
     # --- Goal operations ---
@@ -165,24 +263,61 @@ class TodoService:
     def delete_goal(self, goal_id: UUID) -> bool:
         return self.goal_repo.delete(goal_id)
 
+    @_completion_guard
     def complete_goal(self, goal: Goal, user_id: UUID) -> Goal:
         """Complete a goal and award coins and experience to the user."""
-        if goal.status == TaskStatus.COMPLETED:
+        now = datetime.now(timezone.utc)
+        changed = self.db.execute(update(Goal).where(
+            Goal.id == goal.id, Goal.user_id == user_id, Goal.status != TaskStatus.COMPLETED
+        ).values(status=TaskStatus.COMPLETED, progress=GOAL_COMPLETED_PROGRESS)).rowcount
+        if not changed:
+            self.db.refresh(goal)
             return goal
-        goal.status = TaskStatus.COMPLETED
-        goal.progress = GOAL_COMPLETED_PROGRESS
 
         user = self.user_repo.get_by_id(user_id)
+        settlement = None
         if user:
-            self._update_rewards(user, goal.coins_reward, goal.exp_reward, CoinSource.GOAL)
+            settlement = self._update_rewards(
+                user, goal.coins_reward, goal.exp_reward, CoinSource.GOAL,
+                goal.difficulty, source_key=f"todo:goal:{goal.id}",
+                coin_source_id=self._coin_source_id(CoinSource.GOAL, goal.id),
+                cultivation_base_exp=CULTIVATION_REWARD_BASES["goal"],
+                quality=self._completion_quality(goal.deadline, now),
+            )
             self._check_achievements(user)
             self.db.commit()
 
         self.goal_repo.db.refresh(goal)
+        goal.cultivation_reward = settlement
         return goal
 
-    def _update_rewards(self, user, coins: int, exp: int, source: str) -> None:
+    def _update_rewards(
+        self,
+        user,
+        coins: int,
+        exp: int,
+        source: str,
+        difficulty: str = "medium",
+        importance: float = 1.0,
+        quality: float = 1.0,
+        cultivation_base_exp: int | None = None,
+        source_key: str | None = None,
+        coin_source_id: str | None = None,
+    ):
         """Update user coins and experience in a single transaction."""
+        settlement = self.cultivation_service.settle_todo_reward(
+            user.id,
+            source,
+            cultivation_base_exp if cultivation_base_exp is not None else exp,
+            difficulty,
+            quality=quality,
+            importance=importance,
+            source_key=source_key,
+            apply_legacy_user_rewards=False,
+        )
+        if settlement._already_settled:
+            return settlement
+
         self.user_repo._update_coins_no_commit(user, coins)
         self.user_repo._update_experience_no_commit(user, exp)
         self.coin_repo._create_no_commit(
@@ -191,9 +326,11 @@ class TodoService:
                 "amount": coins,
                 "type": CoinType.EARN,
                 "source": source,
-                "description": f"Reward from {source}",
+                "source_id": coin_source_id,
+                "description": f"{source_label(source)}奖励",
             }
         )
+        return settlement
 
     def _check_achievements(self, user) -> None:
         """Check and unlock achievements based on current user state."""
@@ -320,3 +457,20 @@ class TodoService:
 
     def delete_subtask(self, subtask_id: UUID) -> bool:
         return self.subtask_repo.delete(subtask_id)
+
+    @_completion_guard
+    def complete_subtask(self, subtask: Subtask, user_id: UUID) -> Subtask:
+        if not subtask.is_completed:
+            subtask.is_completed = True
+        settlement = self.cultivation_service.settle_todo_reward(
+            user_id,
+            "subtask",
+            CULTIVATION_REWARD_BASES["subtask"],
+            "medium",
+            source_key=f"todo:subtask:{subtask.id}",
+        )
+        subtask.cultivation_reward = settlement
+        self.db.commit()
+        self.db.refresh(subtask)
+        subtask.cultivation_reward = settlement
+        return subtask

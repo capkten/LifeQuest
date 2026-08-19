@@ -13,16 +13,20 @@
       </button>
     </div>
 
-    <div v-if="loading" class="loading-state">
+    <div v-if="loading && !hasDashboardData" class="loading-state">
       <span class="loading-spinner"></span>
     </div>
 
-    <div v-else-if="error" class="error-state">
+    <div v-else-if="error && !hasDashboardData" class="error-state">
       <p>{{ error }}</p>
       <button class="retry-btn" @click="fetchDashboard">重试</button>
     </div>
 
     <template v-else>
+      <div v-if="error" class="inline-error" role="alert">
+        <span>{{ error }}</span>
+        <button type="button" class="retry-btn" @click="fetchDashboard">重试</button>
+      </div>
       <!-- Account Cards -->
       <div class="accounts-row">
         <div v-if="accounts.length === 0" class="accounts-empty">
@@ -239,7 +243,7 @@
         <div class="dialog dialog--wide" role="dialog" aria-modal="true" aria-labelledby="quick-add-title" @keydown.escape="cancelQuickAdd">
           <div class="dialog-header">
             <h3 id="quick-add-title" class="dialog-title">{{ editingTx ? '编辑流水' : '快速记账' }}</h3>
-            <button class="dialog-close" @click="cancelQuickAdd" aria-label="Close">
+            <button class="dialog-close" @click="cancelQuickAdd" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -311,7 +315,7 @@
             <div v-if="txError" class="dialog-error" role="alert">{{ txError }}</div>
             <div class="dialog-actions">
               <button type="button" class="btn-secondary" @click="cancelQuickAdd">取消</button>
-              <button type="submit" class="btn-primary" :disabled="savingTx || !txForm.amount || !txForm.account_id">
+              <button type="submit" class="btn-primary" :disabled="savingTx" :aria-disabled="isTransactionBlocked">
                 <span v-if="savingTx" class="loading-spinner loading-spinner--sm"></span>
                 {{ savingTx ? '保存中...' : '保存' }}
               </button>
@@ -355,6 +359,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { financeService } from '../services/finance'
 import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -365,6 +370,10 @@ const accounts = ref([])
 const budgets = ref([])
 const recentTransactions = ref([])
 const categories = ref([])
+let dashboardRequestId = 0
+const hasDashboardData = computed(() => Boolean(
+  Object.keys(dashboard.value).length || accounts.value.length || budgets.value.length || recentTransactions.value.length || categories.value.length
+))
 
 const showQuickAdd = ref(false)
 const savingTx = ref(false)
@@ -439,30 +448,41 @@ function cancelQuickAdd() {
 }
 
 async function fetchDashboard() {
+  const requestId = ++dashboardRequestId
   loading.value = true
   error.value = null
   try {
     const [dash, accts, bds, txs, cats] = await Promise.all([
-      financeService.getDashboard().catch(() => ({})),
-      financeService.getAccounts().catch(() => []),
-      financeService.getBudgets().catch(() => []),
-      financeService.getTransactions({ limit: 5 }).catch(() => []),
-      financeService.getCategories().catch(() => [])
+      financeService.getDashboard(),
+      financeService.getAccounts(),
+      financeService.getBudgets(),
+      financeService.getTransactions({ limit: 5 }),
+      financeService.getCategories()
     ])
+    if (requestId !== dashboardRequestId) return
     dashboard.value = dash || {}
     accounts.value = Array.isArray(accts) ? accts : (accts.items || accts.accounts || [])
     budgets.value = Array.isArray(bds) ? bds : (bds.items || bds.budgets || [])
     recentTransactions.value = Array.isArray(txs) ? txs : (txs.items || txs.transactions || [])
     categories.value = Array.isArray(cats) ? cats : (cats.items || cats.categories || [])
   } catch (e) {
-    error.value = '加载财务数据失败，请重试。'
+    if (requestId === dashboardRequestId) error.value = getErrorMessage(e)
   } finally {
-    loading.value = false
+    if (requestId === dashboardRequestId) loading.value = false
   }
 }
 
+const isTransactionBlocked = computed(() => !txForm.value.amount || !txForm.value.account_id || (txForm.value.type === 'transfer' && !txForm.value.to_account_id))
+
+function explainBlocked(message) {
+  txError.value = message
+  showError(message)
+}
+
 async function saveTransaction() {
-  if (!txForm.value.amount || !txForm.value.account_id) return
+  if (!txForm.value.amount) { explainBlocked('请输入金额后再保存。'); return }
+  if (!txForm.value.account_id) { explainBlocked('请先选择账户。'); return }
+  if (txForm.value.type === 'transfer' && !txForm.value.to_account_id) { explainBlocked('转账还需要选择目标账户。'); return }
   savingTx.value = true
   txError.value = null
   try {
@@ -498,7 +518,7 @@ async function saveTransaction() {
     showSuccess(editingTx.value ? '流水已更新' : '记账成功！')
     await fetchDashboard()
   } catch (e) {
-    txError.value = e.response?.data?.detail || '保存失败，请重试。'
+    txError.value = getErrorMessage(e)
   } finally {
     savingTx.value = false
   }

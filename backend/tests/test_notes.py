@@ -568,6 +568,60 @@ class _FakeMigrationInspector:
         return [{"name": name} for name in columns[table_name]]
 
 
+class _TribulationMigrationInspector(_FakeMigrationInspector):
+    def get_columns(self, table_name):
+        if table_name == "tribulation_attempts":
+            return [{"name": "id"}, {"name": "user_id"}, {"name": "attempted_date"}, {"name": "attempted_at"}]
+        return super().get_columns(table_name)
+
+
+class _TribulationMigrationResult:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def fetchall(self):
+        return list(self.rows)
+
+
+class _TribulationMigrationConnection:
+    def __init__(self):
+        self.rows = [
+            ("keep-latest", "user-1", "2026-08-17", "2026-08-17 18:00:00"),
+            ("delete-older", "user-1", "2026-08-17", "2026-08-17 09:00:00"),
+            ("keep-other-day", "user-1", "2026-08-16", "2026-08-16 09:00:00"),
+        ]
+        self.deleted = []
+        self.statements = []
+
+    def execute(self, statement, params=None):
+        sql = str(statement)
+        self.statements.append(sql)
+        if sql.startswith("SELECT id, user_id, attempted_date, attempted_at"):
+            return _TribulationMigrationResult(self.rows)
+        if sql.startswith("DELETE FROM tribulation_attempts"):
+            attempt_id = params["id"]
+            self.rows = [row for row in self.rows if row[0] != attempt_id]
+            self.deleted.append(attempt_id)
+        return _TribulationMigrationResult([])
+
+
+class _TribulationMigrationEngine:
+    def __init__(self):
+        self.connection = _TribulationMigrationConnection()
+
+    def begin(self):
+        connection = self.connection
+
+        class _Context:
+            def __enter__(self):
+                return connection
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        return _Context()
+
+
 class _FakeMigrationConnection:
     def __init__(self, error, error_column="last_opened_at"):
         self.error = error
@@ -683,6 +737,28 @@ def test_migrate_columns_does_not_canonicalize_before_old_note_migration(monkeyp
     main_module._migrate_columns()
 
     assert not any("SELECT id, tags" in statement for statement in engine.connection.statements)
+
+
+def test_migrate_columns_deduplicates_daily_tribulation_attempts_before_unique_index(monkeypatch):
+    from app import main as main_module
+
+    engine = _TribulationMigrationEngine()
+    monkeypatch.setattr(main_module, "inspect", lambda engine: _TribulationMigrationInspector())
+    monkeypatch.setattr(main_module, "engine", engine)
+
+    main_module._migrate_columns()
+    main_module._migrate_columns()
+
+    assert engine.connection.deleted == ["delete-older"]
+    index_position = next(
+        index for index, statement in enumerate(engine.connection.statements)
+        if "CREATE UNIQUE INDEX" in statement
+    )
+    delete_position = next(
+        index for index, statement in enumerate(engine.connection.statements)
+        if "DELETE FROM tribulation_attempts" in statement
+    )
+    assert delete_position < index_position
 
 
 def test_legacy_note_migration_canonicalizes_tags_for_discover(migration_database, client, db_session):

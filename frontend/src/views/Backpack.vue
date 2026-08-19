@@ -139,6 +139,7 @@
               v-if="item.item_type === 'consumable'"
               class="btn-action btn-action--use"
               :disabled="actionId === item.id"
+              :aria-disabled="item.item_type !== 'consumable'"
               @click="useItem(item)"
             >
               <span v-if="actionId === item.id" class="loading-spinner loading-spinner--sm"></span>
@@ -151,6 +152,7 @@
               v-if="(item.item_type === 'gear' || item.item_type === 'collectible') && !item.is_equipped"
               class="btn-action btn-action--equip"
               :disabled="actionId === item.id"
+              :aria-disabled="item.is_equipped"
               @click="equipItem(item)"
             >
               <span v-if="actionId === item.id" class="loading-spinner loading-spinner--sm"></span>
@@ -162,6 +164,7 @@
             <button
               class="btn-action btn-action--discard"
               :disabled="actionId === item.id"
+              :aria-disabled="item.quantity <= 0"
               @click="requestDiscard(item)"
             >
               <span v-if="actionId === item.id" class="loading-spinner loading-spinner--sm"></span>
@@ -213,7 +216,7 @@
           <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" @keydown.escape="cancelConfirm">
             <div class="dialog-header">
               <h3 id="confirm-dialog-title" class="dialog-title">确认丢弃</h3>
-              <button class="dialog-close" @click="cancelConfirm" aria-label="Close">
+              <button class="dialog-close" @click="cancelConfirm" aria-label="关闭对话框">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
@@ -241,6 +244,8 @@ import { useAuthStore } from '../stores/auth'
 import { backpackService } from '../services/backpack'
 import { shopService } from '../services/shop'
 import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/errorMessage'
+import { labelItemType } from '../utils/displayLabels'
 
 const authStore = useAuthStore()
 const { successToast, errorToast, showSuccess, showError } = useToast()
@@ -273,7 +278,7 @@ function getCount(filter) {
 
 function getItemName(item) {
   const shopItem = shopItemsMap.value[item.shop_item_id]
-  return shopItem?.name || 'Unknown Item'
+  return shopItem?.name || '未知商品'
 }
 
 function getItemDescription(item) {
@@ -282,13 +287,7 @@ function getItemDescription(item) {
 }
 
 function formatType(type) {
-  const typeMap = {
-    'consumable': '消耗品',
-    'gear': '装备',
-    'collectible': '收藏品',
-    'quest': '任务'
-  }
-  return typeMap[type] || type
+  return labelItemType(type)
 }
 
 function formatDate(dateStr) {
@@ -311,7 +310,7 @@ async function fetchShopItems() {
     shopItemsMap.value = map
   } catch (e) {
     console.error('Failed to fetch shop items for name lookup:', e)
-    showError('无法加载物品详情，物品名称可能不可用。')
+    showError(getErrorMessage(e))
   }
 }
 
@@ -325,14 +324,19 @@ async function fetchAll() {
   try {
     await Promise.all([fetchShopItems(), fetchBackpackItems()])
   } catch (e) {
-    error.value = '加载背包物品失败，请重试。'
+    error.value = getErrorMessage(e)
   } finally {
     loading.value = false
   }
 }
 
+function explainBlocked(message) {
+  showError(message)
+}
+
 async function useItem(item) {
-  if (actionId.value) return
+  if (actionId.value) { explainBlocked('已有其他物品操作正在进行，请等待完成后再试。'); return }
+  if (item.item_type !== 'consumable') { explainBlocked('该物品不可使用。'); return }
   actionId.value = item.id
   try {
     const updated = await backpackService.useItem(item.id)
@@ -347,14 +351,16 @@ async function useItem(item) {
     await authStore.fetchUser()
     showSuccess('物品使用成功！')
   } catch (e) {
-    showError(e.response?.data?.detail || '使用物品失败，请重试。')
+    showError(getErrorMessage(e))
   } finally {
     actionId.value = null
   }
 }
 
 async function equipItem(item) {
-  if (actionId.value) return
+  if (actionId.value) { explainBlocked('已有其他物品操作正在进行，请等待完成后再试。'); return }
+  if (item.is_equipped) { explainBlocked('该物品已经装备。'); return }
+  if (item.item_type !== 'gear' && item.item_type !== 'collectible') { explainBlocked('该物品不可装备。'); return }
   actionId.value = item.id
   try {
     const updated = await backpackService.equipItem(item.id)
@@ -370,7 +376,7 @@ async function equipItem(item) {
     })
     showSuccess('物品已装备！')
   } catch (e) {
-    showError(e.response?.data?.detail || '装备物品失败，请重试。')
+    showError(getErrorMessage(e))
   } finally {
     actionId.value = null
   }
@@ -380,7 +386,7 @@ function requestDiscard(item) {
   const shopItem = shopItemsMap.value[item.shop_item_id]
   confirmDialog.value = {
     id: item.id,
-    name: shopItem?.name || 'this item'
+    name: shopItem?.name || '该物品'
   }
 }
 
@@ -389,7 +395,8 @@ function cancelConfirm() {
 }
 
 async function confirmDiscard() {
-  if (!confirmDialog.value || actionId.value) return
+  if (!confirmDialog.value) return
+  if (actionId.value) { explainBlocked('已有其他物品操作正在进行，请等待完成后再试。'); return }
   const itemId = confirmDialog.value.id
   confirmDialog.value = null
   actionId.value = itemId
@@ -405,7 +412,7 @@ async function confirmDiscard() {
     }
     showSuccess('物品已丢弃。')
   } catch (e) {
-    showError(e.response?.data?.detail || '丢弃物品失败，请重试。')
+    showError(getErrorMessage(e))
   } finally {
     actionId.value = null
   }

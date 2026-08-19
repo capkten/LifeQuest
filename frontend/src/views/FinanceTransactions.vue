@@ -23,7 +23,7 @@
 
     <section class="finance-summary-grid">
       <article class="summary-panel summary-panel--primary stitch-surface">
-        <div class="summary-panel__eyebrow">Wallet summary</div>
+        <div class="summary-panel__eyebrow">钱包概览</div>
         <div class="summary-panel__hero">
           <div>
             <span class="summary-panel__label">净流动</span>
@@ -68,7 +68,7 @@
       <article class="summary-panel stitch-surface">
         <div class="summary-panel__header">
           <div>
-            <div class="summary-panel__eyebrow">Recent transactions</div>
+            <div class="summary-panel__eyebrow">最近流水</div>
             <h3 class="summary-panel__title">筛选与范围</h3>
           </div>
           <span class="summary-panel__meta">{{ activeFilterCount === 0 ? '当前查看全部' : `已启用 ${activeFilterCount} 个筛选` }}</span>
@@ -85,7 +85,7 @@
               :aria-selected="filters.type === t.value"
               @click="filters.type = t.value; fetchTransactions()"
             >
-              {{ t.label }}
+              {{ t.value ? labelTransactionType(t.value) : '全部' }}
             </button>
           </div>
 
@@ -109,16 +109,28 @@
       </article>
     </section>
 
-    <div v-if="loading" class="loading-state">
+    <div v-if="supportError" class="inline-error" role="alert">
+      <span>{{ supportError }}</span>
+      <button type="button" class="retry-btn" @click="fetchSupportData">重试账户和分类</button>
+    </div>
+    <div v-if="supportLoading" class="inline-loading" aria-live="polite">正在加载账户和分类...</div>
+    <div v-if="loadMoreError" class="inline-error" role="alert">
+      <span>{{ loadMoreError }}</span>
+      <button type="button" class="retry-btn" @click="loadMore">重试加载更多</button>
+    </div>
+
+    <div v-if="loading && !transactions.length" class="loading-state">
       <span class="loading-spinner"></span>
     </div>
 
-    <div v-else-if="error" class="error-state stitch-surface">
+    <div v-else-if="error && !transactions.length" class="error-state stitch-surface">
       <p>{{ error }}</p>
       <button class="retry-btn" @click="fetchTransactions">重试</button>
     </div>
 
-    <div v-else-if="transactions.length === 0" class="empty-state stitch-surface">
+    <div v-else>
+    <div v-if="error" class="inline-error" role="alert"><span>{{ error }}</span><button type="button" class="retry-btn" @click="fetchTransactions">重试</button></div>
+    <div v-if="transactions.length === 0 && !supportError && !supportLoading" class="empty-state stitch-surface">
       <div class="empty-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
           <circle cx="12" cy="12" r="10" />
@@ -129,10 +141,18 @@
       <p class="empty-text">开始记账后，这里会按日期展示最近交易。</p>
     </div>
 
+    <div v-else-if="transactions.length === 0 && supportLoading" class="loading-state stitch-surface" aria-live="polite">
+      <p>正在加载账户和分类，流水暂不可完整展示。</p>
+    </div>
+
+    <div v-else-if="transactions.length === 0 && supportError" class="error-state stitch-surface" role="alert">
+      <p>支持数据加载失败，流水暂不可完整展示。</p>
+    </div>
+
     <section v-else class="transactions-section">
       <div class="section-heading">
         <div>
-          <div class="section-eyebrow">Recent activity</div>
+          <div class="section-eyebrow">最近活动</div>
           <h3 class="section-title">按日期查看流水</h3>
         </div>
       </div>
@@ -201,6 +221,7 @@
         </button>
       </div>
     </section>
+    </div>
 
     <Teleport to="body">
       <div v-if="showDialog" class="dialog-overlay" @click.self="cancelDialog">
@@ -329,6 +350,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { financeService } from '../services/finance'
 import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/errorMessage'
+import { labelTransactionType } from '../utils/displayLabels'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -338,8 +361,17 @@ const categories = ref([])
 const loading = ref(true)
 const loadingMore = ref(false)
 const error = ref(null)
+const accountsError = ref(null)
+const categoriesError = ref(null)
+const loadMoreError = ref(null)
+const supportLoading = ref(false)
 const page = ref(1)
 const hasMore = ref(false)
+let requestSequence = 0
+let filterGeneration = 0
+let supportRequestId = 0
+
+const supportError = computed(() => [accountsError.value, categoriesError.value].filter(Boolean).join('；') || null)
 
 const filters = ref({
   type: '',
@@ -350,10 +382,10 @@ const filters = ref({
 })
 
 const typeFilters = [
-  { value: '', label: '全部' },
-  { value: 'income', label: '收入' },
-  { value: 'expense', label: '支出' },
-  { value: 'transfer', label: '转账' }
+  { value: '' },
+  { value: 'income' },
+  { value: 'expense' },
+  { value: 'transfer' }
 ]
 
 const showDialog = ref(false)
@@ -443,8 +475,13 @@ function openDelete(tx) { deletingTx.value = tx; showDeleteDialog.value = true }
 function cancelDelete() { showDeleteDialog.value = false; deletingTx.value = null }
 
 async function fetchTransactions() {
+  const requestId = ++requestSequence
+  const generation = ++filterGeneration
   loading.value = true
   error.value = null
+  loadMoreError.value = null
+  loadingMore.value = false
+  hasMore.value = false
   page.value = 1
   try {
     const params = { page: 1, limit: 50 }
@@ -454,20 +491,25 @@ async function fetchTransactions() {
     if (filters.value.start_date) params.start_date = filters.value.start_date
     if (filters.value.end_date) params.end_date = filters.value.end_date
     const data = await financeService.getTransactions(params)
+    if (requestId !== requestSequence) return
     transactions.value = Array.isArray(data) ? data : (data.items || data.transactions || [])
     hasMore.value = data.has_more || (Array.isArray(data) ? false : (data.total > transactions.value.length))
   } catch (e) {
-    error.value = '加载流水失败，请重试。'
+    if (requestId === requestSequence) error.value = getErrorMessage(e)
   } finally {
-    loading.value = false
+    if (requestId === requestSequence) loading.value = false
   }
 }
 
 async function loadMore() {
+  if (loadingMore.value || !hasMore.value) return
+  const requestId = ++requestSequence
+  const generation = filterGeneration
+  const nextPage = page.value + 1
   loadingMore.value = true
-  page.value++
+  loadMoreError.value = null
   try {
-    const params = { page: page.value, limit: 50 }
+    const params = { page: nextPage, limit: 50 }
     if (filters.value.type) params.type = filters.value.type
     if (filters.value.account_id) params.account_id = filters.value.account_id
     if (filters.value.category_id) params.category_id = filters.value.category_id
@@ -475,25 +517,46 @@ async function loadMore() {
     if (filters.value.end_date) params.end_date = filters.value.end_date
     const data = await financeService.getTransactions(params)
     const items = Array.isArray(data) ? data : (data.items || data.transactions || [])
+    if (requestId !== requestSequence || generation !== filterGeneration) return
     transactions.value.push(...items)
+    page.value = nextPage
     hasMore.value = data.has_more || false
   } catch (e) {
-    page.value--
+    if (requestId === requestSequence && generation === filterGeneration) {
+      loadMoreError.value = getErrorMessage(e, '加载更多流水失败，请重试。')
+    }
   } finally {
-    loadingMore.value = false
+    if (requestId === requestSequence && generation === filterGeneration) loadingMore.value = false
   }
 }
 
 async function fetchSupportData() {
+  const requestId = ++supportRequestId
+  supportLoading.value = true
+  accountsError.value = null
+  categoriesError.value = null
   try {
-    const [acctData, catData] = await Promise.all([
-      financeService.getAccounts().catch(() => []),
-      financeService.getCategories().catch(() => [])
+    const [accountResult, categoryResult] = await Promise.allSettled([
+      Promise.resolve().then(() => financeService.getAccounts()),
+      Promise.resolve().then(() => financeService.getCategories()),
     ])
-    accounts.value = Array.isArray(acctData) ? acctData : (acctData.items || acctData.accounts || [])
-    categories.value = Array.isArray(catData) ? catData : (catData.items || catData.categories || [])
-  } catch (e) {
-    // Non-critical
+    if (requestId !== supportRequestId) return
+
+    if (accountResult.status === 'fulfilled') {
+      const data = accountResult.value
+      accounts.value = Array.isArray(data) ? data : (data.items || data.accounts || [])
+    } else {
+      accountsError.value = getErrorMessage(accountResult.reason, '加载账户失败，请重试。')
+    }
+
+    if (categoryResult.status === 'fulfilled') {
+      const data = categoryResult.value
+      categories.value = Array.isArray(data) ? data : (data.items || data.categories || [])
+    } else {
+      categoriesError.value = getErrorMessage(categoryResult.reason, '加载分类失败，请重试。')
+    }
+  } finally {
+    if (requestId === supportRequestId) supportLoading.value = false
   }
 }
 
@@ -538,7 +601,7 @@ async function saveTransaction() {
     showSuccess(wasEditing ? '流水已更新' : '记账成功')
     await fetchTransactions()
   } catch (e) {
-    txDialogError.value = e.response?.data?.detail || '保存失败，请重试。'
+    txDialogError.value = getErrorMessage(e)
   } finally {
     savingTx.value = false
   }
@@ -553,7 +616,7 @@ async function deleteTransaction() {
     showSuccess('流水已删除')
     cancelDelete()
   } catch (e) {
-    showError(e.response?.data?.detail || '删除失败，请重试。')
+    showError(getErrorMessage(e))
     cancelDelete()
   } finally {
     deleting.value = false

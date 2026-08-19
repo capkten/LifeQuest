@@ -11,16 +11,20 @@
       </h1>
     </div>
 
-    <div v-if="loading" class="loading-state">
+    <div v-if="loading && !hasRenderableData" class="loading-state">
       <span class="loading-spinner"></span>
     </div>
 
-    <div v-else-if="error" class="error-state">
+    <div v-else-if="error && !hasRenderableData" class="error-state">
       <p>{{ error }}</p>
       <button class="retry-btn" @click="fetchAll">重试</button>
     </div>
 
     <template v-else>
+      <div v-if="error" class="inline-error" role="alert">
+        <span>{{ error }}</span>
+        <button type="button" class="retry-btn" @click="fetchAll">重试</button>
+      </div>
       <!-- Overview Cards -->
       <div class="overview-grid">
         <div class="overview-card overview-card--tasks">
@@ -73,6 +77,11 @@
           </div>
         </div>
       </div>
+      <div v-if="loadingOverview" class="inline-loading" aria-live="polite">正在加载统计总览...</div>
+      <div v-if="overviewError" class="inline-error" role="alert">
+        <span>{{ overviewError }}</span>
+        <button type="button" class="retry-btn" @click="fetchOverview">重试总览</button>
+      </div>
 
       <!-- Task Completion Trend -->
       <div class="chart-section">
@@ -92,11 +101,12 @@
               class="period-tab"
               :class="{ 'period-tab--active': taskPeriod === p.value }"
               @click="setTaskPeriod(p.value)"
-            >{{ p.label }}</button>
+            >{{ labelPeriod(p.value) }}</button>
           </div>
         </div>
         <div class="chart-body">
           <div v-if="loadingTasks" class="chart-loading"><span class="loading-spinner"></span></div>
+          <div v-else-if="taskError" class="chart-error" role="alert">{{ taskError }} <button type="button" @click="fetchTaskTrends">重试</button></div>
           <div v-else-if="taskTrends.length === 0" class="chart-empty">暂无数据</div>
           <div v-else class="bar-chart">
             <div class="bar-chart-y-axis">
@@ -153,11 +163,12 @@
               class="period-tab"
               :class="{ 'period-tab--active': habitPeriod === p.value }"
               @click="setHabitPeriod(p.value)"
-            >{{ p.label }}</button>
+            >{{ labelPeriod(p.value) }}</button>
           </div>
         </div>
         <div class="chart-body">
           <div v-if="loadingHabits" class="chart-loading"><span class="loading-spinner"></span></div>
+          <div v-else-if="habitError" class="chart-error" role="alert">{{ habitError }} <button type="button" @click="fetchHabitStats">重试</button></div>
           <div v-else-if="habitStats.length === 0" class="chart-empty">暂无数据</div>
           <div v-else class="line-chart-wrapper">
             <svg
@@ -218,11 +229,12 @@
               class="period-tab"
               :class="{ 'period-tab--active': coinPeriod === p.value }"
               @click="setCoinPeriod(p.value)"
-            >{{ p.label }}</button>
+            >{{ labelPeriod(p.value) }}</button>
           </div>
         </div>
         <div class="chart-body">
           <div v-if="loadingCoins" class="chart-loading"><span class="loading-spinner"></span></div>
+          <div v-else-if="coinError" class="chart-error" role="alert">{{ coinError }} <button type="button" @click="fetchCoinTrends">重试</button></div>
           <div v-else-if="coinTrends.length === 0" class="chart-empty">暂无数据</div>
           <div v-else class="line-chart-wrapper">
             <svg
@@ -286,16 +298,20 @@
           </h3>
         </div>
         <div class="chart-body">
+          <div v-if="loadingLevel" class="chart-loading"><span class="loading-spinner"></span></div>
+          <div v-else-if="levelError" class="chart-error" role="alert">
+            {{ levelError }} <button type="button" @click="fetchLevel">重试</button>
+          </div>
           <div class="level-section">
             <div class="level-info">
               <div class="level-badge">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
-                <span class="level-number">Lv.{{ levelProgress.current_level }}</span>
+                <span class="level-number">等级 {{ levelProgress.current_level }}</span>
               </div>
               <div class="level-detail">
-                <span class="level-exp">{{ levelProgress.current_exp }} / {{ levelProgress.required_exp }} EXP</span>
+                <span class="level-exp">{{ levelProgress.current_exp }} / {{ levelProgress.required_exp }} 经验</span>
                 <span class="level-percent">{{ levelProgress.exp_percent }}%</span>
               </div>
             </div>
@@ -313,11 +329,21 @@
 </template>
 
 <script setup>
+import { labelPeriod } from '../utils/displayLabels'
 import { ref, computed, onMounted } from 'vue'
 import { statsService } from '../services/stats'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const loading = ref(true)
 const error = ref(null)
+const hasRenderableData = ref(false)
+const loadingOverview = ref(false)
+const loadingLevel = ref(false)
+const overviewError = ref(null)
+const levelError = ref(null)
+let overviewRequestId = 0
+let levelRequestId = 0
+let refreshRequestId = 0
 
 const overview = ref({
   total_tasks_completed: 0,
@@ -341,20 +367,30 @@ const coinTrends = ref([])
 const loadingTasks = ref(false)
 const loadingHabits = ref(false)
 const loadingCoins = ref(false)
+const taskError = ref(null)
+const habitError = ref(null)
+const coinError = ref(null)
+let taskRequestId = 0
+let habitRequestId = 0
+let coinRequestId = 0
+
+function syncGlobalError() {
+  error.value = overviewError.value || levelError.value || taskError.value || habitError.value || coinError.value || null
+}
 
 const taskPeriods = [
-  { value: 'week', label: '周' },
-  { value: 'month', label: '月' },
-  { value: 'year', label: '年' },
+  { value: 'week' },
+  { value: 'month' },
+  { value: 'year' },
 ]
 const habitPeriods = [
-  { value: 'week', label: '周' },
-  { value: 'month', label: '月' },
+  { value: 'week' },
+  { value: 'month' },
 ]
 const coinPeriods = [
-  { value: 'week', label: '周' },
-  { value: 'month', label: '月' },
-  { value: 'year', label: '年' },
+  { value: 'week' },
+  { value: 'month' },
+  { value: 'year' },
 ]
 
 // --- Task bar chart helpers ---
@@ -482,37 +518,114 @@ const coinXLabels = computed(() => {
 
 // --- Data fetching ---
 async function fetchOverview() {
-  overview.value = await statsService.getOverview()
+  const requestId = ++overviewRequestId
+  loadingOverview.value = true
+  overviewError.value = null
+  syncGlobalError()
+  try {
+    const result = await statsService.getOverview()
+    if (requestId !== overviewRequestId) return false
+    overview.value = result
+    hasRenderableData.value = true
+    syncGlobalError()
+    return true
+  } catch (e) {
+    if (requestId === overviewRequestId) {
+      overviewError.value = getErrorMessage(e, '加载统计总览失败，请重试。')
+      syncGlobalError()
+    }
+    return false
+  } finally {
+    if (requestId === overviewRequestId) loadingOverview.value = false
+  }
 }
 
 async function fetchLevel() {
-  levelProgress.value = await statsService.getLevelProgress()
+  const requestId = ++levelRequestId
+  loadingLevel.value = true
+  levelError.value = null
+  syncGlobalError()
+  try {
+    const result = await statsService.getLevelProgress()
+    if (requestId !== levelRequestId) return false
+    levelProgress.value = result
+    hasRenderableData.value = true
+    syncGlobalError()
+    return true
+  } catch (e) {
+    if (requestId === levelRequestId) {
+      levelError.value = getErrorMessage(e, '加载等级进度失败，请重试。')
+      syncGlobalError()
+    }
+    return false
+  } finally {
+    if (requestId === levelRequestId) loadingLevel.value = false
+  }
 }
 
 async function fetchTaskTrends() {
+  const requestId = ++taskRequestId
   loadingTasks.value = true
+  taskError.value = null
+  syncGlobalError()
   try {
-    taskTrends.value = await statsService.getTaskTrends(taskPeriod.value)
+    const result = await statsService.getTaskTrends(taskPeriod.value)
+    if (requestId === taskRequestId) {
+      taskTrends.value = result
+      hasRenderableData.value = true
+      syncGlobalError()
+    }
+  } catch (e) {
+    if (requestId === taskRequestId) {
+      taskError.value = getErrorMessage(e, '加载任务趋势失败，请重试。')
+      syncGlobalError()
+    }
   } finally {
-    loadingTasks.value = false
+    if (requestId === taskRequestId) loadingTasks.value = false
   }
 }
 
 async function fetchHabitStats() {
+  const requestId = ++habitRequestId
   loadingHabits.value = true
+  habitError.value = null
+  syncGlobalError()
   try {
-    habitStats.value = await statsService.getHabitStats(habitPeriod.value)
+    const result = await statsService.getHabitStats(habitPeriod.value)
+    if (requestId === habitRequestId) {
+      habitStats.value = result
+      hasRenderableData.value = true
+      syncGlobalError()
+    }
+  } catch (e) {
+    if (requestId === habitRequestId) {
+      habitError.value = getErrorMessage(e, '加载习惯统计失败，请重试。')
+      syncGlobalError()
+    }
   } finally {
-    loadingHabits.value = false
+    if (requestId === habitRequestId) loadingHabits.value = false
   }
 }
 
 async function fetchCoinTrends() {
+  const requestId = ++coinRequestId
   loadingCoins.value = true
+  coinError.value = null
+  syncGlobalError()
   try {
-    coinTrends.value = await statsService.getCoinTrends(coinPeriod.value)
+    const result = await statsService.getCoinTrends(coinPeriod.value)
+    if (requestId === coinRequestId) {
+      coinTrends.value = result
+      hasRenderableData.value = true
+      syncGlobalError()
+    }
+  } catch (e) {
+    if (requestId === coinRequestId) {
+      coinError.value = getErrorMessage(e, '加载金币趋势失败，请重试。')
+      syncGlobalError()
+    }
   } finally {
-    loadingCoins.value = false
+    if (requestId === coinRequestId) loadingCoins.value = false
   }
 }
 
@@ -532,19 +645,21 @@ function setCoinPeriod(p) {
 }
 
 async function fetchAll() {
+  const requestId = ++refreshRequestId
   loading.value = true
   error.value = null
-  try {
-    await Promise.all([
-      fetchOverview(),
-      fetchLevel(),
-      fetchTaskTrends(),
-      fetchHabitStats(),
-      fetchCoinTrends(),
-    ])
-  } catch (e) {
-    error.value = '加载统计数据失败，请重试。'
-  } finally {
+  const results = await Promise.all([
+    fetchOverview(),
+    fetchLevel(),
+    fetchTaskTrends(),
+    fetchHabitStats(),
+    fetchCoinTrends(),
+  ])
+  if (requestId === refreshRequestId && results.some((result) => result === false)) {
+    syncGlobalError()
+    error.value = error.value || '加载统计数据失败，请重试。'
+  }
+  if (requestId === refreshRequestId) {
     loading.value = false
   }
 }

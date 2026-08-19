@@ -19,6 +19,14 @@
     </div>
 
     <div class="calendar-body">
+      <div v-if="eventsError" class="inline-error" role="alert">
+        <span>{{ eventsError }}</span>
+        <button type="button" class="retry-btn" @click="fetchEvents">重试</button>
+      </div>
+      <div v-if="loadingEvents" class="inline-loading" aria-live="polite">
+        <span class="loading-spinner"></span>
+        <span>正在加载日历事件...</span>
+      </div>
       <!-- Calendar Grid -->
       <div class="calendar-grid-wrapper">
         <!-- Weekday headers -->
@@ -58,7 +66,7 @@
         <template v-if="selectedDate">
           <div class="detail-header">
             <h3 class="detail-date">{{ formatSelectedDate }}</h3>
-            <button class="detail-close" @click="selectedDate = null" aria-label="关闭">
+            <button class="detail-close" @click="closeDetail" aria-label="关闭">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -68,6 +76,11 @@
 
           <div v-if="loadingDetail" class="detail-loading">
             <span class="loading-spinner"></span>
+          </div>
+
+          <div v-else-if="detailError" class="detail-error" role="alert">
+            <p>{{ detailError }}</p>
+            <button type="button" class="retry-btn" @click="selectDate(selectedDate)">重试</button>
           </div>
 
           <div v-else-if="dayDetail" class="detail-content">
@@ -185,13 +198,13 @@
 
     <!-- Mobile detail overlay -->
     <Transition name="overlay">
-      <div v-if="selectedDate && isMobile" class="mobile-overlay" @click.self="selectedDate = null">
+      <div v-if="selectedDate && isMobile" class="mobile-overlay" @click.self="closeDetail">
         <Transition name="sheet">
           <div v-if="selectedDate" class="mobile-sheet">
             <div class="mobile-sheet-handle"></div>
             <div class="detail-header">
               <h3 class="detail-date">{{ formatSelectedDate }}</h3>
-              <button class="detail-close" @click="selectedDate = null" aria-label="关闭">
+              <button class="detail-close" @click="closeDetail" aria-label="关闭">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
@@ -200,6 +213,10 @@
             </div>
             <div v-if="loadingDetail" class="detail-loading">
               <span class="loading-spinner"></span>
+            </div>
+            <div v-else-if="detailError" class="detail-error" role="alert">
+              <p>{{ detailError }}</p>
+              <button type="button" class="retry-btn" @click="selectDate(selectedDate)">重试</button>
             </div>
             <div v-else-if="dayDetail" class="detail-content">
               <div v-if="dayDetail.checked_in" class="detail-checkin">
@@ -300,6 +317,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { calendarService } from '../services/calendar'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const router = useRouter()
 
@@ -312,6 +330,10 @@ const selectedDate = ref(null)
 const dayDetail = ref(null)
 const loadingDetail = ref(false)
 const loadingEvents = ref(false)
+const eventsError = ref(null)
+const detailError = ref(null)
+let eventsRequestId = 0
+let detailRequestId = 0
 const isMobile = ref(false)
 
 function checkMobile() {
@@ -426,28 +448,42 @@ function getMonthRange(year, month) {
 }
 
 async function fetchEvents() {
+  const requestId = ++eventsRequestId
   loadingEvents.value = true
+  eventsError.value = null
   try {
     const range = getMonthRange(currentYear.value, currentMonth.value)
-    events.value = await calendarService.getEvents(range.start, range.end)
+    const nextEvents = await calendarService.getEvents(range.start, range.end)
+    if (requestId === eventsRequestId) events.value = nextEvents
   } catch (e) {
-    events.value = []
+    if (requestId === eventsRequestId) eventsError.value = getErrorMessage(e, '加载日历事件失败，请重试。')
   } finally {
-    loadingEvents.value = false
+    if (requestId === eventsRequestId) loadingEvents.value = false
   }
 }
 
 async function selectDate(dateStr) {
+  const requestId = ++detailRequestId
   selectedDate.value = dateStr
-  loadingDetail.value = true
   dayDetail.value = null
+  loadingDetail.value = true
+  detailError.value = null
   try {
-    dayDetail.value = await calendarService.getDayDetail(dateStr)
+    const detail = await calendarService.getDayDetail(dateStr)
+    if (requestId === detailRequestId) dayDetail.value = detail
   } catch (e) {
-    dayDetail.value = null
+    if (requestId === detailRequestId) detailError.value = getErrorMessage(e, '加载日期详情失败，请重试。')
   } finally {
-    loadingDetail.value = false
+    if (requestId === detailRequestId) loadingDetail.value = false
   }
+}
+
+function closeDetail() {
+  detailRequestId += 1
+  selectedDate.value = null
+  dayDetail.value = null
+  detailError.value = null
+  loadingDetail.value = false
 }
 
 function prevMonth() {
@@ -457,8 +493,7 @@ function prevMonth() {
   } else {
     currentMonth.value--
   }
-  selectedDate.value = null
-  dayDetail.value = null
+  closeDetail()
 }
 
 function nextMonth() {
@@ -468,8 +503,7 @@ function nextMonth() {
   } else {
     currentMonth.value++
   }
-  selectedDate.value = null
-  dayDetail.value = null
+  closeDetail()
 }
 
 function goToday() {

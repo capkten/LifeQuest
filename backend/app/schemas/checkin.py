@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.cultivation import RewardSettlement
+
 
 class CheckinResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -13,6 +15,9 @@ class CheckinResponse(BaseModel):
     checkin_date: date
     streak: int
     created_at: datetime
+    reward_coins: int
+    reward_exp: int
+    cultivation_reward: Optional[RewardSettlement] = None
 
 
 class CheckinStatusResponse(BaseModel):

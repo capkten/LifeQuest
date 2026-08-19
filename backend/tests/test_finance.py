@@ -174,3 +174,87 @@ def test_finance_rejects_non_positive_amounts_and_invalid_debt_remaining(client)
         headers=headers,
     )
     assert debt.status_code == 422
+
+
+def test_finance_transactions_support_page_pagination_and_legacy_skip(client):
+    headers = _register_and_login(client)
+    account = _create_account(client, headers, "Pagination account", 1000)
+
+    for index in range(5):
+        response = client.post(
+            "/api/finance/transactions",
+            json={
+                "account_id": account["id"],
+                "type": "expense",
+                "amount": index + 1,
+                "description": f"Pagination transaction {index}",
+                "date": "2026-06-09",
+            },
+            headers=headers,
+        )
+        assert response.status_code == 200
+
+    page_one = client.get(
+        "/api/finance/transactions?page=1&page_size=2",
+        headers=headers,
+    )
+    page_two = client.get(
+        "/api/finance/transactions?page=2&page_size=2",
+        headers=headers,
+    )
+    legacy_page_two = client.get(
+        "/api/finance/transactions?skip=2&page_size=2",
+        headers=headers,
+    )
+
+    assert page_one.status_code == 200
+    assert page_two.status_code == 200
+    assert legacy_page_two.status_code == 200
+    assert set(page_one.json()) == {"items", "total", "page", "page_size", "has_more"}
+    assert page_one.json()["page"] == 1
+    assert page_two.json()["page"] == 2
+    assert page_one.json()["page_size"] == 2
+    assert page_one.json()["total"] == 5
+    assert page_one.json()["has_more"] is True
+    assert {item["id"] for item in page_one.json()["items"]}.isdisjoint(
+        {item["id"] for item in page_two.json()["items"]}
+    )
+    assert [item["id"] for item in page_two.json()["items"]] == [
+        item["id"] for item in legacy_page_two.json()["items"]
+    ]
+
+
+def test_finance_filtered_pagination_metadata_matches_filtered_rows(client):
+    headers = _register_and_login(client)
+    account = _create_account(client, headers, "Filtered pagination account", 1000)
+
+    for transaction_type, amount, transaction_date in [
+        ("expense", 10, "2026-06-07"),
+        ("income", 20, "2026-06-08"),
+        ("expense", 30, "2026-06-09"),
+    ]:
+        response = client.post(
+            "/api/finance/transactions",
+            json={
+                "account_id": account["id"],
+                "type": transaction_type,
+                "amount": amount,
+                "description": "Filtered pagination transaction",
+                "date": transaction_date,
+            },
+            headers=headers,
+        )
+        assert response.status_code == 200
+
+    response = client.get(
+        "/api/finance/transactions?type=expense&page=2&page_size=1",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 2
+    assert payload["page"] == 2
+    assert payload["page_size"] == 1
+    assert len(payload["items"]) == 1
+    assert payload["has_more"] is False

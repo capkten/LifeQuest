@@ -43,3 +43,19 @@ No post-implementation browser verification was run because implementation and t
 ## Remaining integration assumptions
 
 The approved Task 3 plan still requires implementation of contextual routes, reusable tree actions, persisted workspace selection/expansion state, desktop two-column layout, mobile drawer behavior, and responsive overflow verification. Existing unrelated worktree changes were preserved and no commit was created.
+
+## P1 review follow-up: Todo reward source_id length
+
+Status: fixed.
+
+Todo coin transactions now use compact, type-distinct source IDs without changing the existing `String(36)` database column or the existing cultivation source keys. Task and goal IDs use `t:` and `g:` plus a URL-safe UUID encoding; habit IDs use `h:` plus the same encoding and the completion date. The longest generated value is 33 characters, and the three reward paths remain independently identifiable. Coin history localization recognizes both the compact IDs and the existing `todo:<source>:` IDs, preserving source label semantics and legacy history display.
+
+Regression coverage was added for all three reward writes and all three localized history displays.
+
+Verification:
+
+- `cd backend; $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; pytest tests/test_content_localization.py tests/test_todos.py -q` — 31 passed, 63 existing warnings.
+- `cd backend; python -m compileall -q app` — passed.
+- `git diff --check` — passed.
+
+Fix commit: `ec36cb4` (`fix(todos): keep reward source ids within limit`).

@@ -1,5 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useCultivationStore } from '../stores/cultivation'
+
+const cultivationRouteComponent = () => import('../components/cultivation/CultivationStatusBar.vue')
 
 const routes = [
   {
@@ -63,6 +66,36 @@ const routes = [
         path: 'todos',
         name: 'Todos',
         component: () => import('../views/Todos.vue')
+      },
+      {
+        path: 'cultivation',
+        name: 'Cultivation',
+        component: () => import('../views/Cultivation.vue')
+      },
+      {
+        path: 'world',
+        name: 'World',
+        component: () => import('../views/World.vue')
+      },
+      {
+        path: 'sects',
+        name: 'Sects',
+        component: () => import('../views/Sects.vue')
+      },
+      {
+        path: 'techniques',
+        name: 'Techniques',
+        component: () => import('../views/Techniques.vue')
+      },
+      {
+        path: 'npcs',
+        name: 'Npcs',
+        component: () => import('../views/Npcs.vue')
+      },
+      {
+        path: 'tribulations',
+        name: 'Tribulations',
+        component: () => import('../views/Tribulations.vue')
       },
       {
         path: 'shop',
@@ -178,6 +211,20 @@ router.beforeEach(async (to, from, next) => {
         next({ name: 'Login', query: { redirect: to.fullPath } })
         return
       }
+    }
+  }
+
+  if (to.matched.some(record => record.meta.requiresAscended)) {
+    const cultivationStore = useCultivationStore()
+    try {
+      const overview = cultivationStore.overview || await cultivationStore.loadOverview()
+      if (overview?.ascended !== true) {
+        next({ name: 'Cultivation' })
+        return
+      }
+    } catch (error) {
+      next({ name: 'Cultivation' })
+      return
     }
   }
 

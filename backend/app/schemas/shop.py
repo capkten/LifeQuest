@@ -31,6 +31,7 @@ class ShopItemResponse(BaseModel):
 
     id: UUID
     created_by: Optional[UUID] = None
+    item_key: Optional[str] = None
     name: str
     description: Optional[str] = None
     icon: Optional[str] = None

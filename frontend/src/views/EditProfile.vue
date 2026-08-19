@@ -2,7 +2,7 @@
   <div class="edit-profile-page">
     <section class="profile-shell">
       <div class="profile-intro">
-        <span class="profile-kicker">PROFILE SETTINGS</span>
+        <span class="profile-kicker">资料设置</span>
         <h1 class="page-title">编辑资料</h1>
         <p class="page-copy">更新头像、用户名与邮箱信息，保留现有头像解析、上传和资料保存行为。</p>
       </div>
@@ -53,7 +53,7 @@
         <section class="form-card">
           <div class="section-heading">
             <div>
-              <span class="section-kicker">ACCOUNT INFO</span>
+              <span class="section-kicker">账户信息</span>
               <h2>基础信息</h2>
             </div>
             <button class="text-button" type="button" @click="goBack">返回资料页</button>
@@ -119,6 +119,7 @@ import { useAuthStore } from '../stores/auth'
 import { authService } from '../services/auth'
 import { useToast } from '../composables/useToast'
 import { useResolvedImage } from '../composables/useResolvedImage'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -170,7 +171,7 @@ async function handleAvatarChange(event) {
     await authStore.fetchUser()
     showSuccess('头像上传成功')
   } catch (err) {
-    showError('头像上传失败，请重试')
+    showError(getErrorMessage(err))
     avatarPreview.value = null
   } finally {
     avatarUploading.value = false
@@ -207,8 +208,7 @@ async function handleSave() {
       router.push({ name: 'Profile' })
     }, 1000)
   } catch (err) {
-    const message = err.response?.data?.detail || '更新失败，请重试'
-    showError(message)
+    showError(getErrorMessage(err))
   } finally {
     saving.value = false
   }

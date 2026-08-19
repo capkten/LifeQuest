@@ -1,3 +1,49 @@
+def test_system_tribulation_pill_seed_is_idempotent(db_session):
+    from app.database import Base
+    from tests.conftest import engine
+    from app.models.shop import ShopItem
+    from app.services.shop import ShopService
+
+    Base.metadata.create_all(bind=engine)
+    ShopService.seed_system_items(db_session)
+    ShopService.seed_system_items(db_session)
+
+    pills = db_session.query(ShopItem).filter_by(item_key="tribulation-pill").all()
+    assert len(pills) == 1
+    assert pills[0].category == "consumable"
+    assert pills[0].is_active is True
+
+
+def test_purchasing_tribulation_pills_uses_existing_backpack_flow(db_session):
+    from app.database import Base
+    from tests.conftest import engine
+    from app.models.backpack import BackpackItem
+    from app.models.shop import ShopItem
+    from app.models.user import User
+    from app.schemas.shop import ExchangeHistoryCreate
+    from app.services.shop import ShopService
+
+    user = User(username="pill-buyer", email="pill-buyer@example.com", password_hash="hashed")
+    Base.metadata.create_all(bind=engine)
+    db_session.add(user)
+    db_session.commit()
+    ShopService.seed_system_items(db_session)
+    item = db_session.query(ShopItem).filter_by(item_key="tribulation-pill").one()
+    user.coins = item.coin_price * 2
+    db_session.commit()
+
+    exchange = ShopService(db_session).purchase_item(
+        user.id,
+        ExchangeHistoryCreate(item_id=item.id, quantity=2),
+    )
+
+    backpack_item = db_session.query(BackpackItem).filter_by(
+        user_id=user.id, shop_item_id=item.id
+    ).one()
+    assert exchange.quantity == 2
+    assert backpack_item.quantity == 2
+
+
 def _register_and_login(client, username="testuser", email="test@example.com", password="testpassword123"):
     """Helper: register a user and return auth headers."""
     client.post(
@@ -50,8 +96,8 @@ def test_create_shop_item(client):
     list_response = client.get("/api/shop/items", headers=headers)
     assert list_response.status_code == 200
     items = list_response.json()
-    assert len(items) == 1
-    assert items[0]["id"] == data["id"]
+    user_items = [item for item in items if item["id"] == data["id"]]
+    assert len(user_items) == 1
 
 
 def test_shop_item_rejects_negative_price_and_invalid_stock(client):

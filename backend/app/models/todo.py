@@ -14,6 +14,7 @@ class Difficulty(str, Enum):
     EASY = "easy"
     MEDIUM = "medium"
     HARD = "hard"
+    VERY_HARD = "very_hard"
 
 
 class TaskStatus(str, Enum):

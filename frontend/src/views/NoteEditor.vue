@@ -2,7 +2,7 @@
   <div class="note-editor-page">
     <header class="editor-header">
       <div class="header-left">
-        <button type="button" class="back-btn" aria-label="Back" @click="goBack">
+        <button type="button" class="back-btn" aria-label="返回" @click="goBack">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M19 12H5" />
             <polyline points="12 19 5 12 12 5" />
@@ -10,7 +10,7 @@
         </button>
         <div>
           <p class="context-kicker">{{ contextLabel }}</p>
-          <h1 class="page-title">{{ isEditing ? 'Edit note' : 'New note' }}</h1>
+          <h1 class="page-title">{{ isEditing ? '编辑笔记' : '新建笔记' }}</h1>
         </div>
       </div>
       <div class="header-actions">
@@ -18,47 +18,52 @@
           <span class="save-status-dot" aria-hidden="true"></span>
           {{ statusLabel }}
         </span>
-        <button type="button" class="save-btn" :disabled="status === 'saving'" @click="saveNote">
+        <button type="button" class="save-btn" :disabled="status === 'saving' || (isEditing && !hydrated)" @click="saveNote">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
             <polyline points="17 21 17 13 7 13 7 21" />
             <polyline points="7 3 7 8 15 8" />
           </svg>
-          {{ status === 'error' ? 'Retry & view' : 'Save & view' }}
+          {{ status === 'error' ? '重试并查看' : '保存并查看' }}
         </button>
       </div>
     </header>
 
     <div v-if="loading" class="loading-state" aria-live="polite">
       <div class="loading-spinner"></div>
-      <span>Loading note...</span>
+      <span>正在加载笔记...</span>
     </div>
 
-    <main v-else class="editor-body">
-      <section class="editor-meta" aria-label="Note details">
+    <div v-else-if="loadError" class="error-state" role="alert">
+      <span>{{ loadError }}</span>
+      <button type="button" class="retry-btn" @click="loadRoute">重试</button>
+    </div>
+
+    <main v-else-if="hydrated" class="editor-body">
+      <section class="editor-meta" aria-label="笔记详情">
         <label class="field field--title" for="note-title">
-          <span class="sr-only">Title</span>
-          <input id="note-title" v-model="noteTitle" type="text" class="title-input" placeholder="Note title" maxlength="200" />
+          <span class="sr-only">标题</span>
+          <input id="note-title" v-model="noteTitle" type="text" class="title-input" placeholder="笔记标题" maxlength="200" />
         </label>
         <label class="field" for="note-summary">
-          <span class="field-label">Summary</span>
-          <textarea id="note-summary" v-model="noteSummary" class="meta-input meta-input--summary" rows="2" maxlength="500" placeholder="A short summary for the reader"></textarea>
+          <span class="field-label">摘要</span>
+          <textarea id="note-summary" v-model="noteSummary" class="meta-input meta-input--summary" rows="2" maxlength="500" placeholder="为读者写一段简短摘要"></textarea>
         </label>
         <label class="field" for="note-tags">
-          <span class="field-label">Tags</span>
-          <input id="note-tags" v-model="noteTags" type="text" class="meta-input" placeholder="work, ideas, reference" maxlength="500" />
+          <span class="field-label">标签</span>
+          <input id="note-tags" v-model="noteTags" type="text" class="meta-input" placeholder="工作、想法、参考" maxlength="500" />
         </label>
         <label class="pin-field" for="note-pinned">
           <input id="note-pinned" v-model="isPinned" type="checkbox" />
-          <span>Keep this note pinned</span>
+          <span>置顶这篇笔记</span>
         </label>
       </section>
 
-      <section class="editor-wrapper" aria-label="Markdown editor">
+      <section class="editor-wrapper" aria-label="Markdown 编辑器">
         <v-md-editor
           v-model="noteContent"
           height="100%"
-          placeholder="Write in Markdown..."
+          placeholder="使用 Markdown 编写内容..."
           :disabled-menus="[]"
           @upload-image="handleUploadImage"
         />
@@ -78,6 +83,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { useNoteAutosave } from '../composables/useNoteAutosave'
 import { noteService } from '../services/note'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const route = useRoute()
 const router = useRouter()
@@ -92,14 +98,15 @@ const notebookId = ref(null)
 const folderId = ref(null)
 const loading = ref(false)
 const hydrated = ref(false)
+const loadError = ref(null)
 const suppressRouteWarning = ref(false)
 const toast = ref({ show: false, message: '', type: 'success' })
 
 const isEditing = computed(() => !!noteId.value)
 const contextLabel = computed(() => {
-  if (notebookId.value && folderId.value) return `Notebook ${notebookId.value} / Folder ${folderId.value}`
-  if (notebookId.value) return `Notebook ${notebookId.value}`
-  return 'Notes'
+  if (notebookId.value && folderId.value) return `笔记本 ${notebookId.value} / 文件夹 ${folderId.value}`
+  if (notebookId.value) return `笔记本 ${notebookId.value}`
+  return '笔记'
 })
 
 function snapshot() {
@@ -120,11 +127,11 @@ function displayTime(value) {
 const autosave = useNoteAutosave({ snapshot, delay: 900, save: persistNote })
 const status = computed(() => autosave.status.value)
 const statusLabel = computed(() => {
-  if (status.value === 'dirty') return 'Unsaved changes'
-  if (status.value === 'saving') return 'Saving...'
-  if (status.value === 'error') return 'Save failed · retry'
-  if (status.value === 'saved') return `Saved ${displayTime(autosave.lastSavedAt.value)}`
-  return 'All changes saved'
+  if (status.value === 'dirty') return '有未保存的更改'
+  if (status.value === 'saving') return '保存中...'
+  if (status.value === 'error') return '保存失败 · 点击重试'
+  if (status.value === 'saved') return `已保存 ${displayTime(autosave.lastSavedAt.value)}`
+  return '所有更改已保存'
 })
 
 let toastTimer = null
@@ -134,6 +141,10 @@ function showToast(message, type = 'success') {
   if (toastTimer) clearTimeout(toastTimer)
   toast.value = { show: true, message, type }
   toastTimer = setTimeout(() => { toast.value.show = false }, 3000)
+}
+
+function showTitleRequiredError() {
+  showToast(getErrorMessage(new Error('TITLE_REQUIRED')), 'error')
 }
 
 function routeContext() {
@@ -149,6 +160,7 @@ async function loadRoute() {
   const context = routeContext()
   autosave.cancel()
   hydrated.value = false
+  loadError.value = null
   noteId.value = context.noteId
   notebookId.value = context.notebookId
   folderId.value = context.folderId
@@ -159,6 +171,7 @@ async function loadRoute() {
   isPinned.value = false
 
   if (!noteId.value) {
+    loading.value = false
     hydrated.value = true
     autosave.reset(snapshot())
     return
@@ -178,7 +191,10 @@ async function loadRoute() {
     autosave.reset(snapshot(), note.updated_at)
     hydrated.value = true
   } catch (error) {
-    if (requestId === loadRequest) showToast('Could not load this note.', 'error')
+    if (requestId === loadRequest) {
+      loadError.value = getErrorMessage(error, '加载笔记失败，请重试。')
+      showToast(loadError.value, 'error')
+    }
   } finally {
     if (requestId === loadRequest) loading.value = false
   }
@@ -190,7 +206,7 @@ function scheduleAutosave() {
 
 async function persistNote(payload) {
   if (!payload.title) {
-    showToast('A title is required before saving.', 'error')
+    showTitleRequiredError()
     throw new Error('TITLE_REQUIRED')
   }
   if (noteId.value) return noteService.updateNote(noteId.value, payload)
@@ -210,8 +226,12 @@ async function persistNote(payload) {
 }
 
 async function saveNote() {
+  if (isEditing.value && !hydrated.value) {
+    showToast(loadError.value || '笔记尚未加载完成，请先重试加载。', 'error')
+    return
+  }
   if (!noteTitle.value.trim()) {
-    showToast('A title is required before saving.', 'error')
+    showTitleRequiredError()
     return
   }
   try {
@@ -220,7 +240,7 @@ async function saveNote() {
       await router.push({ name: 'NotebookWorkspaceView', params: { notebookId: notebookId.value, noteId: noteId.value } })
     }
   } catch (error) {
-    showToast(error.message === 'TITLE_REQUIRED' ? 'A title is required before saving.' : 'Save failed. Try again.', 'error')
+    showToast(getErrorMessage(error, '保存失败，请重试。'), 'error')
   }
 }
 
@@ -231,7 +251,7 @@ async function handleUploadImage(event, insertCallback, files) {
     const url = await noteService.uploadImage(file)
     insertCallback({ url })
   } catch (error) {
-    showToast('Image upload failed.', 'error')
+    showToast(getErrorMessage(error, '图片上传失败，请重试。'), 'error')
   }
 }
 
@@ -249,7 +269,7 @@ function handleBeforeUnload(event) {
 
 onBeforeRouteLeave(() => {
   if (suppressRouteWarning.value || !autosave.dirty.value) return true
-  return window.confirm('You have unsaved changes. Leave this note?')
+  return window.confirm('当前笔记有未保存的更改，确定要离开吗？')
 })
 
 watch(snapshot, scheduleAutosave, { deep: true })

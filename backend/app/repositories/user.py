@@ -1,6 +1,7 @@
 from typing import Optional
 from uuid import UUID
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.models.user import User
@@ -34,16 +35,27 @@ class UserRepository(BaseRepository[User]):
         return user
 
     def _update_coins_no_commit(self, user: User, amount: int) -> None:
-        user.coins += amount
+        self.db.flush()
+        values = {"coins": User.coins + amount}
         if amount > 0:
-            user.total_coins_earned += amount
+            values["total_coins_earned"] = User.total_coins_earned + amount
+        self.db.execute(
+            update(User).where(User.id == user.id).values(**values)
+        )
+        self.db.refresh(user)
 
     def _refund_coins_no_commit(self, user: User, amount: int) -> None:
         """Restore coins without counting as earned (used for refunds)."""
         user.coins += amount
 
     def _update_experience_no_commit(self, user: User, exp: int) -> None:
-        user.experience += exp
+        self.db.flush()
+        self.db.execute(
+            update(User).where(User.id == user.id).values(
+                experience=User.experience + exp
+            )
+        )
+        self.db.refresh(user)
         while user.experience >= self._get_required_exp(user.level):
             user.experience -= self._get_required_exp(user.level)
             user.level += 1

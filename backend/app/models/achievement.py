@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, Uuid
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, Uuid, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -22,6 +22,12 @@ class Achievement(Base):
 
 class UserAchievement(Base):
     __tablename__ = "user_achievements"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "achievement_id",
+            name="uq_user_achievement_user_achievement",
+        ),
+    )
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     user_id = Column(Uuid, ForeignKey("users.id"), nullable=False)

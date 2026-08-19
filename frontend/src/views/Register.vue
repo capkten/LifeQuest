@@ -1,7 +1,7 @@
 <template>
   <div class="register-container">
     <section class="register-brand" aria-label="LifeQuest 产品介绍">
-      <span class="auth-eyebrow">START YOUR NEXT CHAPTER</span>
+      <span class="auth-eyebrow">开启下一段旅程</span>
       <div class="auth-brand-mark" aria-hidden="true">
         <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M24 5v38M5 24h38" opacity="0.28" />
@@ -104,6 +104,7 @@
 import { ref, reactive } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { ElMessage } from 'element-plus'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const authStore = useAuthStore()
 const formRef = ref(null)
@@ -158,7 +159,7 @@ async function handleRegister() {
     })
     ElMessage.success('注册成功，请登录')
   } catch (error) {
-    ElMessage.error(error.response?.data?.detail || '注册失败，请稍后重试')
+    ElMessage.error(getErrorMessage(error))
   } finally {
     loading.value = false
   }
@@ -266,6 +267,8 @@ async function handleRegister() {
   padding: var(--spacing-2xl);
   width: 100%;
   max-width: 420px;
+  min-width: 0;
+  box-sizing: border-box;
   box-shadow: var(--shadow-lg);
   border: 1px solid var(--color-border);
 }

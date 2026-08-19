@@ -60,7 +60,7 @@ def update_item(
     db: Session = Depends(get_db),
 ):
     service = ShopService(db)
-    item = service.get_item_for_user(item_id, current_user.id)
+    item = service.get_mutable_item_for_user(item_id, current_user.id)
     return service.update_item(item, item_in)
 
 

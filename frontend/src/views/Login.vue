@@ -1,7 +1,7 @@
 <template>
   <div class="login-container">
     <section class="login-brand" aria-label="LifeQuest 产品介绍">
-      <span class="auth-eyebrow">PERSONAL PROGRESS SYSTEM</span>
+      <span class="auth-eyebrow">个人成长系统</span>
       <div class="auth-brand-mark" aria-hidden="true">
         <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M24 5v38M5 24h38" opacity="0.28" />
@@ -14,7 +14,7 @@
       <div class="auth-momentum">
         <div class="auth-momentum-head">
           <span>今日行动力</span>
-          <strong>+12 XP</strong>
+          <strong>+12 经验</strong>
         </div>
         <div class="auth-momentum-bar"><span></span></div>
         <div class="auth-momentum-foot">
@@ -92,6 +92,7 @@
 import { ref, reactive } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { ElMessage } from 'element-plus'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const authStore = useAuthStore()
 const formRef = ref(null)
@@ -124,11 +125,7 @@ async function handleLogin() {
     await authStore.login(form)
     ElMessage.success('登录成功')
   } catch (error) {
-    ElMessage.error(
-      error.response
-        ? `[${error.response.status}] ${error.response.data?.detail || JSON.stringify(error.response.data)}`
-        : `[Network] ${error.message} | API: ${import.meta.env.VITE_API_BASE_URL || '/api'}`
-    )
+    ElMessage.error(getErrorMessage(error))
   } finally {
     loading.value = false
   }
@@ -299,6 +296,8 @@ async function handleLogin() {
   padding: var(--spacing-2xl);
   width: 100%;
   max-width: 420px;
+  min-width: 0;
+  box-sizing: border-box;
   box-shadow: var(--shadow-lg);
   border: 1px solid var(--color-border);
 }

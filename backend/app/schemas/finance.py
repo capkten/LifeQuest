@@ -135,6 +135,14 @@ class TransactionResponse(BaseModel):
     created_at: datetime
 
 
+class TransactionPageResponse(BaseModel):
+    items: List[TransactionResponse]
+    total: int
+    page: int
+    page_size: int
+    has_more: bool
+
+
 # Budget schemas
 class BudgetCreate(BaseModel):
     category_id: Optional[UUID] = None

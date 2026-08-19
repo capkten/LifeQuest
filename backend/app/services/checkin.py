@@ -10,6 +10,7 @@ from app.repositories.checkin import CheckinRepository
 from app.repositories.coin_transaction import CoinTransactionRepository
 from app.repositories.user import UserRepository
 from app.services.achievement import AchievementService
+from app.services.cultivation import CultivationService
 
 BASE_COINS = 10
 BASE_EXP = 5
@@ -25,6 +26,7 @@ class CheckinService:
         self.user_repo = UserRepository(db)
         self.coin_repo = CoinTransactionRepository(db)
         self.achievement_service = AchievementService(db)
+        self.cultivation_service = CultivationService(db)
 
     def get_status(self, user_id: UUID) -> dict:
         today = date.today()
@@ -71,15 +73,11 @@ class CheckinService:
             streak = 1
 
         # Create checkin record (handle race condition)
-        try:
-            checkin = self.checkin_repo.create({
-                "user_id": user_id,
-                "checkin_date": today,
-                "streak": streak,
-            })
-        except IntegrityError:
-            self.db.rollback()
-            raise HTTPException(status_code=400, detail="Already checked in today")
+        checkin = self.checkin_repo._create_no_commit({
+            "user_id": user_id,
+            "checkin_date": today,
+            "streak": streak,
+        })
 
         # Calculate rewards
         reward_coins = BASE_COINS
@@ -88,25 +86,49 @@ class CheckinService:
             reward_coins += STREAK_BONUS_COINS
             reward_exp += STREAK_BONUS_EXP
 
-        # Award rewards
+        settlement = self.cultivation_service.settle_todo_reward(
+            user_id,
+            "checkin",
+            BASE_EXP,
+            "medium",
+            source_key=f"checkin:{user_id}:{today.isoformat()}",
+            apply_legacy_user_rewards=False,
+        )
+
+        # Award legacy rewards separately; cultivation owns its authoritative
+        # resources and must not alter this wallet's legacy totals.
         user = self.user_repo.get_by_id(user_id)
         if user:
             self.user_repo._update_coins_no_commit(user, reward_coins)
             self.user_repo._update_experience_no_commit(user, reward_exp)
-            self.db.commit()
 
-        # Record coin transaction
-        self.coin_repo.create_transaction(
-            user_id=user_id,
-            amount=reward_coins,
-            coin_type=CoinType.EARN,
-            source=CoinSource.CHECKIN,
-            description=f"Daily check-in (streak: {streak})",
-        )
+        self.coin_repo._create_no_commit({
+            "user_id": user_id,
+            "amount": reward_coins,
+            "type": CoinType.EARN,
+            "source": CoinSource.CHECKIN.value,
+            "source_id": f"checkin:{today.isoformat()}",
+            "description": f"每日签到（连续第{streak}天）",
+        })
+
+        try:
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            raise HTTPException(status_code=400, detail="Already checked in today")
 
         # Check achievements: login_streak, checkin_count
         checkin_count = self.checkin_repo.get_checkin_count(user_id)
         self.achievement_service.check_and_unlock(user_id, "login_streak", streak)
         self.achievement_service.check_and_unlock(user_id, "checkin_count", checkin_count)
 
-        return checkin
+        return {
+            "id": checkin.id,
+            "user_id": checkin.user_id,
+            "checkin_date": checkin.checkin_date,
+            "streak": checkin.streak,
+            "created_at": checkin.created_at,
+            "reward_coins": reward_coins,
+            "reward_exp": reward_exp,
+            "cultivation_reward": settlement,
+        }

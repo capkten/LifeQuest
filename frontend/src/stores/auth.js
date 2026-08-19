@@ -2,12 +2,23 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authService } from '../services/auth'
 import router from '../router'
+import { useCultivationStore } from './cultivation'
+import { registerAuthCleanup } from '../services/authSession'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('token') || null)
   const refreshTokenValue = ref(localStorage.getItem('refreshToken') || null)
   const user = ref(null)
   const loading = ref(false)
+  const cultivationStore = useCultivationStore()
+
+  function clearAuthState() {
+    cultivationStore.clear()
+    clearTokens()
+    user.value = null
+  }
+
+  registerAuthCleanup(logout)
 
   const isAuthenticated = computed(() => !!token.value)
 
@@ -32,13 +43,14 @@ export const useAuthStore = defineStore('auth', () => {
       setTokens(response.access_token, response.refresh_token)
       return true
     } catch {
-      clearTokens()
+      logout()
       return false
     }
   }
 
   async function login(credentials) {
     loading.value = true
+    cultivationStore.clear()
     try {
       const response = await authService.login(credentials.username, credentials.password)
       setTokens(response.access_token, response.refresh_token)
@@ -63,6 +75,9 @@ export const useAuthStore = defineStore('auth', () => {
   async function fetchUser() {
     try {
       const userData = await authService.getCurrentUser()
+      if (user.value?.id && user.value.id !== userData.id) {
+        cultivationStore.clear()
+      }
       user.value = userData
     } catch (error) {
       logout()
@@ -71,11 +86,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function logout() {
-    token.value = null
-    refreshTokenValue.value = null
-    user.value = null
-    localStorage.removeItem('token')
-    localStorage.removeItem('refreshToken')
+    clearAuthState()
     router.push({ name: 'Login' })
   }
 

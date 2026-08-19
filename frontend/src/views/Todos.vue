@@ -43,7 +43,7 @@
 
     <section class="todo-progress-card" aria-label="当前列表进度">
       <div class="todo-progress-copy">
-        <span class="todo-progress-kicker">DAILY PROGRESS</span>
+        <span class="todo-progress-kicker">每日进度</span>
         <strong>{{ activeTabProgress }}%</strong>
       </div>
       <div class="todo-progress-track" aria-hidden="true">
@@ -63,7 +63,7 @@
 
     <div class="mobile-add-cta">
       <div class="mobile-add-copy">
-        <span class="mobile-add-kicker">QUICK ADD</span>
+        <span class="mobile-add-kicker">快速添加</span>
         <strong>新建{{ activeTabSingular }}</strong>
       </div>
       <button class="btn-create btn-create--compact" @click="showCreateDialog = true">
@@ -109,31 +109,32 @@
           v-for="habit in habits"
           :key="habit.id"
           class="todo-card"
-          :class="{ 'todo-card--completed': !habit.is_active }"
+          :class="{ 'todo-card--completed': habit.completed_today }"
         >
           <div class="todo-card-header">
             <div class="todo-card-main">
               <button
                 class="complete-btn"
-                :class="{ 'complete-btn--done': !habit.is_active }"
+                :class="{ 'complete-btn--done': habit.completed_today }"
                 :disabled="completingId === habit.id"
+                :aria-disabled="habit.completed_today"
                 @click="completeHabit(habit)"
-                :aria-label="'Complete ' + habit.title"
+                :aria-label="'完成 ' + habit.title"
               >
-                <span v-if="completingId === habit.id" class="loading-spinner loading-spinner--sm"></span>
+                <span v-if="completionLoadingId === habit.id" class="loading-spinner loading-spinner--sm"></span>
                 <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               </button>
               <div class="todo-card-info">
-                <h3 class="todo-card-title" :class="{ 'todo-card-title--done': !habit.is_active }">{{ habit.title }}</h3>
+                <h3 class="todo-card-title" :class="{ 'todo-card-title--done': habit.completed_today }">{{ habit.title }}</h3>
                 <p v-if="habit.description" class="todo-card-desc">{{ habit.description }}</p>
                 <div class="todo-card-meta todo-card-meta--inline">
                   <span class="difficulty-badge" :class="'difficulty-badge--' + habit.difficulty">
-                    {{ habit.difficulty === 'easy' ? '简单' : habit.difficulty === 'medium' ? '中等' : '困难' }}
+                    {{ labelDifficulty(habit.difficulty) }}
                   </span>
                   <span class="frequency-badge" :class="'frequency-badge--' + habit.frequency">
-                    {{ habit.frequency === 'daily' ? '每日' : habit.frequency === 'weekly' ? '每周' : '每月' }}
+                    {{ labelFrequency(habit.frequency) }}
                   </span>
                 </div>
               </div>
@@ -174,7 +175,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
-                +{{ habit.exp_reward }} XP
+                +{{ habit.exp_reward }} 经验
               </span>
             </div>
           </div>
@@ -194,11 +195,12 @@
               <button
                 class="complete-btn"
                 :class="{ 'complete-btn--done': task.status === 'completed' }"
-                :disabled="task.status === 'completed' || completingId === task.id"
+                :disabled="completingId === task.id"
+                :aria-disabled="task.status === 'completed'"
                 @click="completeTask(task)"
-                :aria-label="'Complete ' + task.title"
+                :aria-label="'完成 ' + task.title"
               >
-                <span v-if="completingId === task.id" class="loading-spinner loading-spinner--sm"></span>
+                <span v-if="completionLoadingId === task.id" class="loading-spinner loading-spinner--sm"></span>
                 <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
@@ -214,7 +216,7 @@
                     {{ formatPriority(task.priority) }}
                   </span>
                   <span class="difficulty-badge" :class="'difficulty-badge--' + task.difficulty">
-                    {{ task.difficulty === 'easy' ? '简单' : task.difficulty === 'medium' ? '中等' : '困难' }}
+                    {{ labelDifficulty(task.difficulty) }}
                   </span>
                   <span class="status-badge" :class="'status-badge--' + task.status">
                     {{ formatStatus(task.status) }}
@@ -278,7 +280,8 @@
                     <button
                       class="subtask-complete-btn"
                       :class="{ 'subtask-complete-btn--done': subtask.is_completed }"
-                      :disabled="subtask.is_completed || completingSubtaskId === subtask.id"
+                      :disabled="completingSubtaskId === subtask.id"
+                      :aria-disabled="subtask.is_completed"
                       @click="completeSubtask(subtask, task.id)"
                     >
                       <span v-if="completingSubtaskId === subtask.id" class="loading-spinner loading-spinner--sm"></span>
@@ -292,6 +295,7 @@
                     <button
                       class="subtask-delete-btn"
                       :disabled="deletingSubtaskId === subtask.id"
+                      :aria-disabled="Boolean(deletingSubtaskId)"
                       @click="deleteSubtask(subtask, task.id)"
                       aria-label="删除子任务"
                     >
@@ -319,7 +323,8 @@
                   <button
                     type="submit"
                     class="subtask-add-btn"
-                    :disabled="!newSubtaskTitle.trim() || creatingSubtask"
+                    :disabled="creatingSubtask"
+                    :aria-disabled="!newSubtaskTitle.trim()"
                   >
                     <span v-if="creatingSubtask" class="loading-spinner loading-spinner--sm"></span>
                     <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -351,7 +356,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
-                +{{ task.exp_reward }} XP
+                +{{ task.exp_reward }} 经验
               </span>
             </div>
           </div>
@@ -371,11 +376,12 @@
               <button
                 class="complete-btn"
                 :class="{ 'complete-btn--done': goal.status === 'completed' }"
-                :disabled="goal.status === 'completed' || completingId === goal.id"
+                :disabled="completingId === goal.id"
+                :aria-disabled="goal.status === 'completed'"
                 @click="completeGoal(goal)"
-                :aria-label="'Complete ' + goal.title"
+                :aria-label="'完成 ' + goal.title"
               >
-                <span v-if="completingId === goal.id" class="loading-spinner loading-spinner--sm"></span>
+                <span v-if="completionLoadingId === goal.id" class="loading-spinner loading-spinner--sm"></span>
                 <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
@@ -385,7 +391,7 @@
                 <p v-if="goal.description" class="todo-card-desc">{{ goal.description }}</p>
                 <div class="todo-card-meta todo-card-meta--inline">
                   <span class="difficulty-badge" :class="'difficulty-badge--' + goal.difficulty">
-                    {{ goal.difficulty === 'easy' ? '简单' : goal.difficulty === 'medium' ? '中等' : '困难' }}
+                    {{ labelDifficulty(goal.difficulty) }}
                   </span>
                   <span class="status-badge" :class="'status-badge--' + goal.status">
                     {{ formatStatus(goal.status) }}
@@ -443,7 +449,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
-                +{{ goal.exp_reward }} XP
+                +{{ goal.exp_reward }} 经验
               </span>
             </div>
           </div>
@@ -451,35 +457,22 @@
       </template>
     </div>
 
-    <!-- Reward Toast -->
-    <Teleport to="body">
-      <Transition name="toast">
-        <div v-if="rewardToast" class="reward-toast">
-          <div class="reward-toast-content">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-            </svg>
-            <span>+{{ rewardToast.coins }} 金币，+{{ rewardToast.exp }} 经验值！</span>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
+    <div v-if="rewardToast" class="reward-toast" role="status" aria-live="polite">
+      <div class="reward-toast-content">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+        </svg>
+        <span v-if="rewardToast.cultivation !== null">+{{ rewardToast.cultivation }} 修为，+{{ rewardToast.spiritStones }} 灵石</span>
+        <span v-else>+{{ rewardToast.coins }} 金币，+{{ rewardToast.exp }} 经验值！</span>
+      </div>
+    </div>
 
-    <!-- Error Toast -->
-    <Teleport to="body">
-      <Transition name="toast">
-        <div v-if="errorToast" class="error-toast">
-          <div class="error-toast-content">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="15" y1="9" x2="9" y2="15" />
-              <line x1="9" y1="9" x2="15" y2="15" />
-            </svg>
-            <span>{{ errorToast }}</span>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
+    <div v-if="errorToast" class="error-toast" role="alert">
+      <div class="error-toast-content">
+        <span>{{ errorToast.message }}</span>
+        <button v-if="errorToast.retry" type="button" class="retry-btn" @click="errorToast.retry">重试</button>
+      </div>
+    </div>
 
     <!-- Create Dialog -->
     <Teleport to="body">
@@ -493,7 +486,7 @@
         >
           <div class="dialog-header">
             <h3 id="create-dialog-title" class="dialog-title">{{ isEditing ? '编辑' : '新建' }}{{ activeTabSingular }}</h3>
-            <button class="dialog-close" @click="cancelDialog" aria-label="Close">
+            <button class="dialog-close" @click="cancelDialog" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -583,7 +576,7 @@
             <div v-if="dialogError" class="dialog-error" role="alert">{{ dialogError }}</div>
             <div class="dialog-actions">
               <button type="button" class="btn-secondary" @click="cancelDialog">取消</button>
-              <button type="submit" class="btn-primary" :disabled="creating || !form.title.trim()">
+              <button type="submit" class="btn-primary" :disabled="creating" :aria-disabled="!form.title.trim()">
                 <span v-if="creating" class="loading-spinner loading-spinner--sm"></span>
                 {{ creating ? (isEditing ? '保存中...' : '创建中...') : (isEditing ? '保存' : '创建') }}
               </button>
@@ -605,7 +598,7 @@
         >
           <div class="dialog-header">
             <h3 id="delete-dialog-title" class="dialog-title">确认删除</h3>
-            <button class="dialog-close" @click="closeDeleteDialog" aria-label="Close">
+            <button class="dialog-close" @click="closeDeleteDialog" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -635,8 +628,12 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { todoService } from '../services/todo'
 import { projectService } from '../services/project'
 import { useAuthStore } from '../stores/auth'
+import { useCultivationStore } from '../stores/cultivation'
+import { getErrorMessage } from '../utils/errorMessage'
+import { labelDifficulty, labelFrequency, labelTaskStatus } from '../utils/displayLabels'
 
 const authStore = useAuthStore()
+const cultivationStore = useCultivationStore()
 
 const activeTab = ref('habits')
 const habits = ref([])
@@ -645,6 +642,8 @@ const goals = ref([])
 const loading = ref(true)
 const error = ref(null)
 const completingId = ref(null)
+const completionLoadingId = ref(null)
+const completionLoadingTimer = ref(null)
 const rewardToast = ref(null)
 const rewardToastTimeout = ref(null)
 const errorToast = ref(null)
@@ -748,13 +747,7 @@ function getCount(tab) {
 }
 
 function formatStatus(status) {
-  const statusMap = {
-    'pending': '待开始',
-    'in_progress': '进行中',
-    'completed': '已完成',
-    'cancelled': '已取消'
-  }
-  return statusMap[status] || status.replace(/_/g, ' ')
+  return labelTaskStatus(status)
 }
 
 function formatPriority(priority) {
@@ -819,8 +812,18 @@ function trapFocus(event) {
   }
 }
 
-function showReward(coins, exp) {
-  rewardToast.value = { coins, exp }
+function showReward(updated) {
+  const settlement = updated.cultivation_reward
+  rewardToast.value = settlement
+    ? {
+        cultivation: settlement.cultivation ?? 0,
+        spiritStones: settlement.spirit_stones ?? 0
+      }
+    : {
+        cultivation: null,
+        coins: updated.coins_reward,
+        exp: updated.exp_reward
+      }
   if (rewardToastTimeout.value) clearTimeout(rewardToastTimeout.value)
   rewardToastTimeout.value = setTimeout(() => {
     rewardToast.value = null
@@ -828,8 +831,8 @@ function showReward(coins, exp) {
   }, 3000)
 }
 
-function showError(message) {
-  errorToast.value = message
+function showError(message, retry) {
+  errorToast.value = { message, retry }
   if (errorToastTimeout.value) clearTimeout(errorToastTimeout.value)
   errorToastTimeout.value = setTimeout(() => {
     errorToast.value = null
@@ -837,10 +840,45 @@ function showError(message) {
   }, 4000)
 }
 
+function explainBlocked(message) {
+  showError(message)
+}
+
 onUnmounted(() => {
   if (rewardToastTimeout.value) clearTimeout(rewardToastTimeout.value)
   if (errorToastTimeout.value) clearTimeout(errorToastTimeout.value)
+  if (completionLoadingTimer.value) clearTimeout(completionLoadingTimer.value)
 })
+
+function beginCompletion(id) {
+  completingId.value = id
+  completionLoadingId.value = null
+  if (completionLoadingTimer.value) clearTimeout(completionLoadingTimer.value)
+  completionLoadingTimer.value = setTimeout(() => {
+    completionLoadingId.value = id
+  }, 300)
+}
+
+function endCompletion() {
+  completingId.value = null
+  completionLoadingId.value = null
+  if (completionLoadingTimer.value) clearTimeout(completionLoadingTimer.value)
+  completionLoadingTimer.value = null
+}
+
+async function settleCompletion(updated) {
+  try {
+    if (updated.cultivation_reward) {
+      await cultivationStore.applySettlement(updated.cultivation_reward)
+    } else {
+      await cultivationStore.refresh()
+    }
+  } catch (e) {
+    // Reward display must retain the legacy completion result if cultivation is unavailable.
+    console.warn('Cultivation refresh failed after todo completion:', e)
+  }
+  showReward(updated)
+}
 
 async function fetchHabits() {
   habits.value = await todoService.getHabits()
@@ -861,7 +899,7 @@ async function fetchAll() {
   try {
     await Promise.all([fetchHabits(), fetchTasks(), fetchGoals(), fetchProjects()])
   } catch (e) {
-    error.value = '加载数据失败，请重试。'
+    error.value = getErrorMessage(e)
   } finally {
     loading.value = false
   }
@@ -877,62 +915,65 @@ async function fetchProjects() {
 }
 
 async function completeHabit(habit) {
-  if (!habit.is_active || completingId.value) return
-  completingId.value = habit.id
+  if (habit.completed_today) { explainBlocked('该习惯今天已经完成，明天再来继续。'); return }
+  if (completingId.value) { explainBlocked('已有其他待办正在提交，请等待完成后再试。'); return }
+  beginCompletion(habit.id)
   try {
     const updated = await todoService.completeHabit(habit.id)
     const idx = habits.value.findIndex(h => h.id === habit.id)
     if (idx !== -1) {
       habits.value[idx] = updated
     }
-    showReward(updated.coins_reward, updated.exp_reward)
+    await settleCompletion(updated)
     // Refresh user data to update coins/exp in header
     await authStore.fetchUser()
   } catch (e) {
     console.error('Failed to complete habit:', e)
-    showError(e.response?.data?.detail || '完成习惯失败，请重试。')
+    showError(getErrorMessage(e), () => completeHabit(habit))
   } finally {
-    completingId.value = null
+    endCompletion()
   }
 }
 
 async function completeTask(task) {
-  if (task.status === 'completed' || completingId.value) return
-  completingId.value = task.id
+  if (task.status === 'completed') { explainBlocked('该任务已经完成，无需重复提交。'); return }
+  if (completingId.value) { explainBlocked('已有其他待办正在提交，请等待完成后再试。'); return }
+  beginCompletion(task.id)
   try {
     const updated = await todoService.completeTask(task.id)
     const idx = tasks.value.findIndex(t => t.id === task.id)
     if (idx !== -1) {
       tasks.value[idx] = updated
     }
-    showReward(updated.coins_reward, updated.exp_reward)
+    await settleCompletion(updated)
     // Refresh user data to update coins/exp in header
     await authStore.fetchUser()
   } catch (e) {
     console.error('Failed to complete task:', e)
-    showError(e.response?.data?.detail || '完成任务失败，请重试。')
+    showError(getErrorMessage(e), () => completeTask(task))
   } finally {
-    completingId.value = null
+    endCompletion()
   }
 }
 
 async function completeGoal(goal) {
-  if (goal.status === 'completed' || completingId.value) return
-  completingId.value = goal.id
+  if (goal.status === 'completed') { explainBlocked('该目标已经完成，无需重复提交。'); return }
+  if (completingId.value) { explainBlocked('已有其他待办正在提交，请等待完成后再试。'); return }
+  beginCompletion(goal.id)
   try {
     const updated = await todoService.completeGoal(goal.id)
     const idx = goals.value.findIndex(g => g.id === goal.id)
     if (idx !== -1) {
       goals.value[idx] = updated
     }
-    showReward(updated.coins_reward, updated.exp_reward)
+    await settleCompletion(updated)
     // Refresh user data to update coins/exp in header
     await authStore.fetchUser()
   } catch (e) {
     console.error('Failed to complete goal:', e)
-    showError(e.response?.data?.detail || '完成目标失败，请重试。')
+    showError(getErrorMessage(e), () => completeGoal(goal))
   } finally {
-    completingId.value = null
+    endCompletion()
   }
 }
 
@@ -961,7 +1002,7 @@ async function fetchSubtasks(taskId) {
     taskSubtasks.value[taskId] = subtasks
   } catch (e) {
     console.error('Failed to fetch subtasks:', e)
-    showError('加载子任务失败')
+    showError(getErrorMessage(e))
   } finally {
     loadingSubtasks.value = false
   }
@@ -969,7 +1010,7 @@ async function fetchSubtasks(taskId) {
 
 async function addSubtask(taskId) {
   const title = newSubtaskTitle.value.trim()
-  if (!title) return
+  if (!title) { explainBlocked('请先填写子任务标题。'); return }
   creatingSubtask.value = true
   try {
     const subtask = await todoService.createSubtask(taskId, { title })
@@ -980,14 +1021,15 @@ async function addSubtask(taskId) {
     newSubtaskTitle.value = ''
   } catch (e) {
     console.error('Failed to create subtask:', e)
-    showError(e.response?.data?.detail || '创建子任务失败')
+    showError(getErrorMessage(e))
   } finally {
     creatingSubtask.value = false
   }
 }
 
 async function completeSubtask(subtask, taskId) {
-  if (subtask.is_completed || completingSubtaskId.value) return
+  if (subtask.is_completed) { explainBlocked('该子任务已经完成，无需重复提交。'); return }
+  if (completingSubtaskId.value) { explainBlocked('已有其他子任务正在提交，请等待完成后再试。'); return }
   completingSubtaskId.value = subtask.id
   try {
     const updated = await todoService.completeSubtask(subtask.id)
@@ -1000,13 +1042,14 @@ async function completeSubtask(subtask, taskId) {
     }
   } catch (e) {
     console.error('Failed to complete subtask:', e)
-    showError(e.response?.data?.detail || '完成子任务失败')
+    showError(getErrorMessage(e))
   } finally {
     completingSubtaskId.value = null
   }
 }
 
 async function deleteSubtask(subtask, taskId) {
+  if (deletingSubtaskId.value) { explainBlocked('已有其他子任务正在删除，请等待完成后再试。'); return }
   deletingSubtaskId.value = subtask.id
   try {
     await todoService.deleteSubtask(subtask.id)
@@ -1016,7 +1059,7 @@ async function deleteSubtask(subtask, taskId) {
     }
   } catch (e) {
     console.error('Failed to delete subtask:', e)
-    showError(e.response?.data?.detail || '删除子任务失败')
+    showError(getErrorMessage(e))
   } finally {
     deletingSubtaskId.value = null
   }
@@ -1031,7 +1074,7 @@ function cancelDialog() {
 }
 
 async function createItem() {
-  if (!form.value.title.trim()) return
+  if (!form.value.title.trim()) { dialogError.value = '请先填写标题。'; explainBlocked('请先填写标题。'); return }
   creating.value = true
   dialogError.value = null
   try {
@@ -1061,7 +1104,7 @@ async function createItem() {
     }
     cancelDialog()
   } catch (e) {
-    dialogError.value = e.response?.data?.detail || '创建失败，请重试。'
+    dialogError.value = getErrorMessage(e)
   } finally {
     creating.value = false
   }
@@ -1090,7 +1133,7 @@ function openEditDialog(item, type) {
 }
 
 async function saveItem() {
-  if (!form.value.title.trim()) return
+  if (!form.value.title.trim()) { dialogError.value = '请先填写标题。'; explainBlocked('请先填写标题。'); return }
   if (!isEditing.value) {
     return createItem()
   }
@@ -1127,7 +1170,7 @@ async function saveItem() {
     }
     cancelDialog()
   } catch (e) {
-    dialogError.value = e.response?.data?.detail || '保存失败，请重试。'
+    dialogError.value = getErrorMessage(e)
   } finally {
     creating.value = false
   }
@@ -1162,7 +1205,7 @@ async function confirmDelete() {
     closeDeleteDialog()
   } catch (e) {
     console.error('Failed to delete item:', e)
-    showError(e.response?.data?.detail || '删除失败，请重试。')
+    showError(getErrorMessage(e))
     closeDeleteDialog()
   } finally {
     deleting.value = false
@@ -2068,10 +2111,7 @@ onMounted(() => {
 
 /* Reward Toast */
 .reward-toast {
-  position: fixed;
-  top: var(--spacing-lg);
-  right: var(--spacing-lg);
-  z-index: 1100;
+  margin: var(--spacing-md) 0;
 }
 
 .reward-toast-content {
@@ -2094,10 +2134,7 @@ onMounted(() => {
 
 /* Error Toast */
 .error-toast {
-  position: fixed;
-  top: calc(var(--spacing-lg) + 60px);
-  right: var(--spacing-lg);
-  z-index: 1100;
+  margin: var(--spacing-md) 0;
 }
 
 .error-toast-content {
@@ -2117,6 +2154,11 @@ onMounted(() => {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
+}
+
+.error-toast-content .retry-btn {
+  min-height: 32px;
+  padding: 0 var(--spacing-sm);
 }
 
 .toast-enter-active {
@@ -2623,13 +2665,6 @@ onMounted(() => {
     width: auto;
     min-width: 96px;
     justify-content: center;
-  }
-
-  .reward-toast,
-  .error-toast {
-    top: var(--spacing-md);
-    left: var(--spacing-md);
-    right: var(--spacing-md);
   }
 
   .reward-toast-content,

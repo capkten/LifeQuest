@@ -11,7 +11,7 @@
           </p>
           <div class="hero-progress" aria-label="经验值进度">
             <div class="hero-progress-label">
-              <span>EXP TO LEVEL {{ (user?.level || 1) + 1 }}</span>
+              <span>升级所需经验 {{ (user?.level || 1) + 1 }}</span>
               <strong>{{ expPercent }}%</strong>
             </div>
             <div class="hero-progress-track">
@@ -42,7 +42,7 @@
       <div class="hero-meta">
         <div class="hero-meta-item">
           <span class="hero-meta-label">等级</span>
-          <strong>Lv. {{ user?.level || 1 }}</strong>
+          <strong>等级 {{ user?.level || 1 }}</strong>
         </div>
         <div class="hero-meta-item">
           <span class="hero-meta-label">金币</span>
@@ -58,6 +58,13 @@
         </div>
       </div>
     </section>
+
+    <CultivationStatusBar
+      :overview="cultivationOverview"
+      :loading="cultivationLoading"
+      :error="cultivationError"
+      @retry="loadCultivation"
+    />
 
     <div class="daily-card">
       <div class="daily-header">
@@ -81,7 +88,11 @@
         <div v-if="loadingDaily" class="loading-state">
           <span class="loading-spinner"></span>
         </div>
-        <div v-else-if="!dailySummary || (dailySummary.habits.length === 0 && dailySummary.tasks.length === 0 && dailySummary.goals.length === 0)" class="empty-state">
+        <div v-else-if="dailyError" class="error-state" role="alert" aria-live="polite">
+          <p>{{ dailyError }}</p>
+          <button type="button" class="retry-btn" @click="fetchDailySummary">重试</button>
+        </div>
+        <div v-else-if="dailySummary && dailySummary.habits.length === 0 && dailySummary.tasks.length === 0 && dailySummary.goals.length === 0" class="empty-state">
           <p>今天没有待办事项，去创建一些吧！</p>
         </div>
         <div v-else class="daily-groups">
@@ -98,8 +109,9 @@
                 <button
                   class="daily-check-btn"
                   :class="{ 'daily-check-btn--done': habit.completed_today }"
-                  :disabled="habit.completed_today || completingHabitId === habit.id"
-                  @click="completeDailyHabit(habit.id)"
+                  :disabled="completingHabitId === habit.id"
+                  :aria-disabled="habit.completed_today"
+                  @click="completeDailyHabit(habit)"
                 >
                   <svg v-if="habit.completed_today" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
                     <path d="M20 6L9 17l-5-5" />
@@ -115,7 +127,7 @@
                   </svg>
                   {{ habit.streak }}
                 </span>
-                <span class="task-difficulty" :class="'task-difficulty--' + habit.difficulty">{{ habit.difficulty }}</span>
+                <span class="task-difficulty" :class="'task-difficulty--' + habit.difficulty">{{ labelDifficulty(habit.difficulty) }}</span>
               </div>
             </div>
           </div>
@@ -133,7 +145,7 @@
                 <span class="task-status" :class="'task-status--' + task.status"></span>
                 <span class="daily-item-title">{{ task.title }}</span>
                 <span v-if="isOverdue(task.deadline)" class="daily-overdue">逾期</span>
-                <span class="task-difficulty" :class="'task-difficulty--' + task.difficulty">{{ task.difficulty }}</span>
+                <span class="task-difficulty" :class="'task-difficulty--' + task.difficulty">{{ labelDifficulty(task.difficulty) }}</span>
               </router-link>
             </div>
           </div>
@@ -166,7 +178,7 @@
     <aside class="home-aside-actions">
       <section class="quick-actions-card">
         <div class="aside-card-title">
-          <span class="aside-card-kicker">FOCUS</span>
+          <span class="aside-card-kicker">专注行动</span>
           <h3>快速行动</h3>
         </div>
         <div class="quick-actions-list">
@@ -216,7 +228,7 @@
             <div v-for="task in recentTasks" :key="task.id" class="task-item">
               <span class="task-status" :class="'task-status--' + task.status"></span>
               <span class="task-title">{{ task.title }}</span>
-              <span class="task-difficulty" :class="'task-difficulty--' + task.difficulty">{{ task.difficulty }}</span>
+              <span class="task-difficulty" :class="'task-difficulty--' + task.difficulty">{{ labelDifficulty(task.difficulty) }}</span>
             </div>
           </div>
         </div>
@@ -263,7 +275,7 @@
     <section class="habit-progress-card">
       <div class="habit-progress-heading">
         <div>
-          <span class="aside-card-kicker">DAILY RHYTHM</span>
+          <span class="aside-card-kicker">每日节奏</span>
           <h3>习惯进度</h3>
         </div>
         <strong>{{ habitProgress }}%</strong>
@@ -306,10 +318,19 @@ import { todoService } from '../services/todo'
 import { checkinService } from '../services/checkin'
 import { useToast } from '../composables/useToast'
 import { useUserStats } from '../composables/useUserStats'
+import { getErrorMessage } from '../utils/errorMessage'
+import { labelDifficulty } from '../utils/displayLabels'
+import CultivationStatusBar from '../components/cultivation/CultivationStatusBar.vue'
 
 const authStore = useAuthStore()
 const user = computed(() => authStore.user)
-const { expPercent } = useUserStats()
+const {
+  expPercent,
+  cultivationOverview,
+  cultivationLoading,
+  cultivationError,
+  loadCultivation
+} = useUserStats()
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
 const checkinStatus = ref(null)
@@ -324,7 +345,9 @@ const errorGoals = ref(null)
 
 const dailySummary = ref(null)
 const loadingDaily = ref(true)
+const dailyError = ref(null)
 const completingHabitId = ref(null)
+let dailyRequestId = 0
 
 const recentTasks = computed(() => tasks.value.slice(0, 5))
 const recentGoals = computed(() => goals.value.slice(0, 5))
@@ -343,7 +366,7 @@ async function fetchTasks() {
   try {
     tasks.value = await todoService.getTasks()
   } catch (e) {
-    errorTasks.value = '加载任务失败，请重试。'
+    errorTasks.value = getErrorMessage(e)
   } finally {
     loadingTasks.value = false
   }
@@ -353,11 +376,12 @@ async function fetchCheckinStatus() {
   try {
     checkinStatus.value = await checkinService.getStatus()
   } catch (e) {
-    // Non-critical: silently ignore
+    showError(getErrorMessage(e))
   }
 }
 
 async function doCheckin() {
+  if (checkinStatus.value?.checked_in) { showError('今天已经签到过了。'); return }
   checkinLoading.value = true
   try {
     const result = await checkinService.checkin()
@@ -367,7 +391,7 @@ async function doCheckin() {
     const exp = result.exp_earned || 0
     showSuccess(`签到成功！获得 ${coins} 金币、${exp} 经验值`)
   } catch (e) {
-    showError(e.response?.data?.detail || '签到失败，请重试。')
+    showError(getErrorMessage(e))
   } finally {
     checkinLoading.value = false
   }
@@ -379,32 +403,39 @@ async function fetchGoals() {
   try {
     goals.value = await todoService.getGoals()
   } catch (e) {
-    errorGoals.value = '加载目标失败，请重试。'
+    errorGoals.value = getErrorMessage(e)
   } finally {
     loadingGoals.value = false
   }
 }
 
 async function fetchDailySummary() {
+  const requestId = ++dailyRequestId
   loadingDaily.value = true
+  dailyError.value = null
   try {
-    dailySummary.value = await todoService.getDailySummary()
+    const summary = await todoService.getDailySummary()
+    if (requestId === dailyRequestId) dailySummary.value = summary
   } catch (e) {
-    // Non-critical: silently ignore
+    if (requestId === dailyRequestId) {
+      dailyError.value = getErrorMessage(e, '今日待办加载失败，请重试。')
+      showError(dailyError.value)
+    }
   } finally {
-    loadingDaily.value = false
+    if (requestId === dailyRequestId) loadingDaily.value = false
   }
 }
 
-async function completeDailyHabit(habitId) {
-  completingHabitId.value = habitId
+async function completeDailyHabit(habit) {
+  if (habit.completed_today) { showError('该习惯今天已经完成，明天再来继续。'); return }
+  completingHabitId.value = habit.id
   try {
-    await todoService.completeHabit(habitId)
+    await todoService.completeHabit(habit.id)
     showSuccess('习惯完成！')
     await fetchDailySummary()
     await authStore.fetchUser()
   } catch (e) {
-    showError(e.response?.data?.detail || '操作失败，请重试。')
+    showError(getErrorMessage(e))
   } finally {
     completingHabitId.value = null
   }
@@ -416,6 +447,7 @@ function isOverdue(deadline) {
 }
 
 onMounted(() => {
+  loadCultivation().catch((e) => showError(getErrorMessage(e)))
   fetchCheckinStatus()
   fetchTasks()
   fetchGoals()

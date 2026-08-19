@@ -86,6 +86,78 @@ def test_complete_task_awards_rewards(client):
     assert user_after["level"] == 2
 
 
+def test_todo_completion_responses_include_cultivation_reward(client):
+    headers = _register_and_login(client)
+
+    task = client.post("/api/todos/tasks", json={"title": "Task reward"}, headers=headers).json()
+    habit = client.post("/api/todos/habits", json={"title": "Habit reward"}, headers=headers).json()
+    goal = client.post("/api/todos/goals", json={"title": "Goal reward"}, headers=headers).json()
+
+    responses = [
+        client.post(f"/api/todos/tasks/{task['id']}/complete", headers=headers),
+        client.post(f"/api/todos/habits/{habit['id']}/complete", headers=headers),
+        client.post(f"/api/todos/goals/{goal['id']}/complete", headers=headers),
+    ]
+
+    assert all(response.status_code == 200 for response in responses)
+    assert all(response.json()["cultivation_reward"]["cultivation"] > 0 for response in responses)
+    assert all(response.json()["cultivation_reward"]["spirit_stones"] > 0 for response in responses)
+
+
+def test_ascended_todo_completion_keeps_rewards_and_does_not_progress_mortal_stage(client):
+    headers = _register_and_login(client)
+
+    from app.models.cultivation import CultivationLog, CultivationProfile
+    from app.models.user import User
+    from app.services.cultivation import CultivationService
+    from tests.conftest import TestingSessionLocal
+
+    db = TestingSessionLocal()
+    try:
+        user = db.query(User).filter(User.username == "testuser").one()
+        profile = CultivationService(db).ensure_profile(user.id)
+        profile.realm_key = "ascended"
+        profile.minor_stage = 7
+        profile.cultivation = 123
+        profile.spirit_stones = 11
+        db.commit()
+        coins_before = user.coins
+        experience_before = user.experience
+    finally:
+        db.close()
+
+    task = client.post(
+        "/api/todos/tasks",
+        json={"title": "Ascended task", "coins_reward": 20, "exp_reward": 15},
+        headers=headers,
+    ).json()
+    response = client.post(f"/api/todos/tasks/{task['id']}/complete", headers=headers)
+
+    assert response.status_code == 200
+    settlement = response.json()["cultivation_reward"]
+    assert settlement["cultivation"] == 15
+    assert settlement["spirit_stones"] == 9
+    assert settlement["legacy_exp"] == 15
+
+    db = TestingSessionLocal()
+    try:
+        user = db.query(User).filter(User.username == "testuser").one()
+        profile = db.query(CultivationProfile).filter(
+            CultivationProfile.user_id == user.id
+        ).one()
+        logs = db.query(CultivationLog).filter(CultivationLog.user_id == user.id).all()
+        assert user.coins == coins_before + 20 + 50
+        assert user.experience == experience_before + 15
+        assert (profile.realm_key, profile.minor_stage, profile.cultivation) == (
+            "ascended", 7, 138
+        )
+        assert profile.spirit_stones == 20
+        assert len(logs) == 1
+        assert logs[0].source == "task"
+    finally:
+        db.close()
+
+
 def test_complete_habit_awards_rewards(client):
     headers = _register_and_login(client)
 
@@ -123,6 +195,43 @@ def test_complete_habit_awards_rewards(client):
     user_after = client.get("/api/users/me", headers=headers).json()
     assert user_after["coins"] == coins_before + 15
     assert user_after["experience"] == exp_before + 10
+
+
+def test_habit_response_distinguishes_today_completion_from_activity(client):
+    headers = _register_and_login(client)
+    active_habit = client.post(
+        "/api/todos/habits",
+        json={"title": "Completed today", "coins_reward": 1, "exp_reward": 1},
+        headers=headers,
+    ).json()
+    inactive_habit = client.post(
+        "/api/todos/habits",
+        json={"title": "Inactive and incomplete", "coins_reward": 1, "exp_reward": 1},
+        headers=headers,
+    ).json()
+
+    initial = client.get("/api/todos/habits", headers=headers)
+    assert initial.status_code == 200
+    initial_by_id = {habit["id"]: habit for habit in initial.json()}
+    assert initial_by_id[active_habit["id"]]["completed_today"] is False
+    assert initial_by_id[inactive_habit["id"]]["completed_today"] is False
+
+    completed = client.post(
+        f"/api/todos/habits/{active_habit['id']}/complete",
+        headers=headers,
+    )
+    assert completed.status_code == 200
+    assert completed.json()["completed_today"] is True
+    assert completed.json()["is_active"] is True
+
+    deactivated = client.put(
+        f"/api/todos/habits/{inactive_habit['id']}",
+        json={"is_active": False},
+        headers=headers,
+    )
+    assert deactivated.status_code == 200
+    assert deactivated.json()["completed_today"] is False
+    assert deactivated.json()["is_active"] is False
 
 
 def test_complete_goal_awards_rewards(client):
@@ -205,6 +314,116 @@ def test_complete_task_idempotent(client):
     assert user_after_second["experience"] == user_after_first["experience"]
 
 
+def test_complete_task_creates_one_cultivation_log_and_keeps_legacy_rewards(client):
+    headers = _register_and_login(client)
+
+    create_response = client.post(
+        "/api/todos/tasks",
+        json={
+            "title": "Cultivation integration",
+            "difficulty": "hard",
+            "priority": "urgent",
+            "coins_reward": 20,
+            "exp_reward": 15,
+        },
+        headers=headers,
+    )
+    task_id = create_response.json()["id"]
+
+    first = client.post(f"/api/todos/tasks/{task_id}/complete", headers=headers)
+    second = client.post(f"/api/todos/tasks/{task_id}/complete", headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+    from app.models.cultivation import CultivationLog
+    from app.models.cultivation import CultivationProfile
+    from app.models.user import User
+    from tests.conftest import TestingSessionLocal
+
+    db = TestingSessionLocal()
+    try:
+        user = db.query(User).filter(User.username == "testuser").one()
+        logs = db.query(CultivationLog).filter(CultivationLog.user_id == user.id).all()
+        assert len(logs) == 1
+        assert logs[0].source == "task"
+        profile = db.query(CultivationProfile).filter(
+            CultivationProfile.user_id == user.id
+        ).one()
+        assert user.experience == 15
+        assert user.coins == 70
+        assert profile.cultivation == 32
+        assert profile.spirit_stones == 19
+    finally:
+        db.close()
+
+
+def test_task_reward_log_uses_unique_stable_source_key(client):
+    headers = _register_and_login(client)
+    create_response = client.post(
+        "/api/todos/tasks",
+        json={"title": "Stable event", "coins_reward": 20, "exp_reward": 15},
+        headers=headers,
+    )
+    task_id = create_response.json()["id"]
+
+    client.post(f"/api/todos/tasks/{task_id}/complete", headers=headers)
+
+    from app.models.cultivation import CultivationLog
+    from tests.conftest import TestingSessionLocal
+
+    db = TestingSessionLocal()
+    try:
+        log = db.query(CultivationLog).one()
+        assert log.source_key == f"todo:task:{task_id}"
+    finally:
+        db.close()
+
+
+def test_todo_coin_reward_source_ids_are_short_and_type_distinct(client):
+    headers = _register_and_login(client)
+    task = client.post(
+        "/api/todos/tasks",
+        json={"title": "Short task source", "coins_reward": 1, "exp_reward": 1},
+        headers=headers,
+    ).json()
+    habit = client.post(
+        "/api/todos/habits",
+        json={"title": "Short habit source", "coins_reward": 1, "exp_reward": 1},
+        headers=headers,
+    ).json()
+    goal = client.post(
+        "/api/todos/goals",
+        json={"title": "Short goal source", "coins_reward": 1, "exp_reward": 1},
+        headers=headers,
+    ).json()
+
+    assert client.post(f"/api/todos/tasks/{task['id']}/complete", headers=headers).status_code == 200
+    assert client.post(f"/api/todos/habits/{habit['id']}/complete", headers=headers).status_code == 200
+    assert client.post(f"/api/todos/goals/{goal['id']}/complete", headers=headers).status_code == 200
+
+    from app.models.coin_transaction import CoinTransaction
+    from tests.conftest import TestingSessionLocal
+
+    db = TestingSessionLocal()
+    try:
+        transactions = {
+            transaction.source: transaction
+            for transaction in db.query(CoinTransaction).filter(
+                CoinTransaction.source.in_(["task", "habit", "goal"])
+            ).all()
+        }
+        assert set(transactions) == {"task", "habit", "goal"}
+        source_ids = {source: transaction.source_id for source, transaction in transactions.items()}
+        assert all(source_id and len(source_id) <= 36 for source_id in source_ids.values())
+        assert source_ids["task"].startswith("t:")
+        assert source_ids["habit"].startswith("h:")
+        assert source_ids["goal"].startswith("g:")
+        assert len(set(source_ids.values())) == 3
+    finally:
+        db.close()
+
+
 def test_complete_goal_idempotent(client):
     """Completing a goal twice should only award rewards once."""
     headers = _register_and_login(client)
@@ -269,3 +488,41 @@ def test_complete_habit_idempotent(client):
     user_after_second = client.get("/api/users/me", headers=headers).json()
     assert user_after_second["coins"] == user_after_first["coins"]
     assert user_after_second["experience"] == user_after_first["experience"]
+
+
+def test_subtask_crud_uses_task_path_and_is_completed(client):
+    headers = _register_and_login(client)
+    task = client.post(
+        "/api/todos/tasks",
+        json={"title": "Parent task"},
+        headers=headers,
+    ).json()
+
+    created = client.post(
+        "/api/todos/subtasks",
+        json={"task_id": task["id"], "title": "Child task"},
+        headers=headers,
+    )
+    assert created.status_code == 200
+    assert created.json()["is_completed"] is False
+
+    listed = client.get(
+        f"/api/todos/subtasks/task/{task['id']}",
+        headers=headers,
+    )
+    assert listed.status_code == 200
+    assert listed.json()[0]["task_id"] == task["id"]
+
+    updated = client.put(
+        f"/api/todos/subtasks/{created.json()['id']}",
+        json={"is_completed": True},
+        headers=headers,
+    )
+    assert updated.status_code == 200
+    assert updated.json()["is_completed"] is True
+
+    deleted = client.delete(
+        f"/api/todos/subtasks/{created.json()['id']}",
+        headers=headers,
+    )
+    assert deleted.status_code == 200

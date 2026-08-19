@@ -128,7 +128,7 @@
         <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="debt-dialog-title" tabindex="-1" @keydown.escape="cancelDialog">
           <div class="dialog-header">
             <h3 id="debt-dialog-title" class="dialog-title">{{ editingDebt ? '编辑借贷' : '新建借贷' }}</h3>
-            <button class="dialog-close" @click="cancelDialog" aria-label="Close">
+            <button class="dialog-close" @click="cancelDialog" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             </button>
           </div>
@@ -181,7 +181,7 @@
         <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="pay-dialog-title" tabindex="-1" @keydown.escape="cancelPayment">
           <div class="dialog-header">
             <h3 id="pay-dialog-title" class="dialog-title">添加还款</h3>
-            <button class="dialog-close" @click="cancelPayment" aria-label="Close">
+            <button class="dialog-close" @click="cancelPayment" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             </button>
           </div>
@@ -218,7 +218,7 @@
         <div class="dialog dialog--confirm" role="dialog" aria-modal="true" aria-labelledby="del-debt-title" tabindex="-1" @keydown.escape="cancelDelete">
           <div class="dialog-header">
             <h3 id="del-debt-title" class="dialog-title">确认删除</h3>
-            <button class="dialog-close" @click="cancelDelete" aria-label="Close">
+            <button class="dialog-close" @click="cancelDelete" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             </button>
           </div>
@@ -264,6 +264,7 @@
 import { ref, onMounted } from 'vue'
 import { financeService } from '../services/finance'
 import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/errorMessage'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -356,7 +357,7 @@ async function fetchDebts() {
     const data = await financeService.getDebts({ type: activeTab.value })
     debts.value = Array.isArray(data) ? data : (data.items || data.debts || [])
   } catch (e) {
-    error.value = '加载借贷数据失败，请重试。'
+    error.value = getErrorMessage(e)
   } finally {
     loading.value = false
   }
@@ -387,7 +388,7 @@ async function saveDebt() {
     }
     cancelDialog()
   } catch (e) {
-    dialogError.value = e.response?.data?.detail || '保存失败，请重试。'
+    dialogError.value = getErrorMessage(e)
   } finally {
     saving.value = false
   }
@@ -407,7 +408,7 @@ async function doPayment() {
     cancelPayment()
     await fetchDebts()
   } catch (e) {
-    paymentError.value = e.response?.data?.detail || '还款失败，请重试。'
+    paymentError.value = getErrorMessage(e)
   } finally {
     paying.value = false
   }
@@ -422,7 +423,7 @@ async function deleteDebt() {
     showSuccess('借贷记录已删除')
     cancelDelete()
   } catch (e) {
-    showError(e.response?.data?.detail || '删除失败，请重试。')
+    showError(getErrorMessage(e))
     cancelDelete()
   } finally {
     deleting.value = false

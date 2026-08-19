@@ -1,0 +1,111 @@
+import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, String, Text, Uuid, UniqueConstraint
+
+from app.database import Base
+
+
+def utc_now():
+    return datetime.now(timezone.utc)
+
+
+class WorldNode(Base):
+    __tablename__ = "world_nodes"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    node_key = Column(String(64), nullable=False, unique=True, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    required_realm = Column(String(32), nullable=True)
+    region_key = Column(String(64), nullable=False, default="mortal")
+    required_project_phase = Column(Integer, nullable=False, default=0)
+    sort_order = Column(Integer, nullable=False, default=0)
+    is_hidden = Column(Boolean, nullable=False, default=False)
+    completed = Column(Boolean, nullable=False, default=False)
+    visible = Column(Boolean, nullable=False, default=True)
+    lock_reason = Column(String(128), nullable=True)
+
+
+class Sect(Base):
+    __tablename__ = "sects"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    sect_key = Column(String(64), nullable=False, unique=True, index=True)
+    name = Column(String(100), nullable=False)
+    star = Column(Integer, nullable=False, default=1)
+    kind = Column(String(20), nullable=False, default="normal")
+    task_preference = Column(String(64), nullable=True)
+    core_legacy = Column(Text, nullable=True)
+    entry_realm = Column(String(32), nullable=True)
+    trial_key = Column(String(64), nullable=True)
+    world_node_id = Column(Uuid, ForeignKey("world_nodes.id"), nullable=True)
+
+
+class SectMembership(Base):
+    __tablename__ = "sect_memberships"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
+    sect_id = Column(Uuid, ForeignKey("sects.id"), nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="active")
+    joined_at = Column(DateTime, nullable=False, default=utc_now)
+    left_at = Column(DateTime, nullable=True)
+
+
+class SectAccessProgress(Base):
+    __tablename__ = "sect_access_progress"
+    __table_args__ = (UniqueConstraint("user_id", "sect_id", name="uq_sect_access_user_sect"),)
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
+    sect_id = Column(Uuid, ForeignKey("sects.id"), nullable=False, index=True)
+    messenger_contacted = Column(Boolean, nullable=False, default=False)
+    trial_confirmed = Column(Boolean, nullable=False, default=False)
+    trial_status = Column(String(32), nullable=False, default="awaiting_messenger")
+    objective_snapshot = Column(Text, nullable=True)
+    objective_progress = Column(Text, nullable=True)
+    trial_score = Column(Integer, nullable=False, default=0)
+    completed_at = Column(DateTime, nullable=True)
+
+
+class WorldNodeProgress(Base):
+    __tablename__ = "world_node_progress"
+    __table_args__ = (UniqueConstraint("user_id", "node_id", name="uq_world_node_progress_user_node"),)
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
+    node_id = Column(Uuid, ForeignKey("world_nodes.id"), nullable=False, index=True)
+    completed = Column(Boolean, nullable=False, default=False)
+    completed_at = Column(DateTime, nullable=True)
+
+
+class Npc(Base):
+    __tablename__ = "npcs"
+    __table_args__ = (
+        UniqueConstraint("user_id", "sect_id", "population_index", name="uq_npc_user_sect_population"),
+    )
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
+    sect_id = Column(Uuid, ForeignKey("sects.id"), nullable=True, index=True)
+    name = Column(String(100), nullable=False)
+    role = Column(String(64), nullable=True)
+    description = Column(Text, nullable=True)
+    is_core = Column(Boolean, nullable=False, default=False)
+    population_index = Column(Integer, nullable=True)
+    is_generated = Column(Boolean, nullable=False, default=False)
+    cultivation = Column(Integer, nullable=False, default=0)
+    cultivation_updated_on = Column(Date, nullable=True)
+    cultivation_locked = Column(Boolean, nullable=False, default=False)
+
+
+class NpcEvent(Base):
+    __tablename__ = "npc_events"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
+    npc_id = Column(Uuid, ForeignKey("npcs.id"), nullable=False, index=True)
+    event_key = Column(String(64), nullable=False)
+    summary = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now)

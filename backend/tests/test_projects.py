@@ -97,3 +97,35 @@ def test_project_task_rejects_cross_project_references(client):
         headers=headers_a,
     )
     assert task_response.status_code == 403
+
+
+def test_delete_project_phase_with_tasks_requires_explicit_policy(client):
+    headers = _register_and_login(client)
+    project = client.post(
+        "/api/projects", json={"name": "Phase ownership"}, headers=headers
+    ).json()
+    phase = client.post(
+        f"/api/projects/{project['id']}/phases",
+        json={"name": "Owned tasks"},
+        headers=headers,
+    ).json()
+    task = client.post(
+        f"/api/projects/{project['id']}/tasks",
+        json={"title": "Keep me", "phase_id": phase["id"]},
+        headers=headers,
+    ).json()
+
+    response = client.delete(
+        f"/api/projects/phases/{phase['id']}", headers=headers
+    )
+
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert detail["code"] == "PROJECT_PHASE_HAS_TASKS"
+    assert detail["task_count"] == 1
+
+    project_tasks = client.get(
+        f"/api/projects/{project['id']}/tasks", headers=headers
+    ).json()
+    assert project_tasks[0]["id"] == task["id"]
+    assert project_tasks[0]["phase_id"] == phase["id"]

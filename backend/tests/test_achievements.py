@@ -1,3 +1,7 @@
+import pytest
+from sqlalchemy.exc import IntegrityError
+
+
 def _register_and_login(client):
     """Helper: register a user and return auth headers."""
     client.post(
@@ -46,7 +50,7 @@ def test_first_task_completion_unlocks_achievement(client):
     assert len(achievements) >= 1
 
 
-def test_achievement_does_not_double_unlock(client):
+def test_achievement_does_not_double_unlock(client, db_session):
     """Completing two tasks should still only unlock the task_count=1 achievement once."""
     headers = _register_and_login(client)
 
@@ -70,3 +74,74 @@ def test_achievement_does_not_double_unlock(client):
     assert ach_resp.status_code == 200
     achievements = ach_resp.json()
     assert len(achievements) == 1
+
+    from app.models.achievement import UserAchievement
+    from app.models.coin_transaction import CoinTransaction
+    from app.models.user import User
+
+    user = db_session.query(User).filter(User.username == "testuser").one()
+    assert db_session.query(UserAchievement).filter(
+        UserAchievement.user_id == user.id
+    ).count() == 1
+    assert db_session.query(CoinTransaction).filter(
+        CoinTransaction.user_id == user.id,
+        CoinTransaction.source == "achievement",
+    ).count() == 1
+
+
+def test_achievement_reward_has_stable_source_id(client, db_session):
+    headers = _register_and_login(client)
+    task = client.post(
+        "/api/todos/tasks",
+        json={"title": "Achievement source", "coins_reward": 1, "exp_reward": 1},
+        headers=headers,
+    ).json()
+
+    assert client.post(f"/api/todos/tasks/{task['id']}/complete", headers=headers).status_code == 200
+    from app.models.coin_transaction import CoinTransaction
+    from app.models.user import User
+
+    user = db_session.query(User).filter(User.username == "testuser").one()
+    rewards = db_session.query(CoinTransaction).filter(
+        CoinTransaction.user_id == user.id,
+        CoinTransaction.source == "achievement",
+    ).all()
+    assert len(rewards) == 1
+    assert rewards[0].source_id.startswith("a:")
+    assert len(rewards[0].source_id) <= 36
+
+
+def test_non_duplicate_claim_integrity_error_is_raised_after_savepoint_rollback(
+    client, db_session, monkeypatch
+):
+    from app.models.achievement import UserAchievement
+    from app.models.coin_transaction import CoinTransaction
+    from app.models.user import User
+    from app.services.achievement import AchievementService
+
+    _register_and_login(client)
+    user = db_session.query(User).filter(User.username == "testuser").one()
+    service = AchievementService(db_session)
+    original_create = service.user_achievement_repo._create_no_commit
+
+    def create_invalid_claim(data):
+        invalid_data = dict(data)
+        invalid_data["achievement_id"] = None
+        return original_create(invalid_data)
+
+    monkeypatch.setattr(
+        service.user_achievement_repo,
+        "_create_no_commit",
+        create_invalid_claim,
+    )
+
+    with pytest.raises(IntegrityError, match="NOT NULL|not null"):
+        service.check_and_unlock(user.id, "task_count", 1)
+
+    assert db_session.query(UserAchievement).filter_by(user_id=user.id).count() == 0
+    assert db_session.query(CoinTransaction).filter_by(
+        user_id=user.id, source="achievement"
+    ).count() == 0
+    db_session.expire(user)
+    assert user.coins == 0
+    assert user.experience == 0

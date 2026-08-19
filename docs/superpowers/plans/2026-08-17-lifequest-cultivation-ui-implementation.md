@@ -240,6 +240,10 @@ def test_sect_join_is_locked_before_foundation(client, auth_headers):
     )
     assert response.status_code == 409
     assert response.json()["detail"] == "sect requires foundation realm"
+
+# Define auth_headers in this test module with the existing register/login
+# pattern from backend/tests/test_users.py; the fixture is intentionally local
+# because the shared conftest.py does not provide authenticated headers.
 ~~~
 
 - [ ] **Step 2: 运行测试确认失败**
@@ -359,8 +363,8 @@ git commit -m "feat(frontend): add cultivation state and shared ui"
 ~~~js
 test("router includes authenticated cultivation routes", async () => {
   const source = await readFile(new URL("../router/index.js", import.meta.url), "utf8");
-  assert.match(source, /path: "cultivation"/);
-  assert.match(source, /path: "tribulations"/);
+  assert.match(source, /path: ['\"]cultivation['\"]/);
+  assert.match(source, /path: ['\"]tribulations['\"]/);
 });
 
 test("todo page keeps the legacy reward fallback", async () => {
