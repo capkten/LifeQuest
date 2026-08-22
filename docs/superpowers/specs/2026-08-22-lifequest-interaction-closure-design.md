@@ -23,7 +23,7 @@
 
 登录失败时在登录卡片区域和 Toast 中显示明确错误；保留输入内容并允许重试。注册成功显示成功提示并继续既有跳转，注册失败保留表单并显示中文错误。请求中显示按钮 loading，重复点击不会产生重复请求。
 
-新增轻量共享反馈层：`useFeedback` 负责成功、错误、警告提示；`BaseDialog.vue` 负责确认、表单、失败重试、关闭和焦点管理。已有 `ElMessage` 作为短反馈实现基础，页面不再各自维护重复 Toast 逻辑。
+复用现有 `useToast`、Element Plus `ElMessage` 和 `ElMessageBox`，不新增 `useFeedback` 或 `BaseDialog.vue`。只有当现有能力无法覆盖具体场景时，才在页面内增加最小弹框状态；避免引入第二套反馈基础设施。
 
 ### 2. 笔记本和笔记预览
 
@@ -33,7 +33,7 @@
 
 ### 3. 修炼、宗门、功法、NPC 和渡劫
 
-所有业务锁定按钮保持可点击，点击后打开统一业务反馈弹框，显示当前操作、后端权威原因和下一步。成功后显示 Toast 并刷新权威数据，失败后保留上下文并允许重试。
+所有业务锁定按钮保持可点击，点击后使用现有 Toast 或 Element Plus 弹框显示当前操作、后端权威原因和下一步。成功后显示 Toast 并刷新权威数据，失败后保留上下文并允许重试。
 
 修炼待办使用现有 Todo 完成接口和奖励结算路径，完成后刷新待办、凡界资源、修为和飞升后的仙元/仙石转换，重复点击只结算一次。
 
@@ -47,7 +47,7 @@ NPC 遇见使用弹框，展示宗门和人口槽位。后端冲突转换为人�
 
 ## 代码边界
 
-- 共享反馈：`frontend/src/composables/useFeedback.js`、`frontend/src/components/common/BaseDialog.vue`、`frontend/src/utils/errorMessage.js`。
+- 共享反馈：复用 `frontend/src/composables/useToast.js`、Element Plus `ElMessage`/`ElMessageBox` 和 `frontend/src/utils/errorMessage.js`。
 - 认证：`frontend/src/views/Login.vue`、`frontend/src/views/Register.vue`、`frontend/src/services/auth.js`、认证回归测试。
 - 笔记：`frontend/src/views/NotebookFileManage.vue`、`frontend/src/components/notes/NoteViewer.vue`、相关 UI 回归测试。
 - 修炼：`frontend/src/views/Cultivation.vue`、`frontend/src/views/Sects.vue`、`frontend/src/views/Techniques.vue`、`frontend/src/views/Npcs.vue`、`frontend/src/views/Tribulations.vue`、`frontend/src/services/cultivation.js`、`backend/app/services/todo.py`、相关 API 和测试。
@@ -69,6 +69,6 @@ NPC 遇见使用弹框，展示宗门和人口槽位。后端冲突转换为人�
 ## 非目标
 
 - 不替换现有认证、Todo、修炼和奖励 API 的总体架构。
-- 不重写 Element Plus 或现有主题系统。
+- 不新增重复的反馈基础设施，不重写 Element Plus 或现有主题系统。
 - 不把业务锁定改成永久禁用按钮。
 - 不修改用户级 npm 配置或提交任何密钥。
