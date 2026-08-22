@@ -31,6 +31,8 @@ _NOTE_MIGRATION_LOCK_TABLE = "note_migration_lock"
 def _uuid_column_type(dialect_or_connection):
     """Compile the ORM UUID type for a migration connection's dialect."""
     dialect = getattr(dialect_or_connection, "dialect", dialect_or_connection)
+    if not hasattr(dialect, "type_compiler_instance"):
+        return "VARCHAR(36)"
     return str(Uuid().compile(dialect=dialect))
 
 
