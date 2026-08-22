@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-08-22",
+  "branch": "codex/notebook-write-race-closure",
+  "model": "gpt-5.6luna",
+  "items": {
+    "general-stability": "implemented",
+    "mortal-resources-and-tribulation": "implemented",
+    "technique-effects-and-resource-growth": "implemented",
+    "sect-trial-world-npc": "implemented",
+    "ascension-and-immortal-loop": "implemented",
+    "mortal-todo-continuity": "implemented",
+    "backend-unit-regression-suite": "verified",
+    "frontend-regression-suite": "verified",
+    "production-build": "verified",
+    "authenticated-four-viewport-browser-contracts": "planned",
+    "deployment-healthcheck": "planned"
+  },
+  "evidence": {
+    "backend": "306 passed",
+    "frontend": "102 passed",
+    "build": "successful; main entry chunk reduced from approximately 1498 kB to 1040 kB",
+    "browser": "not verified in this workspace because the strict runner and authenticated fixture are absent"
+  }
+}
