@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.models.cultivation import CultivationLog, CultivationProfile, TribulationAttempt
 from app.models.backpack import TribulationPillSettlement
+from app.models.immortal import CrossRealmSettlement, ImmortalProfile
 from app.models.project import Project, ProjectPhase, PhaseStatus
 from app.models.technique import LearnedTechnique, Technique, TechniqueSlot
 from app.models.todo import Goal, Habit, Task, TaskStatus
@@ -1910,6 +1911,23 @@ class CultivationService:
             log.efficiency = profile.cultivation_efficiency
             log.ready_for_tribulation = ready_for_tribulation
 
+            essence = 0
+            immortal_stones = 0
+            if profile.realm_key == ASCENDED_REALM_KEY and source_key:
+                essence = cultivation
+                immortal_stones = stones
+                immortal_profile = self.db.query(ImmortalProfile).filter_by(user_id=user_id).one_or_none()
+                if immortal_profile is not None:
+                    immortal_profile.essence += essence
+                    immortal_profile.immortal_stones += immortal_stones
+                    self.db.add(CrossRealmSettlement(
+                        user_id=user_id,
+                        source_key=source_key,
+                        request_key=f"cross-realm:{user_id}:{source_key}",
+                        essence_delta=essence,
+                        immortal_stones_delta=immortal_stones,
+                    ))
+
             if apply_legacy_user_rewards:
                 # Keep legacy user rewards in the same write transaction as
                 # the cultivation log so independent sessions cannot
@@ -1928,6 +1946,8 @@ class CultivationService:
             log_id=log.id,
             legacy_exp=cultivation,
             ready_for_tribulation=ready_for_tribulation,
+            essence=essence,
+            immortal_stones=immortal_stones,
         )
         settlement._legacy_level = legacy_level
         settlement._legacy_experience = legacy_experience

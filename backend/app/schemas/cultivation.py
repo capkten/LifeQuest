@@ -28,6 +28,8 @@ class RewardSettlement(BaseModel):
     efficiency: float
     log_id: UUID
     legacy_exp: int
+    essence: int = 0
+    immortal_stones: int = 0
     ready_for_tribulation: bool = False
 
 
