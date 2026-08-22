@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy import Uuid, Enum as SAEnum
 
 from app.database import Base
@@ -55,3 +55,23 @@ class UsageHistory(Base):
     action = Column(SAEnum(UsageAction, native_enum=False), nullable=False)
     quantity = Column(Integer, default=1)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class TribulationPillSettlement(Base):
+    """Auditable, idempotent deductions from the mortal pill inventory."""
+
+    __tablename__ = "tribulation_pill_settlements"
+    __table_args__ = (
+        UniqueConstraint("source_key", name="uq_tribulation_pill_settlement_source_key"),
+    )
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
+    source_key = Column(String(128), nullable=False, index=True)
+    amount = Column(Integer, nullable=False)
+    remaining_pills = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+# Compatibility alias for callers that refer to the table as a pill ledger.
+TribulationPillLedger = TribulationPillSettlement

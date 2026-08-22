@@ -51,6 +51,36 @@ class CultivationOverview(BaseModel):
     recent_rewards: List[Dict[str, Any]] = Field(default_factory=list)
 
 
+class ResourceState(BaseModel):
+    """Authoritative mortal resources used by cultivation and tribulation."""
+
+    merit: int = 0
+    aptitude_points: int = 0
+    mind_state: int = 50
+    contribution: int = 0
+    tribulation_pills: int = 0
+
+    @property
+    def aptitude(self) -> int:
+        return self.aptitude_points
+
+    @property
+    def pill_inventory(self) -> int:
+        return self.tribulation_pills
+
+
+class SettlementResult(BaseModel):
+    amount: int
+    remaining_pills: int
+    source_key: Optional[str] = None
+    already_settled: bool = False
+    settlement_id: Optional[UUID] = None
+
+    @property
+    def consumed(self) -> int:
+        return self.amount
+
+
 class WorldNodeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     node_key: str

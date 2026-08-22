@@ -1,3 +1,6 @@
+import pytest
+
+
 def test_tribulation_pill_backpack_item_is_a_consumable(db_session):
     from app.database import Base
     from tests.conftest import engine
@@ -17,6 +20,25 @@ def test_tribulation_pill_backpack_item_is_a_consumable(db_session):
 
     assert item.item_type == ItemType.CONSUMABLE
     assert item.quantity == 3
+
+
+def test_backpack_add_item_requires_positive_quantity(db_session):
+    from app.database import Base
+    from tests.conftest import engine
+    from app.models.shop import ShopItem
+    from app.models.user import User
+    from app.services.backpack import BackpackService
+    from app.services.shop import ShopService
+
+    user = User(username="positive-quantity-owner", email="positive-quantity@example.com", password_hash="hashed")
+    Base.metadata.create_all(bind=engine)
+    db_session.add(user)
+    db_session.commit()
+    ShopService.seed_system_items(db_session)
+    pill = db_session.query(ShopItem).filter_by(item_key="tribulation-pill").one()
+
+    with pytest.raises(ValueError, match="quantity must be positive"):
+        BackpackService(db_session).add_item(user.id, pill.id, quantity=0)
 
 
 def _register_and_login(client, username="testuser", email="test@example.com", password="testpassword123"):

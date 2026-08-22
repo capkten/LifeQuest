@@ -684,6 +684,40 @@ def _migrate_columns():
     """Add missing columns to existing tables without a full migration tool."""
     inspector = inspect(engine)
     with engine.begin() as conn:
+        # Mortal resource columns were introduced after the first cultivation
+        # profile schema. Preserve existing values and initialize only missing
+        # balances with the established profile defaults.
+        try:
+            profile_cols = {c["name"] for c in inspector.get_columns("cultivation_profiles")}
+        except (KeyError, NoSuchTableError):
+            profile_cols = None
+        if profile_cols is not None:
+            for column_name, column_definition in {
+                "spirit_stones": "INTEGER NOT NULL DEFAULT 0",
+                "merit": "INTEGER NOT NULL DEFAULT 0",
+                "contribution": "INTEGER NOT NULL DEFAULT 0",
+                "mind_state": "INTEGER NOT NULL DEFAULT 50",
+                "aptitude_points": "INTEGER NOT NULL DEFAULT 0",
+                "cultivation_efficiency": "FLOAT NOT NULL DEFAULT 1",
+            }.items():
+                if column_name not in profile_cols:
+                    conn.execute(text(
+                        f"ALTER TABLE cultivation_profiles ADD COLUMN {column_name} {column_definition}"
+                    ))
+
+        # create_all handles fresh databases; this text DDL also supports a
+        # legacy database and the lightweight migration connections used by
+        # the existing startup tests.
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS tribulation_pill_settlements ("
+            "id VARCHAR(36) PRIMARY KEY, "
+            "user_id VARCHAR(36) NOT NULL, "
+            "source_key VARCHAR(128) NOT NULL UNIQUE, "
+            "amount INTEGER NOT NULL, "
+            "remaining_pills INTEGER NOT NULL, "
+            "created_at DATETIME)"
+        ))
+
         # habits.last_completed_at
         habit_cols = {c["name"] for c in inspector.get_columns("habits")}
         if "last_completed_at" not in habit_cols:

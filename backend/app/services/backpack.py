@@ -41,6 +41,8 @@ class BackpackService:
             commit: If True (default), commits the transaction immediately.
                     Pass False to defer the commit to the caller.
         """
+        if quantity <= 0:
+            raise ValueError("quantity must be positive")
         shop_item = self.shop_item_repo.get_by_id(shop_item_id)
         if shop_item is None:
             raise HTTPException(status_code=404, detail="Shop item not found")

@@ -895,6 +895,90 @@ def test_settlement_returns_and_records_all_resource_deltas(db_session, user):
     assert log.mind_state_delta == result.mind_state_delta
 
 
+def _seed_tribulation_pills(db_session, user, quantity):
+    from app.models.shop import ShopItem
+    from app.services.backpack import BackpackService
+    from app.services.shop import ShopService
+
+    ShopService.seed_system_items(db_session)
+    pill = db_session.query(ShopItem).filter_by(item_key="tribulation-pill").one()
+    return BackpackService(db_session).add_item(user.id, pill.id, quantity=quantity)
+
+
+def test_get_resource_state_returns_mortal_defaults_and_pill_inventory(db_session, user):
+    from app.services.cultivation import CultivationService
+
+    state = CultivationService(db_session).get_resource_state(user.id)
+
+    assert state.merit == 0
+    assert state.aptitude_points == 0
+    assert state.mind_state == 50
+    assert state.contribution == 0
+    assert state.tribulation_pills == 0
+
+
+def test_tribulation_pill_inventory_rejects_non_positive_additions(db_session, user):
+    from app.models.shop import ShopItem
+    from app.services.backpack import BackpackService
+    from app.services.shop import ShopService
+
+    ShopService.seed_system_items(db_session)
+    pill = db_session.query(ShopItem).filter_by(item_key="tribulation-pill").one()
+
+    with pytest.raises(ValueError, match="quantity must be positive"):
+        BackpackService(db_session).add_item(user.id, pill.id, quantity=0)
+    with pytest.raises(ValueError, match="quantity must be positive"):
+        BackpackService(db_session).add_item(user.id, pill.id, quantity=-1)
+
+
+def test_consume_tribulation_pills_rejects_insufficient_inventory(db_session, user):
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    _seed_tribulation_pills(db_session, user, quantity=1)
+
+    with pytest.raises(PermissionError, match="TRIBULATION_PILL_INSUFFICIENT:2:1"):
+        service.consume_tribulation_pills(user.id, amount=2, source_key="pill:insufficient")
+
+    assert service.get_resource_state(user.id).tribulation_pills == 1
+
+
+def test_consume_tribulation_pills_is_idempotent_for_duplicate_source_key(db_session, user):
+    from app.models.backpack import TribulationPillSettlement
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    _seed_tribulation_pills(db_session, user, quantity=3)
+
+    first = service.consume_tribulation_pills(user.id, amount=2, source_key="pill:duplicate")
+    repeated = service.consume_tribulation_pills(user.id, amount=1, source_key="pill:duplicate")
+
+    assert first.amount == repeated.amount == 2
+    assert repeated.already_settled is True
+    assert service.get_resource_state(user.id).tribulation_pills == 1
+    assert db_session.query(TribulationPillSettlement).filter_by(
+        user_id=user.id, source_key="pill:duplicate"
+    ).count() == 1
+
+
+def test_consume_tribulation_pills_rolls_back_with_caller_transaction(db_session, user):
+    from app.models.backpack import TribulationPillSettlement
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    _seed_tribulation_pills(db_session, user, quantity=2)
+
+    service.consume_tribulation_pills(
+        user.id, amount=1, source_key="pill:rollback", commit=False
+    )
+    db_session.rollback()
+
+    assert service.get_resource_state(user.id).tribulation_pills == 2
+    assert db_session.query(TribulationPillSettlement).filter_by(
+        user_id=user.id, source_key="pill:rollback"
+    ).count() == 0
+
+
 def test_daily_aptitude_gain_stops_after_eight_reward_events(db_session, user):
     from app.services.cultivation import CultivationService
 

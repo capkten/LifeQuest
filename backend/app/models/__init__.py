@@ -5,7 +5,7 @@ from app.models.todo import Habit, Task, Goal, Subtask
 from app.models.shop import ShopItem, ExchangeHistory, ExchangeStatus
 from app.models.backpack import (
     BackpackItem, ItemType, ItemStatus,
-    UsageHistory, UsageAction,
+    UsageHistory, UsageAction, TribulationPillSettlement, TribulationPillLedger,
 )
 from app.models.achievement import Achievement, UserAchievement
 from app.models.checkin import DailyCheckin
@@ -28,7 +28,7 @@ __all__ = [
     "Habit", "Task", "Goal", "Subtask",
     "ShopItem", "ExchangeHistory", "ExchangeStatus",
     "BackpackItem", "ItemType", "ItemStatus",
-    "UsageHistory", "UsageAction",
+    "UsageHistory", "UsageAction", "TribulationPillSettlement", "TribulationPillLedger",
     "Achievement", "UserAchievement",
     "DailyCheckin",
     "Title", "UserTitle",

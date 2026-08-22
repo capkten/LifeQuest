@@ -13,6 +13,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models.cultivation import CultivationLog, CultivationProfile, TribulationAttempt
+from app.models.backpack import TribulationPillSettlement
 from app.models.project import Project, ProjectPhase, PhaseStatus
 from app.models.technique import LearnedTechnique, Technique, TechniqueSlot
 from app.models.todo import Goal, Habit, Task, TaskStatus
@@ -56,6 +57,8 @@ from app.schemas.cultivation import (
     WorldResponse,
     SectAccessResponse,
     HiddenSectSummary,
+    ResourceState,
+    SettlementResult,
 )
 
 
@@ -141,6 +144,17 @@ class CultivationService:
         if profile is None:
             profile = self.cultivation_repo.create_default(user_id)
         return profile
+
+    def get_resource_state(self, user_id: UUID) -> ResourceState:
+        """Return the current authoritative mortal resource balances."""
+        profile = self.ensure_profile(user_id)
+        return ResourceState(
+            merit=profile.merit,
+            aptitude_points=profile.aptitude_points,
+            mind_state=profile.mind_state,
+            contribution=profile.contribution,
+            tribulation_pills=self._owned_tribulation_pills(user_id),
+        )
 
     def get_overview(self, user_id: UUID) -> CultivationOverview:
         profile = self.ensure_profile(user_id)
@@ -1205,7 +1219,7 @@ class CultivationService:
         if not preview.available:
             raise PermissionError(self._tribulation_lock_message(preview.lock_reason))
         if preview.pill_count:
-            self.consume_tribulation_pills(user_id, preview.pill_count)
+            self.consume_tribulation_pills(user_id, preview.pill_count, commit=False)
         success = self.roll(preview.final_probability)
         roll = getattr(self, "_last_roll", None)
         if roll is None:
@@ -1240,10 +1254,109 @@ class CultivationService:
             raise
         return TribulationResult(success=success, realm_key=profile.realm_key, target_realm=preview.target_realm, cultivation_loss=loss, log_id=attempt_id, cooldown_until=self._cooldown_until(user_id), terminal=success and preview.target_realm == "ascension")
 
-    def consume_tribulation_pills(self, user_id: UUID, count: int) -> int:
-        """Consume pills in the caller's transaction before a tribulation write."""
-        return BackpackService(self.db).consume_by_key(
-            user_id, "tribulation-pill", self._bounded_tribulation_pill_count(count)
+    def consume_tribulation_pills(
+        self,
+        user_id: UUID,
+        amount: int | None = None,
+        source_key: str | None = None,
+        *,
+        count: int | None = None,
+        commit: bool = True,
+    ) -> SettlementResult:
+        """Consume pills atomically, optionally recording an idempotency key.
+
+        ``count`` and the default commit behavior preserve the older service
+        call shape; tribulation attempts pass ``commit=False`` so their pill
+        deduction remains in the attempt's transaction.
+        """
+        if amount is None:
+            amount = count if count is not None else 0
+        elif count is not None and int(amount) != int(count):
+            raise ValueError("amount and count must match")
+        try:
+            amount = int(amount)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("TRIBULATION_PILL_AMOUNT_INVALID") from exc
+        if amount < 0:
+            raise ValueError("TRIBULATION_PILL_AMOUNT_INVALID")
+
+        normalized_source_key = source_key.strip() if isinstance(source_key, str) else source_key
+        if normalized_source_key:
+            existing = self.db.query(TribulationPillSettlement).filter_by(
+                source_key=normalized_source_key
+            ).one_or_none()
+            if existing is not None:
+                if existing.user_id != user_id:
+                    raise ValueError("TRIBULATION_PILL_SOURCE_KEY_CONFLICT")
+                return SettlementResult(
+                    amount=existing.amount,
+                    remaining_pills=existing.remaining_pills,
+                    source_key=existing.source_key,
+                    already_settled=True,
+                    settlement_id=existing.id,
+                )
+
+        if amount == 0:
+            return SettlementResult(
+                amount=0,
+                remaining_pills=self._owned_tribulation_pills(user_id),
+                source_key=normalized_source_key,
+            )
+
+        try:
+            transaction_context = self.db.begin_nested() if commit else nullcontext()
+            with transaction_context:
+                if normalized_source_key:
+                    existing = self.db.query(TribulationPillSettlement).filter_by(
+                        source_key=normalized_source_key
+                    ).with_for_update().one_or_none()
+                    if existing is not None:
+                        if existing.user_id != user_id:
+                            raise ValueError("TRIBULATION_PILL_SOURCE_KEY_CONFLICT")
+                        return SettlementResult(
+                            amount=existing.amount,
+                            remaining_pills=existing.remaining_pills,
+                            source_key=existing.source_key,
+                            already_settled=True,
+                            settlement_id=existing.id,
+                        )
+
+                BackpackService(self.db).consume_by_key(
+                    user_id, "tribulation-pill", amount
+                )
+                remaining_pills = self._owned_tribulation_pills(user_id)
+                settlement = TribulationPillSettlement(
+                    user_id=user_id,
+                    source_key=normalized_source_key,
+                    amount=amount,
+                    remaining_pills=remaining_pills,
+                ) if normalized_source_key else None
+                if settlement is not None:
+                    self.db.add(settlement)
+                    self.db.flush()
+        except IntegrityError:
+            self.db.rollback()
+            if normalized_source_key:
+                existing = self.db.query(TribulationPillSettlement).filter_by(
+                    source_key=normalized_source_key, user_id=user_id
+                ).one_or_none()
+                if existing is not None:
+                    return SettlementResult(
+                        amount=existing.amount,
+                        remaining_pills=existing.remaining_pills,
+                        source_key=existing.source_key,
+                        already_settled=True,
+                        settlement_id=existing.id,
+                    )
+            raise
+
+        if commit:
+            self.db.commit()
+        return SettlementResult(
+            amount=amount,
+            remaining_pills=remaining_pills,
+            source_key=normalized_source_key,
+            settlement_id=settlement.id if settlement is not None else None,
         )
 
     @staticmethod
