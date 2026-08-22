@@ -199,6 +199,8 @@ test('notebook workspace and viewer ignore stale responses after selection chang
 
   assert.match(workspace, /treeRequestId|treeSequence|treeAbortController/)
   assert.match(workspace, /requestId\s*!==\s*treeRequestId|treeRequestId\s*!==\s*requestId/)
+  assert.match(workspace, /selectionRequestId|selectionSequence|selectionGeneration/)
+  assert.match(workspace, /selectionRequestId\s*(?:\+\+|\+=\s*1)|selectionSequence\s*(?:\+\+|\+=\s*1)|selectionGeneration\s*(?:\+\+|\+=\s*1)/)
   assert.match(view, /viewerRequestId|viewerSequence|viewerAbortController/)
   assert.match(view, /requestId\s*!==\s*viewerRequestId|viewerRequestId\s*!==\s*requestId/)
 })

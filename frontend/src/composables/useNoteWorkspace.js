@@ -52,6 +52,7 @@ export function useNoteWorkspace(notebookId) {
   const error = ref(null)
   const actionLocks = ref(new Set())
   let treeRequestId = 0
+  let selectionRequestId = 0
 
   function resolveNotebookId(value = notebookId) {
     return toValue(value)
@@ -127,6 +128,8 @@ export function useNoteWorkspace(notebookId) {
   function selectNote(nodeOrId) {
     const node = typeof nodeOrId === 'object' ? nodeOrId : findNode(nodeOrId)
     if (!node) return null
+
+    selectionRequestId += 1
 
     if (node.type === 'folder') {
       selectedNoteId.value = null
