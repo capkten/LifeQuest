@@ -168,7 +168,7 @@
           <h3 class="item-card-name">{{ item.name }}</h3>
           <p v-if="item.description" class="item-card-desc">{{ item.description }}</p>
           <div class="item-card-tags">
-            <span v-if="item.category" class="item-tag item-tag--category">{{ item.category }}</span>
+            <span v-if="item.category" class="item-tag item-tag--category">{{ labelItemType(item.category) }}</span>
             <span v-if="item.stock === -1" class="item-tag item-tag--stock">无限</span>
             <span v-else class="item-tag item-tag--stock" :class="{ 'item-tag--low-stock': item.stock <= 5 }">
               库存: {{ item.stock }}
@@ -373,6 +373,7 @@ import { useAuthStore } from '../stores/auth'
 import { shopService } from '../services/shop'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
+import { labelItemType } from '../utils/displayLabels'
 import {
   Apple,
   Box,
@@ -1908,6 +1909,10 @@ onMounted(() => {
 .item-card--featured {
   border-color: rgba(16, 185, 129, 0.38);
   box-shadow: 0 10px 24px rgba(16, 185, 129, 0.08);
+}
+
+.item-card--featured .item-card-top {
+  padding-top: 24px;
 }
 
 .item-card-featured {

@@ -3,8 +3,96 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import * as vue from 'vue'
 import { compileTemplate } from '@vue/compiler-sfc'
+import { getErrorMessage } from '../utils/errorMessage.js'
 
 const viewsDirectory = new URL('./', import.meta.url)
+
+test('cultivation backend lock details are translated into actionable Chinese feedback', () => {
+  const cases = [
+    ['sect is locked', '宗门当前处于锁定状态，请先完成解锁条件。'],
+    ['messenger contact required before trial', '请先联系入门使者，再开始宗门试炼。'],
+    ['leave current sect before joining another', '请先退出当前宗门，再加入新的宗门。'],
+    ['messenger contact required before meeting NPC', '请先联系宗门使者，再与 NPC 相遇。'],
+    ['NPC meeting cooldown active', 'NPC 相遇仍在冷却中，请稍后再试。'],
+    ['NPC population capacity reached', 'NPC 人口槽位已满，请选择其他槽位。'],
+    ['Incorrect username or password', '用户名或密码错误，请检查后重试。'],
+  ]
+
+  for (const [detail, expected] of cases) {
+    assert.equal(getErrorMessage({ response: { data: { detail } } }), expected, detail)
+  }
+})
+
+test('login and register failures render an inline alert in addition to toast feedback', async () => {
+  const [login, register] = await Promise.all([
+    readFile(new URL('./Login.vue', import.meta.url), 'utf8'),
+    readFile(new URL('./Register.vue', import.meta.url), 'utf8'),
+  ])
+
+  for (const source of [login, register]) {
+    assert.match(source, /v-if="authError"/)
+    assert.match(source, /role="alert"/)
+    assert.match(source, /authError\.value\s*=\s*getErrorMessage\(error\)/)
+    assert.match(source, /authError\.value\s*=\s*null/)
+  }
+})
+
+test('cultivation interaction pages render toast feedback states', async () => {
+  const files = ['./Sects.vue', './Npcs.vue', './Cultivation.vue']
+  const sources = await Promise.all(files.map((file) => readFile(new URL(file, viewsDirectory), 'utf8')))
+
+  for (const [file, source] of files.map((file, index) => [file, sources[index]])) {
+    assert.match(source, /const \{[^}]*successToast[^}]*showSuccess[^}]*\}\s*=\s*useToast\(\)/, `${file} must expose success toast state`)
+    assert.match(source, /const \{[^}]*errorToast[^}]*showError[^}]*\}\s*=\s*useToast\(\)/, `${file} must expose error toast state`)
+    assert.match(source, /v-if="successToast"[\s\S]*role="status"/, `${file} must render success feedback`)
+    assert.match(source, /v-if="errorToast"[\s\S]*role="alert"/, `${file} must render error feedback`)
+  }
+})
+
+test('cultivation interaction feedback uses body-level floating toast popups', async () => {
+  const files = ['./Sects.vue', './Npcs.vue', './Cultivation.vue']
+  const sources = await Promise.all(files.map((file) => readFile(new URL(file, viewsDirectory), 'utf8')))
+
+  for (const [file, source] of files.map((file, index) => [file, sources[index]])) {
+    assert.match(source, /<Teleport to="body">[\s\S]*?v-if="successToast"[\s\S]*?class="(?:toast|success-toast|cultivation-toast)/, `${file} must render success as a floating toast`)
+    assert.match(source, /<Teleport to="body">[\s\S]*?v-if="errorToast"[\s\S]*?class="(?:toast|error-toast|cultivation-toast)/, `${file} must render errors as a floating toast`)
+    assert.match(source, /<Transition name="toast">/, `${file} must animate toast feedback`)
+    assert.doesNotMatch(source, /class="cultivation-state cultivation-state--(?:success|error)"[^>]*>\{\{ (?:successToast|errorToast) \}\}/, `${file} must not render toast feedback as an inline state`)
+  }
+})
+
+test('sect business locks remain clickable so blocked reasons can be shown', async () => {
+  const source = await readFile(new URL('./Sects.vue', viewsDirectory), 'utf8')
+
+  assert.match(source, /:disabled="busyId !== null"/)
+  assert.doesNotMatch(source, /:aria-disabled="busyId !== null \|\| sect\./)
+})
+
+test('sidebar places accounting directly below home', async () => {
+  const source = await readFile(new URL('../components/layout/Sidebar.vue', import.meta.url), 'utf8')
+  const homeIndex = source.indexOf('to="/"')
+  const financeIndex = source.indexOf('to="/finance"')
+  const todosIndex = source.indexOf('to="/todos"')
+
+  assert.ok(homeIndex >= 0, 'home navigation must remain present')
+  assert.ok(financeIndex > homeIndex, 'accounting must follow home')
+  assert.ok(financeIndex < todosIndex, 'accounting must be directly below home')
+})
+
+test('todo metadata badges share a compact row with each title', async () => {
+  const source = await readFile(new URL('./Todos.vue', viewsDirectory), 'utf8')
+
+  assert.equal((source.match(/class="todo-card-title-row"/g) || []).length, 3)
+  assert.match(source, /todo-card-title-row[\s\S]*todo-card-title[\s\S]*difficulty-badge[\s\S]*frequency-badge/)
+  assert.match(source, /todo-card-title-row[\s\S]*todo-card-title[\s\S]*priority-badge[\s\S]*difficulty-badge[\s\S]*status-badge/)
+})
+
+test('todo card titles use a readable large heading size', async () => {
+  const source = await readFile(new URL('./Todos.vue', viewsDirectory), 'utf8')
+
+  assert.match(source, /\.todo-card-title\s*\{[^}]*font-size:\s*var\(--font-size-xl\)/)
+  assert.match(source, /\.todo-card-title\s*\{[^}]*font-weight:\s*700/)
+})
 
 function compileRender(source) {
   const result = compileTemplate({
@@ -38,6 +126,22 @@ test('shop search overrides the desktop flex basis on mobile', async () => {
 
   assert.match(source, /@media \(max-width: 767px\) \{[\s\S]*?\.shop-search \{[\s\S]*?flex: 0 0 44px[\s\S]*?height: 44px/)
   assert.match(source, /@media \(max-width: 767px\) \{[\s\S]*?\.shop-search input \{[\s\S]*?height: 100%/)
+})
+
+test('notebook mobile rows collapse actions into a compact menu and pad previews', async () => {
+  const [tree, viewer] = await Promise.all([
+    readFile(new URL('../components/notes/NoteTree.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../components/notes/NoteViewer.vue', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(tree, /note-tree__mobile-trigger/)
+  assert.match(tree, /mobileMenuOpen/)
+  for (const action of ['create-folder', 'create-note', 'rename', 'move', 'delete']) {
+    assert.match(tree, new RegExp(`emitMobile\\('${action}'`))
+  }
+  assert.match(tree, /@media \(max-width: 767px\)[\s\S]*?\.note-tree__actions\s*\{[\s\S]*?display:\s*none/)
+  assert.match(viewer, /\.viewer-content\s*\{[^}]*padding:\s*var\(--spacing-xl\)\s+var\(--spacing-lg\)/)
+  assert.match(viewer, /\.viewer-content\s*\{[^}]*padding:\s*var\(--spacing-xl\)\s+var\(--spacing-lg\)\s+var\(--spacing-xl\)/)
 })
 
 test('business-locked todo and shop actions stay clickable and explain their lock', async () => {

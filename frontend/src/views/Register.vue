@@ -88,6 +88,8 @@
         </el-form-item>
       </el-form>
 
+      <p v-if="authError" class="auth-error" role="alert" aria-live="polite">{{ authError }}</p>
+
       <div class="register-footer">
         <p>
           已有账号？
@@ -109,6 +111,7 @@ import { getErrorMessage } from '../utils/errorMessage'
 const authStore = useAuthStore()
 const formRef = ref(null)
 const loading = ref(false)
+const authError = ref(null)
 
 const form = reactive({
   username: '',
@@ -146,6 +149,7 @@ const rules = {
 
 async function handleRegister() {
   if (!formRef.value) return
+  authError.value = null
 
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
@@ -159,7 +163,8 @@ async function handleRegister() {
     })
     ElMessage.success('注册成功，请登录')
   } catch (error) {
-    ElMessage.error(getErrorMessage(error))
+    authError.value = getErrorMessage(error)
+    ElMessage.error(authError.value)
   } finally {
     loading.value = false
   }
@@ -293,6 +298,17 @@ async function handleRegister() {
 
 .register-form {
   margin-bottom: var(--spacing-lg);
+}
+
+.auth-error {
+  margin: calc(var(--spacing-md) * -1) 0 var(--spacing-lg);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--color-error-light);
+  border-radius: var(--radius-md);
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--color-error-dark);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
 }
 
 .register-button {

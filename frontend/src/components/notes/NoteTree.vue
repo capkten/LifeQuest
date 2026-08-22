@@ -136,6 +136,22 @@
             </svg>
           </button>
         </div>
+        <button
+          type="button"
+          class="note-tree__mobile-trigger"
+          aria-label="打开节点操作"
+          :aria-expanded="mobileMenuOpen"
+          @click.stop="mobileMenuOpen = !mobileMenuOpen"
+        >
+          <span aria-hidden="true">•••</span>
+        </button>
+        <div v-if="mobileMenuOpen" class="note-tree__mobile-menu" role="menu" aria-label="节点操作">
+          <button v-if="isFolder(node)" type="button" role="menuitem" @click.stop="emitMobile('create-folder', { parentId: node.id, node })">新建文件夹</button>
+          <button v-if="isFolder(node)" type="button" role="menuitem" @click.stop="emitMobile('create-note', { parentId: node.id, node })">新建笔记</button>
+          <button type="button" role="menuitem" @click.stop="emitMobile('rename', node)">重命名</button>
+          <button type="button" role="menuitem" @click.stop="emitMobile('move', node)">移动</button>
+          <button type="button" role="menuitem" @click.stop="emitMobile('delete', node)">删除</button>
+        </div>
       </div>
 
       <NoteTree
@@ -173,6 +189,7 @@ const props = defineProps({
 const emit = defineEmits(['select', 'toggle', 'create-folder', 'create-note', 'rename', 'move', 'delete'])
 const treeControllerKey = 'note-tree-controller'
 const parentController = inject(treeControllerKey, null)
+const mobileMenuOpen = ref(false)
 
 function flattenVisible(nodes, expanded, parentId = null, level = 1, result = []) {
   for (const node of nodes || []) {
@@ -276,6 +293,11 @@ function isExpanded(node) {
 
 function isSelected(node) {
   return String(node.id) === String(props.selectedId)
+}
+
+function emitMobile(eventName, payload) {
+  mobileMenuOpen.value = false
+  controller.emit(eventName, payload)
 }
 </script>
 
@@ -428,6 +450,10 @@ function isSelected(node) {
   transition: opacity 0.15s ease;
 }
 
+.note-tree__row { position: relative; }
+.note-tree__mobile-trigger,
+.note-tree__mobile-menu { display: none; }
+
 .note-tree__row:hover .note-tree__actions,
 .note-tree__row:focus-within .note-tree__actions {
   opacity: 1;
@@ -457,11 +483,52 @@ function isSelected(node) {
 
 @media (max-width: 767px) {
   .note-tree__actions {
-    opacity: 1;
+    display: none;
   }
 
-  .note-tree__action {
+  .note-tree__mobile-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 44px;
+    min-height: 44px;
+    border: 0;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font: inherit;
+  }
+
+  .note-tree__mobile-menu {
+    position: absolute;
+    right: 8px;
+    top: calc(100% - 4px);
+    z-index: 5;
+    display: grid;
+    min-width: 150px;
+    padding: 4px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-card);
+    box-shadow: var(--shadow-md);
+  }
+
+  .note-tree__mobile-menu button {
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 0;
+    background: transparent;
+    color: var(--color-text);
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+  }
+
+  .note-tree__mobile-menu button:hover,
+  .note-tree__mobile-menu button:focus-visible {
+    background: var(--color-bg-secondary);
   }
 }
+
 </style>

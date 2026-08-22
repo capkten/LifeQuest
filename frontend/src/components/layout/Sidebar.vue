@@ -80,6 +80,14 @@
         </svg>
         <span v-if="!isCollapsed">首页</span>
       </router-link>
+      <router-link to="/finance" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '记账' : ''">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="2" y="4" width="20" height="16" rx="2" />
+          <path d="M2 10h20" />
+          <circle cx="12" cy="15" r="2" />
+        </svg>
+        <span v-if="!isCollapsed">记账</span>
+      </router-link>
       <router-link to="/todos" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '待办' : ''">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M9 11l3 3L22 4" />
@@ -177,14 +185,6 @@
         <span v-if="!isCollapsed">背包</span>
       </router-link>
       <span v-if="!isCollapsed" class="nav-section-label">洞察</span>
-      <router-link to="/finance" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '记账' : ''">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <rect x="2" y="4" width="20" height="16" rx="2" />
-          <path d="M2 10h20" />
-          <circle cx="12" cy="15" r="2" />
-        </svg>
-        <span v-if="!isCollapsed">记账</span>
-      </router-link>
       <router-link to="/stats" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '统计' : ''">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M18 20V10" />

@@ -1,5 +1,13 @@
 <template>
   <div class="cultivation-page">
+    <Teleport to="body">
+      <Transition name="toast">
+        <div v-if="successToast" class="cultivation-toast cultivation-toast--success" role="status" aria-live="polite">{{ successToast }}</div>
+      </Transition>
+      <Transition name="toast">
+        <div v-if="errorToast" class="cultivation-toast cultivation-toast--error" role="alert" aria-live="polite">{{ errorToast }}</div>
+      </Transition>
+    </Teleport>
     <header class="cultivation-page__header">
       <div>
         <p class="cultivation-eyebrow">修炼</p>
@@ -24,6 +32,14 @@
               <li v-for="item in todayItems" :key="item.id || item.title || item.label">
                 <span class="cultivation-list__marker" aria-hidden="true">{{ item.completed ? '✓' : '○' }}</span>
                 <span><strong>{{ item.title || item.label || '今日修炼' }}</strong><small>{{ item.description || item.detail || '完成日常行动以获得修为。' }}</small></span>
+                <button
+                  v-if="!isTodayItemComplete(item)"
+                  type="button"
+                  class="cultivation-action cultivation-action--compact"
+                  :disabled="completingTodayId === item.id"
+                  :aria-disabled="completingTodayId === item.id"
+                  @click="completeTodayItem(item)"
+                >{{ completingTodayId === item.id ? '处理中...' : '完成' }}</button>
               </li>
             </ul>
             <p v-else class="cultivation-fixed-state">今天还没有安排修炼行动。</p>
@@ -47,13 +63,18 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useCultivationStore } from '../stores/cultivation'
+import { todoService } from '../services/todo'
+import { useToast } from '../composables/useToast'
+import { getErrorMessage } from '../utils/errorMessage'
 import RealmProgress from '../components/cultivation/RealmProgress.vue'
 import ResourceSummary from '../components/cultivation/ResourceSummary.vue'
 import { labelFromServer, labelRealm } from '../utils/displayLabels'
 
 const store = useCultivationStore()
+const { successToast, errorToast, showSuccess, showError } = useToast()
+const completingTodayId = ref(null)
 const overview = computed(() => store.overview)
 const loading = computed(() => store.loading)
 const error = computed(() => store.error)
@@ -84,6 +105,34 @@ function toArray(value) {
   return Array.isArray(value) ? value : []
 }
 
+function isTodayItemComplete(item) {
+  return item?.completed === true || item?.completed_today === true || item?.status === 'completed'
+}
+
+function completionMethod(item) {
+  if (item?.kind === 'habits' || item?.kind === 'habit') return todoService.completeHabit
+  if (item?.kind === 'tasks' || item?.kind === 'task') return todoService.completeTask
+  if (item?.kind === 'goals' || item?.kind === 'goal') return todoService.completeGoal
+  return null
+}
+
+async function completeTodayItem(item) {
+  if (!item?.id || isTodayItemComplete(item) || completingTodayId.value) return
+  const complete = completionMethod(item)
+  if (!complete) { showError('该修炼行动暂不支持直接完成，请前往对应页面操作。'); return }
+  completingTodayId.value = item.id
+  try {
+    const updated = await complete(item.id)
+    if (updated?.cultivation_reward) store.applySettlement(updated.cultivation_reward, false)
+    showSuccess('今日修炼已完成。')
+    await store.loadOverview()
+  } catch (cause) {
+    showError(getErrorMessage(cause))
+  } finally {
+    completingTodayId.value = null
+  }
+}
+
 async function load() {
   await store.loadOverview().catch(() => {})
 }
@@ -111,6 +160,8 @@ onMounted(load)
 .cultivation-fixed-state, .cultivation-state { min-height: 64px; display: grid; place-items: center; margin: 0; color: var(--color-text-secondary); }
 .cultivation-state { padding: var(--surface-padding); border: 1px solid var(--color-border); border-radius: var(--surface-radius); background: var(--color-card); }
 .cultivation-state--error { color: var(--color-error-dark); }
+.cultivation-state--success { color: var(--color-success); }
 .cultivation-state--error .cultivation-action { color: #fff; }
 @media (max-width: 767px) { .cultivation-page__header, .cultivation-overview-grid { grid-template-columns: 1fr; display: grid; } .cultivation-page__header .cultivation-action { width: 100%; } }
+.cultivation-toast { position: fixed; top: 20px; right: 20px; z-index: 2000; max-width: min(420px, calc(100vw - 40px)); padding: 14px 18px; border: 1px solid; border-radius: var(--radius-md); box-shadow: var(--shadow-lg); font-weight: 700; }.cultivation-toast--success { border-color: var(--color-success); background: var(--color-card); color: var(--color-success); }.cultivation-toast--error { border-color: var(--color-error); background: var(--color-card); color: var(--color-error-dark); }.toast-enter-active, .toast-leave-active { transition: opacity .2s ease, transform .2s ease; }.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-8px); }
 </style>

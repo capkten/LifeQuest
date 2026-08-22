@@ -39,7 +39,7 @@ export const useCultivationStore = defineStore('cultivation', () => {
     return loadOverview()
   }
 
-  async function applySettlement(settlement) {
+  async function applySettlement(settlement, refreshOverview = true) {
     if (settlement) {
       const currentOverview = overview.value || {}
       overview.value = {
@@ -49,7 +49,7 @@ export const useCultivationStore = defineStore('cultivation', () => {
         merit: (currentOverview.merit || 0) + (settlement.merit || 0),
       }
     }
-    return await refresh()
+    return refreshOverview ? await refresh() : overview.value
   }
 
   return { overview, loading, error, loadOverview, refresh, applySettlement, clear }

@@ -127,16 +127,14 @@
                 </svg>
               </button>
               <div class="todo-card-info">
-                <h3 class="todo-card-title" :class="{ 'todo-card-title--done': habit.completed_today }">{{ habit.title }}</h3>
-                <p v-if="habit.description" class="todo-card-desc">{{ habit.description }}</p>
-                <div class="todo-card-meta todo-card-meta--inline">
-                  <span class="difficulty-badge" :class="'difficulty-badge--' + habit.difficulty">
-                    {{ labelDifficulty(habit.difficulty) }}
-                  </span>
-                  <span class="frequency-badge" :class="'frequency-badge--' + habit.frequency">
-                    {{ labelFrequency(habit.frequency) }}
-                  </span>
+                <div class="todo-card-title-row">
+                  <h3 class="todo-card-title" :class="{ 'todo-card-title--done': habit.completed_today }">{{ habit.title }}</h3>
+                  <div class="todo-card-title-meta">
+                    <span class="difficulty-badge" :class="'difficulty-badge--' + habit.difficulty">{{ labelDifficulty(habit.difficulty) }}</span>
+                    <span class="frequency-badge" :class="'frequency-badge--' + habit.frequency">{{ labelFrequency(habit.frequency) }}</span>
+                  </div>
                 </div>
+                <p v-if="habit.description" class="todo-card-desc">{{ habit.description }}</p>
               </div>
             </div>
             <div class="todo-card-actions">
@@ -206,22 +204,18 @@
                 </svg>
               </button>
               <div class="todo-card-info">
-                <h3 class="todo-card-title" :class="{ 'todo-card-title--done': task.status === 'completed' }">{{ task.title }}</h3>
+                <div class="todo-card-title-row">
+                  <h3 class="todo-card-title" :class="{ 'todo-card-title--done': task.status === 'completed' }">{{ task.title }}</h3>
+                  <div class="todo-card-title-meta">
+                    <span class="priority-badge" :class="'priority-badge--' + task.priority">{{ formatPriority(task.priority) }}</span>
+                    <span class="difficulty-badge" :class="'difficulty-badge--' + task.difficulty">{{ labelDifficulty(task.difficulty) }}</span>
+                    <span class="status-badge" :class="'status-badge--' + task.status">{{ formatStatus(task.status) }}</span>
+                  </div>
+                </div>
                 <p v-if="task.description" class="todo-card-desc">{{ task.description }}</p>
                 <span v-if="task.project_name" class="task-project-tag" :style="{ borderColor: task.project_color || '#0EA5E9' }">
                   {{ task.project_name }}
                 </span>
-                <div class="todo-card-meta todo-card-meta--inline todo-card-meta--task">
-                  <span class="priority-badge" :class="'priority-badge--' + task.priority">
-                    {{ formatPriority(task.priority) }}
-                  </span>
-                  <span class="difficulty-badge" :class="'difficulty-badge--' + task.difficulty">
-                    {{ labelDifficulty(task.difficulty) }}
-                  </span>
-                  <span class="status-badge" :class="'status-badge--' + task.status">
-                    {{ formatStatus(task.status) }}
-                  </span>
-                </div>
               </div>
             </div>
             <div class="todo-card-actions">
@@ -387,16 +381,14 @@
                 </svg>
               </button>
               <div class="todo-card-info">
-                <h3 class="todo-card-title" :class="{ 'todo-card-title--done': goal.status === 'completed' }">{{ goal.title }}</h3>
-                <p v-if="goal.description" class="todo-card-desc">{{ goal.description }}</p>
-                <div class="todo-card-meta todo-card-meta--inline">
-                  <span class="difficulty-badge" :class="'difficulty-badge--' + goal.difficulty">
-                    {{ labelDifficulty(goal.difficulty) }}
-                  </span>
-                  <span class="status-badge" :class="'status-badge--' + goal.status">
-                    {{ formatStatus(goal.status) }}
-                  </span>
+                <div class="todo-card-title-row">
+                  <h3 class="todo-card-title" :class="{ 'todo-card-title--done': goal.status === 'completed' }">{{ goal.title }}</h3>
+                  <div class="todo-card-title-meta">
+                    <span class="difficulty-badge" :class="'difficulty-badge--' + goal.difficulty">{{ labelDifficulty(goal.difficulty) }}</span>
+                    <span class="status-badge" :class="'status-badge--' + goal.status">{{ formatStatus(goal.status) }}</span>
+                  </div>
                 </div>
+                <p v-if="goal.description" class="todo-card-desc">{{ goal.description }}</p>
               </div>
             </div>
             <div class="todo-card-actions">
@@ -1667,12 +1659,27 @@ onMounted(() => {
 }
 
 .todo-card-title {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-size: var(--font-size-xl);
+  font-weight: 700;
   color: var(--color-text);
   margin-bottom: 0;
   line-height: 1.35;
   word-break: break-word;
+}
+
+.todo-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.todo-card-title-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
 .todo-card-title--done {
@@ -1706,21 +1713,21 @@ onMounted(() => {
 .frequency-badge,
 .status-badge {
   font-size: 11px;
-  padding: 2px 8px;
+  padding: 1px 6px;
   border-radius: var(--radius-full);
   font-weight: 500;
   text-transform: capitalize;
   white-space: nowrap;
-  line-height: 20px;
+  line-height: 18px;
 }
 
 .priority-badge {
   font-size: 11px;
-  padding: 2px 8px;
+  padding: 1px 6px;
   border-radius: var(--radius-full);
   font-weight: 600;
   white-space: nowrap;
-  line-height: 20px;
+  line-height: 18px;
   background: rgba(14, 165, 233, 0.12);
   color: var(--color-primary);
 }

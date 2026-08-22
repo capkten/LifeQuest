@@ -1,5 +1,13 @@
 <template>
   <div class="npcs-page">
+    <Teleport to="body">
+      <Transition name="toast">
+        <div v-if="successToast" class="cultivation-toast cultivation-toast--success" role="status" aria-live="polite">{{ successToast }}</div>
+      </Transition>
+      <Transition name="toast">
+        <div v-if="errorToast" class="cultivation-toast cultivation-toast--error" role="alert" aria-live="polite">{{ errorToast }}</div>
+      </Transition>
+    </Teleport>
     <header class="npcs-page__header"><div><p class="cultivation-eyebrow">人物关系</p><h1>人物关系</h1><p>记录固定核心人物、最近相遇与修炼变化。</p></div></header>
     <form class="npc-meet cultivation-surface" @submit.prevent="meetNpc">
       <div class="cultivation-section-heading"><div><h2>遇见普通弟子</h2><p>选择宗门和人口槽位，记录一次真实相遇。</p></div></div>
@@ -27,12 +35,14 @@ import { computed, defineComponent, h, onMounted, ref } from 'vue'
 import { cultivationService } from '../services/cultivation'
 import NpcTimeline from '../components/cultivation/NpcTimeline.vue'
 import { getErrorMessage } from '../utils/errorMessage'
+import { useToast } from '../composables/useToast'
 import { labelFromServer, labelNpcRole } from '../utils/displayLabels'
 
 const relationship = ref({ fixed_core: [], recently_met: [], events: [] })
 const loading = ref(false)
 const error = ref(null)
 const meeting = ref(false)
+const { successToast, errorToast, showSuccess, showError } = useToast()
 const sectKey = ref('')
 const populationIndex = ref(0)
 const sectOptions = ref([])
@@ -53,10 +63,11 @@ function npcRoleLabel(npc) {
     : labelFromServer(npc, 'description', npc?.role, '关系信息待补充'))
 }
 async function load() { loading.value = true; error.value = null; try { const [sects, npcRelationship] = await Promise.all([cultivationService.getSects(), cultivationService.getNpcs()]); sectOptions.value = Array.isArray(sects) ? sects.filter((sect) => sect.visible === true) : []; relationship.value = npcRelationship || { fixed_core: [], recently_met: [], events: [] } } catch (requestError) { error.value = requestError } finally { loading.value = false } }
-async function meetNpc() { meeting.value = true; error.value = null; try { await cultivationService.meetNpc({ sect_key: sectKey.value, population_index: Number(populationIndex.value) }); await load() } catch (requestError) { error.value = requestError } finally { meeting.value = false } }
+async function meetNpc() { meeting.value = true; error.value = null; try { await cultivationService.meetNpc({ sect_key: sectKey.value, population_index: Number(populationIndex.value) }); await load(); showSuccess('相遇已记录。') } catch (requestError) { error.value = requestError; showError(getErrorMessage(requestError)) } finally { meeting.value = false } }
 onMounted(load)
 </script>
 
 <style scoped>
 .npcs-page { display: grid; gap: var(--page-gap); }.npcs-page__header h1 { margin: 4px 0; color: var(--color-text); font-family: var(--font-family-display); }.npcs-page__header p:not(.cultivation-eyebrow) { margin: 0; color: var(--color-text-secondary); }.cultivation-eyebrow { margin: 0; color: var(--color-primary-dark); font-size: 11px; font-weight: 800; letter-spacing: .14em; }.cultivation-surface { display: grid; gap: var(--spacing-md); padding: var(--surface-padding); border: 1px solid var(--color-border); border-radius: var(--surface-radius); background: var(--color-card); box-shadow: var(--shadow-sm); }.npc-meet__fields { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: var(--spacing-md); align-items: end; }.npc-meet__fields label { display: grid; gap: 6px; color: var(--color-text-secondary); font-size: var(--font-size-sm); }.npc-meet__fields input, .npc-meet__fields select { min-height: 40px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); color: var(--color-text); }.npc-population dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 0; }.npc-population dl div { padding: 12px; background: var(--color-bg-secondary); border-radius: var(--radius-md); }.npc-population dt { color: var(--color-text-secondary); font-size: var(--font-size-sm); }.npc-population dd { margin: 4px 0 0; color: var(--color-primary-dark); font-size: 1.35rem; font-weight: 800; }.npc-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--page-gap); }.npc-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }.npc-list li { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); }.npc-list small { color: var(--color-text-secondary); }@media (max-width: 767px) { .npc-meet__fields, .npc-population dl, .npc-groups { grid-template-columns: 1fr; } }
+.cultivation-toast { position: fixed; top: 20px; right: 20px; z-index: 2000; max-width: min(420px, calc(100vw - 40px)); padding: 14px 18px; border: 1px solid; border-radius: var(--radius-md); box-shadow: var(--shadow-lg); font-weight: 700; }.cultivation-toast--success { border-color: var(--color-success); background: var(--color-card); color: var(--color-success); }.cultivation-toast--error { border-color: var(--color-error); background: var(--color-card); color: var(--color-error-dark); }.toast-enter-active, .toast-leave-active { transition: opacity .2s ease, transform .2s ease; }.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-8px); }
 </style>
