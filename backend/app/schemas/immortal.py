@@ -26,3 +26,8 @@ class AscensionResponse(BaseModel):
     request_key: str
     source_key: str
     created_at: datetime
+
+
+class ImmortalActivityRequest(BaseModel):
+    activity_id: str = Field(min_length=1, max_length=64)
+    request_key: str = Field(min_length=1, max_length=128)
