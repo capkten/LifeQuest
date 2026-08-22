@@ -259,7 +259,7 @@ test('EditProfile keeps section headings localized', async () => {
 test('ProjectDetail close buttons use Chinese aria labels', async () => {
   const source = await readFile(new URL('./ProjectDetail.vue', import.meta.url), 'utf8')
   assert.doesNotMatch(source, /aria-label="Close"/)
-  assert.equal((source.match(/aria-label="关闭"/g) || []).length, 5)
+  assert.equal((source.match(/aria-label="关闭"/g) || []).length, 6)
 })
 
 test('NPC meeting and sect preference controls keep stable keys internal', async () => {
