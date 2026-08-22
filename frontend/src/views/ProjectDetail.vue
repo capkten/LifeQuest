@@ -50,7 +50,7 @@
               </svg>
               {{ finishing ? '完成中...' : '完成项目' }}
             </button>
-            <button class="btn-outline btn-outline--danger" @click="showDeleteDialog = true" :disabled="deleting">
+            <button class="btn-outline btn-outline--danger" @click="openDeleteDialog" :disabled="deletePending" :aria-disabled="deletePending">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <polyline points="3 6 5 6 21 6" />
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -164,7 +164,7 @@
               <button class="btn-icon" @click="openPhaseDialog(phase)" aria-label="编辑">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
               </button>
-              <button class="btn-icon btn-icon--danger" @click="deletePhase(phase)" aria-label="删除" :disabled="deletingPhaseId === phase.id" :aria-disabled="deletingPhaseId === phase.id">
+              <button class="btn-icon btn-icon--danger" @click="deletePhase(phase)" aria-label="删除" :disabled="phasePending" :aria-disabled="phasePending">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
               </button>
             </div>
@@ -429,8 +429,8 @@
             </div>
             <div v-if="phaseDialogError" class="dialog-error">{{ phaseDialogError }}</div>
             <div class="dialog-actions">
-              <button type="button" class="btn-secondary" @click="cancelPhaseDialog">取消</button>
-              <button type="submit" class="btn-primary" :aria-disabled="!phaseForm.name.trim()">保存</button>
+              <button type="button" class="btn-secondary" @click="cancelPhaseDialog" :disabled="phasePending">取消</button>
+              <button type="submit" class="btn-primary" :disabled="phasePending || !phaseForm.name.trim()" :aria-disabled="phasePending || !phaseForm.name.trim()">{{ phaseDialogError ? '重试保存阶段' : '保存' }}</button>
             </div>
           </form>
         </div>
@@ -503,9 +503,9 @@
             </div>
             <div v-if="editDialogError" class="dialog-error">{{ editDialogError }}</div>
             <div class="dialog-actions">
-              <button type="button" class="btn-secondary" @click="cancelEditProjectDialog">取消</button>
-              <button type="submit" class="btn-primary" :disabled="saving || !editForm.name.trim()" :aria-disabled="saving || !editForm.name.trim()">
-                {{ saving ? '保存中...' : '保存' }}
+              <button type="button" class="btn-secondary" @click="cancelEditProjectDialog" :disabled="savePending">取消</button>
+              <button type="submit" class="btn-primary" :disabled="savePending || !editForm.name.trim()" :aria-disabled="savePending || !editForm.name.trim()">
+                {{ savePending ? '保存中...' : editDialogError ? '重试保存项目' : '保存' }}
               </button>
             </div>
           </form>
@@ -515,21 +515,22 @@
 
     <!-- Delete Confirmation Dialog -->
     <Teleport to="body">
-      <div v-if="showDeleteDialog" class="dialog-overlay" @click.self="showDeleteDialog = false">
+      <div v-if="showDeleteDialog" class="dialog-overlay" @click.self="closeDeleteDialog">
         <div class="dialog dialog--sm" role="dialog" aria-modal="true">
           <div class="dialog-header">
             <h3 class="dialog-title">确认删除</h3>
-            <button class="dialog-close" @click="showDeleteDialog = false" aria-label="关闭">
+            <button class="dialog-close" @click="closeDeleteDialog" aria-label="关闭" :disabled="deletePending">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             </button>
           </div>
           <div class="dialog-body">
             <p class="delete-message">确定要删除项目「{{ project?.name }}」吗？此操作不可撤销。</p>
+            <div v-if="deleteDialogError" class="dialog-error">{{ deleteDialogError }}</div>
             <div class="dialog-actions">
-              <button type="button" class="btn-secondary" @click="showDeleteDialog = false" :disabled="deleting">取消</button>
-              <button type="button" class="btn-danger" @click="confirmDeleteProject" :disabled="deleting">
-                <span v-if="deleting" class="loading-spinner loading-spinner--sm"></span>
-                {{ deleting ? '删除中...' : '删除' }}
+              <button type="button" class="btn-secondary" @click="closeDeleteDialog" :disabled="deletePending">取消</button>
+              <button type="button" class="btn-danger" @click="confirmDeleteProject" :disabled="deletePending">
+                <span v-if="deletePending" class="loading-spinner loading-spinner--sm"></span>
+                {{ deletePending ? '删除中...' : deleteDialogError ? '重试删除' : '删除' }}
               </button>
             </div>
           </div>
@@ -579,9 +580,10 @@ const milestones = ref([])
 const tasks = ref([])
 const loading = ref(true)
 const error = ref(null)
-const saving = ref(false)
+const savePending = ref(false)
+const phasePending = ref(false)
+const deletePending = ref(false)
 const finishing = ref(false)
-const deleting = ref(false)
 const deletingPhaseId = ref(null)
 const completingTaskId = ref(null)
 const descCollapsed = ref(true)
@@ -632,6 +634,7 @@ const editForm = ref({ name: '', description: '', color: '', start_date: '', end
 const editDialogError = ref(null)
 
 const showDeleteDialog = ref(false)
+const deleteDialogError = ref(null)
 
 // Drag state
 let draggedTask = null
@@ -807,13 +810,20 @@ function openPhaseDialog(phase) {
 }
 
 function cancelPhaseDialog() {
+  if (phasePending.value) {
+    showError('阶段正在保存或删除，请等待完成后再试。')
+    return false
+  }
   showPhaseDialog.value = false
   editingPhase.value = null
   phaseForm.value = { name: '' }
+  return true
 }
 
 async function savePhase() {
   if (!phaseForm.value.name.trim()) { phaseDialogError.value = '请先填写阶段名称。'; showError('请先填写阶段名称。'); return }
+  if (phasePending.value) { showError('阶段正在保存或删除，请等待完成后再试。'); return }
+  phasePending.value = true
   try {
     if (editingPhase.value) {
       const updated = await projectService.updatePhase(editingPhase.value.id, { name: phaseForm.value.name.trim() })
@@ -823,17 +833,22 @@ async function savePhase() {
       const created = await projectService.createPhase(projectId, { name: phaseForm.value.name.trim() })
       phases.value.push(created)
     }
-    cancelPhaseDialog()
+    showPhaseDialog.value = false
+    editingPhase.value = null
+    phaseForm.value = { name: '' }
   } catch (e) {
     phaseDialogError.value = getErrorMessage(e)
+  } finally {
+    phasePending.value = false
   }
 }
 
 async function deletePhase(phase) {
-  if (!phase || deletingPhaseId.value) {
-    if (deletingPhaseId.value) showError('已有阶段正在删除，请等待完成后再试。')
+  if (!phase || phasePending.value) {
+    if (phasePending.value) showError('阶段正在保存或删除，请等待完成后再试。')
     return
   }
+  phasePending.value = true
   deletingPhaseId.value = phase.id
   try {
     await projectService.deletePhase(phase.id)
@@ -842,6 +857,7 @@ async function deletePhase(phase) {
     showError(getErrorMessage(e))
   } finally {
     deletingPhaseId.value = null
+    phasePending.value = false
   }
 }
 
@@ -895,7 +911,7 @@ function openEditProject() {
 }
 
 function closeEditProjectDialog({ force = false } = {}) {
-  if (!force && saving.value) {
+  if (!force && savePending.value) {
     showError('项目正在保存，请等待完成后再试。')
     return false
   }
@@ -911,8 +927,8 @@ function cancelEditProjectDialog() {
 
 async function saveEditProject() {
   if (!editForm.value.name.trim()) { editDialogError.value = '请先填写项目名称。'; showError('请先填写项目名称。'); return }
-  if (saving.value) { showError('项目正在保存，请等待完成后再试。'); return }
-  saving.value = true
+  if (savePending.value) { showError('项目正在保存，请等待完成后再试。'); return }
+  savePending.value = true
   try {
     const data = { name: editForm.value.name.trim(), color: editForm.value.color }
     if (editForm.value.description) data.description = editForm.value.description.trim()
@@ -926,7 +942,7 @@ async function saveEditProject() {
   } catch (e) {
     editDialogError.value = getErrorMessage(e)
   } finally {
-    saving.value = false
+    savePending.value = false
   }
 }
 
@@ -945,17 +961,32 @@ async function completeProject() {
   }
 }
 
+function openDeleteDialog() {
+  deleteDialogError.value = null
+  showDeleteDialog.value = true
+}
+
+function closeDeleteDialog() {
+  if (deletePending.value) {
+    showError('项目正在删除，请等待完成后再试。')
+    return false
+  }
+  showDeleteDialog.value = false
+  deleteDialogError.value = null
+  return true
+}
+
 async function confirmDeleteProject() {
-  if (deleting.value) { showError('项目正在删除，请等待完成后再试。'); return }
-  deleting.value = true
+  if (deletePending.value) { showError('项目正在删除，请等待完成后再试。'); return }
+  deletePending.value = true
   try {
     await projectService.deleteProject(projectId)
     router.push('/projects')
   } catch (e) {
+    deleteDialogError.value = getErrorMessage(e)
     showError(getErrorMessage(e))
-    showDeleteDialog.value = false
   } finally {
-    deleting.value = false
+    deletePending.value = false
   }
 }
 

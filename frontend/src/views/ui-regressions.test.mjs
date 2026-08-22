@@ -263,13 +263,16 @@ test('project mutations use independent locks and phase deletion preserves task 
     readFile(new URL('../services/project.js', import.meta.url), 'utf8'),
   ])
 
-  assert.match(source, /const saving = ref\(false\)/)
+  assert.match(source, /const savePending = ref\(false\)/)
+  assert.match(source, /const phasePending = ref\(false\)/)
+  assert.match(source, /const deletePending = ref\(false\)/)
   assert.match(source, /const finishing = ref\(false\)/)
-  assert.match(source, /const deleting = ref\(false\)/)
-  assert.match(source, /if \(saving\.value\) \{[\s\S]*return[\s\S]*\}/)
-  assert.match(source, /if \(finishing\.value\) \{[\s\S]*return[\s\S]*\}/)
-  assert.match(source, /if \(deleting\.value\) \{[\s\S]*return[\s\S]*\}/)
-  assert.match(source, /finally \{[\s\S]*saving\.value = false/)
+  assert.match(source, /if \(savePending\.value\) \{[\s\S]*return[\s\S]*\}/)
+  assert.match(source, /if \(phasePending\.value\) \{[\s\S]*return[\s\S]*\}/)
+  assert.match(source, /if \(deletePending\.value\) \{[\s\S]*return[\s\S]*\}/)
+  assert.match(source, /finally \{[\s\S]*savePending\.value = false/)
+  assert.match(source, /finally \{[\s\S]*phasePending\.value = false/)
+  assert.match(source, /finally \{[\s\S]*deletePending\.value = false/)
   assert.match(source, /finally \{[\s\S]*finishing\.value = false/)
   assert.doesNotMatch(source, /tasks\.value\.forEach\(t => \{ if \(t\.phase_id === phase\.id\) t\.phase_id = null \}\)/)
   assert.match(service, /deletePhase\(phaseId, options = \{\}\)/)
@@ -294,9 +297,45 @@ test('project edit dialog stays open while its save request is pending', async (
   const closeHandler = source.match(/function closeEditProjectDialog\(\{ force = false \} = \{\}\) \{([\s\S]*?)\n\}/)?.[1]
 
   assert.ok(closeHandler, 'project edit dialog close handler must remain available')
-  assert.match(closeHandler, /if \(!force && saving\.value\) \{[\s\S]*return false\s*\}/)
+  assert.match(closeHandler, /if \(!force && savePending\.value\) \{[\s\S]*return false\s*\}/)
   assert.match(source, /function cancelEditProjectDialog\(\) \{[\s\S]*closeEditProjectDialog\(\)/)
   assert.match(source, /<div v-if="showEditProjectDialog"[\s\S]*?@click\.self="cancelEditProjectDialog"[\s\S]*?<div class="dialog"[^>]*@keydown\.esc="cancelEditProjectDialog"/)
+})
+
+test('project save failure keeps its dialog context and exposes retry', async () => {
+  const source = await readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8')
+  const saveHandler = source.match(/async function saveEditProject\(\) \{([\s\S]*?)\n\}/)?.[1]
+
+  assert.ok(saveHandler, 'saveEditProject handler must remain available')
+  assert.match(saveHandler, /catch \(e\) \{[\s\S]*editDialogError\.value = getErrorMessage\(e\)/)
+  assert.match(saveHandler, /finally \{[\s\S]*savePending\.value = false/)
+  assert.match(source, /editDialogError \? '重试保存项目' : '保存'/)
+})
+
+test('project phase creation keeps its dialog context and allows retry after failure', async () => {
+  const source = await readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8')
+  const saveHandler = source.match(/async function savePhase\(\) \{([\s\S]*?)\n\}/)?.[1]
+
+  assert.ok(saveHandler, 'savePhase handler must remain available')
+  assert.match(saveHandler, /if \(phasePending\.value\)/)
+  assert.match(saveHandler, /phaseDialogError\.value = getErrorMessage\(e\)/)
+  assert.match(saveHandler, /phasePending\.value = false/)
+  assert.match(source, /:disabled="phasePending \|\| !phaseForm\.name\.trim\(\)"/)
+  assert.match(source, /phaseDialogError[\s\S]*重试保存阶段|重试保存阶段[\s\S]*phaseDialogError/)
+})
+
+test('project deletion requires confirmation and keeps confirmation context for retry', async () => {
+  const source = await readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8')
+  const deleteHandler = source.match(/async function confirmDeleteProject\(\) \{([\s\S]*?)\n\}/)?.[1]
+
+  assert.ok(deleteHandler, 'confirmDeleteProject handler must remain available')
+  assert.match(source, /@click="openDeleteDialog"/)
+  assert.match(source, /function openDeleteDialog\(\)/)
+  assert.match(source, /确定要删除项目「\{\{ project\?\.name \}\}」吗？此操作不可撤销。/)
+  assert.match(deleteHandler, /if \(deletePending\.value\)/)
+  assert.match(deleteHandler, /deleteDialogError\.value = getErrorMessage\(e\)/)
+  assert.doesNotMatch(deleteHandler, /showDeleteDialog\.value = false/)
+  assert.match(source, /deleteDialogError[\s\S]*重试删除|重试删除[\s\S]*deleteDialogError/)
 })
 
 test('notebook mutation dialogs stay open while the matching action is pending', async () => {

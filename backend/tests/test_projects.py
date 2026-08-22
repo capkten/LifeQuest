@@ -1,3 +1,12 @@
+import pytest
+from uuid import UUID
+
+from app.models.project import Project, ProjectPhase
+from app.models.todo import Task
+from app.schemas.project import PhaseCreate, ProjectUpdate
+from app.services.project import ProjectService
+
+
 def _register_and_login(client):
     client.post(
         "/api/auth/register",
@@ -129,3 +138,71 @@ def test_delete_project_phase_with_tasks_requires_explicit_policy(client):
     ).json()
     assert project_tasks[0]["id"] == task["id"]
     assert project_tasks[0]["phase_id"] == phase["id"]
+
+
+def test_project_update_rolls_back_when_persistence_fails(client, db_session, monkeypatch):
+    headers = _register_and_login(client)
+    project = client.post(
+        "/api/projects", json={"name": "Keep original"}, headers=headers
+    ).json()
+    service = ProjectService(db_session)
+    project_id = UUID(project["id"])
+    db_project = db_session.query(Project).filter(Project.id == project_id).one()
+
+    def fail_update(project_obj, update_data):
+        project_obj.name = update_data["name"]
+        raise RuntimeError("write failed")
+
+    monkeypatch.setattr(service.project_repo, "update", fail_update)
+
+    with pytest.raises(RuntimeError, match="write failed"):
+        service.update_project(db_project, ProjectUpdate(name="Must not persist"))
+
+    assert db_session.query(Project).filter(Project.id == project_id).one().name == "Keep original"
+
+
+def test_phase_creation_rolls_back_when_persistence_fails(client, db_session, monkeypatch):
+    headers = _register_and_login(client)
+    project = client.post(
+        "/api/projects", json={"name": "Phase rollback"}, headers=headers
+    ).json()
+    service = ProjectService(db_session)
+
+    def fail_create(data):
+        db_session.add(ProjectPhase(**data))
+        raise RuntimeError("phase write failed")
+
+    monkeypatch.setattr(service.phase_repo, "create", fail_create)
+
+    with pytest.raises(RuntimeError, match="phase write failed"):
+        service.create_phase(project["id"], PhaseCreate(name="Must not persist"))
+
+    project_id = UUID(project["id"])
+    assert db_session.query(ProjectPhase).filter(ProjectPhase.project_id == project_id).count() == 0
+
+
+def test_project_delete_rolls_back_task_detachment_when_persistence_fails(client, db_session, monkeypatch):
+    headers = _register_and_login(client)
+    project = client.post(
+        "/api/projects", json={"name": "Delete rollback"}, headers=headers
+    ).json()
+    task = client.post(
+        f"/api/projects/{project['id']}/tasks",
+        json={"title": "Keep project ownership"},
+        headers=headers,
+    ).json()
+    service = ProjectService(db_session)
+    project_id = UUID(project["id"])
+    db_project = db_session.query(Project).filter(Project.id == project_id).one()
+
+    def fail_delete(_project_id):
+        raise RuntimeError("delete failed")
+
+    monkeypatch.setattr(service.project_repo, "delete", fail_delete)
+
+    with pytest.raises(RuntimeError, match="delete failed"):
+        service.delete_project(db_project)
+
+    persisted_task = db_session.query(Task).filter(Task.id == UUID(task["id"])).one()
+    assert persisted_task.project_id == project_id
+    assert persisted_task.phase_id is None

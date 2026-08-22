@@ -102,16 +102,24 @@ class ProjectService:
         return stats
 
     def update_project(self, project: Project, data: ProjectUpdate) -> Project:
-        update_data = data.model_dump(exclude_unset=True)
-        return self.project_repo.update(project, update_data)
+        try:
+            update_data = data.model_dump(exclude_unset=True)
+            return self.project_repo.update(project, update_data)
+        except Exception:
+            self.db.rollback()
+            raise
 
     def delete_project(self, project: Project) -> None:
-        # Nullify task references before deleting
-        self.db.query(Task).filter(Task.project_id == project.id).update(
-            {Task.project_id: None, Task.phase_id: None, Task.milestone_id: None}
-        )
-        self.db.flush()
-        self.project_repo.delete(project.id)
+        try:
+            # Nullify task references before deleting
+            self.db.query(Task).filter(Task.project_id == project.id).update(
+                {Task.project_id: None, Task.phase_id: None, Task.milestone_id: None}
+            )
+            self.db.flush()
+            self.project_repo.delete(project.id)
+        except Exception:
+            self.db.rollback()
+            raise
 
     def complete_project(self, project: Project) -> Project:
         if project.status == ProjectStatus.COMPLETED:
@@ -135,27 +143,39 @@ class ProjectService:
 
     # --- Phase CRUD ---
     def create_phase(self, project_id: UUID, data: PhaseCreate) -> ProjectPhase:
-        obj_data = data.model_dump()
-        obj_data["project_id"] = project_id
-        return self.phase_repo.create(obj_data)
+        try:
+            obj_data = data.model_dump()
+            obj_data["project_id"] = project_id
+            return self.phase_repo.create(obj_data)
+        except Exception:
+            self.db.rollback()
+            raise
 
     def update_phase(self, phase: ProjectPhase, data: PhaseUpdate) -> ProjectPhase:
-        update_data = data.model_dump(exclude_unset=True)
-        return self.phase_repo.update(phase, update_data)
+        try:
+            update_data = data.model_dump(exclude_unset=True)
+            return self.phase_repo.update(phase, update_data)
+        except Exception:
+            self.db.rollback()
+            raise
 
     def delete_phase(self, phase: ProjectPhase) -> None:
-        task_count = self.phase_repo.count_tasks(phase.id)
-        if task_count:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "PROJECT_PHASE_HAS_TASKS",
-                    "message": f"阶段仍有 {task_count} 个任务，请先移动任务后再删除。",
-                    "task_count": task_count,
-                },
-            )
-        self.db.flush()
-        self.phase_repo.delete(phase.id)
+        try:
+            task_count = self.phase_repo.count_tasks(phase.id)
+            if task_count:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "PROJECT_PHASE_HAS_TASKS",
+                        "message": f"阶段仍有 {task_count} 个任务，请先移动任务后再删除。",
+                        "task_count": task_count,
+                    },
+                )
+            self.db.flush()
+            self.phase_repo.delete(phase.id)
+        except Exception:
+            self.db.rollback()
+            raise
 
     # --- Milestone CRUD ---
     def create_milestone(self, project_id: UUID, data: MilestoneCreate) -> ProjectMilestone:
