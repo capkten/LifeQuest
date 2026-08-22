@@ -72,6 +72,8 @@ class BackpackService:
 
     def use_item(self, item: BackpackItem, quantity: int = 1) -> BackpackItem:
         """Use a consumable item. Decrements quantity; deletes entry when quantity reaches 0."""
+        if quantity <= 0:
+            raise ValueError("quantity must be positive")
         if item.item_type != ItemType.CONSUMABLE:
             raise HTTPException(status_code=400, detail="Only consumable items can be used")
 
@@ -112,6 +114,8 @@ class BackpackService:
     def discard_item(self, item: BackpackItem, quantity: int = 1) -> BackpackItem:
         """Discard items. Deletes entry when quantity reaches 0.
         If the item is equipped, unequips it first."""
+        if quantity <= 0:
+            raise ValueError("quantity must be positive")
         if item.status == ItemStatus.EQUIPPED:
             item.status = ItemStatus.ACTIVE
             self._log_history_no_commit(

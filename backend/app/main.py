@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import CheckConstraint, Column, Integer, MetaData, Table, inspect, select, text
+from sqlalchemy import CheckConstraint, Column, Integer, MetaData, Table, Uuid, inspect, select, text
 from sqlalchemy.exc import NoSuchTableError, OperationalError
 from sqlalchemy.orm import Session
 
@@ -26,6 +26,12 @@ app = FastAPI(title="LifeQuest", version="1.0.0")
 logger = logging.getLogger(__name__)
 
 _NOTE_MIGRATION_LOCK_TABLE = "note_migration_lock"
+
+
+def _uuid_column_type(dialect_or_connection):
+    """Compile the ORM UUID type for a migration connection's dialect."""
+    dialect = getattr(dialect_or_connection, "dialect", dialect_or_connection)
+    return str(Uuid().compile(dialect=dialect))
 
 
 def _generic_note_migration_lock(connection):
@@ -684,6 +690,7 @@ def _migrate_columns():
     """Add missing columns to existing tables without a full migration tool."""
     inspector = inspect(engine)
     with engine.begin() as conn:
+        uuid_type = _uuid_column_type(conn)
         # Mortal resource columns were introduced after the first cultivation
         # profile schema. Preserve existing values and initialize only missing
         # balances with the established profile defaults.
@@ -709,9 +716,9 @@ def _migrate_columns():
         # legacy database and the lightweight migration connections used by
         # the existing startup tests.
         conn.execute(text(
-            "CREATE TABLE IF NOT EXISTS tribulation_pill_settlements ("
-            "id VARCHAR(36) PRIMARY KEY, "
-            "user_id VARCHAR(36) NOT NULL, "
+            f"CREATE TABLE IF NOT EXISTS tribulation_pill_settlements ("
+            f"id {uuid_type} PRIMARY KEY, "
+            f"user_id {uuid_type} NOT NULL, "
             "source_key VARCHAR(128) NOT NULL UNIQUE, "
             "amount INTEGER NOT NULL, "
             "remaining_pills INTEGER NOT NULL, "
@@ -739,9 +746,9 @@ def _migrate_columns():
         # project management columns on tasks table
         task_cols = {c["name"] for c in inspector.get_columns("tasks")}
         new_task_cols = {
-            "project_id": "VARCHAR(36)",
-            "phase_id": "VARCHAR(36)",
-            "milestone_id": "VARCHAR(36)",
+            "project_id": uuid_type,
+            "phase_id": uuid_type,
+            "milestone_id": uuid_type,
             "start_date": "DATETIME",
             "priority": "VARCHAR(10) NOT NULL DEFAULT 'medium'",
             "sort_order": "INTEGER NOT NULL DEFAULT 0",
@@ -755,7 +762,7 @@ def _migrate_columns():
         txn_cols = {c["name"] for c in inspector.get_columns("finance_transactions")}
         if "recurring_id" not in txn_cols:
             conn.execute(text(
-                "ALTER TABLE finance_transactions ADD COLUMN recurring_id VARCHAR(36)"
+                f"ALTER TABLE finance_transactions ADD COLUMN recurring_id {uuid_type}"
             ))
             logger.info("Migration: added finance_transactions.recurring_id")
 
@@ -933,10 +940,10 @@ def _migrate_columns():
         # model is still the authoritative runtime shape; this statement only
         # bootstraps the table for databases created before Task 8.
         conn.execute(text(
-            "CREATE TABLE IF NOT EXISTS world_node_progress ("
-            "id VARCHAR(36) PRIMARY KEY, "
-            "user_id VARCHAR(36) NOT NULL, "
-            "node_id VARCHAR(36) NOT NULL, "
+            f"CREATE TABLE IF NOT EXISTS world_node_progress ("
+            f"id {uuid_type} PRIMARY KEY, "
+            f"user_id {uuid_type} NOT NULL, "
+            f"node_id {uuid_type} NOT NULL, "
             "completed BOOLEAN NOT NULL DEFAULT 0, "
             "completed_at DATETIME, "
             "CONSTRAINT uq_world_node_progress_user_node UNIQUE (user_id, node_id)"

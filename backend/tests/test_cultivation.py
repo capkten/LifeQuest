@@ -943,6 +943,18 @@ def test_consume_tribulation_pills_rejects_insufficient_inventory(db_session, us
     assert service.get_resource_state(user.id).tribulation_pills == 1
 
 
+@pytest.mark.parametrize("source_key", [None, "   "])
+def test_consume_tribulation_pills_rejects_missing_or_empty_source_key(
+    db_session, user, source_key
+):
+    from app.services.cultivation import CultivationService
+
+    with pytest.raises(ValueError, match="source_key must be non-empty"):
+        CultivationService(db_session).consume_tribulation_pills(
+            user.id, amount=1, source_key=source_key
+        )
+
+
 def test_consume_tribulation_pills_is_idempotent_for_duplicate_source_key(db_session, user):
     from app.models.backpack import TribulationPillSettlement
     from app.services.cultivation import CultivationService
@@ -977,6 +989,64 @@ def test_consume_tribulation_pills_rolls_back_with_caller_transaction(db_session
     assert db_session.query(TribulationPillSettlement).filter_by(
         user_id=user.id, source_key="pill:rollback"
     ).count() == 0
+
+
+def test_tribulation_attempt_uses_stable_pill_source_key(db_session, user, monkeypatch):
+    from app.models.backpack import TribulationPillSettlement
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    profile = service.ensure_profile(user.id)
+    profile.realm_key = "foundation"
+    profile.minor_stage = 4
+    profile.cultivation = 950
+    _satisfy_tribulation_prerequisites(service, user.id, "foundation")
+    _seed_tribulation_pills(db_session, user, quantity=2)
+    db_session.commit()
+    captured = []
+    original_consume = service.consume_tribulation_pills
+
+    def capture_consume(user_id, amount=None, source_key=None, **kwargs):
+        captured.append(source_key)
+        return original_consume(user_id, amount, source_key, **kwargs)
+
+    monkeypatch.setattr(service, "consume_tribulation_pills", capture_consume)
+    monkeypatch.setattr(service, "roll", lambda probability: False)
+
+    service.attempt_tribulation(user.id, 1)
+
+    assert captured == [f"tribulation:{user.id}:{service._utc_today()}"]
+    assert db_session.query(TribulationPillSettlement).filter_by(
+        user_id=user.id, source_key=captured[0]
+    ).count() == 1
+    assert service.get_resource_state(user.id).tribulation_pills == 1
+
+
+def test_tribulation_failure_rolls_back_pill_settlement_after_later_error(
+    db_session, user, monkeypatch
+):
+    from app.models.backpack import TribulationPillSettlement
+    from app.models.cultivation import TribulationAttempt
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    profile = service.ensure_profile(user.id)
+    profile.realm_key = "foundation"
+    profile.minor_stage = 4
+    profile.cultivation = 950
+    _satisfy_tribulation_prerequisites(service, user.id, "foundation")
+    _seed_tribulation_pills(db_session, user, quantity=2)
+    db_session.commit()
+    monkeypatch.setattr(service, "roll", lambda probability: (_ for _ in ()).throw(
+        RuntimeError("roll failed")
+    ))
+
+    with pytest.raises(RuntimeError, match="roll failed"):
+        service.attempt_tribulation(user.id, 1)
+
+    assert service.get_resource_state(user.id).tribulation_pills == 2
+    assert db_session.query(TribulationPillSettlement).filter_by(user_id=user.id).count() == 0
+    assert db_session.query(TribulationAttempt).filter_by(user_id=user.id).count() == 0
 
 
 def test_daily_aptitude_gain_stops_after_eight_reward_events(db_session, user):
@@ -1458,6 +1528,9 @@ def test_concurrent_tribulation_attempts_allow_only_one_daily_attempt(db_session
     from tests.conftest import TestingSessionLocal
     from app.services.cultivation import CultivationService
 
+    # SQLite does not provide row-level locking for with_for_update(); this
+    # test only proves the in-process serialization boundary. The database
+    # unique(user_id, attempted_date) constraint remains the cross-process guard.
     service = CultivationService(db_session)
     profile = service.ensure_profile(user.id)
     profile.realm_key = "foundation"
@@ -1496,6 +1569,64 @@ def test_tribulation_attempts_have_database_unique_user_day_constraint():
 
     assert "attempted_date" in columns
     assert {"user_id", "attempted_date"} in constraints
+
+
+def test_tribulation_pill_settlements_have_database_unique_source_key_constraint():
+    from app.models.backpack import TribulationPillSettlement
+
+    constraints = [
+        {column.name for column in constraint.columns}
+        for constraint in TribulationPillSettlement.__table__.constraints
+        if hasattr(constraint, "columns")
+    ]
+
+    assert {"source_key"} in constraints
+
+
+def test_migration_uuid_columns_follow_sqlalchemy_dialect_types():
+    from sqlalchemy import Uuid
+    from sqlalchemy.dialects import mssql, mysql, postgresql, sqlite
+    from app import main as main_module
+
+    for dialect in (sqlite.dialect(), postgresql.dialect(), mysql.dialect(), mssql.dialect()):
+        assert main_module._uuid_column_type(dialect) == Uuid().compile(dialect=dialect)
+
+
+def test_migrate_columns_preserves_nonzero_legacy_cultivation_profile_values(
+    tmp_path, monkeypatch
+):
+    from sqlalchemy import create_engine, text
+    from app import main as main_module
+    from app.database import Base
+
+    legacy_engine = create_engine(f"sqlite:///{tmp_path / 'legacy-profile.sqlite'}")
+    Base.metadata.create_all(bind=legacy_engine)
+    with legacy_engine.begin() as connection:
+        connection.execute(text("DROP TABLE cultivation_profiles"))
+        connection.execute(text(
+            "CREATE TABLE cultivation_profiles ("
+            "id VARCHAR(36) PRIMARY KEY, user_id VARCHAR(36) NOT NULL UNIQUE, "
+            "realm_key VARCHAR(32) NOT NULL, minor_stage INTEGER NOT NULL, "
+            "cultivation INTEGER NOT NULL)"
+        ))
+        connection.execute(text(
+            "INSERT INTO cultivation_profiles "
+            "(id, user_id, realm_key, minor_stage, cultivation) VALUES "
+            "('profile-1', 'user-1', 'foundation', 4, 1234)"
+        ))
+
+    monkeypatch.setattr(main_module, "engine", legacy_engine)
+    main_module._migrate_columns()
+
+    with legacy_engine.connect() as connection:
+        row = connection.execute(text(
+            "SELECT realm_key, minor_stage, cultivation, spirit_stones, merit, "
+            "contribution, mind_state, aptitude_points, cultivation_efficiency "
+            "FROM cultivation_profiles WHERE id = 'profile-1'"
+        )).one()
+
+    assert row == ("foundation", 4, 1234, 0, 0, 0, 50, 0, 1.0)
+    legacy_engine.dispose()
 
 
 def test_ascended_profile_remains_valid_for_progression_endpoints(db_session, user):
