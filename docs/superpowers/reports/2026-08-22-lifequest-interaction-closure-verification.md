@@ -1,6 +1,6 @@
 # LifeQuest 交互收口验证报告
 
-日期：2026-08-22  
+日期：2026-08-22
 分支：`codex/notebook-write-race-closure`
 
 ## 已完成实现
