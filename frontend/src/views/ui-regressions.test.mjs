@@ -338,6 +338,54 @@ test('project deletion requires confirmation and keeps confirmation context for 
   assert.match(source, /deleteDialogError[\s\S]*重试删除|重试删除[\s\S]*deleteDialogError/)
 })
 
+async function loadPhaseDeleteStateModule() {
+  return import('../utils/phaseDeleteState.js').catch(() => ({}))
+}
+
+test('phase delete state suppresses duplicate starts and retains retry context after failure', async () => {
+  const { createPhaseDeleteState, reducePhaseDeleteState } = await loadPhaseDeleteStateModule()
+  assert.equal(typeof createPhaseDeleteState, 'function')
+  assert.equal(typeof reducePhaseDeleteState, 'function')
+  const phase = { id: 'phase-1', name: 'Race window' }
+  let state = reducePhaseDeleteState(createPhaseDeleteState(), { type: 'open', phase })
+
+  state = reducePhaseDeleteState(state, { type: 'start' })
+  const duplicateStart = reducePhaseDeleteState(state, { type: 'start' })
+  assert.equal(duplicateStart, state)
+
+  state = reducePhaseDeleteState(state, { type: 'fail', error: '阶段仍有任务' })
+  assert.equal(state.open, true)
+  assert.equal(state.pending, false)
+  assert.deepEqual(state.phase, phase)
+  assert.equal(state.error, '阶段仍有任务')
+
+  state = reducePhaseDeleteState(state, { type: 'start' })
+  assert.equal(state.pending, true)
+  assert.deepEqual(state.phase, phase)
+})
+
+test('phase delete state only closes after success and blocks close while pending', async () => {
+  const { createPhaseDeleteState, reducePhaseDeleteState } = await loadPhaseDeleteStateModule()
+  assert.equal(typeof createPhaseDeleteState, 'function')
+  assert.equal(typeof reducePhaseDeleteState, 'function')
+  const phase = { id: 'phase-2', name: 'Protected' }
+  let state = reducePhaseDeleteState(createPhaseDeleteState(), { type: 'open', phase })
+  state = reducePhaseDeleteState(state, { type: 'start' })
+
+  assert.deepEqual(reducePhaseDeleteState(state, { type: 'close' }), state)
+  assert.deepEqual(reducePhaseDeleteState(state, { type: 'succeed' }), createPhaseDeleteState())
+})
+
+test('project phase deletion wires the retryable state into a confirmation dialog', async () => {
+  const source = await readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8')
+
+  assert.match(source, /@click="openPhaseDeleteDialog\(phase\)"/)
+  assert.match(source, /v-if="phaseDeleteState\.open"[\s\S]*phaseDeleteState\.phase\?\.name/)
+  assert.match(source, /phaseDeleteState\.error[\s\S]*重试删除|重试删除[\s\S]*phaseDeleteState\.error/)
+  assert.match(source, /function confirmDeletePhase\(\)/)
+  assert.match(source, /transitionPhaseDelete\(\{ type: 'fail', error: message \}\)/)
+})
+
 test('notebook mutation dialogs stay open while the matching action is pending', async () => {
   const source = await readFile(new URL('./NotebookFileManage.vue', viewsDirectory), 'utf8')
   const pendingGuard = source.match(/function hasPendingDialogAction\(\) \{([\s\S]*?)\n\}/)?.[1]

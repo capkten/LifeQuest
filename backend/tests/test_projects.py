@@ -1,4 +1,5 @@
 import pytest
+from fastapi import HTTPException
 from uuid import UUID
 
 from app.models.project import Project, ProjectPhase
@@ -138,6 +139,139 @@ def test_delete_project_phase_with_tasks_requires_explicit_policy(client):
     ).json()
     assert project_tasks[0]["id"] == task["id"]
     assert project_tasks[0]["phase_id"] == phase["id"]
+
+
+def test_phase_deletion_requires_authorized_project_owner(client):
+    owner_headers = _register_and_login(client)
+    project = client.post(
+        "/api/projects", json={"name": "Private phase"}, headers=owner_headers
+    ).json()
+    phase = client.post(
+        f"/api/projects/{project['id']}/phases",
+        json={"name": "Owner only"},
+        headers=owner_headers,
+    ).json()
+
+    assert client.delete(f"/api/projects/phases/{phase['id']}").status_code == 401
+
+    client.post(
+        "/api/auth/register",
+        json={
+            "username": "projectuserb",
+            "email": "project-b@example.com",
+            "password": "testpassword123",
+        },
+    )
+    login_response = client.post(
+        "/api/auth/login",
+        data={"username": "projectuserb", "password": "testpassword123"},
+    )
+    other_headers = {"Authorization": f"Bearer {login_response.json()['access_token']}"}
+
+    response = client.delete(
+        f"/api/projects/phases/{phase['id']}", headers=other_headers
+    )
+
+    assert response.status_code == 403
+    detail = client.get(f"/api/projects/{project['id']}", headers=owner_headers).json()
+    assert any(item["id"] == phase["id"] for item in detail["phases"])
+
+
+def test_repeated_phase_deletion_with_tasks_returns_stable_conflict(client):
+    headers = _register_and_login(client)
+    project = client.post(
+        "/api/projects", json={"name": "Stable phase error"}, headers=headers
+    ).json()
+    phase = client.post(
+        f"/api/projects/{project['id']}/phases",
+        json={"name": "Still has work"},
+        headers=headers,
+    ).json()
+    client.post(
+        f"/api/projects/{project['id']}/tasks",
+        json={"title": "Blocking task", "phase_id": phase["id"]},
+        headers=headers,
+    )
+
+    responses = [
+        client.delete(f"/api/projects/phases/{phase['id']}", headers=headers)
+        for _ in range(2)
+    ]
+
+    assert [response.status_code for response in responses] == [409, 409]
+    assert [response.json()["detail"] for response in responses] == [
+        {
+            "code": "PROJECT_PHASE_HAS_TASKS",
+            "message": "阶段仍有 1 个任务，请先移动任务后再删除。",
+            "task_count": 1,
+        },
+        {
+            "code": "PROJECT_PHASE_HAS_TASKS",
+            "message": "阶段仍有 1 个任务，请先移动任务后再删除。",
+            "task_count": 1,
+        },
+    ]
+
+
+def test_phase_deletion_rechecks_tasks_added_during_transaction(
+    client, db_session, monkeypatch
+):
+    headers = _register_and_login(client)
+    project = client.post(
+        "/api/projects", json={"name": "Atomic phase delete"}, headers=headers
+    ).json()
+    phase = client.post(
+        f"/api/projects/{project['id']}/phases",
+        json={"name": "Race window"},
+        headers=headers,
+    ).json()
+    service = ProjectService(db_session)
+    phase_id = UUID(phase["id"])
+    db_phase = db_session.query(ProjectPhase).filter(ProjectPhase.id == phase_id).one()
+    original_count_tasks = service.phase_repo.count_tasks
+
+    def count_then_insert_task(candidate_phase_id):
+        count = original_count_tasks(candidate_phase_id)
+        if count == 0:
+            db_session.add(
+                Task(
+                    user_id=db_phase.project.user_id,
+                    project_id=db_phase.project_id,
+                    phase_id=candidate_phase_id,
+                    title="Inserted while deleting",
+                )
+            )
+            db_session.flush()
+        return count
+
+    monkeypatch.setattr(service.phase_repo, "count_tasks", count_then_insert_task)
+
+    with pytest.raises(HTTPException) as error:
+        service.delete_phase(db_phase)
+
+    assert error.value.status_code == 409
+    assert error.value.detail["code"] == "PROJECT_PHASE_HAS_TASKS"
+    assert db_session.query(ProjectPhase).filter(ProjectPhase.id == phase_id).one()
+    assert db_session.query(Task).filter(Task.phase_id == phase_id).count() == 0
+
+
+def test_project_update_can_clear_existing_dates(client):
+    headers = _register_and_login(client)
+    project = client.post(
+        "/api/projects",
+        json={"name": "Date clearing", "start_date": "2026-08-01", "end_date": "2026-08-31"},
+        headers=headers,
+    ).json()
+
+    response = client.put(
+        f"/api/projects/{project['id']}",
+        json={"start_date": None, "end_date": None},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["start_date"] is None
+    assert response.json()["end_date"] is None
 
 
 def test_project_update_rolls_back_when_persistence_fails(client, db_session, monkeypatch):

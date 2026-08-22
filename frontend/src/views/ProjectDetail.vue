@@ -164,7 +164,7 @@
               <button class="btn-icon" @click="openPhaseDialog(phase)" aria-label="编辑">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
               </button>
-              <button class="btn-icon btn-icon--danger" @click="deletePhase(phase)" aria-label="删除" :disabled="phasePending" :aria-disabled="phasePending">
+              <button class="btn-icon btn-icon--danger" @click="openPhaseDeleteDialog(phase)" aria-label="删除" :disabled="phasePending || phaseDeleteState.pending" :aria-disabled="phasePending || phaseDeleteState.pending">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
               </button>
             </div>
@@ -437,6 +437,31 @@
       </div>
     </Teleport>
 
+    <!-- Phase Delete Confirmation Dialog -->
+    <Teleport to="body">
+      <div v-if="phaseDeleteState.open" class="dialog-overlay" @click.self="closePhaseDeleteDialog">
+        <div class="dialog dialog--sm" role="dialog" aria-modal="true">
+          <div class="dialog-header">
+            <h3 class="dialog-title">确认删除阶段</h3>
+            <button class="dialog-close" @click="closePhaseDeleteDialog" aria-label="关闭" :disabled="phaseDeleteState.pending">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            </button>
+          </div>
+          <div class="dialog-body">
+            <p class="delete-message">确定要删除阶段「{{ phaseDeleteState.phase?.name }}」吗？阶段中的任务不会被删除。</p>
+            <div v-if="phaseDeleteState.error" class="dialog-error" role="alert">{{ phaseDeleteState.error }}</div>
+            <div class="dialog-actions">
+              <button type="button" class="btn-secondary" @click="closePhaseDeleteDialog" :disabled="phaseDeleteState.pending">取消</button>
+              <button type="button" class="btn-danger" @click="confirmDeletePhase" :disabled="phaseDeleteState.pending">
+                <span v-if="phaseDeleteState.pending" class="loading-spinner loading-spinner--sm"></span>
+                {{ phaseDeleteState.pending ? '删除中...' : phaseDeleteState.error ? '重试删除' : '删除' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- Milestone Create/Edit Dialog -->
     <Teleport to="body">
       <div v-if="showMilestoneDialog" class="dialog-overlay" @click.self="cancelMilestoneDialog">
@@ -566,6 +591,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { projectService } from '../services/project'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
+import { createPhaseDeleteState, reducePhaseDeleteState } from '../utils/phaseDeleteState'
 
 const route = useRoute()
 const router = useRouter()
@@ -584,7 +610,6 @@ const savePending = ref(false)
 const phasePending = ref(false)
 const deletePending = ref(false)
 const finishing = ref(false)
-const deletingPhaseId = ref(null)
 const completingTaskId = ref(null)
 const descCollapsed = ref(true)
 
@@ -623,6 +648,7 @@ const showPhaseDialog = ref(false)
 const editingPhase = ref(null)
 const phaseForm = ref({ name: '' })
 const phaseDialogError = ref(null)
+const phaseDeleteState = ref(createPhaseDeleteState())
 
 const showMilestoneDialog = ref(false)
 const editingMilestone = ref(null)
@@ -843,21 +869,43 @@ async function savePhase() {
   }
 }
 
-async function deletePhase(phase) {
-  if (!phase || phasePending.value) {
-    if (phasePending.value) showError('阶段正在保存或删除，请等待完成后再试。')
+function transitionPhaseDelete(event) {
+  phaseDeleteState.value = reducePhaseDeleteState(phaseDeleteState.value, event)
+}
+
+function openPhaseDeleteDialog(phase) {
+  if (!phase || phasePending.value || phaseDeleteState.value.pending) {
+    if (phasePending.value || phaseDeleteState.value.pending) showError('阶段正在保存或删除，请等待完成后再试。')
     return
   }
-  phasePending.value = true
-  deletingPhaseId.value = phase.id
+  transitionPhaseDelete({ type: 'open', phase })
+}
+
+function closePhaseDeleteDialog() {
+  if (phaseDeleteState.value.pending) {
+    showError('阶段正在删除，请等待完成后再试。')
+    return false
+  }
+  transitionPhaseDelete({ type: 'close' })
+  return true
+}
+
+async function confirmDeletePhase() {
+  const current = phaseDeleteState.value
+  const next = reducePhaseDeleteState(current, { type: 'start' })
+  if (next === current) {
+    showError('阶段正在删除，请等待完成后再试。')
+    return
+  }
+  phaseDeleteState.value = next
   try {
-    await projectService.deletePhase(phase.id)
-    phases.value = phases.value.filter(p => p.id !== phase.id)
+    await projectService.deletePhase(current.phase.id)
+    phases.value = phases.value.filter(p => p.id !== current.phase.id)
+    transitionPhaseDelete({ type: 'succeed' })
   } catch (e) {
-    showError(getErrorMessage(e))
-  } finally {
-    deletingPhaseId.value = null
-    phasePending.value = false
+    const message = getErrorMessage(e)
+    transitionPhaseDelete({ type: 'fail', error: message })
+    showError(message)
   }
 }
 

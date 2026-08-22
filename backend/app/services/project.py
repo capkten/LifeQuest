@@ -54,8 +54,14 @@ class ProjectService:
             raise HTTPException(status_code=403, detail="Not authorized")
         return project
 
-    def get_phase_for_project(self, phase_id: UUID, project_id: UUID) -> ProjectPhase:
-        phase = self.phase_repo.get_by_id(phase_id)
+    def get_phase_for_project(
+        self, phase_id: UUID, project_id: UUID, for_update: bool = False
+    ) -> ProjectPhase:
+        phase = (
+            self.phase_repo.get_for_update(phase_id)
+            if for_update
+            else self.phase_repo.get_by_id(phase_id)
+        )
         if phase is None:
             raise HTTPException(status_code=404, detail="Phase not found")
         if phase.project_id != project_id:
@@ -161,6 +167,9 @@ class ProjectService:
 
     def delete_phase(self, phase: ProjectPhase) -> None:
         try:
+            locked_phase = self.phase_repo.get_for_update(phase.id)
+            if locked_phase is None:
+                raise HTTPException(status_code=404, detail="Phase not found")
             task_count = self.phase_repo.count_tasks(phase.id)
             if task_count:
                 raise HTTPException(
@@ -171,8 +180,19 @@ class ProjectService:
                         "task_count": task_count,
                     },
                 )
-            self.db.flush()
-            self.phase_repo.delete(phase.id)
+            if not self.phase_repo.delete_if_empty(phase.id):
+                task_count = self.phase_repo.count_tasks(phase.id)
+                if task_count:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "PROJECT_PHASE_HAS_TASKS",
+                            "message": f"阶段仍有 {task_count} 个任务，请先移动任务后再删除。",
+                            "task_count": task_count,
+                        },
+                    )
+                raise HTTPException(status_code=404, detail="Phase not found")
+            self.db.commit()
         except Exception:
             self.db.rollback()
             raise
@@ -206,7 +226,7 @@ class ProjectService:
     def create_project_task(self, user_id: UUID, project_id: UUID, data: TaskCreate) -> Task:
         self.get_project_for_user(project_id, user_id)
         if data.phase_id is not None:
-            self.get_phase_for_project(data.phase_id, project_id)
+            self.get_phase_for_project(data.phase_id, project_id, for_update=True)
         if data.milestone_id is not None:
             self.get_milestone_for_project(data.milestone_id, project_id)
         obj_data = data.model_dump()
@@ -242,7 +262,7 @@ class ProjectService:
         if phase_id is not None:
             if target_project_id is None:
                 raise HTTPException(status_code=400, detail="Phase requires a project")
-            self.get_phase_for_project(phase_id, target_project_id)
+            self.get_phase_for_project(phase_id, target_project_id, for_update=True)
         if milestone_id is not None:
             if target_project_id is None:
                 raise HTTPException(status_code=400, detail="Milestone requires a project")

@@ -1,7 +1,7 @@
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import delete, exists, func
 from sqlalchemy.orm import Session
 
 from app.models.project import Project, ProjectPhase, ProjectMilestone
@@ -18,6 +18,13 @@ class ProjectRepository(BaseRepository[Project]):
         if status:
             query = query.filter(Project.status == status)
         return query.order_by(Project.created_at.desc()).all()
+
+    def update(self, db_obj: Project, obj_in: dict) -> Project:
+        for key, value in obj_in.items():
+            setattr(db_obj, key, value)
+        self.db.commit()
+        self.db.refresh(db_obj)
+        return db_obj
 
     def get_with_stats(self, project_id: UUID) -> Optional[dict]:
         project = self.get_by_id(project_id)
@@ -55,6 +62,23 @@ class PhaseRepository(BaseRepository[ProjectPhase]):
 
     def count_tasks(self, phase_id: UUID) -> int:
         return self.db.query(Task).filter(Task.phase_id == phase_id).count()
+
+    def get_for_update(self, phase_id: UUID) -> Optional[ProjectPhase]:
+        return (
+            self.db.query(ProjectPhase)
+            .filter(ProjectPhase.id == phase_id)
+            .with_for_update()
+            .first()
+        )
+
+    def delete_if_empty(self, phase_id: UUID) -> bool:
+        result = self.db.execute(
+            delete(ProjectPhase).where(
+                ProjectPhase.id == phase_id,
+                ~exists().where(Task.phase_id == phase_id),
+            )
+        )
+        return result.rowcount == 1
 
 
 class MilestoneRepository(BaseRepository[ProjectMilestone]):
