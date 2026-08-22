@@ -8,9 +8,12 @@ def test_existing_user_keeps_mortal_profile_without_immortal_row(client, db_sess
     )
     assert response.status_code == 200
 
-    assert db_session.query(ImmortalProfile).count() == 0
-    assert db_session.query(AscensionRecord).count() == 0
-    assert db_session.query(CrossRealmSettlement).count() == 0
+    from app.models.user import User
+
+    user = db_session.query(User).filter_by(username="mortal_before_ascension").one()
+    assert db_session.query(ImmortalProfile).filter_by(user_id=user.id).count() == 0
+    assert db_session.query(AscensionRecord).filter_by(user_id=user.id).count() == 0
+    assert db_session.query(CrossRealmSettlement).filter_by(user_id=user.id).count() == 0
 
 
 def test_immortal_tables_expose_unique_idempotency_constraints(db_session):

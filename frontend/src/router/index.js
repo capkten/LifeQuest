@@ -98,6 +98,18 @@ const routes = [
         component: () => import('../views/Tribulations.vue')
       },
       {
+        path: 'immortal/world',
+        name: 'ImmortalWorld',
+        component: () => import('../views/ImmortalWorld.vue'),
+        meta: { requiresAscended: true }
+      },
+      {
+        path: 'immortal/activities',
+        name: 'ImmortalActivities',
+        component: () => import('../views/ImmortalActivities.vue'),
+        meta: { requiresAscended: true }
+      },
+      {
         path: 'shop',
         name: 'Shop',
         component: () => import('../views/Shop.vue')
