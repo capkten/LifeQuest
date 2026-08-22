@@ -30,7 +30,7 @@
         </svg>
 
         <transition name="dropdown">
-          <div v-if="dropdownOpen" class="dropdown-menu" role="menu">
+          <div v-if="dropdownOpen" class="dropdown-menu" role="menu" @click.stop="dropdownOpen = false">
             <router-link to="/profile" class="dropdown-item" role="menuitem" @click.stop="dropdownOpen = false">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />

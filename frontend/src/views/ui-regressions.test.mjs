@@ -433,4 +433,8 @@ test('header profile and logout actions stop propagation before closing the menu
   assert.match(source, /@click\.stop="dropdownOpen = false"/)
   assert.match(source, /@click\.stop="handleLogout"/)
   assert.match(source, /function handleLogout\(event\)[\s\S]*event\.stopPropagation\(\)/)
+
+  const menuOpeningTag = source.match(/<div v-if="dropdownOpen" class="dropdown-menu"[^>]*>/)?.[0]
+  assert.ok(menuOpeningTag, 'dropdown menu must remain available for the propagation contract')
+  assert.match(menuOpeningTag, /@click\.stop="dropdownOpen = false"/)
 })
