@@ -14,6 +14,17 @@ export default defineConfig({
       resolvers: [ElementPlusResolver()]
     })
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vue-core': ['vue', 'vue-router', 'pinia'],
+          'element-plus': ['element-plus', '@element-plus/icons-vue'],
+          'markdown-editor': ['@kangc/v-md-editor', 'prismjs']
+        }
+      }
+    }
+  },
   server: {
     port: 3000,
     proxy: {
