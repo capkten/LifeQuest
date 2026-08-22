@@ -161,7 +161,7 @@
             <span class="status-badge status-badge--sm" :class="'status-badge--' + (phase.status || 'active')">{{ formatStatus(phase.status || 'active') }}</span>
             <span class="phase-count">{{ getPhaseTasks(phase.id).length }}</span>
             <div class="phase-actions" @click.stop>
-              <button class="btn-icon" @click="openPhaseDialog(phase)" aria-label="编辑">
+              <button class="btn-icon" @click="openPhaseDialog(phase)" :disabled="phasePending || phaseDeleteState.pending" :aria-disabled="phasePending || phaseDeleteState.pending" :aria-label="phaseDeleteState.pending ? '编辑（阶段删除中）' : '编辑'" :title="phaseDeleteState.pending ? '阶段正在删除，请等待完成后再试。' : '编辑阶段'">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
               </button>
               <button class="btn-icon btn-icon--danger" @click="openPhaseDeleteDialog(phase)" aria-label="删除" :disabled="phasePending || phaseDeleteState.pending" :aria-disabled="phasePending || phaseDeleteState.pending">
@@ -430,7 +430,7 @@
             <div v-if="phaseDialogError" class="dialog-error">{{ phaseDialogError }}</div>
             <div class="dialog-actions">
               <button type="button" class="btn-secondary" @click="cancelPhaseDialog" :disabled="phasePending">取消</button>
-              <button type="submit" class="btn-primary" :disabled="phasePending || !phaseForm.name.trim()" :aria-disabled="phasePending || !phaseForm.name.trim()">{{ phaseDialogError ? '重试保存阶段' : '保存' }}</button>
+              <button type="submit" class="btn-primary" :disabled="phasePending || phaseDeleteState.pending || !phaseForm.name.trim()" :aria-disabled="phasePending || phaseDeleteState.pending || !phaseForm.name.trim()">{{ phaseDeleteState.pending ? '删除中...' : phaseDialogError ? '重试保存阶段' : '保存' }}</button>
             </div>
           </form>
         </div>
@@ -829,6 +829,10 @@ async function onDrop(event, newStatus) {
 
 // --- Phase operations ---
 function openPhaseDialog(phase) {
+  if (phaseDeleteState.value.pending) {
+    showError('阶段正在删除，请等待完成后再试。')
+    return
+  }
   editingPhase.value = phase || null
   phaseForm.value = { name: phase?.name || '' }
   phaseDialogError.value = null
@@ -847,6 +851,7 @@ function cancelPhaseDialog() {
 }
 
 async function savePhase() {
+  if (phaseDeleteState.value.pending) { showError('阶段正在删除，请等待完成后再试。'); return }
   if (!phaseForm.value.name.trim()) { phaseDialogError.value = '请先填写阶段名称。'; showError('请先填写阶段名称。'); return }
   if (phasePending.value) { showError('阶段正在保存或删除，请等待完成后再试。'); return }
   phasePending.value = true

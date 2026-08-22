@@ -320,8 +320,20 @@ test('project phase creation keeps its dialog context and allows retry after fai
   assert.match(saveHandler, /if \(phasePending\.value\)/)
   assert.match(saveHandler, /phaseDialogError\.value = getErrorMessage\(e\)/)
   assert.match(saveHandler, /phasePending\.value = false/)
-  assert.match(source, /:disabled="phasePending \|\| !phaseForm\.name\.trim\(\)"/)
+  assert.match(source, /:disabled="phasePending \|\| phaseDeleteState\.pending \|\| !phaseForm\.name\.trim\(\)"/)
   assert.match(source, /phaseDialogError[\s\S]*重试保存阶段|重试保存阶段[\s\S]*phaseDialogError/)
+})
+
+test('phase deletion pending blocks phase editing and save submission with clear feedback', async () => {
+  const source = await readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8')
+  const saveHandler = source.match(/async function savePhase\(\) \{([\s\S]*?)\n\}/)?.[1]
+
+  assert.ok(saveHandler, 'savePhase handler must remain available')
+  assert.match(saveHandler, /if \(phaseDeleteState\.value\.pending\) \{[\s\S]*return/)
+  assert.match(source, /<button class="btn-icon" @click="openPhaseDialog\(phase\)"[^>]*:disabled="phasePending \|\| phaseDeleteState\.pending"[^>]*:aria-disabled="phasePending \|\| phaseDeleteState\.pending"/)
+  assert.match(source, /:title="phaseDeleteState\.pending \? '阶段正在删除，请等待完成后再试。' : '编辑阶段'"/)
+  assert.match(source, /<button type="submit" class="btn-primary"[^>]*:disabled="phasePending \|\| phaseDeleteState\.pending \|\| !phaseForm\.name\.trim\(\)"[^>]*:aria-disabled="phasePending \|\| phaseDeleteState\.pending \|\| !phaseForm\.name\.trim\(\)"/)
+  assert.match(source, /phaseDeleteState\.pending \? '删除中\.\.\.' : phaseDialogError \? '重试保存阶段' : '保存'/)
 })
 
 test('project deletion requires confirmation and keeps confirmation context for retry', async () => {
