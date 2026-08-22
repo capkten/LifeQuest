@@ -1144,14 +1144,7 @@ class CultivationService:
         target = "ascension" if profile.realm_key == "tribulation" else REALM_ORDER[index + 1]
         base, failure_loss_percent = TRIBULATION_RULES[(profile.realm_key, target)]
         readiness_breakdown = self._readiness_breakdown(profile)
-        readiness = round(
-            readiness_breakdown["mind_state"] * 0.25
-            + readiness_breakdown["habit"] * 0.20
-            + readiness_breakdown["task_quality"] * 0.20
-            + readiness_breakdown["trial"] * 0.20
-            + readiness_breakdown["compatibility"] * 0.15,
-            2,
-        )
+        readiness = self.calculate_preparation_score(readiness_breakdown)
         readiness_bonus = round((readiness - 50) / 5)
         bounded_pills = min(15, owned_pills, requested_pills)
         pill_bonus = bounded_pills * 5
@@ -1183,6 +1176,17 @@ class CultivationService:
             lock_reason=lock_reason,
             prerequisites=prerequisites,
         )
+
+    @staticmethod
+    def calculate_preparation_score(snapshot: dict[str, float]) -> float:
+        weights = {
+            "mind_state": 0.25,
+            "habit": 0.20,
+            "task_quality": 0.20,
+            "trial": 0.20,
+            "compatibility": 0.15,
+        }
+        return round(sum(float(snapshot.get(key, 0)) * weight for key, weight in weights.items()), 2)
 
     def attempt_tribulation(self, user_id: UUID, pill_count: int) -> TribulationResult:
         with _TRIBULATION_PROCESS_LOCK:

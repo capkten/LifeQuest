@@ -1571,6 +1571,20 @@ def test_tribulation_attempts_have_database_unique_user_day_constraint():
     assert {"user_id", "attempted_date"} in constraints
 
 
+def test_calculate_preparation_score_uses_authoritative_breakdown_weights():
+    from app.services.cultivation import CultivationService
+
+    score = CultivationService.calculate_preparation_score({
+        "mind_state": 80,
+        "habit": 60,
+        "task_quality": 70,
+        "trial": 50,
+        "compatibility": 40,
+    })
+
+    assert score == 62.0
+
+
 def test_tribulation_pill_settlements_have_database_unique_source_key_constraint():
     from app.models.backpack import TribulationPillSettlement
 
