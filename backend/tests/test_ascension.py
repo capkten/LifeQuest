@@ -41,6 +41,15 @@ def test_ascension_creates_one_immortal_profile_and_replays_request(db_session):
     assert db_session.query(ImmortalProfile).filter_by(user_id=user.id).count() == 1
 
 
+def test_ascension_accepts_current_terminal_realm_key(db_session):
+    _prepare_schema()
+    user = _user(db_session)
+    db_session.add(CultivationProfile(user_id=user.id, realm_key="ascended", minor_stage=1))
+    db_session.commit()
+    record = AscensionService(db_session).ascend(user.id, "ascend-current-key")
+    assert record.user_id == user.id
+
+
 def test_cross_realm_settlement_is_idempotent(db_session):
     _prepare_schema()
     user = _user(db_session)

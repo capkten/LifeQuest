@@ -21,7 +21,7 @@ from app.models.project import Project, ProjectPhase, ProjectMilestone, ProjectS
 from app.models.cultivation import CultivationProfile, CultivationLog, TribulationAttempt
 from app.models.world import WorldNode, WorldNodeProgress, Sect, SectMembership, SectAccessProgress, Npc, NpcEvent
 from app.models.technique import Technique, TechniqueSlot, LearnedTechnique
-from app.models.immortal import ImmortalProfile, AscensionRecord, CrossRealmSettlement
+from app.models.immortal import ImmortalProfile, AscensionRecord, CrossRealmSettlement, ImmortalActivityRecord, ImmortalStageAdvance, ImmortalOfficialCommission
 
 __all__ = [
     "User",
@@ -44,5 +44,5 @@ __all__ = [
     "CultivationProfile", "CultivationLog", "TribulationAttempt",
     "WorldNode", "WorldNodeProgress", "Sect", "SectMembership", "SectAccessProgress", "Npc", "NpcEvent",
     "Technique", "TechniqueSlot", "LearnedTechnique",
-    "ImmortalProfile", "AscensionRecord", "CrossRealmSettlement",
+    "ImmortalProfile", "AscensionRecord", "CrossRealmSettlement", "ImmortalActivityRecord", "ImmortalStageAdvance", "ImmortalOfficialCommission",
 ]

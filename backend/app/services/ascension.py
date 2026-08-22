@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.models.cultivation import CultivationProfile
 from app.models.immortal import AscensionRecord, CrossRealmSettlement, ImmortalProfile
 
-ASCENDED_REALM_KEY = "n"
+ASCENDED_REALM_KEYS = {"ascended", "n"}  # "n" is retained for legacy persisted fixtures.
 MORTAL_EXP_TO_IMMORTAL_ESSENCE = 1
 MORTAL_COIN_TO_IMMORTAL_STONE = 1
 
@@ -23,7 +23,7 @@ class AscensionService:
         if existing:
             return existing
         profile = self.db.query(CultivationProfile).filter_by(user_id=user_id).one_or_none()
-        if profile is None or profile.realm_key != ASCENDED_REALM_KEY:
+        if profile is None or profile.realm_key not in ASCENDED_REALM_KEYS:
             raise PermissionError("ASCENSION_NOT_READY")
         if self.db.query(ImmortalProfile).filter_by(user_id=user_id).one_or_none():
             raise ValueError("ASCENSION_ALREADY_RECORDED")

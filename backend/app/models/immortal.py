@@ -51,3 +51,42 @@ class CrossRealmSettlement(Base):
     essence_delta = Column(Integer, nullable=False, default=0)
     immortal_stones_delta = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class ImmortalActivityRecord(Base):
+    __tablename__ = "immortal_activity_records"
+    __table_args__ = (
+        UniqueConstraint("user_id", "request_key", name="uq_immortal_activity_request"),
+    )
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
+    activity_id = Column(String(64), nullable=False)
+    request_key = Column(String(128), nullable=False)
+    essence_delta = Column(Integer, nullable=False, default=0)
+    immortal_stones_delta = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class ImmortalStageAdvance(Base):
+    __tablename__ = "immortal_stage_advances"
+    __table_args__ = (UniqueConstraint("user_id", "request_key", name="uq_immortal_stage_request"),)
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
+    request_key = Column(String(128), nullable=False)
+    stage = Column(Integer, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class ImmortalOfficialCommission(Base):
+    __tablename__ = "immortal_official_commissions"
+    __table_args__ = (UniqueConstraint("user_id", "official_key", "request_key", name="uq_immortal_commission_request"),)
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
+    official_key = Column(String(64), nullable=False)
+    request_key = Column(String(128), nullable=False)
+    essence_delta = Column(Integer, nullable=False, default=0)
+    immortal_stones_delta = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
