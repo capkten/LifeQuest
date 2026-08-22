@@ -43,6 +43,19 @@ test('cultivation overview exposes stable today and recent reward arrays', async
   assert.match(schema, /recent_rewards:[\s\S]*default_factory=list/)
 })
 
+test('cultivation overview exposes actionable today completion with authoritative refresh', async () => {
+  const source = await readFile(new URL('./Cultivation.vue', import.meta.url), 'utf8')
+
+  assert.match(source, /completeTodayItem\(item\)/)
+  assert.match(source, /completeHabit|completeTask|completeGoal/)
+  assert.match(source, /completingTodayId/)
+  assert.match(source, /applySettlement\(.*cultivation_reward/s)
+  assert.match(source, /loadOverview\(\)/)
+  assert.match(source, /showSuccess/)
+  assert.match(source, /getErrorMessage/)
+  assert.match(source, /item\.completed|item\.status/)
+})
+
 test('cultivation service keeps endpoint paths in one module', async () => {
   const source = await readFile(new URL('../services/cultivation.js', import.meta.url), 'utf8')
   const apiSource = await readFile(new URL('../services/api.js', import.meta.url), 'utf8')
@@ -101,6 +114,24 @@ test('tribulation page exposes transparent risk order and authoritative result s
   assert.match(page, /async function syncAndLoad[\s\S]*try\s*\{\s*await cultivationStore\.refresh\(\)\s*\}\s*catch[\s\S]*await load\(\)/)
   assert.match(probability, /:disabled="[^"]*operationBusy/)
   assert.match(probability, /aria-live="polite"/)
+})
+
+test('sect, NPC, and tribulation actions expose actionable feedback and confirmation', async () => {
+  const [sects, npcs, tribulations] = await Promise.all([
+    readFile(new URL('./Sects.vue', import.meta.url), 'utf8'),
+    readFile(new URL('./Npcs.vue', import.meta.url), 'utf8'),
+    readFile(new URL('./Tribulations.vue', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(sects, /useToast/)
+  assert.match(sects, /showError\(/)
+  assert.match(sects, /showSuccess\(/)
+  assert.doesNotMatch(sects, /v-if="actionFeedback"/)
+  assert.match(npcs, /showSuccess\('相遇已记录。'\)/)
+  assert.match(npcs, /showError\(getErrorMessage/)
+  assert.match(npcs, /sectKey|populationIndex/)
+  assert.match(tribulations, /ElMessageBox\.confirm/)
+  assert.match(tribulations, /pillCount|final_probability|failure_loss/)
 })
 
 test('cultivation error details from the backend map to actionable messages', () => {
@@ -479,4 +510,20 @@ test('world node actions use server progression and explain locked clicks', asyn
   assert.match(node, /aria-disabled/)
   assert.doesNotMatch(node, /:disabled="isLocked"/)
   assert.match(service, /completeWorldNode[\s\S]*world\/\$\{nodeKey\}\/complete/)
+})
+
+test('technique purchase uses a retryable modal and shop categories use localized labels', async () => {
+  const [techniques, shop, labels] = await Promise.all([
+    readFile(new URL('./Techniques.vue', import.meta.url), 'utf8'),
+    readFile(new URL('./Shop.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../locales/zh-CN.js', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(techniques, /role="dialog"|el-dialog/i)
+  assert.match(techniques, /showPurchaseDialog/)
+  assert.match(techniques, /selectedSlot\.price|selectedSlot\.balance/)
+  assert.match(techniques, /close only after success|purchaseFeedback|showError/)
+  assert.match(shop, /labelItemType\(item\.category\)/)
+  assert.match(labels, /consumable.*消耗品|消耗品.*consumable/)
+  assert.match(shop, /item-card--featured[\s\S]*item-card-top|item-card-top[\s\S]*padding-top/)
 })

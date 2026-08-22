@@ -29,6 +29,7 @@ import { useCultivationStore } from '../stores/cultivation'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelFromServer, labelRealm } from '../utils/displayLabels'
+import { ElMessageBox } from 'element-plus'
 
 const preview = ref(null), overview = ref(null), result = ref(null), error = ref(null), loading = ref(false), attempting = ref(false), pillCount = ref(0)
 const { errorToast, showError } = useToast()
@@ -66,6 +67,15 @@ async function attempt() {
   if (attempting.value) return
   if (preview.value?.cooldown_until) { explainBlocked('渡劫冷却中，请等待冷却结束后再试。'); return }
   if (!preview.value?.available) { explainBlocked('渡劫前置条件未满足，请先完成渡劫试炼并达到要求。'); return }
+  try {
+    await ElMessageBox.confirm(
+      `本次使用 ${preview.value.pill_count ?? pillCount.value} 颗渡劫丹，成功概率 ${preview.value.final_probability}% ，失败损失 ${preview.value.failure_loss} 点修为。确认开始渡劫吗？`,
+      '确认渡劫',
+      { confirmButtonText: '开始渡劫', cancelButtonText: '再想想', type: 'warning' },
+    )
+  } catch {
+    return
+  }
   attempting.value = true; error.value = null
   try {
     result.value = await cultivationService.attemptTribulation({ pill_count: pillCount.value })

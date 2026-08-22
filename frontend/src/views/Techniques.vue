@@ -18,13 +18,15 @@
           </li>
         </ul>
       </section>
-      <section v-if="selectedSlot" ref="purchasePanel" tabindex="-1" class="purchase-panel cultivation-surface" aria-labelledby="purchase-title">
+      <el-dialog v-model="showPurchaseDialog" title="购买确认" width="min(92vw, 480px)" :close-on-click-modal="false" :close-on-press-escape="true">
+      <section v-if="selectedSlot" ref="purchasePanel" tabindex="-1" class="purchase-panel" role="dialog" aria-labelledby="purchase-title">
         <div class="cultivation-section-heading"><h2 id="purchase-title">购买确认</h2><span>{{ slotLabel(selectedSlot.slot_type) }}</span></div>
         <p>当前灵石：{{ spiritStones }}</p><p>目标格子：{{ slotLabel(selectedSlot.slot_type) }}第 {{ selectedSlot.slot_index + 1 }} 格</p><p>需要境界：{{ requiredRealmLabel(selectedSlot) }} · 灵石：{{ selectedSlot.price }} · 购买后余额：{{ selectedSlot.balance }}</p>
         <p v-if="selectedSlot.can_purchase === false" class="cultivation-state cultivation-state--error" role="alert">{{ purchaseLockMessage }}</p>
         <p v-if="purchaseFeedback" class="cultivation-state cultivation-state--action" role="alert" aria-live="polite">{{ purchaseFeedback }}</p>
         <button type="button" class="cultivation-action" :disabled="busy" :aria-disabled="selectedSlot.purchased || selectedSlot.can_purchase === false" @click="purchase">{{ selectedSlot.purchased ? '已购买' : selectedSlot.can_purchase === false ? '暂不可购买' : '购买格子' }}</button>
       </section>
+      </el-dialog>
     </template>
   </div>
 </template>
@@ -39,7 +41,7 @@ import { labelFromServer, labelRealm, labelSlotType, labelTechniqueType } from '
 
 const slotTypes = ['main', 'auxiliary', 'mind', 'movement', 'body']
 const { errorToast, showError } = useToast()
-const techniques = ref([]); const slots = ref([]); const loadout = ref({}); const spiritStones = ref(0); const nextSlotPurchases = ref({}); const loading = ref(false); const error = ref(null); const busy = ref(false); const selectedSlot = ref(null); const purchaseFeedback = ref(null); const purchasePanel = ref(null)
+const techniques = ref([]); const slots = ref([]); const loadout = ref({}); const spiritStones = ref(0); const nextSlotPurchases = ref({}); const loading = ref(false); const error = ref(null); const busy = ref(false); const selectedSlot = ref(null); const purchaseFeedback = ref(null); const purchasePanel = ref(null); const showPurchaseDialog = ref(false)
 const purchaseLockMessage = computed(() => {
   const slot = selectedSlot.value
   if (!slot) return '请先选择要购买的功法格子。'
@@ -56,6 +58,7 @@ function techniqueTypeLabel(technique) { return labelFromServer(technique, 'tech
 function requiredRealmLabel(record) { return labelFromServer(record, 'required_realm_label', record?.required_realm, labelRealm) }
 function selectSlot(slot) {
   selectedSlot.value = slot
+  showPurchaseDialog.value = Boolean(slot.isNext)
   purchaseFeedback.value = slot.isNext
     ? slot.can_purchase === true
       ? `已选择${slotLabel(slot.slot_type)}第${slot.slot_index + 1}格，请确认购买。`
@@ -87,6 +90,7 @@ async function purchase() {
     applyLibrary(await cultivationService.getTechniques())
     selectedSlot.value = displaySlots.value.find((candidate) => candidate.slot_type === slot.slot_type && candidate.isNext)
     purchaseFeedback.value = '格子购买成功，已刷新下一格购买条件。'
+    showPurchaseDialog.value = false
   } catch (requestError) {
     const message = getErrorMessage(requestError)
     explainPurchaseBlocked(message)
