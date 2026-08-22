@@ -155,6 +155,9 @@
       <router-link v-if="isAscended" to="/immortal/activities" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '仙界活动' : ''">
         <span v-if="!isCollapsed">仙界活动</span>
       </router-link>
+      <router-link v-if="isAscended" to="/immortal/officials" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '仙官委托' : ''">
+        <span v-if="!isCollapsed">仙官委托</span>
+      </router-link>
       <span v-if="!isCollapsed" class="nav-section-label">奖励</span>
       <router-link to="/shop" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '商城' : ''">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">

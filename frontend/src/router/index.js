@@ -110,6 +110,12 @@ const routes = [
         meta: { requiresAscended: true }
       },
       {
+        path: 'immortal/officials',
+        name: 'ImmortalOfficials',
+        component: () => import('../views/ImmortalOfficials.vue'),
+        meta: { requiresAscended: true }
+      },
+      {
         path: 'shop',
         name: 'Shop',
         component: () => import('../views/Shop.vue')

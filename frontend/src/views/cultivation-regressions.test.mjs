@@ -220,8 +220,9 @@ test('npcs route exposes mortal disciples without ascended-only officials', asyn
   const router = await readFile(new URL('../router/index.js', import.meta.url), 'utf8')
   const api = await readFile(new URL('../../../backend/app/api/cultivation.py', import.meta.url), 'utf8')
   const service = await readFile(new URL('../../../backend/app/services/cultivation.py', import.meta.url), 'utf8')
-  assert.match(router, /path:\s*['"]npcs['"][\s\S]*component:/)
-  assert.doesNotMatch(router, /path:\s*['"]npcs['"][\s\S]*requiresAscended:\s*true/)
+  const npcsRoute = router.match(/path:\s*['"]npcs['"][\s\S]*?\n\s*\},/i)?.[0] || ''
+  assert.match(npcsRoute, /path:\s*['"]npcs['"][\s\S]*component:/)
+  assert.doesNotMatch(npcsRoute, /requiresAscended:\s*true/)
   assert.match(router, /requiresAscended[\s\S]*cultivationStore\.loadOverview/)
   assert.match(api, /def npcs\([\s\S]*get_npcs\(current_user\.id\)/)
   assert.match(service, /profile\.realm_key == ASCENDED_REALM_KEY/)
