@@ -21,7 +21,7 @@ if [[ -x "$APP_DIR/backend/venv/bin/python" ]]; then
 else
   PYTHON="$(command -v python3)"
 fi
-"$PYTHON" -m pip install -r requirements.txt
+"$PYTHON" -m pip install --disable-pip-version-check --retries 5 --timeout 120 -r requirements.txt
 
 cd "$APP_DIR/frontend"
 npm ci

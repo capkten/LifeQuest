@@ -88,5 +88,9 @@ jobs:
           test -n "$SERVER_HOST"
           test -n "$SERVER_USER"
           APP_DIR="${SERVER_APP_DIR:-/root/LifeQuest}"
-          ssh -o BatchMode=yes "$SERVER_USER@$SERVER_HOST" \
+          ssh -o BatchMode=yes \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=20 \
+            -o ConnectTimeout=30 \
+            "$SERVER_USER@$SERVER_HOST" \
             "bash '$APP_DIR/deploy/update-systemd.sh' '$APP_DIR'"
