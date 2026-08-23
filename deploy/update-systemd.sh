@@ -3,6 +3,8 @@ set -Eeuo pipefail
 
 APP_DIR="${1:-/root/LifeQuest}"
 SERVICE_NAME="${LIFEQUEST_SERVICE_NAME:-lifequest}"
+PIP_INDEX_URL="${LIFEQUEST_PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}"
+NPM_REGISTRY="${LIFEQUEST_NPM_REGISTRY:-https://registry.npmmirror.com}"
 
 cd "$APP_DIR"
 
@@ -21,10 +23,15 @@ if [[ -x "$APP_DIR/backend/venv/bin/python" ]]; then
 else
   PYTHON="$(command -v python3)"
 fi
-"$PYTHON" -m pip install --disable-pip-version-check --retries 5 --timeout 120 -r requirements.txt
+"$PYTHON" -m pip install \
+  --index-url "$PIP_INDEX_URL" \
+  --disable-pip-version-check \
+  --retries 5 \
+  --timeout 120 \
+  -r requirements.txt
 
 cd "$APP_DIR/frontend"
-npm ci
+npm ci --registry="$NPM_REGISTRY"
 npm run build
 
 sudo systemctl restart "$SERVICE_NAME"
