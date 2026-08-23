@@ -32,3 +32,7 @@ backend/notes_data/
 backend/uploads/
 data/
 .worktrees/
+
+# Android signing material
+frontend/android/key.properties
+frontend/android/release.keystore

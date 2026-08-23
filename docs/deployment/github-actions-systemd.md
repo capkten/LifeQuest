@@ -52,3 +52,29 @@ ssh-keyscan -H <服务器地址>
 8. 检查 `http://127.0.0.1:8000/api/health`。
 
 测试失败、SSH 配置错误、服务器存在手工改动或健康检查失败，部署都会停止。
+
+## Android 自动发布
+
+修改 `frontend/android/app/build.gradle` 中的 `versionName` 或 `versionCode` 并推送到 `main` 后，Android 工作流会构建签名 APK/AAB 并创建 GitHub Release。仅修改普通前端文件不会发布 Android 版本。
+
+还需要添加这些 GitHub Secrets：
+
+- `ANDROID_KEYSTORE_BASE64`: Android keystore 的 Base64 内容
+- `ANDROID_KEYSTORE_PASSWORD`: keystore 密码
+- `ANDROID_KEY_ALIAS`: 签名 alias
+- `ANDROID_KEY_PASSWORD`: alias 密码
+
+`VITE_ANDROID_UPDATE_MANIFEST_URL` 应配置为：
+
+```text
+https://github.com/capkten/LifeQuest/releases/latest/download/latest.json
+```
+
+App 只会在 Android 原生环境检查更新。发现新版本后弹出提示，点击更新会打开 APK 下载地址；Android 最终安装仍需要用户确认。
+
+Android 工作流使用 JDK 21；本地构建也需要安装 JDK 21，并从 `frontend/android` 目录执行 Gradle：
+
+```bash
+cd frontend/android
+./gradlew assembleDebug
+```

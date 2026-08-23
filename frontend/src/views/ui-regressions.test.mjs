@@ -94,6 +94,23 @@ test('todo card titles use a readable large heading size', async () => {
   assert.match(source, /\.todo-card-title\s*\{[^}]*font-weight:\s*700/)
 })
 
+test('android release workflow and in-app update contract are present', async () => {
+  const [packageJson, envExample, workflow, app] = await Promise.all([
+    readFile(new URL('../../package.json', import.meta.url), 'utf8'),
+    readFile(new URL('../../.env.android.example', import.meta.url), 'utf8'),
+    readFile(new URL('../../../.github/workflows/android-release.yml', import.meta.url), 'utf8'),
+    readFile(new URL('../App.vue', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(packageJson, /"@capacitor\/app"/)
+  assert.match(packageJson, /"@capacitor\/browser"/)
+  assert.match(envExample, /VITE_ANDROID_UPDATE_MANIFEST_URL=/)
+  assert.match(workflow, /bundleRelease/)
+  assert.match(workflow, /latest\.json/)
+  assert.match(workflow, /ANDROID_KEYSTORE_BASE64/)
+  assert.match(app, /VITE_ANDROID_UPDATE_MANIFEST_URL|UpdatePrompt/)
+})
+
 function compileRender(source) {
   const result = compileTemplate({
     source,

@@ -32,5 +32,6 @@ declare module 'vue' {
     TechniqueSlotGrid: typeof import('./src/components/cultivation/TechniqueSlotGrid.vue')['default']
     TreeItem: typeof import('./src/components/TreeItem.vue')['default']
     TribulationProbability: typeof import('./src/components/cultivation/TribulationProbability.vue')['default']
+    UpdatePrompt: typeof import('./src/components/layout/UpdatePrompt.vue')['default']
   }
 }

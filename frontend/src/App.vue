@@ -1,6 +1,11 @@
 <template>
+  <UpdatePrompt />
   <router-view />
 </template>
+
+<script setup>
+import UpdatePrompt from './components/layout/UpdatePrompt.vue'
+</script>
 
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
