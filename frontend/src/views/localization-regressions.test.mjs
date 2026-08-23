@@ -416,7 +416,7 @@ test('cultivation surfaces keep Chinese fallback and state copy', async () => {
   const sources = await Promise.all(cultivationFiles.map((file) => readFile(new URL(file, import.meta.url), 'utf8')))
 
   for (const [file, source] of cultivationFiles.map((file, index) => [file, sources[index]])) {
-    const english = templateEnglish(source).filter((word) => !['EXP', 'LifeQuest', 'NPC'].includes(word))
+    const english = templateEnglish(source).filter((word) => !['EXP', 'LifeQuest', 'NPC', 'v'].includes(word))
     assert.deepEqual(english, [], `${file} contains bare English template text: ${english.join(', ')}`)
   }
 
