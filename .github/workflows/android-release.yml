@@ -26,8 +26,8 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "should_release=true" >> "$GITHUB_OUTPUT"
-          elif git diff --quiet HEAD^ HEAD -- frontend/android/app/build.gradle; then
-            echo "Android version did not change; skipping release."
+          elif git diff --quiet HEAD^ HEAD -- frontend/android/app/build.gradle .github/workflows/android-release.yml; then
+            echo "Android version and workflow did not change; skipping release."
             echo "should_release=false" >> "$GITHUB_OUTPUT"
           else
             echo "should_release=true" >> "$GITHUB_OUTPUT"
@@ -75,7 +75,9 @@ jobs:
 
       - name: Sync Capacitor Android project
         working-directory: frontend
-        run: npx cap sync android
+        run: |
+          chmod +x android/gradlew
+          npx cap sync android
 
       - name: Configure Android signing
         working-directory: frontend/android
