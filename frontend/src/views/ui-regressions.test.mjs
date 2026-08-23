@@ -79,6 +79,18 @@ test('sidebar places accounting directly below home', async () => {
   assert.ok(financeIndex < todosIndex, 'accounting must be directly below home')
 })
 
+test('sidebar displays the application version beside the LifeQuest brand', async () => {
+  const [sidebar, viteConfig] = await Promise.all([
+    readFile(new URL('../components/layout/Sidebar.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../../vite.config.js', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(sidebar, /appVersion/)
+  assert.match(sidebar, /v\{\{ appVersion \}\}/)
+  assert.match(viteConfig, /readFileSync/)
+  assert.match(viteConfig, /VERSION/)
+})
+
 test('todo metadata badges share a compact row with each title', async () => {
   const source = await readFile(new URL('./Todos.vue', viewsDirectory), 'utf8')
 

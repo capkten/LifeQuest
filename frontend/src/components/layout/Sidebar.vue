@@ -4,7 +4,10 @@
     'sidebar--collapsed': isCollapsed
   }">
     <div class="sidebar-header">
-      <h1 class="logo">LifeQuest</h1>
+      <div class="logo-row">
+        <h1 class="logo">LifeQuest</h1>
+        <span v-if="!isCollapsed" class="logo-version">v{{ appVersion }}</span>
+      </div>
       <p v-if="!isCollapsed" class="logo-subtitle">修行与生活</p>
     </div>
 
@@ -211,6 +214,8 @@ import { useUserStats } from '../../composables/useUserStats'
 import { useResolvedImage } from '../../composables/useResolvedImage'
 import { labelFromServer, labelRealm, labelResource } from '../../utils/displayLabels'
 
+const appVersion = __APP_VERSION__
+
 const route = useRoute()
 
 defineProps({
@@ -285,6 +290,19 @@ const isHomeActive = computed(() => route.path === '/')
   font-size: 1.75rem;
   font-weight: 700;
   color: var(--color-primary);
+}
+
+.logo-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-xs);
+}
+
+.logo-version {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .sidebar--collapsed .logo {
