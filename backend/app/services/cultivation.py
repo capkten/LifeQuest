@@ -741,6 +741,7 @@ class CultivationService:
             raise ValueError("INVALID_SLOT_TYPE")
         # Capture pending caller changes before any lookup can autoflush them.
         session_had_pending_work = bool(self.db.new or self.db.dirty or self.db.deleted)
+        is_sqlite = self.db.get_bind().dialect.name == "sqlite"
         profile = self.cultivation_repo.get_by_user(user_id)
         if profile is None:
             profile = self.ensure_profile(user_id)
@@ -759,6 +760,8 @@ class CultivationService:
         # count then cannot silently advance to a second purchase.
         if not session_had_pending_work:
             self.db.rollback()
+            if is_sqlite:
+                self.db.connection().exec_driver_sql("BEGIN IMMEDIATE")
         self.db.execute(update(CultivationProfile).where(
             CultivationProfile.user_id == user_id
         ).values(spirit_stones=CultivationProfile.spirit_stones))
