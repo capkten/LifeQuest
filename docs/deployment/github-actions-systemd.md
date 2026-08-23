@@ -59,6 +59,8 @@ ssh-keyscan -H <服务器地址>
 
 还需要添加这些 GitHub Secrets：
 
+- `ANDROID_API_BASE_URL`: Android App 使用的正式后端地址，例如 `https://example.com/api`
+- `ANDROID_UPDATE_MANIFEST_URL`: 可选，默认使用当前 GitHub 仓库的 Release 地址
 - `ANDROID_KEYSTORE_BASE64`: Android keystore 的 Base64 内容
 - `ANDROID_KEYSTORE_PASSWORD`: keystore 密码
 - `ANDROID_KEY_ALIAS`: 签名 alias

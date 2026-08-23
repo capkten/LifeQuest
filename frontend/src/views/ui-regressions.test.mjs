@@ -108,6 +108,7 @@ test('android release workflow and in-app update contract are present', async ()
   assert.match(workflow, /bundleRelease/)
   assert.match(workflow, /latest\.json/)
   assert.match(workflow, /ANDROID_KEYSTORE_BASE64/)
+  assert.match(workflow, /ANDROID_API_BASE_URL/)
   assert.match(app, /VITE_ANDROID_UPDATE_MANIFEST_URL|UpdatePrompt/)
 })
 
