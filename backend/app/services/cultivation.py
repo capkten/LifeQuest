@@ -113,6 +113,7 @@ SLOT_REALMS = [
     "tribulation", "tribulation", "tribulation",
 ]
 _TRIBULATION_PROCESS_LOCK = threading.Lock()
+_SLOT_PURCHASE_PROCESS_LOCK = threading.Lock()
 
 
 def _catalog_label(catalog, raw_value, label_field):
@@ -737,11 +738,28 @@ class CultivationService:
         return math.floor(SLOT_PRICES[-1] * (2.4 ** (slot_index - len(SLOT_PRICES) + 1)))
 
     def purchase_slot(self, user_id: UUID, slot_type: str):
+        is_sqlite = self.db.get_bind().dialect.name == "sqlite"
+        if not is_sqlite:
+            return self._purchase_slot_locked(user_id, slot_type)
+        if not _SLOT_PURCHASE_PROCESS_LOCK.acquire(blocking=False):
+            raise PermissionError("SLOT_PURCHASE_CONFLICT:slot purchase already in progress")
+        try:
+            return self._purchase_slot_locked(user_id, slot_type)
+        finally:
+            _SLOT_PURCHASE_PROCESS_LOCK.release()
+
+    def _purchase_slot_locked(self, user_id: UUID, slot_type: str):
         if slot_type not in SLOT_TYPES:
             raise ValueError("INVALID_SLOT_TYPE")
         # Capture pending caller changes before any lookup can autoflush them.
         session_had_pending_work = bool(self.db.new or self.db.dirty or self.db.deleted)
         is_sqlite = self.db.get_bind().dialect.name == "sqlite"
+        if not session_had_pending_work:
+            # Acquire the SQLite writer lock before reading the slot count so
+            # concurrent buyers cannot both observe the same next index.
+            self.db.rollback()
+            if is_sqlite:
+                self.db.connection().exec_driver_sql("BEGIN IMMEDIATE")
         profile = self.cultivation_repo.get_by_user(user_id)
         if profile is None:
             profile = self.ensure_profile(user_id)
@@ -758,10 +776,6 @@ class CultivationService:
         # A clean session can reset its read snapshot before taking the
         # profile write lock. Concurrent callers that observed the same slot
         # count then cannot silently advance to a second purchase.
-        if not session_had_pending_work:
-            self.db.rollback()
-            if is_sqlite:
-                self.db.connection().exec_driver_sql("BEGIN IMMEDIATE")
         self.db.execute(update(CultivationProfile).where(
             CultivationProfile.user_id == user_id
         ).values(spirit_stones=CultivationProfile.spirit_stones))
