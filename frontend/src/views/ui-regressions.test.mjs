@@ -201,6 +201,29 @@ test('todo habit completion uses the server completed_today field for all lock s
   assert.doesNotMatch(source, /habit\.is_active/)
 })
 
+test('todo task filters use project buttons and show unfinished tasks first', async () => {
+  const source = await readFile(new URL('./Todos.vue', viewsDirectory), 'utf8')
+
+  assert.doesNotMatch(source, /id="project-filter-select"/)
+  assert.match(source, /project-filter-btn/)
+  assert.match(source, /id:\s*'unassigned'/)
+  assert.match(source, /projectFilters/)
+  assert.match(source, /openTaskCount/)
+  assert.match(source, /visibleTasks/)
+  assert.match(source, /task in visibleTasks/)
+  assert.match(source, /status === 'completed'/)
+})
+
+test('todo subtasks use a compact right-side arrow toggle', async () => {
+  const source = await readFile(new URL('./Todos.vue', viewsDirectory), 'utf8')
+
+  assert.doesNotMatch(source, /class="subtask-toggle-btn"/)
+  assert.match(source, /class="subtask-toggle"/)
+  assert.match(source, /aria-label="expandedTaskId === task\.id \? '收起子任务' : '展开子任务'"/)
+  assert.match(source, /class="subtask-divider"/)
+  assert.match(source, /subtask-toggle-icon--expanded/)
+})
+
 test('backpack business actions expose a visible blocked-action feedback path', async () => {
   const source = await readFile(new URL('./Backpack.vue', viewsDirectory), 'utf8')
 

@@ -53,12 +53,22 @@
     </section>
 
     <!-- Project filter (only for tasks tab) -->
-    <div v-if="activeTab === 'tasks' && projects.length > 0" class="project-filter">
-      <label class="project-filter-label" for="project-filter-select">按项目筛选</label>
-      <select id="project-filter-select" v-model="selectedProjectId" class="form-select project-filter-select">
-        <option value="">全部项目</option>
-        <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
-      </select>
+    <div v-if="activeTab === 'tasks' && projectFilters.length > 0" class="project-filter">
+      <span class="project-filter-label">按项目筛选</span>
+      <div class="project-filter-list" role="group" aria-label="按项目筛选待办">
+        <button
+          v-for="filter in projectFilters"
+          :key="filter.id || 'all'"
+          type="button"
+          class="project-filter-btn"
+          :class="{ 'project-filter-btn--active': selectedProjectId === filter.id }"
+          :aria-pressed="selectedProjectId === filter.id"
+          @click="selectedProjectId = filter.id"
+        >
+          <span>{{ filter.name }}</span>
+          <span class="project-filter-count">{{ filter.openTaskCount }}</span>
+        </button>
+      </div>
     </div>
 
     <div class="mobile-add-cta">
@@ -183,7 +193,7 @@
       <!-- Tasks List -->
       <template v-if="activeTab === 'tasks'">
         <div
-          v-for="task in tasks"
+          v-for="task in visibleTasks"
           :key="task.id"
           class="todo-card"
           :class="{ 'todo-card--completed': task.status === 'completed' }"
@@ -236,11 +246,13 @@
             </div>
           </div>
           <!-- Subtask Section for Tasks -->
-          <div class="subtask-section">
+          <div class="subtask-divider">
             <button
-              class="subtask-toggle-btn"
+              class="subtask-toggle"
               @click="toggleTaskExpand(task)"
               :aria-expanded="expandedTaskId === task.id"
+              :aria-label="expandedTaskId === task.id ? '收起子任务' : '展开子任务'"
+              :title="expandedTaskId === task.id ? '收起子任务' : '展开子任务'"
             >
               <svg
                 class="subtask-toggle-icon"
@@ -250,12 +262,8 @@
                 stroke="currentColor"
                 stroke-width="2"
               >
-                <polyline points="6 9 12 15 18 9" />
+                <polyline points="9 18 15 12 9 6" />
               </svg>
-              <span>子任务</span>
-              <span v-if="taskSubtasks[task.id]" class="subtask-count-badge">
-                {{ taskSubtasks[task.id].filter(s => s.is_completed).length }}/{{ taskSubtasks[task.id].length }}
-              </span>
             </button>
 
             <div v-if="expandedTaskId === task.id" class="subtask-content">
@@ -709,8 +717,42 @@ const activeTabSingular = computed(() => {
 
 const currentList = computed(() => {
   if (activeTab.value === 'habits') return habits.value
-  if (activeTab.value === 'tasks') return tasks.value
+  if (activeTab.value === 'tasks') return visibleTasks.value
   return goals.value
+})
+
+const visibleTasks = computed(() => {
+  let filtered = tasks.value
+  if (selectedProjectId.value === 'unassigned') {
+    filtered = tasks.value.filter(task => !task.project_id)
+  } else if (selectedProjectId.value) {
+    filtered = tasks.value.filter(task => task.project_id === selectedProjectId.value)
+  }
+
+  return [...filtered].sort((a, b) => {
+    const aCompleted = a.status === 'completed'
+    const bCompleted = b.status === 'completed'
+    return Number(aCompleted) - Number(bCompleted)
+  })
+})
+
+const projectFilters = computed(() => {
+  const unfinishedCount = (projectId) => tasks.value.filter(task => {
+    const belongsToProject = projectId === 'unassigned' ? !task.project_id : task.project_id === projectId
+    return belongsToProject && task.status !== 'completed'
+  }).length
+
+  return [
+    { id: '', name: '全部', openTaskCount: tasks.value.filter(task => task.status !== 'completed').length },
+    { id: 'unassigned', name: '普通', openTaskCount: unfinishedCount('unassigned') },
+    ...projects.value
+      .map(project => ({
+        id: project.id,
+        name: project.name,
+        openTaskCount: unfinishedCount(project.id)
+      }))
+      .sort((a, b) => b.openTaskCount - a.openTaskCount || a.name.localeCompare(b.name, 'zh-CN'))
+  ]
 })
 
 const activeTabCompleted = computed(() => {
@@ -765,11 +807,6 @@ function formatDate(dateStr) {
 // Reset form when tab changes
 watch(activeTab, () => {
   form.value = { ...defaultForms[activeTab.value] }
-})
-
-// Refetch tasks when project filter changes
-watch(selectedProjectId, () => {
-  fetchTasks()
 })
 
 // Auto-focus title input when dialog opens
@@ -877,8 +914,7 @@ async function fetchHabits() {
 }
 
 async function fetchTasks() {
-  const params = selectedProjectId.value ? { project_id: selectedProjectId.value } : undefined
-  tasks.value = await todoService.getTasks(params)
+  tasks.value = await todoService.getTasks()
 }
 
 async function fetchGoals() {
@@ -1845,52 +1881,45 @@ onMounted(() => {
 }
 
 /* Subtask Section */
-.subtask-section {
+.subtask-divider {
   margin-top: 10px;
   padding-top: 10px;
   border-top: 1px dashed var(--color-border);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
 }
 
-.subtask-toggle-btn {
+.subtask-toggle {
+  align-self: flex-end;
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  min-height: 36px;
-  padding: var(--spacing-xs) var(--spacing-sm);
+  justify-content: center;
+  width: 30px;
+  height: 24px;
+  padding: 0;
   background: none;
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: var(--font-size-sm);
-  font-weight: 500;
   color: var(--color-text-secondary);
   font-family: var(--font-family);
   transition: color 0.15s ease, background 0.15s ease;
 }
 
-.subtask-toggle-btn:hover {
+.subtask-toggle:hover {
   color: var(--color-text);
   background: var(--color-bg-tertiary);
 }
 
 .subtask-toggle-icon {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   transition: transform 0.2s ease;
 }
 
 .subtask-toggle-icon--expanded {
-  transform: rotate(180deg);
-}
-
-.subtask-count-badge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  background: rgba(14, 165, 233, 0.12);
-  color: var(--color-primary);
-  line-height: 18px;
+  transform: rotate(90deg);
 }
 
 .subtask-content {
@@ -2454,8 +2483,8 @@ onMounted(() => {
 /* Project Filter */
 .project-filter {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: flex-start;
+  gap: 16px;
   margin-bottom: var(--spacing-md);
   min-width: 0;
   padding: 12px 14px;
@@ -2465,14 +2494,63 @@ onMounted(() => {
 }
 
 .project-filter-label {
+  padding-top: 7px;
   font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--color-text-secondary);
   white-space: nowrap;
 }
 
-.project-filter-select {
-  max-width: 240px;
+.project-filter-list {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.project-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 6px 11px;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.project-filter-btn:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary-light);
+}
+
+.project-filter-btn--active {
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  border-color: var(--color-primary);
+  font-weight: 600;
+}
+
+.project-filter-count {
+  min-width: 20px;
+  padding: 1px 5px;
+  color: var(--color-text-tertiary);
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.project-filter-btn--active .project-filter-count {
+  color: var(--color-primary);
+  background: rgba(255, 255, 255, 0.75);
 }
 
 /* Project Tag */
@@ -2600,8 +2678,15 @@ onMounted(() => {
     gap: 12px;
   }
 
-  .project-filter-select {
-    max-width: 100%;
+  .project-filter-label {
+    padding-top: 0;
+  }
+
+  .project-filter-list {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
   }
 
   .todo-progress-card {
