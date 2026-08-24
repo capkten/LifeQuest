@@ -223,7 +223,12 @@
                   </div>
                 </div>
                 <p v-if="task.description" class="todo-card-desc">{{ task.description }}</p>
-                <span v-if="task.project_name" class="task-project-tag" :style="{ borderColor: task.project_color || '#0EA5E9' }">
+                <span v-if="task.project_name" class="task-project-tag">
+                  <span
+                    class="task-project-dot"
+                    :style="{ backgroundColor: task.project_color || '#0EA5E9' }"
+                    aria-hidden="true"
+                  ></span>
                   {{ task.project_name }}
                 </span>
               </div>
@@ -518,6 +523,31 @@
                 rows="2"
               ></textarea>
             </div>
+            <div v-if="activeTab === 'tasks'" class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="item-project">项目</label>
+                <select id="item-project" v-model="form.project_id" class="form-select" @change="handleProjectChange">
+                  <option value="">不选择项目</option>
+                  <option v-for="project in projects" :key="project.id" :value="String(project.id)">
+                    {{ project.name }}
+                  </option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="item-milestone">里程碑</label>
+                <select
+                  id="item-milestone"
+                  v-model="form.milestone_id"
+                  class="form-select"
+                  :disabled="!form.project_id || milestoneLoading"
+                >
+                  <option value="">不选择里程碑</option>
+                  <option v-for="milestone in projectMilestones" :key="milestone.id" :value="String(milestone.id)">
+                    {{ milestone.name }}
+                  </option>
+                </select>
+              </div>
+            </div>
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label" for="item-difficulty">难度</label>
@@ -625,6 +655,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { todoService } from '../services/todo'
 import { projectService } from '../services/project'
 import { useAuthStore } from '../stores/auth'
@@ -634,8 +665,13 @@ import { labelDifficulty, labelFrequency, labelTaskStatus } from '../utils/displ
 
 const authStore = useAuthStore()
 const cultivationStore = useCultivationStore()
+const route = useRoute()
 
-const activeTab = ref('habits')
+const contextProjectId = computed(() => (
+  typeof route.query.project_id === 'string' ? route.query.project_id : ''
+))
+
+const activeTab = ref(contextProjectId.value ? 'tasks' : 'habits')
 const habits = ref([])
 const tasks = ref([])
 const goals = ref([])
@@ -673,6 +709,9 @@ const deletingSubtaskId = ref(null)
 // Project filter state
 const projects = ref([])
 const selectedProjectId = ref('')
+const projectMilestones = ref([])
+const milestoneLoading = ref(false)
+let projectDetailRequestId = 0
 
 const tabs = [
   { id: 'habits', label: '日常习惯' },
@@ -695,7 +734,9 @@ const defaultForms = {
     difficulty: 'medium',
     deadline: '',
     coins_reward: 10,
-    exp_reward: 5
+    exp_reward: 5,
+    project_id: '',
+    milestone_id: ''
   },
   goals: {
     title: '',
@@ -707,7 +748,15 @@ const defaultForms = {
   }
 }
 
-const form = ref({ ...defaultForms.habits })
+const form = ref(getDefaultForm(activeTab.value))
+
+function getDefaultForm(tab) {
+  const defaults = { ...defaultForms[tab] }
+  if (tab === 'tasks') {
+    defaults.project_id = contextProjectId.value
+  }
+  return defaults
+}
 
 const activeTabSingular = computed(() => {
   if (activeTab.value === 'habits') return '习惯'
@@ -806,12 +855,19 @@ function formatDate(dateStr) {
 
 // Reset form when tab changes
 watch(activeTab, () => {
-  form.value = { ...defaultForms[activeTab.value] }
+  form.value = getDefaultForm(activeTab.value)
+  projectMilestones.value = []
+  if (activeTab.value === 'tasks' && form.value.project_id) {
+    loadProjectMilestones(form.value.project_id)
+  }
 })
 
 // Auto-focus title input when dialog opens
 watch(showCreateDialog, (open) => {
   if (open) {
+    if (activeTab.value === 'tasks' && form.value.project_id && projectMilestones.value.length === 0) {
+      loadProjectMilestones(form.value.project_id)
+    }
     nextTick(() => {
       dialogTitleInput.value?.focus()
     })
@@ -940,6 +996,31 @@ async function fetchProjects() {
     // Silently fail - project filter is optional
     projects.value = []
   }
+}
+
+async function loadProjectMilestones(projectId) {
+  projectMilestones.value = []
+  if (!projectId) return
+  const requestId = ++projectDetailRequestId
+  milestoneLoading.value = true
+  try {
+    const project = await projectService.getProject(projectId)
+    if (requestId === projectDetailRequestId) {
+      projectMilestones.value = project.milestones || []
+    }
+  } catch (e) {
+    if (requestId === projectDetailRequestId) {
+      projectMilestones.value = []
+      showError(getErrorMessage(e))
+    }
+  } finally {
+    if (requestId === projectDetailRequestId) milestoneLoading.value = false
+  }
+}
+
+function handleProjectChange() {
+  form.value.milestone_id = ''
+  loadProjectMilestones(form.value.project_id)
 }
 
 async function completeHabit(habit) {
@@ -1097,7 +1178,8 @@ function cancelDialog() {
   showCreateDialog.value = false
   editingItem.value = null
   editingType.value = null
-  form.value = { ...defaultForms[activeTab.value] }
+  form.value = getDefaultForm(activeTab.value)
+  projectMilestones.value = []
   dialogError.value = null
 }
 
@@ -1124,7 +1206,11 @@ async function createItem() {
       const habit = await todoService.createHabit(payload)
       habits.value.push(habit)
     } else if (activeTab.value === 'tasks') {
-      const task = await todoService.createTask(base)
+      const taskBase = { ...base, project_id: contextProjectId.value || undefined }
+      if (form.value.project_id) taskBase.project_id = form.value.project_id
+      if (form.value.milestone_id) taskBase.milestone_id = form.value.milestone_id
+      else delete taskBase.milestone_id
+      const task = await todoService.createTask(taskBase)
       tasks.value.push(task)
     } else {
       const goal = await todoService.createGoal(base)
@@ -1151,11 +1237,16 @@ function openEditDialog(item, type) {
     frequency: item.frequency || 'daily',
     deadline: deadlineValue,
     coins_reward: item.coins_reward ?? 10,
-    exp_reward: item.exp_reward ?? 5
+    exp_reward: item.exp_reward ?? 5,
+    project_id: item.project_id || '',
+    milestone_id: item.milestone_id || ''
   }
   // Switch to the correct tab so the dialog shows the right fields
   if (type !== activeTab.value) {
     activeTab.value = type
+  }
+  if (type === 'tasks' && form.value.project_id) {
+    loadProjectMilestones(form.value.project_id)
   }
   showCreateDialog.value = true
 }
@@ -1180,6 +1271,11 @@ async function saveItem() {
       base.deadline = new Date(form.value.deadline).toISOString()
     } else if (editingType.value === 'tasks' || editingType.value === 'goals') {
       base.deadline = null
+    }
+
+    if (editingType.value === 'tasks') {
+      base.project_id = form.value.project_id || null
+      base.milestone_id = form.value.milestone_id || null
     }
 
     if (editingType.value === 'habits') {
@@ -1883,7 +1979,6 @@ onMounted(() => {
 /* Subtask Section */
 .subtask-divider {
   margin-top: 10px;
-  padding-top: 10px;
   border-top: 1px dashed var(--color-border);
   display: flex;
   flex-direction: column;
@@ -1897,8 +1992,9 @@ onMounted(() => {
   justify-content: center;
   width: 30px;
   height: 24px;
+  margin-top: -12px;
   padding: 0;
-  background: none;
+  background: var(--color-card);
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -2557,14 +2653,19 @@ onMounted(() => {
 .task-project-tag {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  border: 1px solid;
+  gap: 5px;
+  padding: 2px 0;
   font-size: 11px;
   color: var(--color-text-secondary);
-  background: var(--color-bg-tertiary);
   margin-top: 2px;
   line-height: 20px;
+}
+
+.task-project-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
 }
 
 /* Responsive */

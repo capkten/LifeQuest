@@ -5,6 +5,8 @@ import { Capacitor } from '@capacitor/core'
 const manifestUrl = import.meta.env.VITE_ANDROID_UPDATE_MANIFEST_URL
 const update = ref(null)
 const checking = ref(false)
+const downloading = ref(false)
+const updateError = ref('')
 
 function isNewerVersion(remote, current) {
   return Number(remote) > Number(current)
@@ -41,11 +43,27 @@ function dismissUpdate() {
   if (!update.value?.forceUpdate) update.value = null
 }
 
-export function useAppUpdate() {
+async function startUpdate(AppUpdater) {
+  if (!update.value?.downloadUrl || downloading.value) return
+  downloading.value = true
+  updateError.value = ''
+  try {
+    await AppUpdater.startDownload({ url: update.value.downloadUrl })
+  } catch (error) {
+    updateError.value = error?.message || '无法开始下载更新，请稍后重试。'
+  } finally {
+    downloading.value = false
+  }
+}
+
+export function useAppUpdate(AppUpdater) {
   return {
     update,
     checking,
     checkForUpdate,
+    downloading,
+    updateError,
+    startUpdate: () => startUpdate(AppUpdater),
     dismissUpdate,
   }
 }

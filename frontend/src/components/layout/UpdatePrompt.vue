@@ -5,9 +5,12 @@
         <p class="update-eyebrow">LifeQuest 更新</p>
         <h2 id="update-title">发现新版本 {{ update.versionName }}</h2>
         <p class="update-copy">{{ update.releaseNotes }}</p>
+        <p v-if="updateError" class="update-error" role="alert">{{ updateError }}</p>
         <div class="update-actions">
           <button v-if="!update.forceUpdate" type="button" class="update-secondary" @click="dismissUpdate">稍后再说</button>
-          <button type="button" class="update-primary" @click="openDownload">立即更新</button>
+          <button type="button" class="update-primary" :disabled="downloading" @click="startUpdate">
+            {{ downloading ? '正在下载...' : '立即更新' }}
+          </button>
         </div>
       </section>
     </div>
@@ -16,14 +19,11 @@
 
 <script setup>
 import { onMounted } from 'vue'
-import { Browser } from '@capacitor/browser'
+import { registerPlugin } from '@capacitor/core'
 import { useAppUpdate } from '../../composables/useAppUpdate'
 
-const { update, checkForUpdate, dismissUpdate } = useAppUpdate()
-
-async function openDownload() {
-  if (update.value?.downloadUrl) await Browser.open({ url: update.value.downloadUrl })
-}
+const AppUpdater = registerPlugin('AppUpdater')
+const { update, checkForUpdate, dismissUpdate, downloading, updateError, startUpdate } = useAppUpdate(AppUpdater)
 
 onMounted(checkForUpdate)
 </script>
@@ -34,8 +34,10 @@ onMounted(checkForUpdate)
 .update-eyebrow { margin: 0 0 6px; color: var(--color-primary-dark); font-size: var(--font-size-xs); font-weight: 700; letter-spacing: .08em; }
 .update-dialog h2 { margin: 0; color: var(--color-text); font-size: var(--font-size-xl); }
 .update-copy { margin: 12px 0 20px; color: var(--color-text-secondary); }
+.update-error { margin: 0 0 16px; color: var(--color-danger, #dc2626); font-size: var(--font-size-sm); }
 .update-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .update-actions button { min-height: var(--touch-target-min); padding: 10px 16px; border-radius: var(--radius-md); border: 1px solid transparent; font: inherit; font-weight: 700; cursor: pointer; }
+.update-actions button:disabled { opacity: .6; cursor: wait; }
 .update-primary { background: var(--color-primary); color: #fff; }
 .update-secondary { border-color: var(--color-border); background: var(--color-card); color: var(--color-text-secondary); }
 </style>

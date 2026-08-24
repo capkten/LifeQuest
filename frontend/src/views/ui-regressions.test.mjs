@@ -126,6 +126,26 @@ test('android release workflow and in-app update contract are present', async ()
   assert.match(app, /VITE_ANDROID_UPDATE_MANIFEST_URL|UpdatePrompt/)
 })
 
+test('android update prompt downloads and launches APK installation natively', async () => {
+  const [prompt, updater, activity, manifest, filePaths] = await Promise.all([
+    readFile(new URL('../components/layout/UpdatePrompt.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../../android/app/src/main/java/com/lifequest/app/AppUpdaterPlugin.java', import.meta.url), 'utf8'),
+    readFile(new URL('../../android/app/src/main/java/com/lifequest/app/MainActivity.java', import.meta.url), 'utf8'),
+    readFile(new URL('../../android/app/src/main/AndroidManifest.xml', import.meta.url), 'utf8'),
+    readFile(new URL('../../android/app/src/main/res/xml/file_paths.xml', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(prompt, /AppUpdater|startDownload/)
+  assert.doesNotMatch(prompt, /Browser\.open/)
+  assert.match(updater, /DownloadManager/)
+  assert.match(updater, /ACTION_VIEW/)
+  assert.match(updater, /resumePendingInstall/)
+  assert.match(activity, /registerPlugin\(AppUpdaterPlugin\.class\)/)
+  assert.match(activity, /resumePendingInstall\(\)/)
+  assert.match(manifest, /REQUEST_INSTALL_PACKAGES/)
+  assert.match(filePaths, /external-files-path/)
+})
+
 function compileRender(source) {
   const result = compileTemplate({
     source,
@@ -222,6 +242,21 @@ test('todo subtasks use a compact right-side arrow toggle', async () => {
   assert.match(source, /aria-label="expandedTaskId === task\.id \? '收起子任务' : '展开子任务'"/)
   assert.match(source, /class="subtask-divider"/)
   assert.match(source, /subtask-toggle-icon--expanded/)
+})
+
+test('todo task creation supports optional project and milestone context', async () => {
+  const source = await readFile(new URL('./Todos.vue', viewsDirectory), 'utf8')
+  const projectDetail = await readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8')
+
+  assert.match(source, /id="item-project"/)
+  assert.match(source, /id="item-milestone"/)
+  assert.match(source, /project_id: contextProjectId\.value/)
+  assert.match(source, /base\.project_id = form\.value\.project_id/)
+  assert.match(source, /base\.milestone_id = form\.value\.milestone_id/)
+  assert.match(source, /route\.query\.project_id/)
+  assert.match(source, /projectService\.getProject\(projectId\)/)
+  assert.match(projectDetail, /path: '\/todos'/)
+  assert.match(projectDetail, /query: \{ project_id: project\.id \}/)
 })
 
 test('backpack business actions expose a visible blocked-action feedback path', async () => {
