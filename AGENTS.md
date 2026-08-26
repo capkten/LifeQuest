@@ -44,3 +44,14 @@ Pull requests should include:
 
 ## Security & Configuration Tips
 Do not commit secrets. Use `.env.example` as the template for local configuration, and keep generated databases, uploads, and other runtime artifacts out of version control.
+
+## LifeQuest Project Rules
+
+- The project version has one source of truth: the repository-root `VERSION` file. Do not hardcode the application version in backend, frontend, UI, Android metadata, or CI release metadata.
+- When a release or user-visible application change requires a version increment, update `VERSION` first. The version is semantic and should be incremented from the current version (currently `1.8.3`); then run `cd frontend && npm run sync:version` so `frontend/package.json` and `frontend/package-lock.json` stay synchronized.
+- Before committing a version change, run `cd frontend && npm run check:version` and `npm run build`. The backend reads the same root `VERSION`, and the frontend UI reads the injected build version from that source.
+- Android `versionName` must read the root `VERSION`. Android `versionCode` is a separate monotonically increasing integer used by Android and must be incremented for each Android package release; it must not replace or override the project version.
+- A push to `main` that changes `VERSION`, `frontend/**`, or the relevant workflow files is expected to trigger both GitHub Actions workflows: `Test and Deploy` and `Build Android Release`. Do not treat a merely triggered workflow as complete; verify the final conclusion is `success`.
+- A successful Android release must create a GitHub Release with the project version in its name/tag and include `app-release.apk`, `app-release.aab`, and `latest.json`. A successful deployment must be confirmed by the deployment workflow and, when practical, an HTTP health check against the live site.
+- Daily habits are completed at most once per China calendar day (`Asia/Shanghai`). Completion checks and persistence must use the same China-local date boundary, so repeated clicks on the same day cannot create repeated completions.
+- Keep existing user changes in the working tree, especially unrelated files under `docs/superpowers/`; stage only files belonging to the requested change.
