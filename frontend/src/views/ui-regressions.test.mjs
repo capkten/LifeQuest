@@ -150,6 +150,8 @@ test('android update prompt downloads and launches APK installation natively', a
   assert.match(prompt, /AppUpdater|startDownload/)
   assert.doesNotMatch(prompt, /Browser\.open/)
   assert.match(updater, /DownloadManager/)
+  assert.match(updater, /Context\.RECEIVER_EXPORTED/)
+  assert.doesNotMatch(updater, /Context\.RECEIVER_NOT_EXPORTED/)
   assert.match(updater, /ACTION_VIEW/)
   assert.match(updater, /resumePendingInstall/)
   assert.match(activity, /registerPlugin\(AppUpdaterPlugin\.class\)/)
