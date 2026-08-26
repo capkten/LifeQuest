@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "sync:version": "node ../scripts/sync-version.mjs",
+    "check:version": "node ../scripts/check-version.mjs",
+    "prebuild": "node ../scripts/sync-version.mjs",
+    "prebuild:android": "node ../scripts/sync-version.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",

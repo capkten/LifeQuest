@@ -91,6 +91,18 @@ test('sidebar displays the application version beside the LifeQuest brand', asyn
   assert.match(viteConfig, /VERSION/)
 })
 
+test('all application runtimes consume the root VERSION source', async () => {
+  const [backend, gradle, workflow] = await Promise.all([
+    readFile(new URL('../../../backend/app/main.py', import.meta.url), 'utf8'),
+    readFile(new URL('../../android/app/build.gradle', import.meta.url), 'utf8'),
+    readFile(new URL('../../../.github/workflows/android-release.yml', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(backend, /readFileSync[\s\S]*VERSION|read_text\([\s\S]*VERSION/)
+  assert.match(gradle, /VERSION[\s\S]*versionName|versionName[\s\S]*VERSION/)
+  assert.match(workflow, /diff --quiet HEAD\^ HEAD -- VERSION/)
+})
+
 test('todo metadata badges share a compact row with each title', async () => {
   const source = await readFile(new URL('./Todos.vue', viewsDirectory), 'utf8')
 

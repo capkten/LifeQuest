@@ -1,6 +1,7 @@
 import logging
 import os
 from contextlib import contextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi import HTTPException
@@ -20,7 +21,8 @@ from app.api import auth, users, notes, todos, shop, backpack, achievements, che
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="LifeQuest", version="1.8.2")
+_APP_VERSION = (Path(__file__).resolve().parents[2] / "VERSION").read_text(encoding="utf-8").strip()
+app = FastAPI(title="LifeQuest", version=_APP_VERSION)
 
 
 logger = logging.getLogger(__name__)
