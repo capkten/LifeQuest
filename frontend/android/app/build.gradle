@@ -1,6 +1,6 @@
 apply plugin: 'com.android.application'
 
-def appVersion = file('../../VERSION').text.trim()
+def appVersion = rootProject.file('../../VERSION').text.trim()
 
 def keystoreProperties = new Properties()
 def keystorePropertiesFile = rootProject.file('key.properties')
