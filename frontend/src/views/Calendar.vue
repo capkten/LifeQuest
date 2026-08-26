@@ -748,6 +748,7 @@ onMounted(() => {
   padding: var(--spacing-lg);
   height: fit-content;
   max-height: calc(100vh - 180px);
+  max-height: calc(100dvh - 180px);
   overflow-y: auto;
 }
 

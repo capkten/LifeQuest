@@ -78,14 +78,12 @@
         <div class="search-results-header">
           <span class="search-results-count">找到 {{ searchResults.length }} 条结果</span>
         </div>
-        <div
+        <button
           v-for="result in searchResults"
           :key="result.id"
           class="search-result-card"
-          tabindex="0"
-          role="button"
+          type="button"
           @click="openNote(result)"
-          @keydown.enter="openNote(result)"
         >
           <div class="search-result-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
@@ -99,7 +97,7 @@
             <h4 class="search-result-name">{{ result.name }}</h4>
             <p v-if="result.summary" class="search-result-summary">{{ result.summary }}</p>
           </div>
-        </div>
+        </button>
       </div>
     </div>
 
@@ -110,7 +108,7 @@
         <h2 class="page-title">笔记本</h2>
         <span class="notebook-count">{{ notebooks.length }} 个笔记本</span>
       </div>
-      <button class="btn-create" @click="showDialog = true">
+      <button class="btn-create" type="button" @click="openCreateDialog">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
@@ -142,7 +140,7 @@
       </div>
       <h3 class="empty-title">暂无笔记本</h3>
       <p class="empty-text">创建你的第一个笔记本，开始整理笔记吧。</p>
-      <button class="btn-create" @click="showDialog = true">
+       <button class="btn-create" type="button" @click="openCreateDialog">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
@@ -156,12 +154,13 @@
         v-for="notebook in notebooks"
         :key="notebook.id"
         class="notebook-card"
-        tabindex="0"
         role="button"
+        tabindex="0"
         @click="openNotebook(notebook)"
         @keydown.enter="openNotebook(notebook)"
+        @keydown.space.prevent="openNotebook(notebook)"
       >
-        <button class="notebook-delete-btn" @click.stop="confirmDeleteNotebook(notebook)" title="删除笔记本">
+        <button type="button" class="notebook-delete-btn" @click.stop="confirmDeleteNotebook(notebook)" title="删除笔记本" aria-label="删除笔记本">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <polyline points="3 6 5 6 21 6" />
             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -194,10 +193,11 @@
           aria-modal="true"
           aria-labelledby="dialog-title"
           @keydown="trapFocus"
+          @keydown.escape="cancelDialog"
         >
           <div class="dialog-header">
             <h3 id="dialog-title" class="dialog-title">新建笔记本</h3>
-            <button class="dialog-close" @click="cancelDialog" aria-label="关闭对话框">
+            <button class="dialog-close" type="button" @click="cancelDialog" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -245,8 +245,8 @@
 
     <!-- Delete Notebook Confirmation -->
     <Teleport to="body">
-      <div v-if="showDeleteConfirm" class="dialog-overlay" @click.self="showDeleteConfirm = false">
-        <div class="dialog dialog--sm" role="dialog" aria-modal="true">
+      <div v-if="showDeleteConfirm" class="dialog-overlay" @click.self="closeDeleteDialog">
+        <div ref="deleteDialogRef" class="dialog dialog--sm" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title" @keydown="trapDeleteFocus" @keydown.escape="closeDeleteDialog">
           <div class="dialog-header">
             <h3 id="delete-dialog-title" class="dialog-title">删除笔记本</h3>
           </div>
@@ -255,7 +255,7 @@
             <p class="delete-confirm-warning">该笔记本下的所有笔记和文件夹都将被永久删除，此操作不可撤销。</p>
           </div>
           <div class="dialog-actions">
-            <button type="button" class="btn-secondary" @click="showDeleteConfirm = false">取消</button>
+            <button type="button" class="btn-secondary" @click="closeDeleteDialog">取消</button>
             <button type="button" class="btn-danger" @click="deleteNotebook" :disabled="deleting">
               <span v-if="deleting" class="loading-spinner loading-spinner--sm"></span>
               {{ deleting ? '删除中...' : '确认删除' }}
@@ -301,6 +301,8 @@ const creating = ref(false)
 const dialogError = ref(null)
 const form = ref({ name: '', description: '' })
 const dialogNameInput = ref(null)
+const dialogTriggerRef = ref(null)
+const deleteDialogRef = ref(null)
 
 // Delete state
 const showDeleteConfirm = ref(false)
@@ -318,6 +320,11 @@ watch(showDialog, (open) => {
 
 function openNotebook(notebook) {
   router.push(`/notes/${notebook.id}`)
+}
+
+function openCreateDialog(event) {
+  dialogTriggerRef.value = event.currentTarget
+  showDialog.value = true
 }
 
 function openNote(result) {
@@ -427,6 +434,7 @@ function cancelDialog() {
   showDialog.value = false
   form.value = { name: '', description: '' }
   dialogError.value = null
+  nextTick(() => dialogTriggerRef.value?.focus())
 }
 
 async function createNotebook() {
@@ -448,8 +456,32 @@ async function createNotebook() {
 }
 
 function confirmDeleteNotebook(notebook) {
+  dialogTriggerRef.value = document.activeElement
   notebookToDelete.value = notebook
   showDeleteConfirm.value = true
+  nextTick(() => deleteDialogRef.value?.querySelector('button, [href], input, select, textarea')?.focus())
+}
+
+function closeDeleteDialog() {
+  showDeleteConfirm.value = false
+  notebookToDelete.value = null
+  nextTick(() => dialogTriggerRef.value?.focus())
+}
+
+function trapDeleteFocus(event) {
+  if (event.key !== 'Tab') return
+  const dialog = event.currentTarget
+  const focusable = dialog.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  if (!first || !last) return
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
 }
 
 async function deleteNotebook() {
@@ -458,8 +490,7 @@ async function deleteNotebook() {
   try {
     await noteService.deleteNotebook(notebookToDelete.value.id)
     notebooks.value = notebooks.value.filter(n => n.id !== notebookToDelete.value.id)
-    showDeleteConfirm.value = false
-    notebookToDelete.value = null
+    closeDeleteDialog()
   } catch (e) {
     alert(getErrorMessage(e))
   } finally {
@@ -569,6 +600,8 @@ watch(discoveryFilters, fetchDiscovery, { deep: true })
   padding: var(--spacing-lg);
   margin-bottom: var(--spacing-sm);
   cursor: pointer;
+  font: inherit;
+  text-align: left;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -804,6 +837,9 @@ watch(discoveryFilters, fetchDiscovery, { deep: true })
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
   cursor: pointer;
+  border: 1px solid var(--color-border);
+  font: inherit;
+  text-align: left;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -922,8 +958,8 @@ watch(discoveryFilters, fetchDiscovery, { deep: true })
 }
 
 .dialog-close {
-  width: 32px;
-  height: 32px;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1135,6 +1171,8 @@ watch(discoveryFilters, fetchDiscovery, { deep: true })
     max-width: 100%;
     margin: var(--spacing-sm);
     max-height: calc(100vh - (var(--spacing-sm) * 2));
+    max-height: calc(100dvh - (var(--spacing-sm) * 2));
+    overflow-y: auto;
   }
 
   .dialog-body {
@@ -1150,6 +1188,13 @@ watch(discoveryFilters, fetchDiscovery, { deep: true })
   .btn-danger {
     width: 100%;
     justify-content: center;
+  }
+}
+
+@media (pointer: coarse) {
+  .dialog-close {
+    width: var(--touch-target-android);
+    height: var(--touch-target-android);
   }
 }
 </style>

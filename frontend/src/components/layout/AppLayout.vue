@@ -145,6 +145,7 @@ const pageTitle = computed(() => {
 .app-layout {
   display: flex;
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--color-bg);
 }
 
@@ -205,6 +206,7 @@ const pageTitle = computed(() => {
   .app-main {
     margin-left: 0;
     min-height: 100vh;
+    min-height: 100dvh;
   }
 
   .sidebar-overlay {
@@ -232,7 +234,8 @@ const pageTitle = computed(() => {
   }
 
   .app-content {
-    padding-bottom: calc(var(--bottom-nav-height) + 12px + var(--safe-area-bottom));
+    --mobile-content-bottom-inset: calc(var(--bottom-nav-height) + 20px + var(--safe-area-bottom));
+    padding-bottom: var(--mobile-content-bottom-inset);
   }
 
   .app-content-shell {
@@ -271,5 +274,12 @@ const pageTitle = computed(() => {
   width: 22px;
   height: 22px;
   flex-shrink: 0;
+}
+
+@media (pointer: coarse) {
+  .bottom-nav-item {
+    min-width: var(--touch-target-android);
+    min-height: var(--touch-target-android);
+  }
 }
 </style>

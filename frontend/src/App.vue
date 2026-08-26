@@ -86,6 +86,7 @@ import UpdatePrompt from './components/layout/UpdatePrompt.vue'
   --surface-radius-sm: 14px;
   --surface-padding: 16px;
   --touch-target-min: 44px;
+  --touch-target-android: 48px;
   --touch-target-gap: 8px;
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
@@ -105,6 +106,7 @@ import UpdatePrompt from './components/layout/UpdatePrompt.vue'
 
 body {
   min-height: 100vh;
+  min-height: 100dvh;
   font-family: var(--font-family);
   background-color: var(--color-bg);
   color: var(--color-text);
@@ -116,6 +118,7 @@ body {
 
 #app {
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .page-shell {

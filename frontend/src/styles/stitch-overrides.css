@@ -508,3 +508,55 @@
     border-radius: var(--surface-radius-sm) !important;
   }
 }
+
+/* Mobile contract: readable type, stable state blocks, and reliable hit areas. */
+@media (max-width: 767px) {
+  .dialog-close {
+    min-width: var(--touch-target-min) !important;
+    min-height: var(--touch-target-min) !important;
+  }
+
+  .bottom-nav-item {
+    font-size: 11px !important;
+  }
+
+  .empty-state,
+  .loading-state,
+  .error-state {
+    min-height: 180px !important;
+  }
+
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+
+  .login-container,
+  .register-container {
+    min-height: 100vh;
+    min-height: 100dvh !important;
+  }
+
+  .file-manager {
+    min-height: calc(100vh - 150px);
+    min-height: calc(100dvh - 150px) !important;
+  }
+
+  .event-more,
+  .auth-eyebrow,
+  .auth-momentum-foot {
+    font-size: 11px !important;
+  }
+
+  .auth-feature-list {
+    font-size: 12px !important;
+  }
+}
+
+@media (pointer: coarse) {
+  .dialog-close {
+    min-width: var(--touch-target-android) !important;
+    min-height: var(--touch-target-android) !important;
+  }
+}

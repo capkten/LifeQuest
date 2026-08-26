@@ -94,6 +94,7 @@
         </div>
         <div v-else-if="dailySummary && dailySummary.habits.length === 0 && dailySummary.tasks.length === 0 && dailySummary.goals.length === 0" class="empty-state">
           <p>今天没有待办事项，去创建一些吧！</p>
+          <router-link to="/todos" class="empty-state-action">创建任务</router-link>
         </div>
         <div v-else class="daily-groups">
           <div v-if="dailySummary.habits.length > 0" class="daily-group">

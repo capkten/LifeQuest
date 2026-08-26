@@ -284,7 +284,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.note-editor-page { display: flex; flex-direction: column; width: 100%; height: calc(100vh - 64px); min-width: 0; background: var(--color-bg-secondary); }
+.note-editor-page { display: flex; flex-direction: column; width: 100%; height: calc(100vh - 64px); height: calc(100dvh - 64px); min-width: 0; background: var(--color-bg-secondary); }
 .editor-header { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-md); padding: var(--spacing-md) var(--spacing-xl); border-bottom: 1px solid var(--color-border); flex-shrink: 0; background: var(--color-card); }
 .header-left, .header-actions { display: flex; align-items: center; gap: var(--spacing-md); min-width: 0; }
 .back-btn { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: var(--radius-md); color: var(--color-text); background: transparent; cursor: pointer; }
@@ -327,5 +327,5 @@ onUnmounted(() => {
 @keyframes pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .loading-spinner, .save-status--saving .save-status-dot { animation: none; } }
 @media (max-width: 960px) { .editor-meta { grid-template-columns: 1fr 1fr; } .field--title { grid-column: 1 / -1; } .pin-field { align-self: center; } }
-@media (max-width: 767px) { .note-editor-page { height: calc(100vh - var(--bottom-nav-height) - var(--header-height)); padding-bottom: var(--safe-area-bottom); } .editor-header { align-items: flex-start; padding: var(--spacing-sm) var(--spacing-md); } .header-actions { flex-direction: column; align-items: flex-end; gap: var(--spacing-xs); } .save-status { font-size: var(--font-size-xs); } .editor-meta { grid-template-columns: 1fr; padding: var(--spacing-md); } .field--title { grid-column: auto; } .pin-field { justify-self: start; } }
+@media (max-width: 767px) { .note-editor-page { height: calc(100vh - var(--bottom-nav-height) - var(--header-height)); height: calc(100dvh - var(--bottom-nav-height) - var(--header-height)); padding-bottom: var(--safe-area-bottom); } .editor-header { align-items: flex-start; padding: var(--spacing-sm) var(--spacing-md); } .header-actions { flex-direction: column; align-items: flex-end; gap: var(--spacing-xs); } .save-status { font-size: var(--font-size-xs); } .editor-meta { grid-template-columns: 1fr; padding: var(--spacing-md); } .field--title { grid-column: auto; } .pin-field { justify-self: start; } }
 </style>
