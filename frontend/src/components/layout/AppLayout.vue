@@ -234,7 +234,7 @@ const pageTitle = computed(() => {
   }
 
   .app-content {
-    --mobile-content-bottom-inset: calc(var(--bottom-nav-height) + 20px + var(--safe-area-bottom));
+    --mobile-content-bottom-inset: calc(var(--bottom-nav-height) + 72px + var(--safe-area-bottom));
     padding-bottom: var(--mobile-content-bottom-inset);
   }
 

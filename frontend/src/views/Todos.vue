@@ -259,6 +259,7 @@
               :aria-label="expandedTaskId === task.id ? '收起子任务' : '展开子任务'"
               :title="expandedTaskId === task.id ? '收起子任务' : '展开子任务'"
             >
+              <span class="subtask-toggle-label">子任务</span>
               <svg
                 class="subtask-toggle-icon"
                 :class="{ 'subtask-toggle-icon--expanded': expandedTaskId === task.id }"
@@ -1744,8 +1745,8 @@ onMounted(() => {
 }
 
 .complete-btn {
-  width: 28px;
-  height: 28px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -1990,10 +1991,11 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 24px;
+  width: auto;
+  min-width: 44px;
+  height: 44px;
   margin-top: -12px;
-  padding: 0;
+  padding: 0 8px;
   background: var(--color-card);
   border: none;
   border-radius: var(--radius-sm);
@@ -2012,6 +2014,13 @@ onMounted(() => {
   width: 18px;
   height: 18px;
   transition: transform 0.2s ease;
+}
+
+.subtask-toggle-label {
+  margin-right: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: inherit;
 }
 
 .subtask-toggle-icon--expanded {
@@ -2056,8 +2065,8 @@ onMounted(() => {
 }
 
 .subtask-complete-btn {
-  width: 28px;
-  height: 28px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -2175,8 +2184,8 @@ onMounted(() => {
 }
 
 .subtask-add-btn {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -2509,8 +2518,8 @@ onMounted(() => {
 }
 
 .action-btn {
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2682,9 +2691,9 @@ onMounted(() => {
   }
 
   .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
   }
 
   .header-left,
@@ -2697,12 +2706,15 @@ onMounted(() => {
   }
 
   .btn-create {
-    width: 100%;
+    width: auto;
+    flex-shrink: 0;
     justify-content: center;
+    min-height: 44px;
+    padding-inline: 12px;
   }
 
   .mobile-add-cta {
-    display: flex;
+    display: none;
   }
 
   .tab-btn {
@@ -2738,7 +2750,13 @@ onMounted(() => {
   }
 
   .todo-card {
-    padding: 10px 12px;
+    padding: 12px 12px 10px;
+    border-radius: 14px;
+  }
+
+  .todo-card-title {
+    font-size: 18px;
+    line-height: 1.3;
   }
 
   .todo-card-actions {
@@ -2774,13 +2792,15 @@ onMounted(() => {
   }
 
   .project-filter {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 14px;
   }
 
   .project-filter-label {
     padding-top: 0;
+    font-size: 12px;
   }
 
   .project-filter-list {
@@ -2793,7 +2813,8 @@ onMounted(() => {
   .todo-progress-card {
     grid-template-columns: 1fr auto;
     gap: var(--spacing-sm);
-    padding: var(--spacing-md);
+    padding: 12px;
+    margin-bottom: 10px;
   }
 
   .todo-progress-track {
@@ -2808,6 +2829,15 @@ onMounted(() => {
   .subtask-item {
     align-items: center;
     padding: 8px;
+  }
+
+  .subtask-toggle {
+    margin-right: -4px;
+  }
+
+  .retry-btn {
+    min-height: 44px;
+    padding-inline: 16px;
   }
 
   .subtask-delete-btn {

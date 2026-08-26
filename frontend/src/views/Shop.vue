@@ -57,7 +57,7 @@
         :class="{ 'shop-category--active': activeCategory === category }"
         @click="activeCategory = category"
       >
-        {{ category }}
+        {{ category === '全部' ? category : labelItemType(category) }}
       </button>
     </nav>
 
@@ -1532,47 +1532,88 @@ onMounted(() => {
 
 @media (max-width: 767px) {
   .shop-page {
-    padding: var(--spacing-md);
+    padding: 10px var(--spacing-md) 0;
   }
 
   .shop-toolbar {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 10px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
   }
 
   .shop-toolbar-meta {
-    justify-content: space-between;
+    justify-content: flex-end;
+  }
+
+  .shop-toolbar-meta > span {
+    display: none;
   }
 
   .shop-hero {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 16px;
-    padding: 18px;
+    align-items: center;
+    flex-direction: row;
+    gap: 12px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+  }
+
+  .shop-hero-copy {
+    flex: 1;
+  }
+
+  .shop-hero-kicker {
+    margin-bottom: 5px;
+  }
+
+  .shop-hero h1 {
+    font-size: 1.1rem;
+  }
+
+  .shop-hero p {
+    display: none;
   }
 
   .shop-hero-summary {
-    align-items: flex-start;
-    width: 100%;
-    padding-top: 12px;
-    padding-left: 0;
-    border-top: 1px solid rgba(255, 255, 255, 0.25);
-    border-left: 0;
-    text-align: left;
+    align-items: flex-end;
+    width: auto;
+    padding-top: 0;
+    padding-left: 12px;
+    border-top: 0;
+    border-left: 1px solid rgba(255, 255, 255, 0.25);
+    text-align: right;
+  }
+
+  .shop-hero-summary strong {
+    font-size: 1.45rem;
   }
 
   .page-header {
     flex-direction: column;
     align-items: stretch;
-    gap: var(--spacing-md);
+    gap: 10px;
+    margin-bottom: 10px;
   }
 
   .page-header-main {
-    flex-direction: column;
+    flex-direction: row;
     width: 100%;
-    align-items: stretch;
-    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: nowrap;
+  }
+
+  .shop-page .header-left {
+    min-width: 0;
+  }
+
+  .shop-page .page-title {
+    font-size: 1.25rem;
+  }
+
+  .shop-page .item-count {
+    font-size: 12px;
   }
 
   .shop-actions {
@@ -1582,8 +1623,15 @@ onMounted(() => {
     gap: 10px;
   }
 
+  .shop-actions .btn-history,
+  .shop-actions .btn-create {
+    width: auto;
+    min-height: 44px;
+    padding-inline: 10px;
+  }
+
   .items-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     gap: 10px;
   }
 
@@ -1593,7 +1641,7 @@ onMounted(() => {
   }
 
   .item-card {
-    padding: 10px;
+    padding: 12px;
   }
 
   .item-card-top {
@@ -1609,18 +1657,18 @@ onMounted(() => {
   }
 
   .item-card-icon {
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
   }
 
   .item-card-icon svg {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
   }
 
   .item-card-icon :deep(svg) {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
   }
 
   .item-price {
@@ -1628,7 +1676,7 @@ onMounted(() => {
   }
 
   .item-price strong {
-    font-size: 1rem;
+    font-size: 1.1rem;
   }
 
   .item-card-footer {
@@ -1637,19 +1685,19 @@ onMounted(() => {
   }
 
   .btn-purchase {
-    min-height: 40px;
-    padding: 8px 10px;
-    font-size: 12px;
+    min-height: 44px;
+    padding: 8px 12px;
+    font-size: var(--font-size-sm);
   }
 
   .btn-icon {
-    width: 24px;
-    height: 24px;
+    width: 44px;
+    height: 44px;
   }
 
   .btn-icon svg {
-    width: 12px;
-    height: 12px;
+    width: 16px;
+    height: 16px;
   }
 
   .form-row {
@@ -1676,6 +1724,16 @@ onMounted(() => {
 
   .icon-option {
     height: 40px;
+  }
+
+  .empty-state--filtered {
+    min-height: 200px;
+  }
+}
+
+@media (min-width: 480px) and (max-width: 767px) {
+  .items-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (min-width: 768px) {
@@ -1953,7 +2011,8 @@ onMounted(() => {
 
 @media (max-width: 767px) {
   .shop-search {
-    flex: 0 0 44px;
+    flex: 1 1 auto;
+    width: 100%;
     max-width: none;
     height: 44px;
     min-height: 44px;
