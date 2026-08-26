@@ -20,7 +20,7 @@ from app.api import auth, users, notes, todos, shop, backpack, achievements, che
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="LifeQuest", version="1.0.0")
+app = FastAPI(title="LifeQuest", version="1.8.2")
 
 
 logger = logging.getLogger(__name__)
