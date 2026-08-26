@@ -187,10 +187,10 @@ test('notes discovery controls use readable Chinese labels', async () => {
   assert.doesNotMatch(source, /\u93ba\u6391\u7c2d|\u93c8\u5100\u677f\u621a\u5f48\u6d93\u5bee/)
 })
 
-test('shop search overrides the desktop flex basis on mobile', async () => {
+test('shop search remains usable on mobile', async () => {
   const source = await readFile(new URL('./Shop.vue', viewsDirectory), 'utf8')
 
-  assert.match(source, /@media \(max-width: 767px\) \{[\s\S]*?\.shop-search \{[\s\S]*?flex: 0 0 44px[\s\S]*?height: 44px/)
+  assert.match(source, /@media \(max-width: 767px\) \{[\s\S]*?\.shop-search \{[\s\S]*?flex: 1 1 auto[\s\S]*?width: 100%[\s\S]*?height: 44px/)
   assert.match(source, /@media \(max-width: 767px\) \{[\s\S]*?\.shop-search input \{[\s\S]*?height: 100%/)
 })
 
