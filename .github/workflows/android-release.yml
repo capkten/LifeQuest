@@ -27,8 +27,8 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "should_release=true" >> "$GITHUB_OUTPUT"
-          elif git diff --quiet HEAD^ HEAD -- VERSION .github/workflows/android-release.yml; then
-            echo "Application version and workflow did not change; skipping release."
+          elif git diff --quiet HEAD^ HEAD -- VERSION frontend .github/workflows/android-release.yml; then
+            echo "Application version and frontend release inputs did not change; skipping release."
             echo "should_release=false" >> "$GITHUB_OUTPUT"
           else
             echo "should_release=true" >> "$GITHUB_OUTPUT"
