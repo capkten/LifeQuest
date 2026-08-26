@@ -4,6 +4,7 @@ from functools import wraps
 from datetime import date, datetime, timezone
 from typing import List
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from sqlalchemy import or_, update
@@ -41,6 +42,7 @@ from app.services.cultivation import CultivationService
 
 
 _TODO_COMPLETION_LOCK = threading.Lock()
+_APP_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 
 def _completion_guard(method):
@@ -73,6 +75,23 @@ class TodoService:
         self.cultivation_service = CultivationService(db)
 
     @staticmethod
+    def _local_date(value: datetime) -> date:
+        """Return the calendar date in the app's user-facing timezone."""
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(_APP_TIMEZONE).date()
+
+    @classmethod
+    def _today(cls) -> date:
+        return cls._local_date(datetime.now(timezone.utc))
+
+    @classmethod
+    def _today_start_utc(cls) -> datetime:
+        local_now = datetime.now(timezone.utc).astimezone(_APP_TIMEZONE)
+        local_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        return local_start.astimezone(timezone.utc)
+
+    @staticmethod
     def _set_completed_today(habit: Habit) -> Habit:
         if habit.last_completed_at is None:
             habit.completed_today = False
@@ -83,7 +102,7 @@ class TodoService:
             completed_at = completed_at.replace(tzinfo=timezone.utc)
         else:
             completed_at = completed_at.astimezone(timezone.utc)
-        habit.completed_today = completed_at.date() == datetime.now(timezone.utc).date()
+        habit.completed_today = TodoService._local_date(completed_at) == TodoService._today()
         return habit
 
     @staticmethod
@@ -163,7 +182,8 @@ class TodoService:
     def complete_habit(self, habit: Habit, user_id: UUID) -> Habit:
         """Mark habit as completed for today, incrementing streak and awarding rewards."""
         now = datetime.now(timezone.utc)
-        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_start = self._today_start_utc()
+        completed_on = self._local_date(now)
         changed = self.db.execute(update(Habit).where(
             Habit.id == habit.id, Habit.user_id == user_id,
             or_(Habit.last_completed_at.is_(None), Habit.last_completed_at < day_start),
@@ -182,8 +202,8 @@ class TodoService:
         if user:
             settlement = self._update_rewards(
                 user, habit.coins_reward, habit.exp_reward, CoinSource.HABIT,
-                habit.difficulty, source_key=f"todo:habit:{habit.id}:{now.date().isoformat()}",
-                coin_source_id=self._coin_source_id(CoinSource.HABIT, habit.id, now.date()),
+                habit.difficulty, source_key=f"todo:habit:{habit.id}:{completed_on.isoformat()}",
+                coin_source_id=self._coin_source_id(CoinSource.HABIT, habit.id, completed_on),
                 cultivation_base_exp=CULTIVATION_REWARD_BASES["habit"],
             )
             self._check_achievements(user)
@@ -368,7 +388,7 @@ class TodoService:
     # --- Daily summary ---
     def get_daily_summary(self, user_id: UUID) -> dict:
         """Get today's tasks overview: habits due today, tasks due today, active goals."""
-        today = date.today()
+        today = self._today()
 
         # 1. Active habits due today
         habits = self.habit_repo.get_active_by_user(user_id)

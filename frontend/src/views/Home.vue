@@ -109,7 +109,7 @@
                 <button
                   class="daily-check-btn"
                   :class="{ 'daily-check-btn--done': habit.completed_today }"
-                  :disabled="completingHabitId === habit.id"
+                  :disabled="completingHabitId === habit.id || habit.completed_today"
                   :aria-disabled="habit.completed_today"
                   @click="completeDailyHabit(habit)"
                 >

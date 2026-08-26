@@ -490,6 +490,18 @@ def test_complete_habit_idempotent(client):
     assert user_after_second["experience"] == user_after_first["experience"]
 
 
+def test_habit_calendar_day_uses_china_timezone():
+    from datetime import datetime, timezone
+
+    from app.services.todo import TodoService
+
+    just_before_midnight = datetime(2026, 8, 26, 15, 59, tzinfo=timezone.utc)
+    midnight = datetime(2026, 8, 26, 16, 0, tzinfo=timezone.utc)
+
+    assert TodoService._local_date(just_before_midnight).isoformat() == "2026-08-26"
+    assert TodoService._local_date(midnight).isoformat() == "2026-08-27"
+
+
 def test_subtask_crud_uses_task_path_and_is_completed(client):
     headers = _register_and_login(client)
     task = client.post(

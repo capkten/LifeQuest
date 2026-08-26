@@ -126,7 +126,7 @@
               <button
                 class="complete-btn"
                 :class="{ 'complete-btn--done': habit.completed_today }"
-                :disabled="completingId === habit.id"
+                :disabled="completingId === habit.id || habit.completed_today"
                 :aria-disabled="habit.completed_today"
                 @click="completeHabit(habit)"
                 :aria-label="'完成 ' + habit.title"
