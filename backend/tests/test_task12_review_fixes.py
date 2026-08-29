@@ -288,7 +288,7 @@ def test_lock_retry_preserves_completed_todo_state_and_claims_once(
         session.commit()
         source_key = f"todo:{source}:{todo.id}"
         if model is Habit:
-            source_key += f":{datetime.now(timezone.utc).date().isoformat()}"
+            source_key += f":{TodoService._today().isoformat()}"
 
         getattr(TodoService(session), complete)(todo, user.id)
         session.expire_all()
