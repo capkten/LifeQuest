@@ -160,7 +160,7 @@
         @keydown.enter="openNotebook(notebook)"
         @keydown.space.prevent="openNotebook(notebook)"
       >
-        <button type="button" class="notebook-delete-btn" @click.stop="confirmDeleteNotebook(notebook)" title="删除笔记本" aria-label="删除笔记本">
+        <button v-if="notebook.is_owner !== false" type="button" class="notebook-delete-btn" @click.stop="confirmDeleteNotebook(notebook)" title="删除笔记本" aria-label="删除笔记本">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <polyline points="3 6 5 6 21 6" />
             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -178,6 +178,10 @@
         <div class="notebook-info">
           <h3 class="notebook-name">{{ notebook.name }}</h3>
           <p class="notebook-description">{{ notebook.description || '暂无描述' }}</p>
+          <p class="notebook-access">
+            <span>{{ notebook.is_owner === false ? (notebook.role === 'editor' ? '可编辑成员' : '只读成员') : '所有者' }}</span>
+            <span>{{ notebook.member_count || 1 }} 人</span>
+          </p>
         </div>
       </div>
     </div>
@@ -919,6 +923,21 @@ watch(discoveryFilters, fetchDiscovery, { deep: true })
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.notebook-access {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin: var(--spacing-sm) 0 0;
+  color: var(--color-primary);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+
+.notebook-access span + span {
+  color: var(--color-text-tertiary);
+  font-weight: 500;
 }
 
 /* Dialog */

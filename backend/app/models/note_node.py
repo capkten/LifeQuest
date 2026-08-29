@@ -73,6 +73,8 @@ class NoteNode(Base):
     tags_normalized = Column(Boolean, nullable=True)
     is_pinned = Column(Boolean, default=False)  # note only
     word_count = Column(Integer, default=0)  # note only
+    content_revision = Column(Integer, nullable=False, default=1)  # note only
+    updated_by = Column(Uuid, ForeignKey("users.id"), nullable=True)  # note only
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,

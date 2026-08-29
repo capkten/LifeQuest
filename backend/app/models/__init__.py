@@ -1,6 +1,7 @@
 from app.models.user import User
 from app.models.note import Notebook, Attachment
 from app.models.note_node import NoteNode
+from app.models.note_sharing import NotebookMember, NoteUserActivity, NoteCollabDocument, NoteCollabEvent
 from app.models.todo import Habit, Task, Goal, Subtask
 from app.models.shop import ShopItem, ExchangeHistory, ExchangeStatus
 from app.models.backpack import (
@@ -25,7 +26,8 @@ from app.models.immortal import ImmortalProfile, AscensionRecord, CrossRealmSett
 
 __all__ = [
     "User",
-    "Notebook", "Attachment", "NoteNode",
+    "Notebook", "Attachment", "NoteNode", "NotebookMember", "NoteUserActivity",
+    "NoteCollabDocument", "NoteCollabEvent",
     "Habit", "Task", "Goal", "Subtask",
     "ShopItem", "ExchangeHistory", "ExchangeStatus",
     "BackpackItem", "ItemType", "ItemStatus",

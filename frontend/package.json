@@ -1,6 +1,6 @@
 {
   "name": "lifequest-frontend",
-  "version": "1.8.6",
+  "version": "1.8.7",
   "private": true,
   "type": "module",
   "scripts": {
@@ -26,7 +26,8 @@
     "pinia": "^2.1.7",
     "prismjs": "^1.30.0",
     "vue": "^3.3.8",
-    "vue-router": "^4.2.5"
+    "vue-router": "^4.2.5",
+    "yjs": "^13.6.32"
   },
   "devDependencies": {
     "@capacitor/android": "^8.4.0",

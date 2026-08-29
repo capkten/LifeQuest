@@ -12,6 +12,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AppLayout: typeof import('./src/components/layout/AppLayout.vue')['default']
+    CollaborativeMarkdownEditor: typeof import('./src/components/notes/CollaborativeMarkdownEditor.vue')['default']
     CultivationStatusBar: typeof import('./src/components/cultivation/CultivationStatusBar.vue')['default']
     ElButton: typeof import('element-plus/es')['ElButton']
     ElDialog: typeof import('element-plus/es')['ElDialog']
@@ -20,6 +21,7 @@ declare module 'vue' {
     ElInput: typeof import('element-plus/es')['ElInput']
     Header: typeof import('./src/components/layout/Header.vue')['default']
     MapNode: typeof import('./src/components/cultivation/MapNode.vue')['default']
+    NotebookMembersDialog: typeof import('./src/components/notes/NotebookMembersDialog.vue')['default']
     NoteTree: typeof import('./src/components/notes/NoteTree.vue')['default']
     NoteViewer: typeof import('./src/components/notes/NoteViewer.vue')['default']
     NpcTimeline: typeof import('./src/components/cultivation/NpcTimeline.vue')['default']

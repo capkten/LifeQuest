@@ -2,10 +2,11 @@
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import and_, exists, func, or_
 from sqlalchemy.orm import Session
 from app.models.note import Notebook, Attachment
 from app.models.note_node import NoteNode
+from app.models.note_sharing import NoteUserActivity
 from app.repositories.base import BaseRepository
 
 
@@ -70,7 +71,7 @@ class NoteNodeRepository(BaseRepository[NoteNode]):
             self.db.query(NoteNode)
             .join(Notebook)
             .filter(
-                Notebook.user_id == user_id,
+                or_(Notebook.user_id == user_id, self._member_access_clause(user_id)),
                 NoteNode.type == "note",
                 (NoteNode.name.contains(query)) |
                 (NoteNode.summary.contains(query)) |
@@ -80,21 +81,28 @@ class NoteNodeRepository(BaseRepository[NoteNode]):
         )
 
     def get_recent_by_user(self, user_id: UUID, limit: int) -> List[NoteNode]:
-        return (
-            self.db.query(NoteNode)
+        rows = (
+            self.db.query(NoteNode, NoteUserActivity.last_opened_at)
             .join(Notebook)
+            .join(NoteUserActivity, NoteUserActivity.note_id == NoteNode.id)
             .filter(
-                Notebook.user_id == user_id,
+                or_(Notebook.user_id == user_id, self._member_access_clause(user_id)),
+                NoteUserActivity.user_id == user_id,
                 NoteNode.type == "note",
-                NoteNode.last_opened_at.is_not(None),
+                NoteUserActivity.last_opened_at.is_not(None),
             )
             .order_by(
-                NoteNode.last_opened_at.desc().nullslast(),
+                NoteUserActivity.last_opened_at.desc().nullslast(),
                 NoteNode.updated_at.desc(),
             )
             .limit(limit)
             .all()
         )
+        notes = []
+        for node, last_opened_at in rows:
+            node._viewer_last_opened_at = last_opened_at
+            notes.append(node)
+        return notes
 
     def discover(
         self,
@@ -110,7 +118,14 @@ class NoteNodeRepository(BaseRepository[NoteNode]):
         query = (
             self.db.query(NoteNode)
             .join(Notebook)
-            .filter(Notebook.user_id == user_id, NoteNode.type == "note")
+            .outerjoin(
+                NoteUserActivity,
+                and_(NoteUserActivity.note_id == NoteNode.id, NoteUserActivity.user_id == user_id),
+            )
+            .filter(
+                or_(Notebook.user_id == user_id, self._member_access_clause(user_id)),
+                NoteNode.type == "note",
+            )
         )
         if notebook_id is not None:
             query = query.filter(NoteNode.notebook_id == notebook_id)
@@ -131,7 +146,7 @@ class NoteNodeRepository(BaseRepository[NoteNode]):
             query = query.filter(NoteNode.updated_at <= updated_before)
 
         sort_columns = {
-            "last_opened": (NoteNode.last_opened_at.desc().nullslast(), NoteNode.updated_at.desc()),
+            "last_opened": (NoteUserActivity.last_opened_at.desc().nullslast(), NoteNode.updated_at.desc()),
             "updated": (NoteNode.updated_at.desc().nullslast(),),
             "created": (NoteNode.created_at.desc().nullslast(),),
             "title": (NoteNode.name.asc(),),
@@ -140,6 +155,21 @@ class NoteNodeRepository(BaseRepository[NoteNode]):
             raise ValueError("Unknown note sort")
         ordered_query = query.order_by(*sort_columns[sort], NoteNode.name.asc())
         return ordered_query.limit(limit).all()
+
+    @staticmethod
+    def _member_access_clause(user_id: UUID):
+        """Return an EXISTS clause for active notebook membership.
+
+        Keeping this as EXISTS avoids duplicate note rows when a notebook has
+        multiple members.
+        """
+        from app.models.note_sharing import NotebookMember
+
+        return exists().where(and_(
+            NotebookMember.notebook_id == Notebook.id,
+            NotebookMember.user_id == user_id,
+            NotebookMember.status == "active",
+        ))
 
 
 class AttachmentRepository(BaseRepository[Attachment]):

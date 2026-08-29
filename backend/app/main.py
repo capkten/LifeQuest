@@ -982,6 +982,16 @@ def _migrate_columns():
             else:
                 logger.info("Migration: added note_nodes.tags_normalized")
 
+        note_node_cols = {c["name"] for c in inspector.get_columns("note_nodes")}
+        if "content_revision" not in note_node_cols:
+            conn.execute(text(
+                "ALTER TABLE note_nodes ADD COLUMN content_revision INTEGER NOT NULL DEFAULT 1"
+            ))
+        if "updated_by" not in note_node_cols:
+            conn.execute(text(
+                f"ALTER TABLE note_nodes ADD COLUMN updated_by {uuid_type}"
+            ))
+
 
 @app.on_event("startup")
 def startup_event():
@@ -1022,8 +1032,9 @@ def startup_event():
         db.close()
 
 
-# Mount static files directory for uploaded files
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+# Avatars are intentionally public; note attachments are served by the
+# authenticated notes API instead of a static directory.
+app.mount("/uploads/avatars", StaticFiles(directory="uploads/avatars"), name="avatars")
 
 # CORS middleware
 _origins = [o.strip() for o in settings.CORS_ORIGINS.split(",")]

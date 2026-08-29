@@ -1,6 +1,6 @@
 <template>
   <div v-if="!nested" class="note-tree">
-    <div v-if="showToolbar" class="note-tree__toolbar" aria-label="笔记操作">
+    <div v-if="showToolbar && !readOnly" class="note-tree__toolbar" aria-label="笔记操作">
       <button
         type="button"
         class="note-tree__toolbar-button"
@@ -74,7 +74,7 @@
           <span class="note-tree__name">{{ node.name }}</span>
         </button>
 
-        <div class="note-tree__actions" aria-label="节点操作">
+        <div v-if="!readOnly" class="note-tree__actions" aria-label="节点操作">
           <button
             v-if="isFolder(node)"
             type="button"
@@ -137,6 +137,7 @@
           </button>
         </div>
         <button
+          v-if="!readOnly"
           type="button"
           class="note-tree__mobile-trigger"
           aria-label="打开节点操作"
@@ -145,7 +146,7 @@
         >
           <span aria-hidden="true">•••</span>
         </button>
-        <div v-if="mobileMenuOpen" class="note-tree__mobile-menu" role="menu" aria-label="节点操作">
+        <div v-if="!readOnly && mobileMenuOpen" class="note-tree__mobile-menu" role="menu" aria-label="节点操作">
           <button v-if="isFolder(node)" type="button" role="menuitem" @click.stop="emitMobile('create-folder', { parentId: node.id, node })">新建文件夹</button>
           <button v-if="isFolder(node)" type="button" role="menuitem" @click.stop="emitMobile('create-note', { parentId: node.id, node })">新建笔记</button>
           <button type="button" role="menuitem" @click.stop="emitMobile('rename', node)">重命名</button>
@@ -163,6 +164,7 @@
         :level="level + 1"
         :nested="true"
         :show-toolbar="false"
+        :read-only="readOnly"
       />
     </li>
     <li v-if="!nodes.length" class="note-tree__empty" role="none">{{ emptyLabel }}</li>
@@ -184,6 +186,7 @@ const props = defineProps({
   level: { type: Number, default: 1 },
   nested: { type: Boolean, default: false },
   showToolbar: { type: Boolean, default: true },
+  readOnly: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['select', 'toggle', 'create-folder', 'create-note', 'rename', 'move', 'delete'])

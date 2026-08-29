@@ -13,6 +13,18 @@ export function resolveUrl(path) {
   return serverBaseUrl + path
 }
 
+export function resolveWebSocketUrl(path) {
+  if (typeof window === 'undefined') return path
+  if (path.startsWith('ws://') || path.startsWith('wss://')) return path
+  const configured = import.meta.env.VITE_API_BASE_URL
+  if (configured && /^https?:\/\//.test(configured)) {
+    const base = configured.replace(/^http/, 'ws').replace(/\/$/, '')
+    return `${base}${path.replace(/^\/api/, '')}`
+  }
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.host}${path}`
+}
+
 const api = axios.create({
   baseURL: apiBaseUrl,
   timeout: 10000,

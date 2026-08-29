@@ -1,6 +1,14 @@
 import api from './api'
 
-const NOTE_FIELDS = ['title', 'content', 'summary', 'tags', 'is_pinned']
+const ATTACHMENT_PATH_PATTERN = /\/api\/notes\/[0-9a-f-]+\/attachments\/[0-9a-f-]+/gi
+
+export function resolveNoteAttachmentUrls(markdown = '') {
+  const token = typeof localStorage === 'undefined' ? '' : localStorage.getItem('token')
+  if (!token || !markdown) return markdown
+  return markdown.replace(ATTACHMENT_PATH_PATTERN, (path) => `${path}?token=${encodeURIComponent(token)}`)
+}
+
+const NOTE_FIELDS = ['title', 'content', 'summary', 'tags', 'is_pinned', 'base_revision']
 
 function notePayload(data = {}) {
   return NOTE_FIELDS.reduce((payload, field) => {
@@ -33,6 +41,26 @@ export const noteService = {
 
   async deleteNotebook(notebookId) {
     await api.delete(`/notes/notebooks/${notebookId}`)
+  },
+
+  // --- Sharing ---
+  async getNotebookMembers(notebookId) {
+    const response = await api.get(`/notes/notebooks/${notebookId}/members`)
+    return response.data
+  },
+
+  async addNotebookMember(notebookId, data) {
+    const response = await api.post(`/notes/notebooks/${notebookId}/members`, data)
+    return response.data
+  },
+
+  async updateNotebookMember(notebookId, userId, data) {
+    const response = await api.patch(`/notes/notebooks/${notebookId}/members/${userId}`, data)
+    return response.data
+  },
+
+  async removeNotebookMember(notebookId, userId) {
+    await api.delete(`/notes/notebooks/${notebookId}/members/${userId}`)
   },
 
   // --- Node tree ---
@@ -68,6 +96,11 @@ export const noteService = {
 
   async updateNote(noteId, data) {
     const response = await api.put(`/notes/${noteId}`, notePayload(data))
+    return response.data
+  },
+
+  async getCollaborationTicket(noteId) {
+    const response = await api.post(`/notes/${noteId}/collaboration-ticket`, null)
     return response.data
   },
 
@@ -108,9 +141,11 @@ export const noteService = {
   },
 
   // --- Image upload ---
-  async uploadImage(file) {
+  async uploadImage(file, noteId) {
+    if (!noteId) throw new Error('NOTE_MUST_BE_SAVED_BEFORE_UPLOAD')
     const formData = new FormData()
     formData.append('file', file)
+    formData.append('note_id', noteId)
     const response = await api.post('/notes/upload-image', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })

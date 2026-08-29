@@ -14,11 +14,15 @@
         </div>
       </div>
       <div class="header-actions">
+        <span v-if="isEditing" class="collaboration-status" :class="`collaboration-status--${collaboration.status.value}`" role="status" aria-live="polite">
+          <span class="collaboration-status-dot" aria-hidden="true"></span>
+          {{ collaborationStatusLabel }}
+        </span>
         <span class="save-status" :class="`save-status--${status}`" role="status" aria-live="polite">
           <span class="save-status-dot" aria-hidden="true"></span>
           {{ statusLabel }}
         </span>
-        <button type="button" class="save-btn" :disabled="status === 'saving' || (isEditing && !hydrated)" @click="saveNote">
+        <button type="button" class="save-btn" :disabled="!canSave || status === 'saving' || (isEditing && !hydrated)" @click="saveNote">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
             <polyline points="17 21 17 13 7 13 7 21" />
@@ -43,28 +47,27 @@
       <section class="editor-meta" aria-label="笔记详情">
         <label class="field field--title" for="note-title">
           <span class="sr-only">标题</span>
-          <input id="note-title" v-model="noteTitle" type="text" class="title-input" placeholder="笔记标题" maxlength="200" />
+            <input id="note-title" v-model="noteTitle" :disabled="!canEdit" type="text" class="title-input" placeholder="笔记标题" maxlength="200" />
         </label>
         <label class="field" for="note-summary">
           <span class="field-label">摘要</span>
-          <textarea id="note-summary" v-model="noteSummary" class="meta-input meta-input--summary" rows="2" maxlength="500" placeholder="为读者写一段简短摘要"></textarea>
+          <textarea id="note-summary" v-model="noteSummary" :disabled="!canEdit" class="meta-input meta-input--summary" rows="2" maxlength="500" placeholder="为读者写一段简短摘要"></textarea>
         </label>
         <label class="field" for="note-tags">
           <span class="field-label">标签</span>
-          <input id="note-tags" v-model="noteTags" type="text" class="meta-input" placeholder="工作、想法、参考" maxlength="500" />
+          <input id="note-tags" v-model="noteTags" :disabled="!canEdit" type="text" class="meta-input" placeholder="工作、想法、参考" maxlength="500" />
         </label>
         <label class="pin-field" for="note-pinned">
-          <input id="note-pinned" v-model="isPinned" type="checkbox" />
+          <input id="note-pinned" v-model="isPinned" :disabled="!canEdit" type="checkbox" />
           <span>置顶这篇笔记</span>
         </label>
       </section>
 
       <section class="editor-wrapper" aria-label="Markdown 编辑器">
-        <v-md-editor
+        <CollaborativeMarkdownEditor
           v-model="noteContent"
-          height="100%"
-          placeholder="使用 Markdown 编写内容..."
-          :disabled-menus="[]"
+          :disabled="!canEdit || collaborationBusy"
+          :upload-disabled="!noteId"
           @upload-image="handleUploadImage"
         />
       </section>
@@ -82,6 +85,8 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { useNoteAutosave } from '../composables/useNoteAutosave'
+import { useNoteCollaboration } from '../composables/useNoteCollaboration'
+import CollaborativeMarkdownEditor from '../components/notes/CollaborativeMarkdownEditor.vue'
 import { noteService } from '../services/note'
 import { getErrorMessage } from '../utils/errorMessage'
 
@@ -100,9 +105,14 @@ const loading = ref(false)
 const hydrated = ref(false)
 const loadError = ref(null)
 const suppressRouteWarning = ref(false)
+const canEdit = ref(true)
+const noteRevision = ref(1)
 const toast = ref({ show: false, message: '', type: 'success' })
+const collaboration = useNoteCollaboration()
 
 const isEditing = computed(() => !!noteId.value)
+const collaborationBusy = computed(() => isEditing.value && ['connecting', 'syncing'].includes(collaboration.status.value))
+const canSave = computed(() => canEdit.value && !collaborationBusy.value)
 const contextLabel = computed(() => {
   if (notebookId.value && folderId.value) return `笔记本 ${notebookId.value} / 文件夹 ${folderId.value}`
   if (notebookId.value) return `笔记本 ${notebookId.value}`
@@ -110,13 +120,14 @@ const contextLabel = computed(() => {
 })
 
 function snapshot() {
-  return {
+  const payload = {
     title: noteTitle.value.trim(),
-    content: noteContent.value,
     summary: noteSummary.value.trim(),
     tags: noteTags.value.trim(),
     is_pinned: isPinned.value,
   }
+  if (!noteId.value || !collaboration.isReady()) payload.content = noteContent.value
+  return payload
 }
 
 function displayTime(value) {
@@ -132,6 +143,18 @@ const statusLabel = computed(() => {
   if (status.value === 'error') return '保存失败 · 点击重试'
   if (status.value === 'saved') return `已保存 ${displayTime(autosave.lastSavedAt.value)}`
   return '所有更改已保存'
+})
+const collaborationStatusLabel = computed(() => {
+  if (collaboration.status.value === 'connected') {
+    const count = collaboration.peers.value.length
+    return count > 1 ? `${count} 人在线` : '协作已连接'
+  }
+  if (collaboration.status.value === 'connecting') return '正在连接协作'
+  if (collaboration.status.value === 'syncing') return '正在同步内容'
+  if (collaboration.status.value === 'readonly') return '只读模式'
+  if (collaboration.status.value === 'error') return '协作连接失败'
+  if (collaboration.status.value === 'disconnected') return '协作已断开'
+  return '协作未连接'
 })
 
 let toastTimer = null
@@ -159,6 +182,7 @@ async function loadRoute() {
   const requestId = ++loadRequest
   const context = routeContext()
   autosave.cancel()
+  collaboration.disconnect()
   hydrated.value = false
   loadError.value = null
   noteId.value = context.noteId
@@ -169,6 +193,8 @@ async function loadRoute() {
   noteSummary.value = ''
   noteTags.value = ''
   isPinned.value = false
+  canEdit.value = true
+  noteRevision.value = 1
 
   if (!noteId.value) {
     loading.value = false
@@ -186,10 +212,14 @@ async function loadRoute() {
     noteSummary.value = note.summary || ''
     noteTags.value = note.tags || ''
     isPinned.value = !!note.is_pinned
+    canEdit.value = note.can_edit !== false
+    noteRevision.value = note.content_revision || 1
     notebookId.value = note.notebook_id || notebookId.value
     folderId.value = note.parent_id || folderId.value
     autosave.reset(snapshot(), note.updated_at)
     hydrated.value = true
+    void collaboration.connect(note.id, note.content || '')
+    collaboration.startSnapshotTimer()
   } catch (error) {
     if (requestId === loadRequest) {
       loadError.value = getErrorMessage(error, '加载笔记失败，请重试。')
@@ -209,7 +239,18 @@ async function persistNote(payload) {
     showTitleRequiredError()
     throw new Error('TITLE_REQUIRED')
   }
-  if (noteId.value) return noteService.updateNote(noteId.value, payload)
+  if (noteId.value) {
+    if (collaboration.isReady()) {
+      await collaboration.flush()
+      noteRevision.value = Math.max(noteRevision.value, collaboration.serverRevision.value)
+    }
+    const updated = await noteService.updateNote(noteId.value, {
+      ...payload,
+      base_revision: noteRevision.value,
+    })
+    noteRevision.value = updated.content_revision || noteRevision.value
+    return updated
+  }
   if (!notebookId.value) throw new Error('NOTEBOOK_REQUIRED')
 
   const created = await noteService.createNote(notebookId.value, { ...payload, parent_id: folderId.value })
@@ -226,6 +267,7 @@ async function persistNote(payload) {
 }
 
 async function saveNote() {
+  if (!canEdit.value) return
   if (isEditing.value && !hydrated.value) {
     showToast(loadError.value || '笔记尚未加载完成，请先重试加载。', 'error')
     return
@@ -235,6 +277,10 @@ async function saveNote() {
     return
   }
   try {
+    if (collaboration.isReady()) {
+      await collaboration.flush()
+      noteRevision.value = Math.max(noteRevision.value, collaboration.serverRevision.value)
+    }
     await autosave.saveNow()
     if (!autosave.dirty.value && noteId.value && notebookId.value) {
       await router.push({ name: 'NotebookWorkspaceView', params: { notebookId: notebookId.value, noteId: noteId.value } })
@@ -245,11 +291,15 @@ async function saveNote() {
 }
 
 async function handleUploadImage(event, insertCallback, files) {
-  const file = files?.[0]
+  const file = event?.target ? event.target.files?.[0] : event
   if (!file) return
   try {
-    const url = await noteService.uploadImage(file)
-    insertCallback({ url })
+    if (!noteId.value) {
+      showToast('请先保存笔记，再插入图片。', 'error')
+      return
+    }
+    const url = await noteService.uploadImage(file, noteId.value)
+    if (typeof insertCallback === 'function') insertCallback(url)
   } catch (error) {
     showToast(getErrorMessage(error, '图片上传失败，请重试。'), 'error')
   }
@@ -273,11 +323,26 @@ onBeforeRouteLeave(() => {
 })
 
 watch(snapshot, scheduleAutosave, { deep: true })
+watch(noteContent, (nextContent) => {
+  if (hydrated.value && collaboration.isReady() && nextContent !== collaboration.content.value) {
+    collaboration.setLocalContent(nextContent)
+  }
+})
+watch(() => collaboration.content.value, (nextContent) => {
+  if (nextContent !== noteContent.value) noteContent.value = nextContent
+})
+watch(() => collaboration.serverRevision.value, (revision) => {
+  if (revision > noteRevision.value) noteRevision.value = revision
+})
+watch(() => collaboration.status.value, (nextStatus, previousStatus) => {
+  if (previousStatus === 'connected' && nextStatus === 'disconnected' && hydrated.value) autosave.schedule()
+})
 watch(() => [route.name, route.params.id, route.params.noteId, route.params.notebookId, route.query.parent_id, route.query.folder_id], loadRoute, { immediate: true })
 
 onMounted(() => window.addEventListener('beforeunload', handleBeforeUnload))
 onUnmounted(() => {
   autosave.cancel()
+  collaboration.disconnect()
   window.removeEventListener('beforeunload', handleBeforeUnload)
   if (toastTimer) clearTimeout(toastTimer)
 })
@@ -297,6 +362,11 @@ onUnmounted(() => {
 .save-status--dirty .save-status-dot, .save-status--error .save-status-dot { background: var(--color-warning); }
 .save-status--saving .save-status-dot { background: var(--color-primary); animation: pulse 1s ease-in-out infinite; }
 .save-status--error { color: var(--color-error-dark); }
+.collaboration-status { display: inline-flex; align-items: center; gap: var(--spacing-xs); color: var(--color-text-secondary); font-size: var(--font-size-xs); white-space: nowrap; }
+.collaboration-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-text-tertiary); }
+.collaboration-status--connected .collaboration-status-dot { background: var(--color-success); }
+.collaboration-status--connecting .collaboration-status-dot, .collaboration-status--syncing .collaboration-status-dot { background: var(--color-primary); animation: pulse 1s ease-in-out infinite; }
+.collaboration-status--error, .collaboration-status--disconnected { color: var(--color-warning-dark, var(--color-warning)); }
 .save-btn { display: inline-flex; align-items: center; gap: var(--spacing-xs); min-height: 44px; padding: var(--spacing-sm) var(--spacing-lg); border: 0; border-radius: var(--radius-md); color: white; background: var(--color-primary); cursor: pointer; font-size: var(--font-size-sm); font-weight: 700; }
 .save-btn:hover:not(:disabled), .save-btn:focus-visible { background: var(--color-primary-dark); outline: 2px solid var(--color-primary-light); outline-offset: 2px; }
 .save-btn:disabled { opacity: .6; cursor: not-allowed; }
@@ -310,6 +380,7 @@ onUnmounted(() => {
 .meta-input { min-height: 44px; padding: var(--spacing-sm); font-size: var(--font-size-sm); }
 .meta-input--summary { resize: vertical; min-height: 60px; }
 .title-input:focus, .meta-input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(14, 165, 233, .12); }
+.title-input:disabled, .meta-input:disabled { opacity: .65; cursor: not-allowed; }
 .pin-field { display: inline-flex; align-items: center; gap: var(--spacing-xs); min-height: 44px; color: var(--color-text-secondary); font-size: var(--font-size-sm); white-space: nowrap; cursor: pointer; }
 .pin-field input { width: 18px; height: 18px; accent-color: var(--color-primary); }
 .editor-wrapper { flex: 1; min-height: 0; }
@@ -325,7 +396,7 @@ onUnmounted(() => {
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse { 50% { opacity: .35; } }
-@media (prefers-reduced-motion: reduce) { .loading-spinner, .save-status--saving .save-status-dot { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .loading-spinner, .save-status--saving .save-status-dot, .collaboration-status--connecting .collaboration-status-dot, .collaboration-status--syncing .collaboration-status-dot { animation: none; } }
 @media (max-width: 960px) { .editor-meta { grid-template-columns: 1fr 1fr; } .field--title { grid-column: 1 / -1; } .pin-field { align-self: center; } }
 @media (max-width: 767px) { .note-editor-page { height: calc(100vh - var(--bottom-nav-height) - var(--header-height)); height: calc(100dvh - var(--bottom-nav-height) - var(--header-height)); padding-bottom: var(--safe-area-bottom); } .editor-header { align-items: flex-start; padding: var(--spacing-sm) var(--spacing-md); } .header-actions { flex-direction: column; align-items: flex-end; gap: var(--spacing-xs); } .save-status { font-size: var(--font-size-xs); } .editor-meta { grid-template-columns: 1fr; padding: var(--spacing-md); } .field--title { grid-column: auto; } .pin-field { justify-self: start; } }
 </style>

@@ -167,6 +167,20 @@ def _resolve_user_id(db) -> UUID:
     raise RuntimeError("请先调用 login 工具登录")
 
 
+def _require_notebook_write(svc: NoteService, notebook_id: UUID, user_id: UUID) -> None:
+    try:
+        svc.require_notebook_access(notebook_id, user_id, write=True)
+    except PermissionError as exc:
+        raise ValueError("Not authorized") from exc
+
+
+def _require_node_write(svc: NoteService, node_id: UUID, user_id: UUID):
+    try:
+        return svc.require_node_access(node_id, user_id, write=True)
+    except (ValueError, PermissionError) as exc:
+        raise ValueError("Node not found") from exc
+
+
 def _serialize(obj):
     """Convert SQLAlchemy model / date / UUID to JSON-safe dict."""
     if obj is None:
@@ -1055,15 +1069,9 @@ def delete_notebook(notebook_id: str) -> Any:
         uid = _resolve_user_id(db)
         svc = NoteService(db)
         notebook_uuid = UUID(notebook_id)
-        if not svc.verify_notebook_ownership(notebook_uuid, uid):
+        if not svc.verify_notebook_owner(notebook_uuid, uid):
             raise ValueError("Notebook not found")
-        root_nodes = [
-            node for node in svc.node_repo.get_by_notebook(notebook_uuid)
-            if node.parent_id is None
-        ]
-        for node in root_nodes:
-            svc.delete_node(node.id)
-        svc.notebook_repo.delete(notebook_uuid)
+        svc.delete_notebook(notebook_uuid)
         return {"status": "ok", "message": "Notebook deleted"}
     finally:
         db.close()
@@ -1118,6 +1126,7 @@ def create_folder(
         notebook_uuid = UUID(notebook_id)
         if not svc.verify_notebook_ownership(notebook_uuid, uid):
             raise ValueError("Notebook not found")
+        _require_notebook_write(svc, notebook_uuid, uid)
         folder = svc.create_folder(
             notebook_uuid,
             uid,
@@ -1145,6 +1154,7 @@ def create_note(
         notebook_uuid = UUID(notebook_id)
         if not svc.verify_notebook_ownership(notebook_uuid, uid):
             raise ValueError("Notebook not found")
+        _require_notebook_write(svc, notebook_uuid, uid)
         note = svc.create_note(
             notebook_uuid,
             uid,
@@ -1178,6 +1188,7 @@ def rename_or_move_node(
         node_uuid = UUID(node_id)
         if not svc.verify_node_ownership(node_uuid, uid):
             raise ValueError("Node not found")
+        _require_node_write(svc, node_uuid, uid)
         node = svc.node_repo.get_by_id(node_uuid)
         if name is not None:
             svc.rename_node(node_uuid, name, commit=False)
@@ -1201,6 +1212,7 @@ def delete_node(node_id: str) -> Any:
         node_uuid = UUID(node_id)
         if not svc.verify_node_ownership(node_uuid, uid):
             raise ValueError("Node not found")
+        _require_node_write(svc, node_uuid, uid)
         svc.delete_node(node_uuid)
         return {"status": "ok", "message": "Node deleted"}
     finally:
@@ -1313,6 +1325,7 @@ def update_note(
         note_id_uuid = UUID(note_id)
         if not svc.verify_node_ownership(note_id_uuid, uid):
             raise ValueError("Note not found")
+        _require_node_write(svc, note_id_uuid, uid)
         note = svc.node_repo.get_by_id(note_id_uuid)
         if not note or note.type != "note":
             raise ValueError("Note not found")

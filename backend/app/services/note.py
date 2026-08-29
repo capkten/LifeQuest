@@ -4,15 +4,17 @@ import pathlib
 import re
 import shutil
 import logging
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import List, Optional, Sequence, Tuple
 from uuid import UUID, uuid4
 
-from sqlalchemy import inspect, text
+from sqlalchemy import and_, or_, inspect, text
 from sqlalchemy.orm import Session
 
 from app.models.note import Notebook, Attachment
 from app.models.note_node import NoteNode, normalize_name
+from app.models.note_sharing import NotebookMember, NoteUserActivity, NoteCollabDocument, NoteCollabEvent
+from app.models.user import User
 from app.repositories.note import NotebookRepository, NoteNodeRepository, AttachmentRepository
 from app.schemas.note import (
     NotebookCreate,
@@ -26,6 +28,13 @@ from app.services.achievement import AchievementService
 BACKEND_DIR = pathlib.Path(__file__).resolve().parent.parent.parent
 NOTES_DIR = BACKEND_DIR / "notes_data"
 logger = logging.getLogger(__name__)
+
+
+class NoteRevisionConflict(ValueError):
+    def __init__(self, node: NoteNode, content: str):
+        super().__init__("NOTE_CONFLICT")
+        self.node = node
+        self.content = content
 
 
 def canonicalize_tags(tags: Optional[str]) -> Optional[str]:
@@ -65,6 +74,13 @@ def _write_content_atomically(content_path: str, content: str) -> None:
         raise
 
 
+def _attachment_file_path(file_path: Optional[str]) -> Optional[pathlib.Path]:
+    if not file_path:
+        return None
+    path = pathlib.Path(file_path)
+    return path if path.is_absolute() else BACKEND_DIR / path
+
+
 class NoteService:
     def __init__(self, db: Session):
         self.db = db
@@ -75,17 +91,54 @@ class NoteService:
 
     # --- Ownership verification ---
 
-    def verify_notebook_ownership(self, notebook_id: UUID, user_id: UUID) -> bool:
+    def get_notebook_access(self, notebook_id: UUID, user_id: UUID) -> Optional[dict]:
         notebook = self.notebook_repo.get_by_id(notebook_id)
         if not notebook:
-            return False
-        return notebook.user_id == user_id
+            return None
+        if notebook.user_id == user_id:
+            return {"notebook": notebook, "role": "owner", "is_owner": True}
+
+        member = self.db.query(NotebookMember).filter(
+            NotebookMember.notebook_id == notebook_id,
+            NotebookMember.user_id == user_id,
+            NotebookMember.status == "active",
+        ).first()
+        if not member:
+            return None
+        return {"notebook": notebook, "role": member.role, "is_owner": False, "member": member}
+
+    def require_notebook_access(self, notebook_id: UUID, user_id: UUID, write: bool = False) -> dict:
+        access = self.get_notebook_access(notebook_id, user_id)
+        if not access or (write and access["role"] == "viewer"):
+            raise PermissionError("Not authorized")
+        return access
+
+    def require_node_access(self, node_id: UUID, user_id: UUID, write: bool = False) -> dict:
+        node = self.node_repo.get_by_id(node_id)
+        if not node:
+            raise ValueError("Note not found")
+        access = self.require_notebook_access(node.notebook_id, user_id, write=write)
+        access["node"] = node
+        return access
+
+    def verify_notebook_ownership(self, notebook_id: UUID, user_id: UUID) -> bool:
+        """Backward-compatible access check used by the MCP adapter.
+
+        The old note API only had owners, so the MCP helper kept this name.
+        It now means that the user can access the notebook as a member too.
+        Destructive owner-only operations must check ``is_owner`` explicitly.
+        """
+        return self.get_notebook_access(notebook_id, user_id) is not None
+
+    def verify_notebook_owner(self, notebook_id: UUID, user_id: UUID) -> bool:
+        access = self.get_notebook_access(notebook_id, user_id)
+        return bool(access and access["is_owner"])
 
     def verify_node_ownership(self, node_id: UUID, user_id: UUID) -> bool:
         node = self.node_repo.get_by_id(node_id)
         if not node:
             return False
-        return self.verify_notebook_ownership(node.notebook_id, user_id)
+        return self.get_notebook_access(node.notebook_id, user_id) is not None
 
     # --- Notebook operations ---
 
@@ -95,7 +148,157 @@ class NoteService:
         return self.notebook_repo.create(data)
 
     def get_notebooks(self, user_id: UUID) -> List[Notebook]:
-        return self.notebook_repo.get_by_user(user_id)
+        owned = self.notebook_repo.get_by_user(user_id)
+        shared = (
+            self.db.query(Notebook)
+            .join(NotebookMember, NotebookMember.notebook_id == Notebook.id)
+            .filter(
+                NotebookMember.user_id == user_id,
+                NotebookMember.status == "active",
+            )
+            .all()
+        )
+        seen = set()
+        result = []
+        for notebook in [*owned, *shared]:
+            if notebook.id in seen:
+                continue
+            seen.add(notebook.id)
+            access = self.get_notebook_access(notebook.id, user_id)
+            notebook._access_role = access["role"] if access else "viewer"
+            notebook._is_owner = bool(access and access["is_owner"])
+            notebook._member_count = self.db.query(NotebookMember).filter(
+                NotebookMember.notebook_id == notebook.id,
+                NotebookMember.status == "active",
+            ).count() + 1
+            result.append(notebook)
+        return result
+
+    def get_notebook_members(self, notebook_id: UUID, user_id: UUID) -> List[dict]:
+        access = self.require_notebook_access(notebook_id, user_id)
+        owner = self.db.query(User).filter(User.id == access["notebook"].user_id).first()
+        members = []
+        if owner:
+            members.append({
+                "id": owner.id,
+                "user_id": owner.id,
+                "username": owner.username,
+                "email": owner.email,
+                "role": "owner",
+                "status": "active",
+                "created_at": access["notebook"].created_at,
+            })
+        rows = (
+            self.db.query(NotebookMember, User)
+            .join(User, User.id == NotebookMember.user_id)
+            .filter(NotebookMember.notebook_id == notebook_id)
+            .order_by(NotebookMember.created_at.asc())
+            .all()
+        )
+        for member, target in rows:
+            members.append({
+                "id": member.id,
+                "user_id": target.id,
+                "username": target.username,
+                "email": target.email,
+                "role": member.role,
+                "status": member.status,
+                "created_at": member.created_at,
+            })
+        return members
+
+    def add_notebook_member(self, notebook_id: UUID, actor_id: UUID, identifier: str, role: str) -> dict:
+        access = self.require_notebook_access(notebook_id, actor_id)
+        if not access["is_owner"]:
+            raise PermissionError("Not authorized")
+        normalized = identifier.strip()
+        target = self.db.query(User).filter(
+            or_(User.username == normalized, User.email == normalized)
+        ).first()
+        if not target:
+            raise ValueError("USER_NOT_FOUND")
+        if target.id == access["notebook"].user_id:
+            raise ValueError("OWNER_ALREADY_MEMBER")
+        existing = self.db.query(NotebookMember).filter(
+            NotebookMember.notebook_id == notebook_id,
+            NotebookMember.user_id == target.id,
+        ).first()
+        if existing:
+            raise ValueError("MEMBER_ALREADY_EXISTS")
+        member = NotebookMember(
+            notebook_id=notebook_id,
+            user_id=target.id,
+            role=role,
+            status="active",
+            invited_by=actor_id,
+        )
+        self.db.add(member)
+        self.db.commit()
+        self.db.refresh(member)
+        return {
+            "id": member.id,
+            "user_id": target.id,
+            "username": target.username,
+            "email": target.email,
+            "role": member.role,
+            "status": member.status,
+            "created_at": member.created_at,
+        }
+
+    def update_notebook_member(self, notebook_id: UUID, actor_id: UUID, target_id: UUID, role: str) -> dict:
+        access = self.require_notebook_access(notebook_id, actor_id)
+        if not access["is_owner"]:
+            raise PermissionError("Not authorized")
+        member = self.db.query(NotebookMember).filter(
+            NotebookMember.notebook_id == notebook_id,
+            NotebookMember.user_id == target_id,
+        ).first()
+        if not member:
+            raise ValueError("MEMBER_NOT_FOUND")
+        member.role = role
+        self.db.commit()
+        target = self.db.query(User).filter(User.id == target_id).first()
+        self.db.refresh(member)
+        return {
+            "id": member.id,
+            "user_id": target.id,
+            "username": target.username,
+            "email": target.email,
+            "role": member.role,
+            "status": member.status,
+            "created_at": member.created_at,
+        }
+
+    def remove_notebook_member(self, notebook_id: UUID, actor_id: UUID, target_id: UUID) -> None:
+        access = self.require_notebook_access(notebook_id, actor_id)
+        if not access["is_owner"]:
+            raise PermissionError("Not authorized")
+        member = self.db.query(NotebookMember).filter(
+            NotebookMember.notebook_id == notebook_id,
+            NotebookMember.user_id == target_id,
+        ).first()
+        if not member:
+            raise ValueError("MEMBER_NOT_FOUND")
+        self.db.delete(member)
+        self.db.commit()
+
+    def delete_notebook(self, notebook_id: UUID) -> None:
+        notebook = self.notebook_repo.get_by_id(notebook_id)
+        if not notebook:
+            raise ValueError("Notebook not found")
+
+        root_nodes = [
+            node for node in self.node_repo.get_by_notebook(notebook_id)
+            if node.parent_id is None
+        ]
+        for node in root_nodes:
+            self.delete_node(node.id)
+
+        self.db.query(NotebookMember).filter(
+            NotebookMember.notebook_id == notebook_id,
+        ).delete(synchronize_session=False)
+        self.db.delete(notebook)
+        self.db.commit()
 
     # --- Node tree operations ---
 
@@ -147,7 +350,12 @@ class NoteService:
             raise ValueError("同名冲突: 当前目录已存在同名条目")
 
         path = _compute_path(parent_path, note_in.title.strip(), is_note=True)
-        content_path = _compute_content_path(user_id, notebook_id, path)
+        notebook = self.notebook_repo.get_by_id(notebook_id)
+        if not notebook:
+            raise ValueError("Notebook not found")
+        # Shared notes use the notebook owner's existing storage root so a
+        # collaborator never creates a second private copy of the document.
+        content_path = _compute_content_path(notebook.user_id, notebook_id, path)
 
         node = NoteNode(
             id=uuid4(),
@@ -307,10 +515,16 @@ class NoteService:
         self.db.refresh(node)
         return node
 
-    def update_note(self, node_id: UUID, note_in: NoteUpdate) -> NoteNode:
+    def update_note(self, node_id: UUID, note_in: NoteUpdate, user_id: Optional[UUID] = None) -> NoteNode:
         node = self.node_repo.get_by_id(node_id)
         if not node or node.type != "note":
             raise ValueError("Note not found")
+
+        if user_id is not None:
+            self.require_notebook_access(node.notebook_id, user_id, write=True)
+
+        if note_in.base_revision is not None and note_in.base_revision != (node.content_revision or 1):
+            raise NoteRevisionConflict(node, self.get_note_content(node_id))
 
         if note_in.title is not None:
             self.rename_node(node_id, note_in.title, commit=False)
@@ -336,6 +550,15 @@ class NoteService:
             if content_path:
                 _write_content_atomically(content_path, note_in.content)
 
+        changed = any(
+            value is not None
+            for value in (note_in.title, note_in.summary, note_in.tags, note_in.is_pinned, note_in.content)
+        )
+        if changed:
+            node.content_revision = (node.content_revision or 1) + 1
+            if user_id is not None:
+                node.updated_by = user_id
+
         try:
             self.db.commit()
             self.db.refresh(node)
@@ -345,6 +568,27 @@ class NoteService:
                 _write_content_atomically(content_path, previous_content)
             raise
         return node
+
+    def persist_collaboration_content(self, node_id: UUID, user_id: UUID, content: str) -> NoteNode:
+        node = self.node_repo.get_by_id(node_id)
+        if not node or node.type != "note":
+            raise ValueError("Note not found")
+        self.require_notebook_access(node.notebook_id, user_id, write=True)
+        previous_content = self.get_note_content(node_id)
+        try:
+            if node.content_path:
+                _write_content_atomically(node.content_path, content)
+            node.word_count = len(content.split())
+            node.content_revision = (node.content_revision or 1) + 1
+            node.updated_by = user_id
+            self.db.commit()
+            self.db.refresh(node)
+            return node
+        except Exception:
+            self.db.rollback()
+            if node.content_path:
+                _write_content_atomically(node.content_path, previous_content)
+            raise
 
     def get_note_content(self, node_id: UUID) -> str:
         node = self.node_repo.get_by_id(node_id)
@@ -362,17 +606,69 @@ class NoteService:
 
         # Delete descendants first
         descendants = self.node_repo.get_descendants(node_id)
-        for desc in reversed(descendants):
+        for desc in sorted(descendants, key=lambda item: item.path.count("/"), reverse=True):
+            self._delete_note_related_data(desc)
             if desc.type == "note" and desc.content_path and os.path.exists(desc.content_path):
                 os.remove(desc.content_path)
             self.db.delete(desc)
 
         # Delete the node itself
+        self._delete_note_related_data(node)
         if node.type == "note" and node.content_path and os.path.exists(node.content_path):
             os.remove(node.content_path)
 
         self.db.delete(node)
         self.db.commit()
+
+    def _delete_note_related_data(self, node: NoteNode) -> None:
+        if node.type != "note":
+            return
+        for attachment in self.attachment_repo.get_by_note(node.id):
+            attachment_path = _attachment_file_path(attachment.file_path)
+            if attachment_path and attachment_path.exists():
+                attachment_path.unlink()
+            self.db.delete(attachment)
+        self.db.query(NoteUserActivity).filter(
+            NoteUserActivity.note_id == node.id,
+        ).delete(synchronize_session=False)
+        self.db.query(NoteCollabEvent).filter(
+            NoteCollabEvent.note_id == node.id,
+        ).delete(synchronize_session=False)
+        self.db.query(NoteCollabDocument).filter(
+            NoteCollabDocument.note_id == node.id,
+        ).delete(synchronize_session=False)
+
+    def create_attachment(
+        self,
+        note_id: UUID,
+        user_id: UUID,
+        filename: str,
+        file_path: str,
+        file_type: str,
+        file_size: int,
+    ) -> Attachment:
+        self.require_node_access(note_id, user_id, write=True)
+        attachment = Attachment(
+            note_id=note_id,
+            filename=filename,
+            file_path=file_path,
+            file_type=file_type,
+            file_size=file_size,
+        )
+        self.db.add(attachment)
+        self.db.commit()
+        self.db.refresh(attachment)
+        return attachment
+
+    def get_attachment(self, note_id: UUID, attachment_id: UUID, user_id: UUID) -> Attachment:
+        self.require_node_access(note_id, user_id)
+        attachment = self.db.query(Attachment).filter(
+            Attachment.id == attachment_id,
+            Attachment.note_id == note_id,
+        ).first()
+        if not attachment:
+            raise ValueError("Attachment not found")
+        return attachment
 
     def search_notes(self, user_id: UUID, query: str) -> List[NoteNode]:
         return self.node_repo.search(user_id, query)
@@ -381,10 +677,18 @@ class NoteService:
         node = self.node_repo.get_by_id(note_id)
         if not node or node.type != "note":
             raise ValueError("Note not found")
-        if not self.verify_notebook_ownership(node.notebook_id, user_id):
-            raise PermissionError("Not authorized")
+        self.require_notebook_access(node.notebook_id, user_id)
 
-        node.last_opened_at = datetime.now(timezone.utc)
+        opened_at = datetime.now(timezone.utc)
+        node.last_opened_at = opened_at
+        activity = self.db.query(NoteUserActivity).filter(
+            NoteUserActivity.note_id == note_id,
+            NoteUserActivity.user_id == user_id,
+        ).first()
+        if not activity:
+            activity = NoteUserActivity(note_id=note_id, user_id=user_id)
+            self.db.add(activity)
+        activity.last_opened_at = opened_at
         self.db.commit()
         self.db.refresh(node)
         return node

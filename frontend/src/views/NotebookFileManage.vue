@@ -22,19 +22,26 @@
       </div>
 
       <div class="workspace-actions">
-        <button type="button" class="button button--quiet" @click="openCreateFolder()">
+        <button type="button" class="button button--quiet" :disabled="!canEdit" @click="openCreateFolder()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
             <path d="M12 11v6M9 14h6" />
           </svg>
           <span>新建文件夹</span>
         </button>
-        <button type="button" class="button button--primary" @click="openCreateNote()">
+        <button type="button" class="button button--primary" :disabled="!canEdit" @click="openCreateNote()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
             <path d="M14 2v6h6M12 11v6M9 14h6" />
           </svg>
           <span>新建笔记</span>
+        </button>
+        <button v-if="canManageMembers" type="button" class="button button--quiet" @click="openMembersDialog">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <circle cx="9" cy="8" r="3" />
+            <path d="M3 20c.4-3.1 2.4-5 6-5s5.6 1.9 6 5M17 11a3 3 0 1 0 0-6M16 15c2.8.2 4.4 1.8 5 5" />
+          </svg>
+          <span>共享</span>
         </button>
       </div>
     </header>
@@ -74,6 +81,7 @@
           :selected-id="selectedNoteId"
           :current-folder-id="currentFolderId"
           :expanded-ids="expandedIds"
+          :read-only="!canEdit"
           label="笔记目录"
           empty-label="还没有笔记内容"
           @select="handleSelect"
@@ -134,6 +142,7 @@
             :note="viewerNote"
             :loading="viewerLoading"
             :error="viewerError"
+            :can-edit="canEdit"
             @edit="editViewer"
             @toggle-pin="toggleViewerPin"
             @move="openMove"
@@ -271,6 +280,19 @@
       </div>
     </Teleport>
 
+    <NotebookMembersDialog
+      :visible="membersDialogOpen"
+      :members="members"
+      :loading="membersLoading"
+      :pending="membersPending"
+      :error="membersError"
+      :can-manage="canManageMembers"
+      @close="closeMembersDialog"
+      @add="addMember"
+      @update-role="updateMemberRole"
+      @remove="removeMember"
+    />
+
     <Teleport to="body">
       <Transition name="toast">
         <div v-if="toast.show" class="workspace-toast" :class="`workspace-toast--${toast.type}`" role="status">{{ toast.message }}</div>
@@ -284,6 +306,7 @@ import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import NoteTree from '../components/notes/NoteTree.vue'
 import NoteViewer from '../components/notes/NoteViewer.vue'
+import NotebookMembersDialog from '../components/notes/NotebookMembersDialog.vue'
 import { useNoteWorkspace } from '../composables/useNoteWorkspace'
 import { noteService } from '../services/note'
 import { getErrorMessage } from '../utils/errorMessage'
@@ -326,6 +349,11 @@ const viewerNote = ref(null)
 const viewerLoading = ref(false)
 const viewerError = ref(null)
 const openedViewerNotes = new Set()
+const membersDialogOpen = ref(false)
+const members = ref([])
+const membersLoading = ref(false)
+const membersPending = ref(false)
+const membersError = ref('')
 let toastTimer = null
 let loadRequest = 0
 let viewerRequestId = 0
@@ -334,6 +362,12 @@ const workspaceLoading = computed(() => loading.value || !notebook.value && !not
 const workspaceError = computed(() => notebookError.value)
 const isNewNoteRoute = computed(() => route.name === 'NewNoteInWorkspace')
 const routeModeLabel = computed(() => route.name === 'NotebookWorkspaceEdit' ? '编辑上下文' : '已选择笔记')
+const canEdit = computed(() => notebook.value?.role !== 'viewer')
+const canManageMembers = computed(() => notebook.value?.is_owner === true)
+const permissionLabel = computed(() => {
+  if (notebook.value?.is_owner) return '所有者'
+  return notebook.value?.role === 'editor' ? '可编辑成员' : '只读成员'
+})
 
 function findNode(nodes, nodeId) {
   for (const node of nodes || []) {
@@ -372,7 +406,7 @@ const currentFolderName = computed(() => {
 const contextLabel = computed(() => {
   if (selectedNode.value) return `正在查看 · ${selectedNode.value.name}`
   if (currentFolderId.value) return `当前位置 · ${currentFolderName.value}`
-  return '目录和内容会一直保持在身边'
+  return `${permissionLabel.value} · 目录和内容会一直保持在身边`
 })
 const dialogTitle = computed(() => ({
   folder: '新建文件夹',
@@ -402,6 +436,70 @@ async function loadWorkspace() {
     syncRouteSelection()
   } catch (cause) {
     if (requestId === loadRequest) notebookError.value = getErrorMessage(cause)
+  }
+}
+
+async function openMembersDialog() {
+  if (!canManageMembers.value) return
+  membersDialogOpen.value = true
+  membersError.value = ''
+  membersLoading.value = true
+  try {
+    members.value = await noteService.getNotebookMembers(notebookId.value)
+  } catch (cause) {
+    membersError.value = getErrorMessage(cause, '加载成员失败，请重试。')
+  } finally {
+    membersLoading.value = false
+  }
+}
+
+function closeMembersDialog() {
+  if (membersPending.value) return
+  membersDialogOpen.value = false
+  membersError.value = ''
+}
+
+async function addMember(payload) {
+  if (membersPending.value) return
+  membersPending.value = true
+  membersError.value = ''
+  try {
+    const member = await noteService.addNotebookMember(notebookId.value, payload)
+    members.value = [...members.value.filter(item => item.user_id !== member.user_id), member]
+    notebook.value = { ...notebook.value, member_count: members.value.length }
+  } catch (cause) {
+    membersError.value = getErrorMessage(cause, '添加成员失败，请确认用户名或邮箱。')
+  } finally {
+    membersPending.value = false
+  }
+}
+
+async function updateMemberRole({ userId, role }) {
+  if (membersPending.value) return
+  membersPending.value = true
+  membersError.value = ''
+  try {
+    const member = await noteService.updateNotebookMember(notebookId.value, userId, { role })
+    members.value = members.value.map(item => item.user_id === member.user_id ? member : item)
+  } catch (cause) {
+    membersError.value = getErrorMessage(cause, '更新成员权限失败，请重试。')
+  } finally {
+    membersPending.value = false
+  }
+}
+
+async function removeMember(member) {
+  if (membersPending.value || !window.confirm(`确定移除成员「${member.username}」吗？`)) return
+  membersPending.value = true
+  membersError.value = ''
+  try {
+    await noteService.removeNotebookMember(notebookId.value, member.user_id)
+    members.value = members.value.filter(item => item.user_id !== member.user_id)
+    notebook.value = { ...notebook.value, member_count: members.value.length }
+  } catch (cause) {
+    membersError.value = getErrorMessage(cause, '移除成员失败，请重试。')
+  } finally {
+    membersPending.value = false
   }
 }
 
@@ -466,7 +564,7 @@ function editViewer() {
 }
 
 async function toggleViewerPin() {
-  if (!viewerNote.value) return
+  if (!viewerNote.value || !canEdit.value) return
   try {
     viewerNote.value = await noteService.updateNote(viewerNote.value.id, { is_pinned: !viewerNote.value.is_pinned })
     showToast(viewerNote.value.is_pinned ? '已置顶' : '已取消置顶')
@@ -514,6 +612,7 @@ function hasPendingDialogAction() {
 }
 
 function openCreateFolder(parentId = currentFolderId.value) {
+  if (!canEdit.value) return
   if (hasPendingDialogAction()) {
     showToast('当前操作正在进行，请等待完成后再试。', 'error')
     return
@@ -528,6 +627,7 @@ function openCreateFolder(parentId = currentFolderId.value) {
 }
 
 function openCreateNote(parentId = currentFolderId.value) {
+  if (!canEdit.value) return
   if (hasPendingDialogAction()) {
     showToast('当前操作正在进行，请等待完成后再试。', 'error')
     return
@@ -540,6 +640,7 @@ function openCreateNote(parentId = currentFolderId.value) {
 }
 
 function openRename(node) {
+  if (!canEdit.value) return
   if (hasPendingDialogAction()) {
     showToast('当前操作正在进行，请等待完成后再试。', 'error')
     return
@@ -552,6 +653,7 @@ function openRename(node) {
 }
 
 function openMove(node) {
+  if (!canEdit.value) return
   if (hasPendingDialogAction()) {
     showToast('当前操作正在进行，请等待完成后再试。', 'error')
     return
@@ -645,6 +747,7 @@ async function submitMove() {
 }
 
 async function handleDelete(node) {
+  if (!canEdit.value) return
   const kind = node.type === 'folder' ? '文件夹及其内容' : '笔记'
   if (!window.confirm(`确定删除${kind}「${node.name}」吗？此操作不可撤销。`)) return
   try {

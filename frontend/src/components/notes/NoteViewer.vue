@@ -13,14 +13,15 @@
           <div v-if="tagList.length" class="viewer-tags"><span v-for="tag in tagList" :key="tag">#{{ tag }}</span></div>
         </div>
         <div class="viewer-actions">
-          <button class="viewer-button viewer-button--primary" type="button" @click="$emit('edit', note)">编辑</button>
-          <button class="viewer-icon-button" type="button" :aria-label="note.is_pinned ? '取消置顶' : '置顶笔记'" @click="$emit('toggle-pin', note)">{{ note.is_pinned ? '取消置顶' : '置顶' }}</button>
-          <button class="viewer-icon-button" type="button" aria-label="移动笔记" @click="$emit('move', note)">移动</button>
-          <button class="viewer-icon-button viewer-icon-button--danger" type="button" aria-label="删除笔记" @click="$emit('delete', note)">删除</button>
+          <span v-if="!canEdit" class="viewer-readonly">只读成员</span>
+          <button v-if="canEdit" class="viewer-button viewer-button--primary" type="button" @click="$emit('edit', note)">编辑</button>
+          <button v-if="canEdit" class="viewer-icon-button" type="button" :aria-label="note.is_pinned ? '取消置顶' : '置顶笔记'" @click="$emit('toggle-pin', note)">{{ note.is_pinned ? '取消置顶' : '置顶' }}</button>
+          <button v-if="canEdit" class="viewer-icon-button" type="button" aria-label="移动笔记" @click="$emit('move', note)">移动</button>
+          <button v-if="canEdit" class="viewer-icon-button viewer-icon-button--danger" type="button" aria-label="删除笔记" @click="$emit('delete', note)">删除</button>
         </div>
       </header>
       <div class="viewer-content">
-        <v-md-editor :model-value="note.content || ''" mode="preview" height="auto" />
+        <v-md-editor :model-value="previewContent" mode="preview" height="auto" />
       </div>
     </article>
   </section>
@@ -29,10 +30,12 @@
 <script setup>
 import { computed } from 'vue'
 import { getErrorMessage } from '../../utils/errorMessage'
+import { resolveNoteAttachmentUrls } from '../../services/note'
 
-const props = defineProps({ noteId: { type: [String, Number], default: null }, note: { type: Object, default: null }, loading: Boolean, error: { type: [String, Object], default: null } })
+const props = defineProps({ noteId: { type: [String, Number], default: null }, note: { type: Object, default: null }, loading: Boolean, error: { type: [String, Object], default: null }, canEdit: { type: Boolean, default: true } })
 defineEmits(['edit', 'toggle-pin', 'move', 'delete', 'retry'])
 const tagList = computed(() => String(props.note?.tags || '').split(',').map(tag => tag.trim()).filter(Boolean))
+const previewContent = computed(() => resolveNoteAttachmentUrls(props.note?.content || ''))
 const errorMessage = computed(() => typeof props.error === 'string' ? props.error : getErrorMessage(props.error))
 function formatDate(value) { return value ? new Date(value).toLocaleString('zh-CN') : '尚未更新' }
 </script>
@@ -50,6 +53,7 @@ function formatDate(value) { return value ? new Date(value).toLocaleString('zh-C
 .viewer-tags span { color: var(--color-primary); background: var(--workspace-soft, rgba(14,165,233,.08)); border-radius: 999px; padding: 4px 10px; }
 .viewer-actions { display: flex; flex-wrap: wrap; gap: var(--spacing-sm); align-items: flex-start; justify-content: flex-end; }
 .viewer-button, .viewer-icon-button { min-height: 44px; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-card); color: var(--color-text); cursor: pointer; font: inherit; }
+.viewer-readonly { display: inline-flex; align-items: center; min-height: 44px; color: var(--color-text-tertiary); font-size: var(--font-size-sm); }
 .viewer-button--primary { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
 .viewer-icon-button--danger { color: var(--color-error); }
 .viewer-button:focus-visible, .viewer-icon-button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }

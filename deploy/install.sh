@@ -133,16 +133,20 @@ server {
     # API reverse proxy to backend
     location /api/ {
         proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 300s;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
         proxy_connect_timeout 75s;
     }
 
-    # Uploads reverse proxy
-    location /uploads/ {
+    # Public avatars only. Note attachments are served by the authenticated API.
+    location /uploads/avatars/ {
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host $host;
     }
