@@ -677,10 +677,11 @@ class NoteService:
         node = self.node_repo.get_by_id(note_id)
         if not node or node.type != "note":
             raise ValueError("Note not found")
-        self.require_notebook_access(node.notebook_id, user_id)
+        access = self.require_notebook_access(node.notebook_id, user_id)
 
         opened_at = datetime.now(timezone.utc)
-        node.last_opened_at = opened_at
+        if access["is_owner"]:
+            node.last_opened_at = opened_at
         activity = self.db.query(NoteUserActivity).filter(
             NoteUserActivity.note_id == note_id,
             NoteUserActivity.user_id == user_id,

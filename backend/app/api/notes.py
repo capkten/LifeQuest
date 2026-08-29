@@ -8,7 +8,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import SessionLocal, get_db
 from app.models.user import User
@@ -439,7 +439,11 @@ def create_collaboration_ticket(
 
 
 @router.websocket("/{note_id}/collab")
-async def collaborate_on_note(websocket: WebSocket, note_id: UUID):
+async def collaborate_on_note(
+    websocket: WebSocket,
+    note_id: UUID,
+    db: Session = Depends(get_db),
+):
     """Join a note collaboration room using a short-lived REST ticket."""
     ticket = websocket.query_params.get("ticket")
     payload = decode_access_token(ticket) if ticket else None
@@ -453,7 +457,6 @@ async def collaborate_on_note(websocket: WebSocket, note_id: UUID):
         await websocket.close(code=4401)
         return
 
-    db = SessionLocal()
     try:
         service = NoteService(db)
         access = service.require_node_access(note_id, user_id)
@@ -468,6 +471,7 @@ async def collaborate_on_note(websocket: WebSocket, note_id: UUID):
             user_id,
             user.username,
             access["role"],
+            sessionmaker(bind=db.get_bind(), autoflush=False, autocommit=False),
         )
     except (ValueError, PermissionError):
         await websocket.close(code=4403)

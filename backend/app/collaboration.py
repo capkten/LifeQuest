@@ -10,6 +10,7 @@ from uuid import UUID
 
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy import func
+from sqlalchemy.orm import sessionmaker
 
 from app.database import SessionLocal
 from app.models.note_node import NoteNode
@@ -52,8 +53,8 @@ def _decode(value: str) -> bytes:
     return decoded
 
 
-def _load_state(note_id: UUID) -> dict:
-    db = SessionLocal()
+def _load_state(note_id: UUID, session_factory=SessionLocal) -> dict:
+    db = session_factory()
     try:
         node = db.get(NoteNode, note_id)
         if not node or node.type != "note":
@@ -102,8 +103,8 @@ def _load_state(note_id: UUID) -> dict:
         db.close()
 
 
-def _claim_initialization(note_id: UUID, user_id: UUID) -> dict:
-    db = SessionLocal()
+def _claim_initialization(note_id: UUID, user_id: UUID, session_factory=SessionLocal) -> dict:
+    db = session_factory()
     try:
         node = db.get(NoteNode, note_id)
         if not node or node.type != "note":
@@ -129,8 +130,14 @@ def _claim_initialization(note_id: UUID, user_id: UUID) -> dict:
         db.close()
 
 
-def _persist_update(note_id: UUID, user_id: UUID, payload: bytes, content: Optional[str]) -> tuple[int, int]:
-    db = SessionLocal()
+def _persist_update(
+    note_id: UUID,
+    user_id: UUID,
+    payload: bytes,
+    content: Optional[str],
+    session_factory=SessionLocal,
+) -> tuple[int, int]:
+    db = session_factory()
     previous_content = None
     content_path = None
     try:
@@ -169,12 +176,19 @@ def _persist_update(note_id: UUID, user_id: UUID, payload: bytes, content: Optio
         db.close()
 
 
-def _persist_snapshot(note_id: UUID, user_id: UUID, snapshot: bytes, content: str, cursor: int) -> int:
+def _persist_snapshot(
+    note_id: UUID,
+    user_id: UUID,
+    snapshot: bytes,
+    content: str,
+    cursor: int,
+    session_factory=SessionLocal,
+) -> int:
     if len(snapshot) > MAX_UPDATE_BYTES:
         raise ValueError("COLLAB_SNAPSHOT_TOO_LARGE")
     if len(content) > MAX_CONTENT_LENGTH:
         raise ValueError("COLLAB_CONTENT_TOO_LARGE")
-    db = SessionLocal()
+    db = session_factory()
     previous_content = None
     content_path = None
     try:
@@ -226,12 +240,14 @@ class CollaborationManager:
         self._start_lock = asyncio.Lock()
         self._poll_task = None
         self._locally_emitted: set[int] = set()
+        self._session_factory = SessionLocal
 
-    async def _ensure_started(self):
+    async def _ensure_started(self, session_factory):
         async with self._start_lock:
             if self._started:
                 return
-            db = SessionLocal()
+            self._session_factory = session_factory
+            db = self._session_factory()
             try:
                 self.last_event_id = db.query(func.max(NoteCollabEvent.id)).scalar() or 0
             finally:
@@ -239,8 +255,16 @@ class CollaborationManager:
             self._poll_task = asyncio.create_task(self._poll_events())
             self._started = True
 
-    async def serve(self, websocket: WebSocket, note_id: UUID, user_id: UUID, username: str, role: str):
-        await self._ensure_started()
+    async def serve(
+        self,
+        websocket: WebSocket,
+        note_id: UUID,
+        user_id: UUID,
+        username: str,
+        role: str,
+        session_factory=SessionLocal,
+    ):
+        await self._ensure_started(session_factory)
         await websocket.accept()
         peer = Peer(websocket, note_id, user_id, username, role)
         room = self.rooms.setdefault(note_id, {})
@@ -263,11 +287,16 @@ class CollaborationManager:
                     await self._broadcast_presence(note_id)
 
     async def _send_initial_state(self, peer: Peer):
-        state = await asyncio.to_thread(_load_state, peer.note_id)
+        state = await asyncio.to_thread(_load_state, peer.note_id, self._session_factory)
         if state["mode"] == "sync":
             await self._send_sync(peer, state)
             return
-        claim = await asyncio.to_thread(_claim_initialization, peer.note_id, peer.user_id)
+        claim = await asyncio.to_thread(
+            _claim_initialization,
+            peer.note_id,
+            peer.user_id,
+            self._session_factory,
+        )
         if claim["mode"] == "init":
             peer.waiting_for_initialization = False
             await peer.websocket.send_json({
@@ -305,7 +334,12 @@ class CollaborationManager:
                 if not isinstance(content, str):
                     raise ValueError("COLLAB_CONTENT_REQUIRED")
                 cursor, revision = await asyncio.to_thread(
-                    _persist_update, peer.note_id, peer.user_id, payload, content
+                    _persist_update,
+                    peer.note_id,
+                    peer.user_id,
+                    payload,
+                    content,
+                    self._session_factory,
                 )
                 peer.cursor = cursor
                 self.last_event_id = max(self.last_event_id, cursor)
@@ -333,6 +367,7 @@ class CollaborationManager:
                     snapshot,
                     content,
                     int(message.get("cursor", peer.cursor) or 0),
+                    self._session_factory,
                 )
                 await peer.websocket.send_json({"type": "snapshot-ack", "revision": revision})
                 await self._notify_waiting_peers(peer.note_id)
@@ -367,11 +402,16 @@ class CollaborationManager:
         await self._broadcast_update(note_id, {"type": "presence", "users": users})
 
     async def _notify_waiting_peers(self, note_id: UUID):
-        state = await asyncio.to_thread(_load_state, note_id)
+        state = await asyncio.to_thread(_load_state, note_id, self._session_factory)
         peers = [peer for peer in self.rooms.get(note_id, {}).values() if peer.waiting_for_initialization]
         if state.get("mode") == "init":
             for peer in peers:
-                claim = await asyncio.to_thread(_claim_initialization, note_id, peer.user_id)
+                claim = await asyncio.to_thread(
+                    _claim_initialization,
+                    note_id,
+                    peer.user_id,
+                    self._session_factory,
+                )
                 if claim.get("mode") == "init":
                     peer.waiting_for_initialization = False
                     await peer.websocket.send_json({
@@ -392,7 +432,7 @@ class CollaborationManager:
     async def _poll_events(self):
         while True:
             try:
-                db = SessionLocal()
+                db = self._session_factory()
                 try:
                     events = (
                         db.query(NoteCollabEvent)
@@ -405,7 +445,7 @@ class CollaborationManager:
                     db.close()
                 revisions = {}
                 if events:
-                    db = SessionLocal()
+                    db = self._session_factory()
                     try:
                         revisions = {
                             node.id: node.content_revision or 1

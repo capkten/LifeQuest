@@ -2,7 +2,7 @@
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import and_, exists, func, or_
+from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.orm import Session
 from app.models.note import Notebook, Attachment
 from app.models.note_node import NoteNode
@@ -81,18 +81,17 @@ class NoteNodeRepository(BaseRepository[NoteNode]):
         )
 
     def get_recent_by_user(self, user_id: UUID, limit: int) -> List[NoteNode]:
+        viewer_last_opened_at = self._viewer_last_opened_at_expression(user_id)
         rows = (
-            self.db.query(NoteNode, NoteUserActivity.last_opened_at)
+            self.db.query(NoteNode, viewer_last_opened_at)
             .join(Notebook)
-            .join(NoteUserActivity, NoteUserActivity.note_id == NoteNode.id)
             .filter(
                 or_(Notebook.user_id == user_id, self._member_access_clause(user_id)),
-                NoteUserActivity.user_id == user_id,
                 NoteNode.type == "note",
-                NoteUserActivity.last_opened_at.is_not(None),
+                viewer_last_opened_at.is_not(None),
             )
             .order_by(
-                NoteUserActivity.last_opened_at.desc().nullslast(),
+                viewer_last_opened_at.desc().nullslast(),
                 NoteNode.updated_at.desc(),
             )
             .limit(limit)
@@ -115,13 +114,10 @@ class NoteNodeRepository(BaseRepository[NoteNode]):
         updated_before=None,
         limit: int = 50,
     ) -> List[NoteNode]:
+        viewer_last_opened_at = self._viewer_last_opened_at_expression(user_id)
         query = (
             self.db.query(NoteNode)
             .join(Notebook)
-            .outerjoin(
-                NoteUserActivity,
-                and_(NoteUserActivity.note_id == NoteNode.id, NoteUserActivity.user_id == user_id),
-            )
             .filter(
                 or_(Notebook.user_id == user_id, self._member_access_clause(user_id)),
                 NoteNode.type == "note",
@@ -146,7 +142,7 @@ class NoteNodeRepository(BaseRepository[NoteNode]):
             query = query.filter(NoteNode.updated_at <= updated_before)
 
         sort_columns = {
-            "last_opened": (NoteUserActivity.last_opened_at.desc().nullslast(), NoteNode.updated_at.desc()),
+            "last_opened": (viewer_last_opened_at.desc().nullslast(), NoteNode.updated_at.desc()),
             "updated": (NoteNode.updated_at.desc().nullslast(),),
             "created": (NoteNode.created_at.desc().nullslast(),),
             "title": (NoteNode.name.asc(),),
@@ -170,6 +166,26 @@ class NoteNodeRepository(BaseRepository[NoteNode]):
             NotebookMember.user_id == user_id,
             NotebookMember.status == "active",
         ))
+
+    @staticmethod
+    def _viewer_last_opened_at_expression(user_id: UUID):
+        """Return the viewer-specific open time with legacy owner fallback."""
+        activity_last_opened_at = (
+            select(NoteUserActivity.last_opened_at)
+            .where(
+                NoteUserActivity.note_id == NoteNode.id,
+                NoteUserActivity.user_id == user_id,
+            )
+            .correlate(NoteNode)
+            .scalar_subquery()
+        )
+        return case(
+            (
+                Notebook.user_id == user_id,
+                func.coalesce(activity_last_opened_at, NoteNode.last_opened_at),
+            ),
+            else_=activity_last_opened_at,
+        )
 
 
 class AttachmentRepository(BaseRepository[Attachment]):
