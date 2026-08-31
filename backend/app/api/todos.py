@@ -1,3 +1,4 @@
+from datetime import date
 from typing import List, Optional
 from uuid import UUID
 
@@ -19,6 +20,11 @@ from app.schemas.todo import (
     SubtaskCreate,
     SubtaskUpdate,
     SubtaskResponse,
+)
+from app.schemas.task_schedule import (
+    TaskScheduleStateResponse,
+    TaskSnoozeRequest,
+    TaskRescheduleRequest,
 )
 from app.services.todo import TodoService
 from app.api.auth import get_current_user
@@ -174,12 +180,42 @@ def delete_task(
 @router.post("/tasks/{task_id}/complete", response_model=TaskResponse)
 def complete_task(
     task_id: UUID,
+    occurrence_date: Optional[date] = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
     task = service.get_task_for_user(task_id, current_user.id)
-    return service.complete_task(task, current_user.id)
+    return service.complete_task(task, current_user.id, occurrence_date)
+
+
+@router.post("/tasks/{task_id}/snooze", response_model=TaskScheduleStateResponse)
+def snooze_task(
+    task_id: UUID,
+    body: TaskSnoozeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = TodoService(db)
+    task = service.get_task_for_user(task_id, current_user.id)
+    return service.schedule_service.snooze(task, body.until, body.occurrence_date)
+
+
+@router.patch("/tasks/{task_id}/schedule", response_model=TaskScheduleStateResponse)
+def reschedule_task(
+    task_id: UUID,
+    body: TaskRescheduleRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = TodoService(db)
+    task = service.get_task_for_user(task_id, current_user.id)
+    return service.schedule_service.reschedule(
+        task,
+        deadline=body.deadline,
+        occurrence_date=body.occurrence_date,
+        new_occurrence_date=body.new_occurrence_date,
+    )
 
 
 # --- Goal endpoints ---

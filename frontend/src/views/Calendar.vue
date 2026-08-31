@@ -23,6 +23,9 @@
         <span>{{ eventsError }}</span>
         <button type="button" class="retry-btn" @click="fetchEvents">重试</button>
       </div>
+      <div v-if="calendarSuccess && !calendarRescheduleItem" class="calendar-success" role="status" aria-live="polite">
+        {{ calendarSuccess }}
+      </div>
       <div v-if="loadingEvents" class="inline-loading" aria-live="polite">
         <span class="loading-spinner"></span>
         <span>正在加载日历事件...</span>
@@ -50,7 +53,7 @@
             <div class="event-dots">
               <span
                 v-for="dot in cell.dots.slice(0, 3)"
-                :key="dot.type + dot.id"
+                :key="dot.event_key || dot.type + dot.id + (dot.occurrence_date || '')"
                 class="event-dot"
                 :class="'event-dot--' + dot.type"
                 :style="dot.type === 'task' && dot.project_color ? { background: dot.project_color } : undefined"
@@ -101,7 +104,7 @@
               </h4>
               <div
                 v-for="task in dayDetail.tasks"
-                :key="task.id"
+                :key="task.target_id + (task.occurrence_date || '')"
                 class="detail-item detail-item--task"
                 @click="goToTodos"
               >
@@ -117,6 +120,7 @@
                     </span>
                   </div>
                 </div>
+                <button type="button" class="detail-item-action" @click.stop="openRescheduleDialog(task)">重排</button>
               </div>
             </div>
 
@@ -233,7 +237,7 @@
                 </h4>
                 <div
                   v-for="task in dayDetail.tasks"
-                  :key="task.id"
+                  :key="task.target_id + (task.occurrence_date || '')"
                   class="detail-item detail-item--task"
                   @click="goToTodos"
                 >
@@ -249,6 +253,7 @@
                       </span>
                     </div>
                   </div>
+                  <button type="button" class="detail-item-action" @click.stop="openRescheduleDialog(task)">重排</button>
                 </div>
               </div>
               <div v-if="dayDetail.goals.length > 0" class="detail-section">
@@ -310,6 +315,48 @@
         </Transition>
       </div>
     </Transition>
+
+    <Teleport to="body">
+      <div v-if="calendarRescheduleItem" class="dialog-overlay" @click.self="closeRescheduleDialog">
+        <div
+          class="dialog dialog--sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="calendar-reschedule-title"
+          @keydown.escape="closeRescheduleDialog"
+        >
+          <div class="dialog-header">
+            <h3 id="calendar-reschedule-title" class="dialog-title">重新安排</h3>
+            <button type="button" class="dialog-close" @click="closeRescheduleDialog" aria-label="关闭重新安排对话框">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+          <form class="dialog-body" @submit.prevent="confirmReschedule">
+            <p class="reschedule-task-name">{{ calendarRescheduleItem.title }}</p>
+            <div v-if="calendarRescheduleItem.occurrence_date" class="form-group">
+              <label class="form-label" for="calendar-reschedule-date">新的日期</label>
+              <input id="calendar-reschedule-date" v-model="calendarRescheduleForm.newOccurrenceDate" type="date" class="form-input" required />
+            </div>
+            <div v-else class="form-group">
+              <label class="form-label" for="calendar-reschedule-deadline">新的截止时间</label>
+              <input id="calendar-reschedule-deadline" v-model="calendarRescheduleForm.deadline" type="datetime-local" class="form-input" required />
+            </div>
+            <div v-if="calendarRescheduleError" class="dialog-error" role="alert">{{ calendarRescheduleError }}</div>
+            <div v-if="calendarSuccess" class="dialog-success" role="status">{{ calendarSuccess }}</div>
+            <div class="dialog-actions">
+              <button type="button" class="btn-secondary" :disabled="calendarRescheduling" @click="closeRescheduleDialog">取消</button>
+              <button type="submit" class="btn-primary" :disabled="calendarRescheduling">
+                <span v-if="calendarRescheduling" class="loading-spinner loading-spinner--sm"></span>
+                {{ calendarRescheduling ? '保存中...' : '保存安排' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -317,6 +364,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { calendarService } from '../services/calendar'
+import { todoService } from '../services/todo'
 import { getErrorMessage } from '../utils/errorMessage'
 
 const router = useRouter()
@@ -332,6 +380,11 @@ const loadingDetail = ref(false)
 const loadingEvents = ref(false)
 const eventsError = ref(null)
 const detailError = ref(null)
+const calendarRescheduleItem = ref(null)
+const calendarRescheduleForm = ref({ deadline: '', newOccurrenceDate: '' })
+const calendarRescheduling = ref(false)
+const calendarRescheduleError = ref(null)
+const calendarSuccess = ref(null)
 let eventsRequestId = 0
 let detailRequestId = 0
 const isMobile = ref(false)
@@ -484,6 +537,66 @@ function closeDetail() {
   dayDetail.value = null
   detailError.value = null
   loadingDetail.value = false
+}
+
+function toDateTimeLocal(date) {
+  const pad = value => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function openRescheduleDialog(item) {
+  calendarRescheduleItem.value = item
+  calendarRescheduleError.value = null
+  calendarSuccess.value = null
+  if (item.occurrence_date) {
+    calendarRescheduleForm.value = {
+      deadline: '',
+      newOccurrenceDate: addDays(item.occurrence_date, 1)
+    }
+  } else {
+    const deadline = item.deadline ? new Date(item.deadline) : new Date(`${selectedDate.value}T09:00:00`)
+    calendarRescheduleForm.value = {
+      deadline: toDateTimeLocal(deadline),
+      newOccurrenceDate: ''
+    }
+  }
+}
+
+function closeRescheduleDialog(force = false) {
+  if (calendarRescheduling.value && !force) return
+  calendarRescheduleItem.value = null
+  calendarRescheduleError.value = null
+}
+
+async function confirmReschedule() {
+  const item = calendarRescheduleItem.value
+  if (!item) return
+  calendarRescheduling.value = true
+  calendarRescheduleError.value = null
+  try {
+    const payload = item.occurrence_date
+      ? {
+          occurrence_date: item.occurrence_date,
+          new_occurrence_date: calendarRescheduleForm.value.newOccurrenceDate
+        }
+      : { deadline: new Date(calendarRescheduleForm.value.deadline).toISOString() }
+    await todoService.rescheduleTask(item.target_id || item.id, payload)
+    calendarSuccess.value = '已重新安排。'
+    closeRescheduleDialog(true)
+    await selectDate(selectedDate.value)
+    await fetchEvents()
+  } catch (e) {
+    calendarRescheduleError.value = getErrorMessage(e, '重新安排失败，请重试。')
+  } finally {
+    calendarRescheduling.value = false
+  }
+}
+
+function addDays(dateStr, days) {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  const date = new Date(year, month - 1, day)
+  date.setDate(date.getDate() + days)
+  return formatDateStr(date.getFullYear(), date.getMonth(), date.getDate())
 }
 
 function prevMonth() {
@@ -977,6 +1090,219 @@ onMounted(() => {
   color: var(--color-text-tertiary);
 }
 
+.detail-item-action {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 6px 9px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-primary);
+  background: var(--color-card);
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.detail-item-action:hover {
+  border-color: var(--color-primary);
+  background: rgba(14, 165, 233, 0.08);
+}
+
+.detail-item-action:focus-visible,
+.detail-close:focus-visible,
+.nav-btn:focus-visible,
+.today-btn:focus-visible {
+  outline: 3px solid rgba(14, 165, 233, 0.28);
+  outline-offset: 2px;
+}
+
+.calendar-success {
+  padding: 10px 12px;
+  border: 1px solid rgba(22, 163, 74, 0.24);
+  border-radius: var(--radius-md);
+  color: #166534;
+  background: #f0fdf4;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.reschedule-task-name {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  background: rgba(15, 23, 42, 0.52);
+}
+
+.dialog {
+  display: flex;
+  width: min(100%, 400px);
+  max-height: min(88vh, 720px);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-card);
+  box-shadow: var(--shadow-xl);
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dialog-title {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+}
+
+.dialog-close {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  color: var(--color-text-tertiary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.dialog-close:hover {
+  color: var(--color-text);
+  background: var(--color-bg-tertiary);
+}
+
+.dialog-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  overflow-y: auto;
+  padding: var(--spacing-lg);
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.form-label {
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.form-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  outline: none;
+  color: var(--color-text);
+  background: var(--color-bg-secondary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  transition: border-color 0.15s ease;
+}
+
+.form-input:focus {
+  border-color: var(--color-primary);
+}
+
+.dialog-error {
+  padding: var(--spacing-xs) 0;
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+}
+
+.dialog-success {
+  padding: var(--spacing-xs) 0;
+  color: var(--color-success);
+  font-size: var(--font-size-sm);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+}
+
+.btn-secondary,
+.btn-primary {
+  min-height: 44px;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.btn-secondary {
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  background: transparent;
+}
+
+.btn-secondary:hover {
+  background: var(--color-bg-tertiary);
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  border: 0;
+  color: #fff;
+  background: var(--color-primary);
+}
+
+.btn-primary:hover {
+  background: var(--color-primary-dark);
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.loading-spinner--sm {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
 /* Goal progress mini */
 .goal-progress-mini {
   display: flex;
@@ -1121,6 +1447,25 @@ onMounted(() => {
 
   .event-more {
     font-size: 8px;
+  }
+
+  .dialog-overlay {
+    padding: var(--spacing-sm);
+  }
+
+  .dialog-header,
+  .dialog-body {
+    padding: var(--spacing-md);
+  }
+
+  .dialog-actions {
+    flex-direction: row;
+  }
+
+  .btn-secondary,
+  .btn-primary {
+    flex: 1;
+    padding-inline: var(--spacing-sm);
   }
 }
 

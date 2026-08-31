@@ -63,8 +63,31 @@ export const todoService = {
    * @param {string} taskId - Task ID
    * @returns {Promise<Object>} Updated task
    */
-  async completeTask(taskId) {
-    const response = await api.post(`/todos/tasks/${taskId}/complete`)
+  async completeTask(taskId, occurrenceDate) {
+    const config = occurrenceDate ? { params: { occurrence_date: occurrenceDate } } : undefined
+    const response = await api.post(`/todos/tasks/${taskId}/complete`, undefined, config)
+    return response.data
+  },
+
+  /**
+   * Postpone a task or one of its recurring occurrences.
+   * @param {string} taskId - Task ID
+   * @param {Object} data - { until, occurrence_date? }
+   * @returns {Promise<Object>} Updated schedule state
+   */
+  async snoozeTask(taskId, data) {
+    const response = await api.post(`/todos/tasks/${taskId}/snooze`, data)
+    return response.data
+  },
+
+  /**
+   * Move a task deadline or a recurring occurrence.
+   * @param {string} taskId - Task ID
+   * @param {Object} data - Reschedule payload
+   * @returns {Promise<Object>} Updated schedule state
+   */
+  async rescheduleTask(taskId, data) {
+    const response = await api.patch(`/todos/tasks/${taskId}/schedule`, data)
     return response.data
   },
 

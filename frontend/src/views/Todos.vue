@@ -235,6 +235,12 @@
             </div>
             <div class="todo-card-actions">
               <div class="action-buttons">
+                <button class="action-btn action-btn--snooze" @click="openSnoozeDialog(task)" aria-label="延期任务" title="延期任务">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 2" />
+                  </svg>
+                </button>
                 <button class="action-btn action-btn--edit" @click="openEditDialog(task, 'tasks')" aria-label="编辑">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -473,6 +479,8 @@
       </div>
     </div>
 
+    <div v-if="successToast" class="success-toast" role="status" aria-live="polite">{{ successToast }}</div>
+
     <div v-if="errorToast" class="error-toast" role="alert">
       <div class="error-toast-content">
         <span>{{ errorToast.message }}</span>
@@ -578,6 +586,43 @@
                 />
               </div>
             </div>
+            <div v-if="activeTab === 'tasks'" class="schedule-editor">
+              <div class="form-group">
+                <label class="form-label" for="item-schedule-rule">重复安排</label>
+                <select id="item-schedule-rule" v-model="form.scheduleRuleType" class="form-select">
+                  <option value="none">不重复</option>
+                  <option value="daily">每天重复</option>
+                  <option value="weekly">每周重复</option>
+                  <option value="monthly">每月重复</option>
+                </select>
+              </div>
+              <div v-if="form.scheduleRuleType !== 'none'" class="schedule-editor-fields">
+                <div class="form-group">
+                  <label class="form-label" for="item-schedule-interval">每隔</label>
+                  <div class="schedule-interval-control">
+                    <input id="item-schedule-interval" v-model.number="form.scheduleInterval" type="number" class="form-input" min="1" max="365" />
+                    <span>{{ form.scheduleRuleType === 'daily' ? '天' : form.scheduleRuleType === 'weekly' ? '周' : '个月' }}</span>
+                  </div>
+                </div>
+                <div v-if="form.scheduleRuleType === 'weekly'" class="form-group">
+                  <span class="form-label">重复日</span>
+                  <div class="weekday-picker" role="group" aria-label="每周重复日">
+                    <label v-for="day in weekdays" :key="day.value" class="weekday-option">
+                      <input v-model="form.weekdays" type="checkbox" :value="day.value" />
+                      <span>{{ day.label }}</span>
+                    </label>
+                  </div>
+                </div>
+                <div v-if="form.scheduleRuleType === 'monthly'" class="form-group">
+                  <label class="form-label" for="item-day-of-month">每月第几天</label>
+                  <input id="item-day-of-month" v-model.number="form.dayOfMonth" type="number" class="form-input" min="1" max="31" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="item-schedule-end">重复结束日期</label>
+                  <input id="item-schedule-end" v-model="form.scheduleEndsOn" type="date" class="form-input" />
+                </div>
+              </div>
+            </div>
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label" for="item-coins">金币奖励</label>
@@ -610,6 +655,44 @@
               <button type="submit" class="btn-primary" :disabled="creating" :aria-disabled="!form.title.trim()">
                 <span v-if="creating" class="loading-spinner loading-spinner--sm"></span>
                 {{ creating ? (isEditing ? '保存中...' : '创建中...') : (isEditing ? '保存' : '创建') }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Snooze Dialog -->
+    <Teleport to="body">
+      <div v-if="snoozeItem" class="dialog-overlay" @click.self="closeSnoozeDialog">
+        <div
+          class="dialog dialog--sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="snooze-dialog-title"
+          @keydown.escape="closeSnoozeDialog"
+        >
+          <div class="dialog-header">
+            <h3 id="snooze-dialog-title" class="dialog-title">稍后处理</h3>
+            <button class="dialog-close" type="button" @click="closeSnoozeDialog" aria-label="关闭延期对话框">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+          <form class="dialog-body" @submit.prevent="confirmSnooze">
+            <p class="snooze-task-name">{{ snoozeItem.title }}</p>
+            <div class="form-group">
+              <label class="form-label" for="snooze-until">恢复时间</label>
+              <input id="snooze-until" v-model="snoozeForm.until" type="datetime-local" class="form-input" required />
+            </div>
+            <div v-if="snoozeError" class="dialog-error" role="alert">{{ snoozeError }}</div>
+            <div class="dialog-actions">
+              <button type="button" class="btn-secondary" :disabled="snoozing" @click="closeSnoozeDialog">取消</button>
+              <button type="submit" class="btn-primary" :disabled="snoozing">
+                <span v-if="snoozing" class="loading-spinner loading-spinner--sm"></span>
+                {{ snoozing ? '保存中...' : '确认延期' }}
               </button>
             </div>
           </form>
@@ -683,6 +766,8 @@ const completionLoadingId = ref(null)
 const completionLoadingTimer = ref(null)
 const rewardToast = ref(null)
 const rewardToastTimeout = ref(null)
+const successToast = ref(null)
+const successToastTimeout = ref(null)
 const errorToast = ref(null)
 const errorToastTimeout = ref(null)
 
@@ -697,6 +782,10 @@ const showDeleteDialog = ref(false)
 const deletingItem = ref(null)
 const deletingType = ref(null)
 const deleting = ref(false)
+const snoozeItem = ref(null)
+const snoozeForm = ref({ until: '' })
+const snoozing = ref(false)
+const snoozeError = ref(null)
 
 // Subtask state
 const expandedTaskId = ref(null)
@@ -720,6 +809,16 @@ const tabs = [
   { id: 'goals', label: '目标' }
 ]
 
+const weekdays = [
+  { value: 0, label: '一' },
+  { value: 1, label: '二' },
+  { value: 2, label: '三' },
+  { value: 3, label: '四' },
+  { value: 4, label: '五' },
+  { value: 5, label: '六' },
+  { value: 6, label: '日' }
+]
+
 const defaultForms = {
   habits: {
     title: '',
@@ -737,7 +836,12 @@ const defaultForms = {
     coins_reward: 10,
     exp_reward: 5,
     project_id: '',
-    milestone_id: ''
+    milestone_id: '',
+    scheduleRuleType: 'none',
+    scheduleInterval: 1,
+    weekdays: [],
+    dayOfMonth: '',
+    scheduleEndsOn: ''
   },
   goals: {
     title: '',
@@ -854,8 +958,32 @@ function formatDate(dateStr) {
   })
 }
 
+function toDateTimeLocal(date) {
+  const pad = value => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function buildTaskSchedule() {
+  if (activeTab.value !== 'tasks' || form.value.scheduleRuleType === 'none') return null
+  const schedule = {
+    rule_type: form.value.scheduleRuleType,
+    interval: Number(form.value.scheduleInterval) || 1,
+    starts_on: form.value.deadline ? form.value.deadline.slice(0, 10) : undefined,
+    ends_on: form.value.scheduleEndsOn || undefined
+  }
+  if (schedule.rule_type === 'weekly') {
+    if (!form.value.weekdays.length) throw new Error('请选择每周重复日。')
+    schedule.weekdays = [...form.value.weekdays].map(Number)
+  }
+  if (schedule.rule_type === 'monthly' && form.value.dayOfMonth) {
+    schedule.day_of_month = Number(form.value.dayOfMonth)
+  }
+  return schedule
+}
+
 // Reset form when tab changes
 watch(activeTab, () => {
+  if (editingItem.value) return
   form.value = getDefaultForm(activeTab.value)
   projectMilestones.value = []
   if (activeTab.value === 'tasks' && form.value.project_id) {
@@ -926,6 +1054,15 @@ function showError(message, retry) {
   }, 4000)
 }
 
+function showSuccess(message) {
+  successToast.value = message
+  if (successToastTimeout.value) clearTimeout(successToastTimeout.value)
+  successToastTimeout.value = setTimeout(() => {
+    successToast.value = null
+    successToastTimeout.value = null
+  }, 3000)
+}
+
 function explainBlocked(message) {
   showError(message)
 }
@@ -933,6 +1070,7 @@ function explainBlocked(message) {
 onUnmounted(() => {
   if (rewardToastTimeout.value) clearTimeout(rewardToastTimeout.value)
   if (errorToastTimeout.value) clearTimeout(errorToastTimeout.value)
+  if (successToastTimeout.value) clearTimeout(successToastTimeout.value)
   if (completionLoadingTimer.value) clearTimeout(completionLoadingTimer.value)
 })
 
@@ -1063,6 +1201,40 @@ async function completeTask(task) {
     showError(getErrorMessage(e), () => completeTask(task))
   } finally {
     endCompletion()
+  }
+}
+
+function openSnoozeDialog(task) {
+  snoozeItem.value = task
+  snoozeError.value = null
+  const suggested = new Date()
+  suggested.setHours(suggested.getHours() + 24)
+  snoozeForm.value = { until: toDateTimeLocal(suggested) }
+}
+
+function closeSnoozeDialog(force = false) {
+  if (snoozing.value && !force) return
+  snoozeItem.value = null
+  snoozeError.value = null
+}
+
+async function confirmSnooze() {
+  if (!snoozeItem.value || !snoozeForm.value.until) return
+  snoozing.value = true
+  snoozeError.value = null
+  try {
+    const payload = { until: new Date(snoozeForm.value.until).toISOString() }
+    if (snoozeItem.value.occurrence_date) payload.occurrence_date = snoozeItem.value.occurrence_date
+    const updated = await todoService.snoozeTask(snoozeItem.value.id, payload)
+    const idx = tasks.value.findIndex(task => task.id === snoozeItem.value.id)
+    if (idx !== -1 && !snoozeItem.value.schedule) tasks.value[idx].snoozed_until = updated.snoozed_until
+    showSuccess('已安排稍后处理。')
+    closeSnoozeDialog(true)
+  } catch (e) {
+    snoozeError.value = getErrorMessage(e, '延期失败，请重试。')
+    showError(snoozeError.value, () => confirmSnooze())
+  } finally {
+    snoozing.value = false
   }
 }
 
@@ -1211,6 +1383,8 @@ async function createItem() {
       if (form.value.project_id) taskBase.project_id = form.value.project_id
       if (form.value.milestone_id) taskBase.milestone_id = form.value.milestone_id
       else delete taskBase.milestone_id
+      const schedule = buildTaskSchedule()
+      if (schedule) taskBase.schedule = schedule
       const task = await todoService.createTask(taskBase)
       tasks.value.push(task)
     } else {
@@ -1240,7 +1414,12 @@ function openEditDialog(item, type) {
     coins_reward: item.coins_reward ?? 10,
     exp_reward: item.exp_reward ?? 5,
     project_id: item.project_id || '',
-    milestone_id: item.milestone_id || ''
+    milestone_id: item.milestone_id || '',
+    scheduleRuleType: item.schedule?.rule_type || 'none',
+    scheduleInterval: item.schedule?.interval || 1,
+    weekdays: item.schedule?.weekdays || [],
+    dayOfMonth: item.schedule?.day_of_month || '',
+    scheduleEndsOn: item.schedule?.ends_on || ''
   }
   // Switch to the correct tab so the dialog shows the right fields
   if (type !== activeTab.value) {
@@ -1277,6 +1456,7 @@ async function saveItem() {
     if (editingType.value === 'tasks') {
       base.project_id = form.value.project_id || null
       base.milestone_id = form.value.milestone_id || null
+      base.schedule = buildTaskSchedule()
     }
 
     if (editingType.value === 'habits') {
@@ -2451,6 +2631,83 @@ onMounted(() => {
   padding: var(--spacing-xs) 0;
 }
 
+.dialog-success {
+  font-size: var(--font-size-sm);
+  color: var(--color-success);
+  padding: var(--spacing-xs) 0;
+}
+
+.snooze-task-name {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.schedule-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-tertiary);
+}
+
+.schedule-editor-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.schedule-interval-control {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.schedule-interval-control .form-input {
+  max-width: 120px;
+}
+
+.schedule-interval-control span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.weekday-picker {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.weekday-option {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  background: var(--color-card);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+}
+
+.weekday-option:has(input:checked) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(14, 165, 233, 0.08);
+}
+
+.weekday-option input {
+  accent-color: var(--color-primary);
+}
+
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
@@ -2546,6 +2803,30 @@ onMounted(() => {
   border-color: var(--color-error);
   color: var(--color-error);
   background: rgba(255, 107, 107, 0.08);
+}
+
+.action-btn--snooze:hover {
+  border-color: var(--color-secondary);
+  color: var(--color-secondary);
+  background: rgba(14, 165, 233, 0.08);
+}
+
+.success-toast {
+  position: fixed;
+  top: var(--spacing-lg);
+  right: var(--spacing-lg);
+  z-index: 1100;
+  display: inline-flex;
+  align-items: center;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid rgba(22, 163, 74, 0.24);
+  border-radius: var(--radius-md);
+  color: #166534;
+  background: #f0fdf4;
+  box-shadow: var(--shadow-lg);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
 }
 
 /* Delete Dialog */
@@ -2891,7 +3172,8 @@ onMounted(() => {
   }
 
   .reward-toast-content,
-  .error-toast-content {
+  .error-toast-content,
+  .success-toast {
     width: 100%;
     justify-content: center;
   }

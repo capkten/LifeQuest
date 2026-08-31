@@ -3,6 +3,7 @@ from app.models.note import Notebook, Attachment
 from app.models.note_node import NoteNode
 from app.models.note_sharing import NotebookMember, NoteUserActivity, NoteCollabDocument, NoteCollabEvent
 from app.models.todo import Habit, Task, Goal, Subtask
+from app.models.task_schedule import TaskSchedule, TaskOccurrence
 from app.models.shop import ShopItem, ExchangeHistory, ExchangeStatus
 from app.models.backpack import (
     BackpackItem, ItemType, ItemStatus,
@@ -29,6 +30,7 @@ __all__ = [
     "Notebook", "Attachment", "NoteNode", "NotebookMember", "NoteUserActivity",
     "NoteCollabDocument", "NoteCollabEvent",
     "Habit", "Task", "Goal", "Subtask",
+    "TaskSchedule", "TaskOccurrence",
     "ShopItem", "ExchangeHistory", "ExchangeStatus",
     "BackpackItem", "ItemType", "ItemStatus",
     "UsageHistory", "UsageAction", "TribulationPillSettlement", "TribulationPillLedger",

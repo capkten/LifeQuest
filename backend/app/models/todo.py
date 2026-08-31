@@ -73,6 +73,8 @@ class Task(Base):
     sort_order = Column(Integer, default=0)
 
     subtasks = relationship("Subtask", back_populates="task", cascade="all, delete-orphan")
+    schedule = relationship("TaskSchedule", back_populates="task", uselist=False, cascade="all, delete-orphan")
+    occurrences = relationship("TaskOccurrence", back_populates="task", cascade="all, delete-orphan")
     project = relationship("Project", back_populates="tasks")
     phase = relationship("ProjectPhase", back_populates="tasks")
     milestone = relationship("ProjectMilestone", back_populates="tasks")

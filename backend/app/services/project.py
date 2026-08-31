@@ -14,6 +14,7 @@ from app.models.project import (
     MilestoneStatus,
 )
 from app.models.todo import Task, TaskStatus
+from app.services.task_schedule import TaskScheduleService
 from app.repositories.project import ProjectRepository, PhaseRepository, MilestoneRepository
 from app.repositories.todo import TaskRepository
 from app.repositories.user import UserRepository
@@ -229,10 +230,15 @@ class ProjectService:
             self.get_phase_for_project(data.phase_id, project_id, for_update=True)
         if data.milestone_id is not None:
             self.get_milestone_for_project(data.milestone_id, project_id)
-        obj_data = data.model_dump()
+        obj_data = data.model_dump(exclude={"schedule"})
         obj_data["user_id"] = user_id
         obj_data["project_id"] = project_id
-        return self.task_repo.create(obj_data)
+        task = self.task_repo.create(obj_data)
+        if data.schedule is not None:
+            TaskScheduleService(self.db).create_for_task(task, data.schedule)
+            self.db.commit()
+            self.db.refresh(task)
+        return task
 
     def get_project_tasks(
         self,

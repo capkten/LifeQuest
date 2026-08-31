@@ -54,7 +54,7 @@
         </div>
         <div class="hero-meta-item">
           <span class="hero-meta-label">今日待办</span>
-          <strong>{{ dailySummary?.summary?.due_tasks || 0 }}</strong>
+          <strong>{{ actionCenter?.summary?.open_count || 0 }}</strong>
         </div>
       </div>
     </section>
@@ -66,115 +66,15 @@
       @retry="loadCultivation"
     />
 
-    <div class="daily-card">
-      <div class="daily-header">
-        <div class="daily-header-left">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-            <line x1="16" y1="2" x2="16" y2="6" />
-            <line x1="8" y1="2" x2="8" y2="6" />
-            <line x1="3" y1="10" x2="21" y2="10" />
-          </svg>
-          <h3 class="daily-title">今日任务</h3>
-        </div>
-        <span v-if="dailySummary" class="daily-overview">
-          今日: {{ dailySummary.summary.completed_habits }}/{{ dailySummary.summary.total_habits }} 习惯已完成,
-          {{ dailySummary.summary.due_tasks }} 个任务到期,
-          {{ dailySummary.summary.active_goals }} 个目标进行中
-        </span>
-      </div>
-
-      <div class="daily-body">
-        <div v-if="loadingDaily" class="loading-state">
-          <span class="loading-spinner"></span>
-        </div>
-        <div v-else-if="dailyError" class="error-state" role="alert" aria-live="polite">
-          <p>{{ dailyError }}</p>
-          <button type="button" class="retry-btn" @click="fetchDailySummary">重试</button>
-        </div>
-        <div v-else-if="dailySummary && dailySummary.habits.length === 0 && dailySummary.tasks.length === 0 && dailySummary.goals.length === 0" class="empty-state">
-          <p>今天没有待办事项，去创建一些吧！</p>
-          <router-link to="/todos" class="empty-state-action">创建任务</router-link>
-        </div>
-        <div v-else class="daily-groups">
-          <div v-if="dailySummary.habits.length > 0" class="daily-group">
-            <h4 class="daily-group-title">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-                <polyline points="17 6 23 6 23 12" />
-              </svg>
-              今日习惯
-            </h4>
-            <div class="daily-list">
-              <div v-for="habit in dailySummary.habits" :key="habit.id" class="daily-item" :class="{ 'daily-item--done': habit.completed_today }">
-                <button
-                  class="daily-check-btn"
-                  :class="{ 'daily-check-btn--done': habit.completed_today }"
-                  :disabled="completingHabitId === habit.id || habit.completed_today"
-                  :aria-disabled="habit.completed_today"
-                  @click="completeDailyHabit(habit)"
-                >
-                  <svg v-if="habit.completed_today" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-                    <path d="M20 6L9 17l-5-5" />
-                  </svg>
-                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <circle cx="12" cy="12" r="10" />
-                  </svg>
-                </button>
-                <span class="daily-item-title" :class="{ 'daily-item-title--done': habit.completed_today }">{{ habit.title }}</span>
-                <span class="daily-streak">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                  </svg>
-                  {{ habit.streak }}
-                </span>
-                <span class="task-difficulty" :class="'task-difficulty--' + habit.difficulty">{{ labelDifficulty(habit.difficulty) }}</span>
-              </div>
-            </div>
-          </div>
-
-          <div v-if="dailySummary.tasks.length > 0" class="daily-group">
-            <h4 class="daily-group-title">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 8v4l3 3" />
-              </svg>
-              今日到期任务
-            </h4>
-            <div class="daily-list">
-              <router-link v-for="task in dailySummary.tasks" :key="task.id" to="/todos" class="daily-item daily-item--link">
-                <span class="task-status" :class="'task-status--' + task.status"></span>
-                <span class="daily-item-title">{{ task.title }}</span>
-                <span v-if="isOverdue(task.deadline)" class="daily-overdue">逾期</span>
-                <span class="task-difficulty" :class="'task-difficulty--' + task.difficulty">{{ labelDifficulty(task.difficulty) }}</span>
-              </router-link>
-            </div>
-          </div>
-
-          <div v-if="dailySummary.goals.length > 0" class="daily-group">
-            <h4 class="daily-group-title">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" />
-                <circle cx="12" cy="12" r="6" />
-                <circle cx="12" cy="12" r="2" />
-              </svg>
-              进行中目标
-            </h4>
-            <div class="daily-list">
-              <router-link v-for="goal in dailySummary.goals" :key="goal.id" to="/todos" class="daily-item daily-item--link daily-item--goal">
-                <span class="daily-item-title">{{ goal.title }}</span>
-                <div class="daily-goal-progress">
-                  <div class="daily-goal-bar">
-                    <div class="daily-goal-fill" :style="{ width: Math.round(goal.progress || 0) + '%' }"></div>
-                  </div>
-                  <span class="daily-goal-pct">{{ Math.round(goal.progress || 0) }}%</span>
-                </div>
-              </router-link>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <TodayActionCenter
+      :data="actionCenter"
+      :loading="actionCenterLoading"
+      :error="actionCenterError"
+      :completing-key="completingActionKey"
+      @complete="handleActionComplete"
+      @open="handleActionOpen"
+      @retry="fetchActionCenter"
+    />
 
     <aside class="home-aside-actions">
       <section class="quick-actions-card">
@@ -287,7 +187,7 @@
           <span>完成</span>
         </div>
       </div>
-      <p v-if="dailySummary?.summary?.total_habits">今日完成 {{ dailySummary.summary.completed_habits }} / {{ dailySummary.summary.total_habits }} 个习惯</p>
+      <p v-if="actionCenter?.summary?.habit_due_count">今日完成 {{ actionCenter.summary.habit_completed_count }} / {{ actionCenter.summary.habit_due_count }} 个习惯</p>
       <p v-else>创建习惯，建立自己的每日节奏。</p>
     </section>
 
@@ -314,16 +214,20 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { todoService } from '../services/todo'
 import { checkinService } from '../services/checkin'
+import { useActionCenter } from '../composables/useActionCenter'
 import { useToast } from '../composables/useToast'
 import { useUserStats } from '../composables/useUserStats'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelDifficulty } from '../utils/displayLabels'
 import CultivationStatusBar from '../components/cultivation/CultivationStatusBar.vue'
+import TodayActionCenter from '../components/home/TodayActionCenter.vue'
 
 const authStore = useAuthStore()
+const router = useRouter()
 const user = computed(() => authStore.user)
 const {
   expPercent,
@@ -343,23 +247,22 @@ const loadingTasks = ref(true)
 const loadingGoals = ref(true)
 const errorTasks = ref(null)
 const errorGoals = ref(null)
-
-const dailySummary = ref(null)
-const loadingDaily = ref(true)
-const dailyError = ref(null)
-const completingHabitId = ref(null)
-let dailyRequestId = 0
+const {
+  data: actionCenter,
+  loading: actionCenterLoading,
+  error: actionCenterError,
+  completingKey: completingActionKey,
+  load: fetchActionCenter,
+  complete: completeAction,
+} = useActionCenter()
 
 const recentTasks = computed(() => tasks.value.slice(0, 5))
 const recentGoals = computed(() => goals.value.slice(0, 5))
 const habitProgress = computed(() => {
-  const summary = dailySummary.value?.summary
-  if (!summary?.total_habits) return 0
-  return Math.round((summary.completed_habits / summary.total_habits) * 100)
+  const summary = actionCenter.value?.summary
+  if (!summary?.habit_due_count) return 0
+  return Math.round((summary.habit_completed_count / summary.habit_due_count) * 100)
 })
-const pendingTasksCount = computed(() =>
-  (tasks.value || []).filter(t => t.status === 'pending' || t.status === 'in_progress').length
-)
 
 async function fetchTasks() {
   loadingTasks.value = true
@@ -410,41 +313,18 @@ async function fetchGoals() {
   }
 }
 
-async function fetchDailySummary() {
-  const requestId = ++dailyRequestId
-  loadingDaily.value = true
-  dailyError.value = null
+async function handleActionComplete(item) {
   try {
-    const summary = await todoService.getDailySummary()
-    if (requestId === dailyRequestId) dailySummary.value = summary
+    await completeAction(item)
+    showSuccess(`${item.title} 已完成`)
+    await Promise.allSettled([authStore.fetchUser(), loadCultivation()])
   } catch (e) {
-    if (requestId === dailyRequestId) {
-      dailyError.value = getErrorMessage(e, '今日待办加载失败，请重试。')
-      showError(dailyError.value)
-    }
-  } finally {
-    if (requestId === dailyRequestId) loadingDaily.value = false
+    showError(getErrorMessage(e, '完成行动失败，请重试。'))
   }
 }
 
-async function completeDailyHabit(habit) {
-  if (habit.completed_today) { showError('该习惯今天已经完成，明天再来继续。'); return }
-  completingHabitId.value = habit.id
-  try {
-    await todoService.completeHabit(habit.id)
-    showSuccess('习惯完成！')
-    await fetchDailySummary()
-    await authStore.fetchUser()
-  } catch (e) {
-    showError(getErrorMessage(e))
-  } finally {
-    completingHabitId.value = null
-  }
-}
-
-function isOverdue(deadline) {
-  if (!deadline) return false
-  return new Date(deadline) < new Date(new Date().toDateString())
+function handleActionOpen() {
+  router.push('/todos')
 }
 
 onMounted(() => {
@@ -452,7 +332,7 @@ onMounted(() => {
   fetchCheckinStatus()
   fetchTasks()
   fetchGoals()
-  fetchDailySummary()
+  fetchActionCenter().catch(() => {})
 })
 </script>
 
@@ -474,15 +354,20 @@ onMounted(() => {
     margin-bottom: 0;
   }
 
-  .daily-card {
-    grid-column: 1;
+  .cultivation-status-bar {
+    grid-column: 1 / -1;
     grid-row: 2;
+  }
+
+  .today-action-center {
+    grid-column: 1;
+    grid-row: 3;
     margin-bottom: 0;
   }
 
   .home-aside-actions {
     grid-column: 2;
-    grid-row: 2;
+    grid-row: 3;
   }
 
   .content-grid {
@@ -491,17 +376,17 @@ onMounted(() => {
 
   .content-grid .content-section:first-child {
     grid-column: 1;
-    grid-row: 3;
+    grid-row: 4;
   }
 
   .content-grid .content-section:last-child {
     grid-column: 2;
-    grid-row: 3;
+    grid-row: 4;
   }
 
   .habit-progress-card {
     grid-column: 2;
-    grid-row: 4;
+    grid-row: 5;
   }
 }
 
