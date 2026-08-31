@@ -16,7 +16,7 @@ from app.config import settings
 from app.database import engine, Base, SessionLocal
 from app import models  # noqa: F401  # Register all ORM models before create_all.
 from app.services.note import NoteService
-from app.api import auth, users, notes, todos, shop, backpack, achievements, checkin, titles, coins, calendar, stats, finance, projects, cultivation, immortal, action_center
+from app.api import auth, users, notes, todos, shop, backpack, achievements, checkin, titles, coins, calendar, stats, finance, projects, cultivation, immortal, action_center, review
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -1095,6 +1095,7 @@ app.include_router(titles.router)
 app.include_router(coins.router)
 app.include_router(calendar.router)
 app.include_router(action_center.router)
+app.include_router(review.router)
 app.include_router(stats.router)
 app.include_router(finance.router)
 app.include_router(projects.router)

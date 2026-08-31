@@ -68,6 +68,11 @@ const routes = [
         component: () => import('../views/Todos.vue')
       },
       {
+        path: 'review',
+        name: 'WeeklyReview',
+        component: () => import('../views/WeeklyReview.vue')
+      },
+      {
         path: 'cultivation',
         name: 'Cultivation',
         component: () => import('../views/Cultivation.vue')

@@ -175,6 +175,68 @@ class TaskScheduleService:
 
         return [existing[key] for key in sorted(existing)]
 
+    def get_occurrences_for_range(
+        self,
+        task: Task,
+        start_date: date,
+        end_date: date,
+    ) -> list[TaskOccurrence]:
+        """Read scheduled occurrences without changing the session or database."""
+        if start_date > end_date:
+            return []
+
+        with self.db.no_autoflush:
+            persisted = self.db.query(TaskOccurrence).filter(
+                TaskOccurrence.task_id == task.id,
+                TaskOccurrence.occurrence_date >= start_date,
+                TaskOccurrence.occurrence_date <= end_date,
+            ).order_by(TaskOccurrence.occurrence_date.asc()).all()
+
+            schedule = task.schedule
+            if schedule is None or not schedule.is_active:
+                return persisted
+
+            # A moved occurrence keeps its original source key. Read all keys
+            # so its original scheduled date is not reconstructed in this range.
+            source_keys = {
+                source_key
+                for (source_key,) in self.db.query(TaskOccurrence.source_key).filter(
+                    TaskOccurrence.task_id == task.id,
+                ).all()
+            }
+            existing_dates = {occurrence.occurrence_date for occurrence in persisted}
+            for occurrence_date in self.iter_occurrence_dates_between(
+                schedule, start_date, end_date
+            ):
+                source_key = f"task:{task.id}:{occurrence_date.isoformat()}"
+                if occurrence_date in existing_dates or source_key in source_keys:
+                    continue
+                persisted.append(TaskOccurrence(
+                    task_id=task.id,
+                    occurrence_date=occurrence_date,
+                    status=TaskStatus.PENDING.value,
+                    source_key=source_key,
+                ))
+                existing_dates.add(occurrence_date)
+                source_keys.add(source_key)
+
+        return sorted(persisted, key=lambda occurrence: occurrence.occurrence_date)
+
+    @classmethod
+    def iter_occurrence_dates_between(
+        cls,
+        schedule: TaskSchedule,
+        start_date: date,
+        end_date: date,
+    ):
+        current = max(start_date, schedule.starts_on)
+        if schedule.ends_on is not None:
+            end_date = min(end_date, schedule.ends_on)
+        while current <= end_date:
+            if cls._matches(schedule, current):
+                yield current
+            current += timedelta(days=1)
+
     def materialize_until(self, user_id: UUID, target_date: date) -> list[TaskOccurrence]:
         tasks = self.db.query(Task).join(TaskSchedule).filter(
             Task.user_id == user_id,
@@ -229,6 +291,9 @@ class TaskScheduleService:
     def deadline_for_occurrence(cls, task: Task, occurrence_date: date) -> Optional[datetime]:
         if task.deadline is None:
             return None
+        deadline_timezone = task.deadline.tzinfo
+        if task.schedule is not None:
+            deadline_timezone = ZoneInfo(task.schedule.timezone or cls.TIMEZONE_NAME)
         return datetime.combine(
             occurrence_date,
             time(
@@ -236,7 +301,7 @@ class TaskScheduleService:
                 minute=task.deadline.minute,
                 second=task.deadline.second,
                 microsecond=task.deadline.microsecond,
-                tzinfo=task.deadline.tzinfo,
+                tzinfo=deadline_timezone,
             ),
         )
 

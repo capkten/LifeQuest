@@ -11,6 +11,7 @@ from sqlalchemy import or_, update
 from sqlalchemy.orm import Session
 
 from app.models.todo import Habit, Task, Goal, Subtask, TaskStatus, GOAL_COMPLETED_PROGRESS
+from app.models.habit_completion import HabitCompletion
 from app.models.task_schedule import TaskOccurrence
 from app.repositories.todo import (
     HabitRepository,
@@ -196,6 +197,11 @@ class TodoService:
         if not changed:
             self.db.refresh(habit)
             return self._set_completed_today(habit)
+        self.db.add(HabitCompletion(
+            habit_id=habit.id,
+            completed_date=completed_on,
+            completed_at=now,
+        ))
         self.db.execute(update(Habit).where(
             Habit.id == habit.id, Habit.streak > Habit.best_streak
         ).values(best_streak=Habit.streak).execution_options(synchronize_session=False))

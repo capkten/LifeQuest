@@ -48,6 +48,12 @@ class Habit(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
+    completions = relationship(
+        "HabitCompletion",
+        back_populates="habit",
+        cascade="all, delete-orphan",
+    )
+
 
 class Task(Base):
     __tablename__ = "tasks"

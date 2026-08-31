@@ -126,6 +126,7 @@ const pageTitle = computed(() => {
     Goals: '目标',
     Notes: '笔记',
     Calendar: '日历',
+    WeeklyReview: '周复盘',
     NotebookFileManage: '笔记本',
     Shop: '商城',
     Backpack: '背包',

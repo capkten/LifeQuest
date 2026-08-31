@@ -785,6 +785,10 @@ const contextTaskId = computed(() => (
   typeof route.query.task_id === 'string' ? route.query.task_id : ''
 ))
 
+const contextOccurrenceDate = computed(() => (
+  typeof route.query.occurrence_date === 'string' ? route.query.occurrence_date : ''
+))
+
 const contextGoalId = computed(() => (
   typeof route.query.goal_id === 'string' ? route.query.goal_id : ''
 ))
@@ -1276,7 +1280,8 @@ async function completeTask(task) {
   if (completingId.value) { explainBlocked('已有其他待办正在提交，请等待完成后再试。'); return }
   beginCompletion(task.id)
   try {
-    const updated = await todoService.completeTask(task.id)
+    const occurrenceDate = task.id === contextTaskId.value && contextOccurrenceDate.value ? contextOccurrenceDate.value : undefined
+    const updated = await todoService.completeTask(task.id, occurrenceDate)
     const idx = tasks.value.findIndex(t => t.id === task.id)
     if (idx !== -1) {
       tasks.value[idx] = updated
