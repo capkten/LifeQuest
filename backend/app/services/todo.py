@@ -251,6 +251,9 @@ class TodoService:
         return task
 
     def delete_task(self, task_id: UUID) -> bool:
+        from app.services.note_link import NoteLinkService
+
+        NoteLinkService(self.db).remove_for_target("task", task_id)
         return self.task_repo.delete(task_id)
 
     @_completion_guard
@@ -351,6 +354,9 @@ class TodoService:
         return self.goal_repo.update(goal, update_data)
 
     def delete_goal(self, goal_id: UUID) -> bool:
+        from app.services.note_link import NoteLinkService
+
+        NoteLinkService(self.db).remove_for_target("goal", goal_id)
         return self.goal_repo.delete(goal_id)
 
     @_completion_guard

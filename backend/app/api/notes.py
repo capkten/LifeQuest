@@ -30,8 +30,10 @@ from app.schemas.note import (
     CollaborationTicketResponse,
     node_to_response,
 )
+from app.schemas.note_link import NoteLinkCreate, NoteLinkSummary
 from app.services.note import NoteService
 from app.services.note import NoteRevisionConflict
+from app.services.note_link import NoteLinkService
 from app.api.auth import get_current_user
 from app.services.auth import create_access_token, decode_access_token
 
@@ -329,6 +331,64 @@ def delete_node(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return {"message": "Node deleted"}
+
+
+# --- Explicit execution links ---
+
+@router.get("/{note_id}/links", response_model=List[NoteLinkSummary])
+def get_note_links(
+    note_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return NoteLinkService(db).list_for_note(note_id, current_user.id)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    except ValueError as exc:
+        if str(exc) == "NOTE_REQUIRED":
+            raise HTTPException(status_code=404, detail="Note not found")
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/{note_id}/links", response_model=NoteLinkSummary)
+def create_note_link(
+    note_id: UUID,
+    body: NoteLinkCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return NoteLinkService(db).link(note_id, body.kind, body.target_id, current_user.id)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    except ValueError as exc:
+        detail = str(exc)
+        if detail == "LINK_ALREADY_EXISTS":
+            raise HTTPException(status_code=409, detail=detail)
+        if detail in {"TARGET_NOT_FOUND", "NOTE_REQUIRED"}:
+            raise HTTPException(status_code=404, detail=detail)
+        raise HTTPException(status_code=400, detail=detail)
+
+
+@router.delete("/{note_id}/links/{kind}/{target_id}")
+def delete_note_link(
+    note_id: UUID,
+    kind: str,
+    target_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        NoteLinkService(db).unlink(note_id, kind, target_id, current_user.id)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    except ValueError as exc:
+        detail = str(exc)
+        if detail in {"LINK_NOT_FOUND", "TARGET_NOT_FOUND", "NOTE_REQUIRED"}:
+            raise HTTPException(status_code=404, detail=detail)
+        raise HTTPException(status_code=400, detail=detail)
+    return {"message": "Link removed"}
 
 
 # --- Note content ---

@@ -14,6 +14,17 @@ export const projectService = {
     const r = await api.get(`/projects/${id}`)
     return r.data
   },
+  async getProjectNotes(id) {
+    const r = await api.get(`/projects/${id}/notes`)
+    return r.data
+  },
+  async linkProjectNote(id, noteId) {
+    const r = await api.post(`/projects/${id}/notes`, { note_id: noteId })
+    return r.data
+  },
+  async unlinkProjectNote(id, noteId) {
+    await api.delete(`/projects/${id}/notes/${noteId}`)
+  },
   async updateProject(id, data) {
     const r = await api.put(`/projects/${id}`, data)
     return r.data

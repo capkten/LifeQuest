@@ -118,6 +118,9 @@ class ProjectService:
 
     def delete_project(self, project: Project) -> None:
         try:
+            from app.services.note_link import NoteLinkService
+
+            NoteLinkService(self.db).remove_for_target("project", project.id)
             # Nullify task references before deleting
             self.db.query(Task).filter(Task.project_id == project.id).update(
                 {Task.project_id: None, Task.phase_id: None, Task.milestone_id: None}

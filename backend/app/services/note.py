@@ -623,6 +623,9 @@ class NoteService:
     def _delete_note_related_data(self, node: NoteNode) -> None:
         if node.type != "note":
             return
+        from app.services.note_link import NoteLinkService
+
+        NoteLinkService(self.db).remove_for_note(node.id)
         for attachment in self.attachment_repo.get_by_note(node.id):
             attachment_path = _attachment_file_path(attachment.file_path)
             if attachment_path and attachment_path.exists():

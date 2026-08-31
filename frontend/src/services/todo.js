@@ -58,6 +58,20 @@ export const todoService = {
     return response.data
   },
 
+  async getTaskNotes(taskId) {
+    const response = await api.get(`/todos/tasks/${taskId}/notes`)
+    return response.data
+  },
+
+  async linkTaskNote(taskId, noteId) {
+    const response = await api.post(`/todos/tasks/${taskId}/notes`, { note_id: noteId })
+    return response.data
+  },
+
+  async unlinkTaskNote(taskId, noteId) {
+    await api.delete(`/todos/tasks/${taskId}/notes/${noteId}`)
+  },
+
   /**
    * Complete a task
    * @param {string} taskId - Task ID
@@ -99,6 +113,20 @@ export const todoService = {
   async createGoal(data) {
     const response = await api.post('/todos/goals', data)
     return response.data
+  },
+
+  async getGoalNotes(goalId) {
+    const response = await api.get(`/todos/goals/${goalId}/notes`)
+    return response.data
+  },
+
+  async linkGoalNote(goalId, noteId) {
+    const response = await api.post(`/todos/goals/${goalId}/notes`, { note_id: noteId })
+    return response.data
+  },
+
+  async unlinkGoalNote(goalId, noteId) {
+    await api.delete(`/todos/goals/${goalId}/notes/${noteId}`)
   },
 
   /**

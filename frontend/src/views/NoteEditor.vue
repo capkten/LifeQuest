@@ -63,6 +63,60 @@
         </label>
       </section>
 
+      <section v-if="isEditing" class="execution-links" aria-labelledby="execution-links-title">
+        <div class="execution-links-header">
+          <div>
+            <span class="field-label">执行上下文</span>
+            <h2 id="execution-links-title">关联任务、项目与目标</h2>
+          </div>
+          <button type="button" class="link-refresh-btn" :disabled="linkLoading" @click="loadLinks">刷新</button>
+        </div>
+        <div v-if="linkError" class="link-error" role="alert">
+          <span>{{ linkError }}</span>
+          <button type="button" class="retry-btn" @click="loadLinks">重试关联</button>
+        </div>
+        <div v-else-if="linkLoading" class="link-loading" aria-live="polite">
+          <span class="loading-spinner loading-spinner--sm"></span>
+          <span>正在加载关联...</span>
+        </div>
+        <ul v-else-if="linkedItems.length" class="execution-link-list">
+          <li v-for="item in linkedItems" :key="`${item.kind}-${item.id}`" class="execution-link-item">
+            <a :href="item.url" class="execution-link-target">
+              <span class="execution-link-kind">{{ linkKindLabel(item.kind) }}</span>
+              <span class="execution-link-title">{{ item.title }}</span>
+            </a>
+            <button
+              v-if="canEdit"
+              type="button"
+              class="link-remove-btn"
+              :disabled="linkPending === `${item.kind}-${item.id}`"
+              :aria-label="`解除关联 ${item.title}`"
+              @click="unlinkExecution(item)"
+            >
+              {{ linkPending === `${item.kind}-${item.id}` ? '处理中...' : '解除' }}
+            </button>
+          </li>
+        </ul>
+        <p v-else class="execution-links-empty">还没有关联内容。</p>
+        <form v-if="canEdit" class="execution-link-form" @submit.prevent="linkExecution">
+          <select v-model="linkKind" class="meta-input" :disabled="Boolean(linkPending)">
+            <option value="task">关联任务</option>
+            <option value="project">关联项目</option>
+            <option value="goal">关联目标</option>
+          </select>
+          <select v-model="linkTargetId" class="meta-input" :disabled="Boolean(linkPending) || !linkTargetOptions.length" required>
+            <option value="">选择要关联的{{ linkKindLabel(linkKind) }}</option>
+            <option v-for="target in linkTargetOptions" :key="target.id" :value="String(target.id)">
+              {{ target.title }}
+            </option>
+          </select>
+          <button type="submit" class="link-submit-btn" :disabled="Boolean(linkPending) || !linkTargetId">
+            {{ linkPending === 'create' ? '关联中...' : '添加关联' }}
+          </button>
+        </form>
+        <p v-if="linkTargetError" class="link-target-error" role="alert">{{ linkTargetError }}</p>
+      </section>
+
       <section class="editor-wrapper" aria-label="Markdown 编辑器">
         <CollaborativeMarkdownEditor
           v-model="noteContent"
@@ -88,6 +142,8 @@ import { useNoteAutosave } from '../composables/useNoteAutosave'
 import { useNoteCollaboration } from '../composables/useNoteCollaboration'
 import CollaborativeMarkdownEditor from '../components/notes/CollaborativeMarkdownEditor.vue'
 import { noteService } from '../services/note'
+import { todoService } from '../services/todo'
+import { projectService } from '../services/project'
 import { getErrorMessage } from '../utils/errorMessage'
 
 const route = useRoute()
@@ -109,6 +165,16 @@ const canEdit = ref(true)
 const noteRevision = ref(1)
 const toast = ref({ show: false, message: '', type: 'success' })
 const collaboration = useNoteCollaboration()
+const linkedItems = ref([])
+const linkLoading = ref(false)
+const linkError = ref(null)
+const linkTargetError = ref(null)
+const linkPending = ref(null)
+const linkKind = ref('task')
+const linkTargetId = ref('')
+const linkTasks = ref([])
+const linkGoals = ref([])
+const linkProjects = ref([])
 
 const isEditing = computed(() => !!noteId.value)
 const collaborationBusy = computed(() => isEditing.value && ['connecting', 'syncing'].includes(collaboration.status.value))
@@ -118,6 +184,18 @@ const contextLabel = computed(() => {
   if (notebookId.value) return `笔记本 ${notebookId.value}`
   return '笔记'
 })
+const linkTargetOptions = computed(() => {
+  if (linkKind.value === 'project') return linkProjects.value
+  if (linkKind.value === 'goal') return linkGoals.value
+  return linkTasks.value
+})
+
+function linkKindLabel(kind) {
+  if (kind === 'project') return '项目'
+  if (kind === 'goal') return '目标'
+  if (kind === 'note') return '笔记'
+  return '任务'
+}
 
 function snapshot() {
   const payload = {
@@ -195,6 +273,10 @@ async function loadRoute() {
   isPinned.value = false
   canEdit.value = true
   noteRevision.value = 1
+  linkedItems.value = []
+  linkError.value = null
+  linkTargetError.value = null
+  linkTargetId.value = ''
 
   if (!noteId.value) {
     loading.value = false
@@ -218,6 +300,7 @@ async function loadRoute() {
     folderId.value = note.parent_id || folderId.value
     autosave.reset(snapshot(), note.updated_at)
     hydrated.value = true
+    void Promise.all([loadLinks(), loadLinkTargets()])
     void collaboration.connect(note.id, note.content || '')
     collaboration.startSnapshotTimer()
   } catch (error) {
@@ -227,6 +310,75 @@ async function loadRoute() {
     }
   } finally {
     if (requestId === loadRequest) loading.value = false
+  }
+}
+
+let linkRequest = 0
+
+async function loadLinks() {
+  if (!noteId.value) return
+  const requestId = ++linkRequest
+  linkLoading.value = true
+  linkError.value = null
+  try {
+    const links = await noteService.getNoteLinks(noteId.value)
+    if (requestId === linkRequest) linkedItems.value = Array.isArray(links) ? links : []
+  } catch (error) {
+    if (requestId === linkRequest) linkError.value = getErrorMessage(error, '关联加载失败，请重试。')
+  } finally {
+    if (requestId === linkRequest) linkLoading.value = false
+  }
+}
+
+async function loadLinkTargets() {
+  if (!noteId.value) return
+  linkTargetError.value = null
+  const [tasks, goals, projects] = await Promise.allSettled([
+    todoService.getTasks(),
+    todoService.getGoals(),
+    projectService.getProjects(),
+  ])
+  if (tasks.status === 'fulfilled') linkTasks.value = tasks.value.map(item => ({ id: item.id, title: item.title }))
+  if (goals.status === 'fulfilled') linkGoals.value = goals.value.map(item => ({ id: item.id, title: item.title }))
+  if (projects.status === 'fulfilled') linkProjects.value = projects.value.map(item => ({ id: item.id, title: item.name }))
+  if ([tasks, goals, projects].some(result => result.status === 'rejected')) {
+    linkTargetError.value = '关联目标列表加载失败，请稍后重试。'
+  }
+}
+
+watch(linkKind, () => {
+  linkTargetId.value = ''
+})
+
+async function linkExecution() {
+  if (!noteId.value || !linkTargetId.value || linkPending.value) return
+  linkPending.value = 'create'
+  linkError.value = null
+  try {
+    const created = await noteService.linkNote(noteId.value, linkKind.value, linkTargetId.value)
+    linkedItems.value = [...linkedItems.value, created]
+    linkTargetId.value = ''
+    showToast('关联已添加')
+  } catch (error) {
+    linkError.value = getErrorMessage(error, '添加关联失败，请重试。')
+  } finally {
+    linkPending.value = null
+  }
+}
+
+async function unlinkExecution(item) {
+  const key = `${item.kind}-${item.id}`
+  if (linkPending.value) return
+  linkPending.value = key
+  linkError.value = null
+  try {
+    await noteService.unlinkNote(noteId.value, item.kind, item.id)
+    linkedItems.value = linkedItems.value.filter(link => `${link.kind}-${link.id}` !== key)
+    showToast('关联已解除')
+  } catch (error) {
+    linkError.value = getErrorMessage(error, '解除关联失败，请重试。')
+  } finally {
+    linkPending.value = null
   }
 }
 
@@ -388,6 +540,28 @@ onUnmounted(() => {
 .editor-wrapper :deep(.v-md-editor__toolbar) { background: var(--color-bg-tertiary); border-bottom-color: var(--color-border); }
 .editor-wrapper :deep(.v-md-textarea-editor textarea), .editor-wrapper :deep(.github-markdown-body) { color: var(--color-text); background: var(--color-bg-secondary); }
 .editor-wrapper :deep(.v-md-editor__preview-wrapper), .editor-wrapper :deep(.v-md-editor--editable .v-md-editor__editor-wrapper) { border-color: var(--color-border); }
+.execution-links { display: grid; gap: var(--spacing-sm); padding: var(--spacing-md) var(--spacing-xl); border-bottom: 1px solid var(--color-border); background: var(--color-card); }
+.execution-links-header, .execution-link-item, .execution-link-form, .link-error { display: flex; align-items: center; gap: var(--spacing-sm); min-width: 0; }
+.execution-links-header { justify-content: space-between; }
+.execution-links h2 { margin: 0; color: var(--color-text); font-size: var(--font-size-md); }
+.link-refresh-btn, .link-remove-btn, .link-submit-btn { min-height: 36px; padding: 6px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text-secondary); background: var(--color-bg-secondary); cursor: pointer; font: inherit; font-size: var(--font-size-xs); }
+.link-refresh-btn:hover:not(:disabled), .link-refresh-btn:focus-visible, .link-remove-btn:hover:not(:disabled), .link-remove-btn:focus-visible { border-color: var(--color-primary); color: var(--color-primary); outline: 2px solid var(--color-primary-light); outline-offset: 2px; }
+.link-submit-btn { border-color: var(--color-primary); color: white; background: var(--color-primary); }
+.link-submit-btn:hover:not(:disabled), .link-submit-btn:focus-visible { background: var(--color-primary-dark); outline: 2px solid var(--color-primary-light); outline-offset: 2px; }
+.link-refresh-btn:disabled, .link-remove-btn:disabled, .link-submit-btn:disabled { opacity: .55; cursor: not-allowed; }
+.execution-link-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.execution-link-item { justify-content: space-between; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-secondary); }
+.execution-link-target { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; color: var(--color-text); text-decoration: none; }
+.execution-link-target:hover { color: var(--color-primary); }
+.execution-link-kind { flex: 0 0 auto; color: var(--color-primary); font-size: var(--font-size-xs); font-weight: 700; }
+.execution-link-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.execution-link-form { align-items: stretch; }
+.execution-link-form .meta-input { flex: 1; min-width: 0; }
+.execution-links-empty, .link-loading, .link-error, .link-target-error { margin: 0; color: var(--color-text-secondary); font-size: var(--font-size-sm); }
+.link-error { justify-content: space-between; color: var(--color-error-dark); }
+.link-target-error { color: var(--color-warning-dark, var(--color-warning)); }
+.link-loading { display: flex; align-items: center; gap: 8px; }
+.loading-spinner--sm { width: 16px; height: 16px; border-width: 2px; }
 .loading-state { display: flex; flex: 1; align-items: center; justify-content: center; gap: var(--spacing-md); color: var(--color-text-secondary); }
 .loading-spinner { width: 28px; height: 28px; border: 3px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite; }
 .toast { position: fixed; z-index: 200; bottom: var(--spacing-xl); left: 50%; transform: translateX(-50%); padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); color: white; box-shadow: var(--shadow-lg); pointer-events: none; }
@@ -398,5 +572,5 @@ onUnmounted(() => {
 @keyframes pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .loading-spinner, .save-status--saving .save-status-dot, .collaboration-status--connecting .collaboration-status-dot, .collaboration-status--syncing .collaboration-status-dot { animation: none; } }
 @media (max-width: 960px) { .editor-meta { grid-template-columns: 1fr 1fr; } .field--title { grid-column: 1 / -1; } .pin-field { align-self: center; } }
-@media (max-width: 767px) { .note-editor-page { height: calc(100vh - var(--bottom-nav-height) - var(--header-height)); height: calc(100dvh - var(--bottom-nav-height) - var(--header-height)); padding-bottom: var(--safe-area-bottom); } .editor-header { align-items: flex-start; padding: var(--spacing-sm) var(--spacing-md); } .header-actions { flex-direction: column; align-items: flex-end; gap: var(--spacing-xs); } .save-status { font-size: var(--font-size-xs); } .editor-meta { grid-template-columns: 1fr; padding: var(--spacing-md); } .field--title { grid-column: auto; } .pin-field { justify-self: start; } }
+@media (max-width: 767px) { .note-editor-page { height: calc(100vh - var(--bottom-nav-height) - var(--header-height)); height: calc(100dvh - var(--bottom-nav-height) - var(--header-height)); padding-bottom: var(--safe-area-bottom); } .editor-header { align-items: flex-start; padding: var(--spacing-sm) var(--spacing-md); } .header-actions { flex-direction: column; align-items: flex-end; gap: var(--spacing-xs); } .save-status { font-size: var(--font-size-xs); } .editor-meta { grid-template-columns: 1fr; padding: var(--spacing-md); } .field--title { grid-column: auto; } .pin-field { justify-self: start; } .execution-links { padding: var(--spacing-md); } .execution-link-form { flex-wrap: wrap; } .execution-link-form .meta-input, .link-submit-btn { width: 100%; } }
 </style>

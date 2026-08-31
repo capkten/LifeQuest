@@ -2,7 +2,7 @@ from datetime import date
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -26,7 +26,9 @@ from app.schemas.task_schedule import (
     TaskSnoozeRequest,
     TaskRescheduleRequest,
 )
+from app.schemas.note_link import NoteLinkSummary, TargetNoteLinkCreate
 from app.services.todo import TodoService
+from app.services.note_link import NoteLinkService
 from app.api.auth import get_current_user
 
 router = APIRouter(prefix="/api/todos", tags=["todos"])
@@ -282,6 +284,104 @@ def complete_goal(
     service = TodoService(db)
     goal = service.get_goal_for_user(goal_id, current_user.id)
     return service.complete_goal(goal, current_user.id)
+
+
+# --- Explicit note links ---
+
+@router.get("/tasks/{task_id}/notes", response_model=List[NoteLinkSummary])
+def get_task_notes(
+    task_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return NoteLinkService(db).list_for_target("task", task_id, current_user.id)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.post("/tasks/{task_id}/notes", response_model=NoteLinkSummary)
+def link_task_note(
+    task_id: UUID,
+    body: TargetNoteLinkCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return NoteLinkService(db).link_target("task", task_id, body.note_id, current_user.id)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    except ValueError as exc:
+        detail = str(exc)
+        if detail == "LINK_ALREADY_EXISTS":
+            raise HTTPException(status_code=409, detail=detail)
+        raise HTTPException(status_code=404 if detail in {"TARGET_NOT_FOUND", "NOTE_REQUIRED"} else 400, detail=detail)
+
+
+@router.delete("/tasks/{task_id}/notes/{note_id}")
+def unlink_task_note(
+    task_id: UUID,
+    note_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        NoteLinkService(db).unlink_target("task", task_id, note_id, current_user.id)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    except ValueError as exc:
+        raise HTTPException(status_code=404 if str(exc) in {"LINK_NOT_FOUND", "TARGET_NOT_FOUND", "NOTE_REQUIRED"} else 400, detail=str(exc))
+    return {"message": "Link removed"}
+
+
+@router.get("/goals/{goal_id}/notes", response_model=List[NoteLinkSummary])
+def get_goal_notes(
+    goal_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return NoteLinkService(db).list_for_target("goal", goal_id, current_user.id)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.post("/goals/{goal_id}/notes", response_model=NoteLinkSummary)
+def link_goal_note(
+    goal_id: UUID,
+    body: TargetNoteLinkCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return NoteLinkService(db).link_target("goal", goal_id, body.note_id, current_user.id)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    except ValueError as exc:
+        detail = str(exc)
+        if detail == "LINK_ALREADY_EXISTS":
+            raise HTTPException(status_code=409, detail=detail)
+        raise HTTPException(status_code=404 if detail in {"TARGET_NOT_FOUND", "NOTE_REQUIRED"} else 400, detail=detail)
+
+
+@router.delete("/goals/{goal_id}/notes/{note_id}")
+def unlink_goal_note(
+    goal_id: UUID,
+    note_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        NoteLinkService(db).unlink_target("goal", goal_id, note_id, current_user.id)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    except ValueError as exc:
+        raise HTTPException(status_code=404 if str(exc) in {"LINK_NOT_FOUND", "TARGET_NOT_FOUND", "NOTE_REQUIRED"} else 400, detail=str(exc))
+    return {"message": "Link removed"}
 
 
 # --- Subtask endpoints ---

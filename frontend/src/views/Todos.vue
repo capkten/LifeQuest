@@ -231,6 +231,19 @@
                   ></span>
                   {{ task.project_name }}
                 </span>
+                <div class="linked-notes-inline">
+                  <button type="button" class="linked-notes-toggle" @click="toggleLinkedNotes('task', task.id)" :disabled="linkedNotesLoading === linkedNotesKey('task', task.id)">
+                    <span v-if="linkedNotesLoading === linkedNotesKey('task', task.id)" class="loading-spinner loading-spinner--sm"></span>
+                    <span v-else>{{ Object.prototype.hasOwnProperty.call(linkedNotesByKey, linkedNotesKey('task', task.id)) ? '收起关联笔记' : '打开关联笔记' }}</span>
+                  </button>
+                  <div v-if="linkedNotesErrors[linkedNotesKey('task', task.id)]" class="linked-notes-error" role="alert">
+                    {{ linkedNotesErrors[linkedNotesKey('task', task.id)] }}
+                    <button type="button" class="linked-notes-retry" @click="loadLinkedNotes('task', task.id)">重试关联笔记</button>
+                  </div>
+                  <ul v-if="notesFor('task', task.id).length" class="linked-notes-list">
+                    <li v-for="note in notesFor('task', task.id)" :key="note.id"><a :href="note.url">{{ note.title }}</a></li>
+                  </ul>
+                </div>
               </div>
             </div>
             <div class="todo-card-actions">
@@ -409,6 +422,19 @@
                   </div>
                 </div>
                 <p v-if="goal.description" class="todo-card-desc">{{ goal.description }}</p>
+                <div class="linked-notes-inline">
+                  <button type="button" class="linked-notes-toggle" @click="toggleLinkedNotes('goal', goal.id)" :disabled="linkedNotesLoading === linkedNotesKey('goal', goal.id)">
+                    <span v-if="linkedNotesLoading === linkedNotesKey('goal', goal.id)" class="loading-spinner loading-spinner--sm"></span>
+                    <span v-else>{{ Object.prototype.hasOwnProperty.call(linkedNotesByKey, linkedNotesKey('goal', goal.id)) ? '收起关联笔记' : '打开关联笔记' }}</span>
+                  </button>
+                  <div v-if="linkedNotesErrors[linkedNotesKey('goal', goal.id)]" class="linked-notes-error" role="alert">
+                    {{ linkedNotesErrors[linkedNotesKey('goal', goal.id)] }}
+                    <button type="button" class="linked-notes-retry" @click="loadLinkedNotes('goal', goal.id)">重试关联笔记</button>
+                  </div>
+                  <ul v-if="notesFor('goal', goal.id).length" class="linked-notes-list">
+                    <li v-for="note in notesFor('goal', goal.id)" :key="note.id"><a :href="note.url">{{ note.title }}</a></li>
+                  </ul>
+                </div>
               </div>
             </div>
             <div class="todo-card-actions">
@@ -802,6 +828,9 @@ const selectedProjectId = ref('')
 const projectMilestones = ref([])
 const milestoneLoading = ref(false)
 let projectDetailRequestId = 0
+const linkedNotesByKey = ref({})
+const linkedNotesLoading = ref(null)
+const linkedNotesErrors = ref({})
 
 const tabs = [
   { id: 'habits', label: '日常习惯' },
@@ -1065,6 +1094,42 @@ function showSuccess(message) {
 
 function explainBlocked(message) {
   showError(message)
+}
+
+function linkedNotesKey(kind, id) {
+  return `${kind}-${id}`
+}
+
+function notesFor(kind, id) {
+  return linkedNotesByKey.value[linkedNotesKey(kind, id)] || []
+}
+
+async function loadLinkedNotes(kind, id) {
+  const key = linkedNotesKey(kind, id)
+  if (linkedNotesLoading.value) return
+  linkedNotesLoading.value = key
+  linkedNotesErrors.value = { ...linkedNotesErrors.value, [key]: null }
+  try {
+    const notes = kind === 'task'
+      ? await todoService.getTaskNotes(id)
+      : await todoService.getGoalNotes(id)
+    linkedNotesByKey.value = { ...linkedNotesByKey.value, [key]: Array.isArray(notes) ? notes : [] }
+  } catch (error) {
+    linkedNotesErrors.value = { ...linkedNotesErrors.value, [key]: getErrorMessage(error, '关联笔记加载失败，请重试。') }
+  } finally {
+    linkedNotesLoading.value = null
+  }
+}
+
+function toggleLinkedNotes(kind, id) {
+  const key = linkedNotesKey(kind, id)
+  if (Object.prototype.hasOwnProperty.call(linkedNotesByKey.value, key)) {
+    const next = { ...linkedNotesByKey.value }
+    delete next[key]
+    linkedNotesByKey.value = next
+    return
+  }
+  void loadLinkedNotes(kind, id)
 }
 
 onUnmounted(() => {
@@ -2008,6 +2073,82 @@ onMounted(() => {
   -webkit-box-orient: vertical;
   overflow: hidden;
   line-height: 1.4;
+}
+
+.linked-notes-inline {
+  display: grid;
+  gap: 6px;
+  margin-top: 2px;
+  min-width: 0;
+}
+
+.linked-notes-toggle,
+.linked-notes-retry {
+  justify-self: start;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.linked-notes-toggle:hover:not(:disabled),
+.linked-notes-toggle:focus-visible,
+.linked-notes-retry:hover,
+.linked-notes-retry:focus-visible {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-card);
+  outline: 2px solid var(--color-primary-light);
+  outline-offset: 2px;
+}
+
+.linked-notes-toggle:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.linked-notes-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--color-error-dark, var(--color-error));
+  font-size: 12px;
+}
+
+.linked-notes-retry {
+  min-height: 28px;
+  color: var(--color-error-dark, var(--color-error));
+  background: transparent;
+}
+
+.linked-notes-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 0 10px;
+  border-left: 2px solid var(--color-primary-light, var(--color-primary));
+  list-style: none;
+}
+
+.linked-notes-list a {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-primary-dark, var(--color-primary));
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.linked-notes-list a:hover {
+  color: var(--color-primary);
 }
 
 .todo-card-meta {
