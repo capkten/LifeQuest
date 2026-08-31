@@ -31,7 +31,7 @@ test('calendar task details expose occurrence-aware rescheduling', async () => {
   assert.match(source, /rescheduleTask\(/)
   assert.match(source, /occurrence_date/)
   assert.match(source, /calendarRescheduleError/)
-  assert.match(source, /重新安排|重排/) 
+  assert.match(source, /重新安排|重排/)
   assert.match(source, /target_id/)
   assert.match(source, /await fetchEvents\(\)/)
   assert.match(source, /\.detail-item-action/)

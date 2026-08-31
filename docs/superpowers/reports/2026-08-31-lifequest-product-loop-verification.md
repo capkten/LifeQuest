@@ -10,9 +10,9 @@ on the `codex/action-center` branch.
 
 | Area | Command | Result |
 | --- | --- | --- |
-| Weekly review backend | `cd backend; pytest tests/test_review.py -q` | 10 passed, 34 warnings |
-| Backend schedule/todo regression | `cd backend; pytest tests/test_review.py tests/test_task_schedule.py tests/test_todos.py -q` | 35 passed, 118 warnings |
-| Full backend suite | `cd backend; pytest -q` | 346 passed, 696 warnings |
+| Weekly review backend | `cd backend; pytest tests/test_review.py -q` | 12 passed, 38 warnings |
+| Backend schedule/todo regression | `cd backend; pytest tests/test_review.py tests/test_task_schedule.py tests/test_todos.py -q` | 37 passed, 122 warnings |
+| Full backend suite | `cd backend; pytest -q` | 348 passed, 700 warnings |
 | Frontend review regressions | `cd frontend; node --test src/views/review-regressions.test.mjs` | 6 passed, 0 failed |
 | Frontend build | `cd frontend; npm run build` | Exit code 0; 2030 modules transformed |
 | Python compilation | `cd backend; python -m compileall -q app` | Exit code 0 |
