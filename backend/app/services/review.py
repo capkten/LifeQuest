@@ -150,6 +150,7 @@ class ReviewService:
         ).filter(
             Task.user_id == user_id,
             TaskSchedule.is_active.is_(True),
+            Task.created_at < end_utc,
         ).order_by(Task.id.asc()).all()
         occurrences = [
             (occurrence, task)

@@ -161,7 +161,11 @@ def test_weekly_review_includes_occurrences_habit_streaks_and_reward_deltas(clie
     from app.models.coin_transaction import CoinTransaction, CoinType
     from app.models.cultivation import CultivationLog
     from app.models.task_schedule import TaskOccurrence
-    from app.models.todo import Habit
+    from app.models.todo import Habit, Task
+
+    db_session.query(Task).filter(Task.id == UUID(recurring["id"])).update(
+        {Task.created_at: _local_utc_naive(2026, 8, 20)}
+    )
 
     occurrence_completed = TaskOccurrence(
         task_id=UUID(recurring["id"]),
@@ -359,6 +363,38 @@ def test_weekly_review_excludes_cancelled_parent_occurrences(client, db_session)
     assert review["summary"]["open_count"] == 0
     assert review["summary"]["overdue_count"] == 0
     assert review["unfinished_high_priority"] == []
+
+
+def test_weekly_review_excludes_occurrences_before_parent_creation(client, db_session):
+    headers = _register_and_login(client, "review-created-after-week", "review-created-after-week@example.com")
+    recurring = _create_task(
+        client,
+        headers,
+        "晚于复盘周创建的重复任务",
+        priority="high",
+        schedule={
+            "rule_type": "daily",
+            "starts_on": "2026-08-24",
+            "ends_on": "2026-08-24",
+        },
+    )
+
+    from app.models.todo import Task
+
+    db_session.query(Task).filter(Task.id == UUID(recurring["id"])).update(
+        {Task.created_at: _local_utc_naive(2026, 9, 1)}
+    )
+    db_session.commit()
+
+    response = client.get(
+        "/api/review/weekly",
+        params={"week_start": "2026-08-24"},
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["summary"]["open_count"] == 0
+    assert response.json()["unfinished_high_priority"] == []
 
 
 def test_weekly_review_does_not_mark_a_future_week_overdue(client):
