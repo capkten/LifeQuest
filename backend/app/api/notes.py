@@ -346,7 +346,7 @@ def get_note_links(
     except PermissionError:
         raise HTTPException(status_code=403, detail="Not authorized")
     except ValueError as exc:
-        if str(exc) == "NOTE_REQUIRED":
+        if str(exc) in {"NOTE_REQUIRED", "Note not found"}:
             raise HTTPException(status_code=404, detail="Note not found")
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -366,7 +366,7 @@ def create_note_link(
         detail = str(exc)
         if detail == "LINK_ALREADY_EXISTS":
             raise HTTPException(status_code=409, detail=detail)
-        if detail in {"TARGET_NOT_FOUND", "NOTE_REQUIRED"}:
+        if detail in {"TARGET_NOT_FOUND", "NOTE_REQUIRED", "Note not found"}:
             raise HTTPException(status_code=404, detail=detail)
         raise HTTPException(status_code=400, detail=detail)
 
@@ -385,7 +385,7 @@ def delete_note_link(
         raise HTTPException(status_code=403, detail="Not authorized")
     except ValueError as exc:
         detail = str(exc)
-        if detail in {"LINK_NOT_FOUND", "TARGET_NOT_FOUND", "NOTE_REQUIRED"}:
+        if detail in {"LINK_NOT_FOUND", "TARGET_NOT_FOUND", "NOTE_REQUIRED", "Note not found"}:
             raise HTTPException(status_code=404, detail=detail)
         raise HTTPException(status_code=400, detail=detail)
     return {"message": "Link removed"}

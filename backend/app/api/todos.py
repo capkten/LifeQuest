@@ -317,7 +317,7 @@ def link_task_note(
         detail = str(exc)
         if detail == "LINK_ALREADY_EXISTS":
             raise HTTPException(status_code=409, detail=detail)
-        raise HTTPException(status_code=404 if detail in {"TARGET_NOT_FOUND", "NOTE_REQUIRED"} else 400, detail=detail)
+        raise HTTPException(status_code=404 if detail in {"TARGET_NOT_FOUND", "NOTE_REQUIRED", "Note not found"} else 400, detail=detail)
 
 
 @router.delete("/tasks/{task_id}/notes/{note_id}")
@@ -332,7 +332,7 @@ def unlink_task_note(
     except PermissionError:
         raise HTTPException(status_code=403, detail="Not authorized")
     except ValueError as exc:
-        raise HTTPException(status_code=404 if str(exc) in {"LINK_NOT_FOUND", "TARGET_NOT_FOUND", "NOTE_REQUIRED"} else 400, detail=str(exc))
+        raise HTTPException(status_code=404 if str(exc) in {"LINK_NOT_FOUND", "TARGET_NOT_FOUND", "NOTE_REQUIRED", "Note not found"} else 400, detail=str(exc))
     return {"message": "Link removed"}
 
 
@@ -365,7 +365,7 @@ def link_goal_note(
         detail = str(exc)
         if detail == "LINK_ALREADY_EXISTS":
             raise HTTPException(status_code=409, detail=detail)
-        raise HTTPException(status_code=404 if detail in {"TARGET_NOT_FOUND", "NOTE_REQUIRED"} else 400, detail=detail)
+        raise HTTPException(status_code=404 if detail in {"TARGET_NOT_FOUND", "NOTE_REQUIRED", "Note not found"} else 400, detail=detail)
 
 
 @router.delete("/goals/{goal_id}/notes/{note_id}")
@@ -380,7 +380,7 @@ def unlink_goal_note(
     except PermissionError:
         raise HTTPException(status_code=403, detail="Not authorized")
     except ValueError as exc:
-        raise HTTPException(status_code=404 if str(exc) in {"LINK_NOT_FOUND", "TARGET_NOT_FOUND", "NOTE_REQUIRED"} else 400, detail=str(exc))
+        raise HTTPException(status_code=404 if str(exc) in {"LINK_NOT_FOUND", "TARGET_NOT_FOUND", "NOTE_REQUIRED", "Note not found"} else 400, detail=str(exc))
     return {"message": "Link removed"}
 
 

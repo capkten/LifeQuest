@@ -30,6 +30,9 @@ test('note editor renders link controls and preserves retryable link state', asy
   assert.match(editor, /linkNote\(/)
   assert.match(editor, /unlinkNote\(/)
   assert.match(editor, /重试.*关联|关联.*重试/s)
+  assert.match(editor, /loadLinkTargets\(/)
+  assert.match(editor, /@click="loadLinkTargets"/)
+  assert.match(editor, /重试关联目标列表/)
 })
 
 test('todo page exposes linked-note navigation for tasks and goals', async () => {
@@ -39,6 +42,12 @@ test('todo page exposes linked-note navigation for tasks and goals', async () =>
   assert.match(todos, /getTaskNotes\(/)
   assert.match(todos, /getGoalNotes\(/)
   assert.match(todos, /note.*links|linkedNotes|关联笔记/s)
+  assert.match(todos, /route\.query\.task_id/)
+  assert.match(todos, /route\.query\.goal_id/)
+  assert.match(todos, /contextTab/)
+  assert.match(todos, /watch\(contextTab/)
+  assert.match(todos, /activeTab.*tasks|tasks.*activeTab/s)
+  assert.match(todos, /activeTab.*goals|goals.*activeTab/s)
 })
 
 test('project detail exposes linked-note navigation and a retryable load path', async () => {

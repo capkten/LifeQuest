@@ -781,7 +781,22 @@ const contextProjectId = computed(() => (
   typeof route.query.project_id === 'string' ? route.query.project_id : ''
 ))
 
-const activeTab = ref(contextProjectId.value ? 'tasks' : 'habits')
+const contextTaskId = computed(() => (
+  typeof route.query.task_id === 'string' ? route.query.task_id : ''
+))
+
+const contextGoalId = computed(() => (
+  typeof route.query.goal_id === 'string' ? route.query.goal_id : ''
+))
+
+const contextTab = computed(() => {
+  const requestedTab = typeof route.query.tab === 'string' ? route.query.tab : ''
+  if (requestedTab === 'goals' || contextGoalId.value) return 'goals'
+  if (requestedTab === 'tasks' || contextTaskId.value || contextProjectId.value) return 'tasks'
+  return 'habits'
+})
+
+const activeTab = ref(contextTab.value)
 const habits = ref([])
 const tasks = ref([])
 const goals = ref([])
@@ -831,6 +846,14 @@ let projectDetailRequestId = 0
 const linkedNotesByKey = ref({})
 const linkedNotesLoading = ref(null)
 const linkedNotesErrors = ref({})
+
+watch(contextTab, (tab) => {
+  activeTab.value = tab
+})
+
+watch(contextProjectId, (projectId) => {
+  if (projectId) selectedProjectId.value = projectId
+})
 
 const tabs = [
   { id: 'habits', label: '日常习惯' },

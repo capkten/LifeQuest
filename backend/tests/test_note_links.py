@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
@@ -189,6 +191,77 @@ def test_unlink_is_explicit_and_does_not_delete_the_note_or_target(client):
     assert client.get(f"/api/notes/{note['id']}/links", headers=headers).json() == []
     assert client.get(f"/api/notes/{note['id']}", headers=headers).status_code == 200
     assert client.get(f"/api/todos/tasks/{task['id']}", headers=headers).status_code == 200
+
+
+def test_missing_notes_are_reported_as_not_found(client):
+    headers = _register_and_login(client)
+    notebook = _create_notebook(client, headers)
+    _note, task, goal, project = _create_targets(client, headers, notebook["id"])
+    missing_note_id = uuid4()
+
+    responses = [
+        client.get(f"/api/notes/{missing_note_id}/links", headers=headers),
+        client.post(
+            f"/api/notes/{missing_note_id}/links",
+            json={"kind": "task", "target_id": task["id"]},
+            headers=headers,
+        ),
+        client.delete(
+            f"/api/notes/{missing_note_id}/links/task/{task['id']}",
+            headers=headers,
+        ),
+    ]
+    target_paths = [
+        f"/api/todos/tasks/{task['id']}/notes",
+        f"/api/todos/goals/{goal['id']}/notes",
+        f"/api/projects/{project['id']}/notes",
+    ]
+    target_list_responses = [client.get(path, headers=headers) for path in target_paths]
+    assert [response.status_code for response in target_list_responses] == [200] * len(target_paths)
+    for path in target_paths:
+        responses.extend(
+            [
+                client.post(path, json={"note_id": str(missing_note_id)}, headers=headers),
+                client.delete(f"{path}/{missing_note_id}", headers=headers),
+            ]
+        )
+
+    assert [response.status_code for response in responses] == [404] * len(responses)
+
+
+def test_mcp_bootstrap_imports_the_complete_model_registry():
+    source = Path(__file__).resolve().parents[1].joinpath("mcp_server.py").read_text(encoding="utf-8")
+
+    model_import = source.index("from app import models")
+    create_all = source.index("Base.metadata.create_all(bind=engine)")
+    assert model_import < create_all
+
+
+def test_deleting_targets_cleans_all_link_rows(client, db_session):
+    headers = _register_and_login(client)
+    notebook = _create_notebook(client, headers)
+    note, task, goal, project = _create_targets(client, headers, notebook["id"])
+    for kind, target_id in (
+        ("task", task["id"]),
+        ("goal", goal["id"]),
+        ("project", project["id"]),
+    ):
+        assert client.post(
+            f"/api/notes/{note['id']}/links",
+            json={"kind": kind, "target_id": target_id},
+            headers=headers,
+        ).status_code == 200
+
+    assert client.delete(f"/api/todos/tasks/{task['id']}", headers=headers).status_code == 200
+    assert client.delete(f"/api/todos/goals/{goal['id']}", headers=headers).status_code == 200
+    assert client.delete(f"/api/projects/{project['id']}", headers=headers).status_code == 200
+
+    assert client.get(f"/api/notes/{note['id']}/links", headers=headers).json() == []
+    from app.models.note_link import GoalNoteLink, ProjectNoteLink, TaskNoteLink
+
+    assert db_session.query(TaskNoteLink).count() == 0
+    assert db_session.query(GoalNoteLink).count() == 0
+    assert db_session.query(ProjectNoteLink).count() == 0
 
 
 def test_deleting_a_note_cleans_all_link_rows(client, db_session):

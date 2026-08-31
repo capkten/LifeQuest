@@ -114,7 +114,10 @@
             {{ linkPending === 'create' ? '关联中...' : '添加关联' }}
           </button>
         </form>
-        <p v-if="linkTargetError" class="link-target-error" role="alert">{{ linkTargetError }}</p>
+        <div v-if="linkTargetError" class="link-target-error" role="alert">
+          <span>{{ linkTargetError }}</span>
+          <button type="button" class="retry-btn" @click="loadLinkTargets">重试关联目标列表</button>
+        </div>
       </section>
 
       <section class="editor-wrapper" aria-label="Markdown 编辑器">
