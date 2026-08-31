@@ -152,14 +152,18 @@ class ReviewService:
             TaskSchedule.is_active.is_(True),
             Task.created_at < end_utc,
         ).order_by(Task.id.asc()).all()
-        occurrences = [
-            (occurrence, task)
-            for task in scheduled_tasks
-            if task.status not in {TaskStatus.COMPLETED.value, TaskStatus.CANCELLED.value}
-            for occurrence in self.schedule_service.get_occurrences_for_range(
-                task, week_start, week_end
+        occurrences = []
+        for task in scheduled_tasks:
+            if task.status in {TaskStatus.COMPLETED.value, TaskStatus.CANCELLED.value}:
+                continue
+            created_on = self._local_date(task.created_at)
+            occurrences.extend(
+                (occurrence, task)
+                for occurrence in self.schedule_service.get_occurrences_for_range(
+                    task, week_start, week_end
+                )
+                if created_on is None or occurrence.occurrence_date >= created_on
             )
-        ]
 
         occurrence_task_ids = {task.id for _occurrence, task in occurrences}
         completed_count = 0

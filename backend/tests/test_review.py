@@ -397,6 +397,38 @@ def test_weekly_review_excludes_occurrences_before_parent_creation(client, db_se
     assert response.json()["unfinished_high_priority"] == []
 
 
+def test_weekly_review_excludes_occurrences_before_creation_day(client, db_session):
+    headers = _register_and_login(client, "review-created-mid-week", "review-created-mid-week@example.com")
+    recurring = _create_task(
+        client,
+        headers,
+        "创建日前的重复任务 occurrence",
+        priority="high",
+        schedule={
+            "rule_type": "daily",
+            "starts_on": "2026-08-24",
+            "ends_on": "2026-08-24",
+        },
+    )
+
+    from app.models.todo import Task
+
+    db_session.query(Task).filter(Task.id == UUID(recurring["id"])).update(
+        {Task.created_at: _local_utc_naive(2026, 8, 25)}
+    )
+    db_session.commit()
+
+    response = client.get(
+        "/api/review/weekly",
+        params={"week_start": "2026-08-24"},
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["summary"]["open_count"] == 0
+    assert response.json()["unfinished_high_priority"] == []
+
+
 def test_weekly_review_does_not_mark_a_future_week_overdue(client):
     headers = _register_and_login(client, "review-future", "review-future@example.com")
     _create_task(
