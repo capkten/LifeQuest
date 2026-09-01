@@ -16,7 +16,7 @@ from app.config import settings
 from app.database import engine, Base, SessionLocal
 from app import models  # noqa: F401  # Register all ORM models before create_all.
 from app.services.note import NoteService
-from app.api import auth, users, notes, todos, shop, backpack, achievements, checkin, titles, coins, calendar, stats, finance, projects, cultivation, immortal
+from app.api import auth, users, notes, note_sync, todos, shop, backpack, achievements, checkin, titles, coins, calendar, stats, finance, projects, cultivation, immortal, action_center, review
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -695,6 +695,15 @@ def _migrate_columns():
     inspector = inspect(engine)
     with engine.begin() as conn:
         uuid_type = _uuid_column_type(conn)
+        try:
+            notebook_cols = {c["name"] for c in inspector.get_columns("notebooks")}
+        except (KeyError, NoSuchTableError):
+            notebook_cols = None
+        if notebook_cols is not None and "sync_revision" not in notebook_cols:
+            conn.execute(text(
+                "ALTER TABLE notebooks ADD COLUMN sync_revision INTEGER NOT NULL DEFAULT 0"
+            ))
+            logger.info("Migration: added notebooks.sync_revision")
         # Mortal resource columns were introduced after the first cultivation
         # profile schema. Preserve existing values and initialize only missing
         # balances with the established profile defaults.
@@ -761,6 +770,42 @@ def _migrate_columns():
             if col_name not in task_cols:
                 conn.execute(text(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_def}"))
                 logger.info("Migration: added tasks.%s", col_name)
+
+        # Recurring tasks use a template schedule and durable per-date
+        # occurrences.  Keep startup idempotent for databases created before
+        # the recurrence feature was introduced.
+        conn.execute(text(
+            f"CREATE TABLE IF NOT EXISTS task_schedules ("
+            f"id {uuid_type} PRIMARY KEY, "
+            f"task_id {uuid_type} NOT NULL UNIQUE, "
+            "rule_type VARCHAR(16) NOT NULL, "
+            "interval INTEGER NOT NULL DEFAULT 1, "
+            "weekdays_json TEXT, "
+            "day_of_month INTEGER, "
+            "starts_on DATE NOT NULL, "
+            "ends_on DATE, "
+            "timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Shanghai', "
+            "is_active BOOLEAN NOT NULL DEFAULT 1, "
+            "created_at DATETIME NOT NULL, "
+            "updated_at DATETIME NOT NULL, "
+            "FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE"
+            ")"
+        ))
+        conn.execute(text(
+            f"CREATE TABLE IF NOT EXISTS task_occurrences ("
+            f"id {uuid_type} PRIMARY KEY, "
+            f"task_id {uuid_type} NOT NULL, "
+            "occurrence_date DATE NOT NULL, "
+            "status VARCHAR(20) NOT NULL DEFAULT 'pending', "
+            "snoozed_until DATETIME, "
+            "completed_at DATETIME, "
+            "source_key VARCHAR(128) NOT NULL UNIQUE, "
+            "created_at DATETIME NOT NULL, "
+            "updated_at DATETIME NOT NULL, "
+            "CONSTRAINT uq_task_occurrence_task_date UNIQUE (task_id, occurrence_date), "
+            "FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE"
+            ")"
+        ))
 
         # finance_transactions.recurring_id
         txn_cols = {c["name"] for c in inspector.get_columns("finance_transactions")}
@@ -1050,6 +1095,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(notes.router)
+app.include_router(note_sync.router)
 app.include_router(todos.router)
 app.include_router(shop.router)
 app.include_router(backpack.router)
@@ -1058,6 +1104,8 @@ app.include_router(checkin.router)
 app.include_router(titles.router)
 app.include_router(coins.router)
 app.include_router(calendar.router)
+app.include_router(action_center.router)
+app.include_router(review.router)
 app.include_router(stats.router)
 app.include_router(finance.router)
 app.include_router(projects.router)

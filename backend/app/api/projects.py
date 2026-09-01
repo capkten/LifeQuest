@@ -20,8 +20,10 @@ from app.schemas.project import (
     MilestoneResponse,
 )
 from app.schemas.todo import TaskCreate, TaskResponse
+from app.schemas.note_link import NoteLinkSummary, TargetNoteLinkCreate
 from app.models.todo import TaskStatus
 from app.services.project import ProjectService
+from app.services.note_link import NoteLinkService
 from app.api.auth import get_current_user
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -276,6 +278,54 @@ def get_project_tasks(
             resp.project_color = t.project.color
         result.append(resp)
     return result
+
+
+@router.get("/{project_id}/notes", response_model=List[NoteLinkSummary])
+def get_project_notes(
+    project_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return NoteLinkService(db).list_for_target("project", project_id, current_user.id)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.post("/{project_id}/notes", response_model=NoteLinkSummary)
+def link_project_note(
+    project_id: UUID,
+    body: TargetNoteLinkCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return NoteLinkService(db).link_target("project", project_id, body.note_id, current_user.id)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    except ValueError as exc:
+        detail = str(exc)
+        if detail == "LINK_ALREADY_EXISTS":
+            raise HTTPException(status_code=409, detail=detail)
+        raise HTTPException(status_code=404 if detail in {"TARGET_NOT_FOUND", "NOTE_REQUIRED", "Note not found"} else 400, detail=detail)
+
+
+@router.delete("/{project_id}/notes/{note_id}")
+def unlink_project_note(
+    project_id: UUID,
+    note_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        NoteLinkService(db).unlink_target("project", project_id, note_id, current_user.id)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    except ValueError as exc:
+        raise HTTPException(status_code=404 if str(exc) in {"LINK_NOT_FOUND", "TARGET_NOT_FOUND", "NOTE_REQUIRED", "Note not found"} else 400, detail=str(exc))
+    return {"message": "Link removed"}
 
 
 class MoveTaskRequest(BaseModel):

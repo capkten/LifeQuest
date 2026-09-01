@@ -105,6 +105,42 @@
         </div>
       </div>
 
+      <section class="project-linked-notes" aria-labelledby="project-linked-notes-title">
+        <div class="project-linked-notes-header">
+          <div>
+            <span class="detail-meta-label">执行上下文</span>
+            <h3 id="project-linked-notes-title">关联笔记</h3>
+          </div>
+          <button
+            type="button"
+            class="btn-outline project-linked-notes-toggle"
+            :disabled="linkedNotesLoading"
+            @click="toggleProjectNotes"
+          >
+            <span v-if="linkedNotesLoading" class="loading-spinner loading-spinner--sm" aria-hidden="true"></span>
+            <span v-else>{{ linkedNotesOpen ? '收起关联笔记' : '打开关联笔记' }}</span>
+          </button>
+        </div>
+        <div v-if="linkedNotesError" class="project-linked-notes-error" role="alert">
+          <span>{{ linkedNotesError }}</span>
+          <button type="button" class="retry-btn" @click="loadProjectNotes">重试关联笔记</button>
+        </div>
+        <div v-if="linkedNotesLoading" class="project-linked-notes-loading" aria-live="polite">
+          正在加载关联笔记...
+        </div>
+        <ul v-if="linkedNotesOpen && linkedNotes.length" class="project-linked-notes-list">
+          <li v-for="note in linkedNotes" :key="note.id">
+            <a :href="note.url" class="project-linked-note-link">
+              <span class="project-linked-note-kind">笔记</span>
+              <span class="project-linked-note-title">{{ note.title }}</span>
+            </a>
+          </li>
+        </ul>
+        <p v-else-if="linkedNotesOpen && !linkedNotesLoading && !linkedNotesError" class="project-linked-notes-empty">
+          暂无关联笔记
+        </p>
+      </section>
+
       <!-- View Toggle -->
       <div class="view-toggle">
         <button
@@ -622,6 +658,11 @@ const deletePending = ref(false)
 const finishing = ref(false)
 const completingTaskId = ref(null)
 const descCollapsed = ref(true)
+const linkedNotes = ref([])
+const linkedNotesOpen = ref(false)
+const linkedNotesLoading = ref(false)
+const linkedNotesError = ref(null)
+let linkedNotesRequestId = 0
 
 // View state
 const currentView = ref('list')
@@ -753,6 +794,30 @@ async function fetchData() {
   } finally {
     loading.value = false
   }
+}
+
+async function loadProjectNotes() {
+  const requestId = ++linkedNotesRequestId
+  linkedNotesOpen.value = true
+  linkedNotesLoading.value = true
+  linkedNotesError.value = null
+  try {
+    const notes = await projectService.getProjectNotes(projectId)
+    if (requestId === linkedNotesRequestId) linkedNotes.value = Array.isArray(notes) ? notes : []
+  } catch (e) {
+    if (requestId === linkedNotesRequestId) linkedNotesError.value = getErrorMessage(e, '关联笔记加载失败，请重试。')
+  } finally {
+    if (requestId === linkedNotesRequestId) linkedNotesLoading.value = false
+  }
+}
+
+function toggleProjectNotes() {
+  if (linkedNotesLoading.value) return
+  if (linkedNotesOpen.value) {
+    linkedNotesOpen.value = false
+    return
+  }
+  void loadProjectNotes()
 }
 
 // --- Task operations ---
@@ -1360,6 +1425,103 @@ onMounted(() => {
 .detail-dates svg {
   width: 16px;
   height: 16px;
+}
+
+.project-linked-notes {
+  display: grid;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) 0;
+  margin-bottom: var(--spacing-xl);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.project-linked-notes-header,
+.project-linked-notes-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.project-linked-notes h3 {
+  margin: 2px 0 0;
+  color: var(--color-text);
+  font-size: var(--font-size-md);
+}
+
+.project-linked-notes-toggle {
+  flex-shrink: 0;
+}
+
+.project-linked-notes-loading,
+.project-linked-notes-empty,
+.project-linked-notes-error {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.project-linked-notes-error {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  color: var(--color-error-dark, var(--color-error));
+}
+
+.project-linked-notes-error .retry-btn {
+  min-height: 32px;
+  padding: 4px 10px;
+  color: var(--color-error-dark, var(--color-error));
+  border-color: currentColor;
+}
+
+.project-linked-notes-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-linked-notes-list li {
+  min-width: 0;
+}
+
+.project-linked-note-link {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  padding: 8px 10px;
+  color: var(--color-text);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.project-linked-note-link:hover,
+.project-linked-note-link:focus-visible {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  outline: 2px solid var(--color-primary-light);
+  outline-offset: 2px;
+}
+
+.project-linked-note-kind {
+  flex: 0 0 auto;
+  color: var(--color-primary);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+
+.project-linked-note-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* View Toggle */
@@ -2223,6 +2385,14 @@ onMounted(() => {
 
   .view-toggle {
     gap: 6px;
+  }
+
+  .project-linked-notes-header {
+    align-items: flex-start;
+  }
+
+  .project-linked-notes-toggle {
+    min-height: 44px;
   }
 
   .view-btn {

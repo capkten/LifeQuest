@@ -313,12 +313,18 @@ test('subtask completion uses the settlement endpoint', async () => {
   assert.doesNotMatch(service, /api\.put\(`\/todos\/subtasks\/\$\{subtaskId\}`\s*,\s*\{ is_completed: true \}\)/)
 })
 
-test('home daily summary keeps request failures separate from the legitimate empty state', async () => {
-  const source = await readFile(new URL('./Home.vue', viewsDirectory), 'utf8')
+test('home action center keeps request failures separate from the legitimate empty state', async () => {
+  const [home, actionCenter, composable] = await Promise.all([
+    readFile(new URL('./Home.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('../components/home/TodayActionCenter.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../composables/useActionCenter.js', import.meta.url), 'utf8'),
+  ])
 
-  assert.match(source, /dailyError/)
-  assert.match(source, /v-else-if="dailyError"[\s\S]*重试[\s\S]*fetchDailySummary/)
-  assert.match(source, /dailyError\.value\s*=\s*getErrorMessage\(e/)
+  assert.match(home, /TodayActionCenter/)
+  assert.match(actionCenter, /v-else-if="error && !data"[\s\S]*role="alert"[\s\S]*重试/)
+  assert.match(actionCenter, /v-if="error"[\s\S]*today-action-inline-error/)
+  assert.match(composable, /if \(currentRequestId === requestId\) error\.value = cause/)
+  assert.doesNotMatch(home, /todoService\.getDailySummary\(\)/)
 })
 
 test('notes preserve prior results and expose retryable errors for search and discovery', async () => {

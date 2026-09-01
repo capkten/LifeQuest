@@ -154,6 +154,7 @@ def _persist_update(
             node.word_count = len(content.split())
             node.content_revision = (node.content_revision or 1) + 1
             node.updated_by = user_id
+            service._record_node_change(node, "update")
         event = NoteCollabEvent(
             note_id=note_id,
             user_id=user_id,
@@ -210,6 +211,7 @@ def _persist_snapshot(
             node.word_count = len(content.split())
             node.content_revision = (node.content_revision or 1) + 1
             node.updated_by = user_id
+            service._record_node_change(node, "update")
 
         max_cursor = db.query(func.max(NoteCollabEvent.id)).filter(NoteCollabEvent.note_id == note_id).scalar() or 0
         document.snapshot = snapshot

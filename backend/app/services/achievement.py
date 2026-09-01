@@ -358,13 +358,13 @@ class AchievementService:
             self.db.commit()
         return unlocked
 
-    def check_notes(self, user_id: UUID) -> List[Achievement]:
+    def check_notes(self, user_id: UUID, commit: bool = True) -> List[Achievement]:
         """Count notes for user and check note_count achievements."""
         count = self.db.query(NoteNode).join(Notebook).filter(
             Notebook.user_id == user_id,
             NoteNode.type == "note",
         ).count()
-        return self.check_and_unlock(user_id, "note_count", count)
+        return self.check_and_unlock(user_id, "note_count", count, commit=commit)
 
     def check_coins_spent(self, user_id: UUID) -> List[Achievement]:
         """Sum total coins spent from exchange history and check coins_spent achievements."""

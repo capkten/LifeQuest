@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional, List
 from uuid import UUID
 
@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.todo import Difficulty, TaskStatus, Frequency
 from app.schemas.cultivation import RewardSettlement
+from app.schemas.task_schedule import TaskScheduleCreate, TaskScheduleResponse
 
 
 # Habit schemas
@@ -62,6 +63,7 @@ class TaskCreate(BaseModel):
     milestone_id: Optional[UUID] = None
     start_date: Optional[datetime] = None
     priority: str = "medium"
+    schedule: Optional[TaskScheduleCreate] = None
 
 
 class TaskUpdate(BaseModel):
@@ -77,6 +79,7 @@ class TaskUpdate(BaseModel):
     milestone_id: Optional[UUID] = None
     start_date: Optional[datetime] = None
     priority: Optional[str] = None
+    schedule: Optional[TaskScheduleCreate] = None
 
 
 class TaskResponse(BaseModel):
@@ -103,6 +106,10 @@ class TaskResponse(BaseModel):
     cultivation_reward: Optional[RewardSettlement] = None
     project_name: Optional[str] = None
     project_color: Optional[str] = None
+    schedule: Optional[TaskScheduleResponse] = None
+    occurrence_date: Optional[date] = None
+    occurrence_status: Optional[str] = None
+    snoozed_until: Optional[datetime] = None
 
 
 # Goal schemas

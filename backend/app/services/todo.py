@@ -11,6 +11,8 @@ from sqlalchemy import or_, update
 from sqlalchemy.orm import Session
 
 from app.models.todo import Habit, Task, Goal, Subtask, TaskStatus, GOAL_COMPLETED_PROGRESS
+from app.models.habit_completion import HabitCompletion
+from app.models.task_schedule import TaskOccurrence
 from app.repositories.todo import (
     HabitRepository,
     TaskRepository,
@@ -28,6 +30,7 @@ from app.schemas.todo import (
     SubtaskCreate,
     SubtaskUpdate,
 )
+from app.services.task_schedule import TaskScheduleService
 from app.models.coin_transaction import CoinSource, CoinType
 from app.repositories.coin_transaction import CoinTransactionRepository
 from app.services.achievement import AchievementService
@@ -73,6 +76,7 @@ class TodoService:
         self.achievement_service = AchievementService(db)
         self.title_service = TitleService(db)
         self.cultivation_service = CultivationService(db)
+        self.schedule_service = TaskScheduleService(db)
 
     @staticmethod
     def _local_date(value: datetime) -> date:
@@ -110,7 +114,7 @@ class TodoService:
         source_value = getattr(source, "value", source)
         compact_uuid = base64.urlsafe_b64encode(entity_id.bytes).decode("ascii").rstrip("=")
         source_id = f"{TODO_SOURCE_PREFIXES[source_value]}:{compact_uuid}"
-        if source_value == "habit":
+        if source_value == "habit" or (source_value == "task" and completed_on is not None):
             source_id = f"{source_id}:{completed_on:%Y%m%d}"
         return source_id
 
@@ -193,6 +197,11 @@ class TodoService:
         if not changed:
             self.db.refresh(habit)
             return self._set_completed_today(habit)
+        self.db.add(HabitCompletion(
+            habit_id=habit.id,
+            completed_date=completed_on,
+            completed_at=now,
+        ))
         self.db.execute(update(Habit).where(
             Habit.id == habit.id, Habit.streak > Habit.best_streak
         ).values(best_streak=Habit.streak).execution_options(synchronize_session=False))
@@ -215,9 +224,16 @@ class TodoService:
 
     # --- Task operations ---
     def create_task(self, user_id: UUID, task_in: TaskCreate) -> Task:
-        data = task_in.model_dump()
+        data = task_in.model_dump(exclude={"schedule"})
         data["user_id"] = user_id
-        return self.task_repo.create(data)
+        task = Task(**data)
+        self.db.add(task)
+        self.db.flush()
+        if task_in.schedule is not None:
+            self.schedule_service.create_for_task(task, task_in.schedule)
+        self.db.commit()
+        self.db.refresh(task)
+        return task
 
     def get_tasks(self, user_id: UUID) -> List[Task]:
         return self.task_repo.get_by_user(user_id)
@@ -229,15 +245,78 @@ class TodoService:
 
     def update_task(self, task: Task, task_in: TaskUpdate) -> Task:
         update_data = task_in.model_dump(exclude_unset=True)
-        return self.task_repo.update(task, update_data)
+        schedule_provided = "schedule" in update_data
+        schedule_data = task_in.schedule if schedule_provided else None
+        update_data.pop("schedule", None)
+        for key, value in update_data.items():
+            setattr(task, key, value)
+        if schedule_provided:
+            self.schedule_service.replace_for_task(task, schedule_data)
+        self.db.commit()
+        self.db.refresh(task)
+        return task
 
     def delete_task(self, task_id: UUID) -> bool:
+        from app.services.note_link import NoteLinkService
+
+        NoteLinkService(self.db).remove_for_target("task", task_id)
         return self.task_repo.delete(task_id)
 
     @_completion_guard
-    def complete_task(self, task: Task, user_id: UUID) -> Task:
+    def complete_task(
+        self,
+        task: Task,
+        user_id: UUID,
+        occurrence_date: date | None = None,
+    ) -> Task:
         """Complete a task and award coins and experience to the user."""
         now = datetime.now(timezone.utc)
+
+        if task.schedule is not None or occurrence_date is not None:
+            target_date = occurrence_date or self._local_date(now)
+            occurrence = self.schedule_service.get_or_create_occurrence(
+                task, target_date
+            )
+            if occurrence.status == TaskStatus.COMPLETED.value:
+                self.db.refresh(occurrence)
+                task.occurrence_date = occurrence.occurrence_date
+                task.occurrence_status = occurrence.status
+                task.snoozed_until = occurrence.snoozed_until
+                return task
+
+            occurrence.status = TaskStatus.COMPLETED.value
+            occurrence.completed_at = now
+            occurrence.snoozed_until = None
+            completed_on = occurrence.occurrence_date
+            occurrence_deadline = self.schedule_service.deadline_for_occurrence(
+                task, completed_on
+            )
+            user = self.user_repo.get_by_id(user_id)
+            settlement = None
+            if user:
+                settlement = self._update_rewards(
+                    user,
+                    task.coins_reward,
+                    task.exp_reward,
+                    CoinSource.TASK,
+                    task.difficulty,
+                    importance=self.TASK_IMPORTANCE.get(task.priority, 1.0),
+                    source_key=f"task:{task.id}:{completed_on.isoformat()}",
+                    coin_source_id=self._coin_source_id(
+                        CoinSource.TASK, task.id, completed_on
+                    ),
+                    cultivation_base_exp=CULTIVATION_REWARD_BASES["task"],
+                    quality=self._completion_quality(occurrence_deadline, now),
+                )
+                self._check_achievements(user)
+            self.db.commit()
+            self.db.refresh(task)
+            task.cultivation_reward = settlement
+            task.occurrence_date = occurrence.occurrence_date
+            task.occurrence_status = occurrence.status
+            task.snoozed_until = occurrence.snoozed_until
+            return task
+
         changed = self.db.execute(update(Task).where(
             Task.id == task.id, Task.user_id == user_id, Task.status != TaskStatus.COMPLETED
         ).values(status=TaskStatus.COMPLETED, completed_at=now)).rowcount
@@ -281,6 +360,9 @@ class TodoService:
         return self.goal_repo.update(goal, update_data)
 
     def delete_goal(self, goal_id: UUID) -> bool:
+        from app.services.note_link import NoteLinkService
+
+        NoteLinkService(self.db).remove_for_target("goal", goal_id)
         return self.goal_repo.delete(goal_id)
 
     @_completion_guard

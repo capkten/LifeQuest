@@ -32,6 +32,7 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     Sidebar: typeof import('./src/components/layout/Sidebar.vue')['default']
     TechniqueSlotGrid: typeof import('./src/components/cultivation/TechniqueSlotGrid.vue')['default']
+    TodayActionCenter: typeof import('./src/components/home/TodayActionCenter.vue')['default']
     TreeItem: typeof import('./src/components/TreeItem.vue')['default']
     TribulationProbability: typeof import('./src/components/cultivation/TribulationProbability.vue')['default']
     UpdatePrompt: typeof import('./src/components/layout/UpdatePrompt.vue')['default']

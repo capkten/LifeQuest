@@ -43,6 +43,12 @@
           </svg>
           <span>共享</span>
         </button>
+        <router-link v-if="canManageMembers" class="button button--quiet" :to="{ name: 'NoteSync', params: { notebookId } }">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M7 7h10v10H7z" /><path d="M4 4h4M16 4h4M4 20h4M16 20h4M4 8V4M20 8V4M4 16v4M20 16v4" />
+          </svg>
+          <span>文件夹同步</span>
+        </router-link>
       </div>
     </header>
 

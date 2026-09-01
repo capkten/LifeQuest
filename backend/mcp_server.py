@@ -30,6 +30,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.lowlevel.server import request_ctx
 
 from app.database import SessionLocal, engine, Base
+from app import models  # noqa: F401  # Register all ORM models before create_all.
 from app.models.user import User
 from app.models.account import AccountType
 from app.models.budget import Budget, BudgetPeriod

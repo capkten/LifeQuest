@@ -94,6 +94,23 @@ export const noteService = {
     return response.data
   },
 
+  async getNoteLinks(noteId) {
+    const response = await api.get(`/notes/${noteId}/links`)
+    return response.data
+  },
+
+  async linkNote(noteId, kind, targetId) {
+    const response = await api.post(`/notes/${noteId}/links`, {
+      kind,
+      target_id: targetId,
+    })
+    return response.data
+  },
+
+  async unlinkNote(noteId, kind, targetId) {
+    await api.delete(`/notes/${noteId}/links/${kind}/${targetId}`)
+  },
+
   async updateNote(noteId, data) {
     const response = await api.put(`/notes/${noteId}`, notePayload(data))
     return response.data

@@ -196,6 +196,13 @@
         </svg>
         <span v-if="!isCollapsed">统计</span>
       </router-link>
+      <router-link to="/review" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '周复盘' : ''">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
+          <path d="M8 7h8M8 11h8M8 15h5" />
+        </svg>
+        <span v-if="!isCollapsed">周复盘</span>
+      </router-link>
       <router-link to="/profile" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '个人' : ''">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />

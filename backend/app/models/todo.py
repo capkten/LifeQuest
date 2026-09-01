@@ -48,6 +48,12 @@ class Habit(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
+    completions = relationship(
+        "HabitCompletion",
+        back_populates="habit",
+        cascade="all, delete-orphan",
+    )
+
 
 class Task(Base):
     __tablename__ = "tasks"
@@ -73,6 +79,8 @@ class Task(Base):
     sort_order = Column(Integer, default=0)
 
     subtasks = relationship("Subtask", back_populates="task", cascade="all, delete-orphan")
+    schedule = relationship("TaskSchedule", back_populates="task", uselist=False, cascade="all, delete-orphan")
+    occurrences = relationship("TaskOccurrence", back_populates="task", cascade="all, delete-orphan")
     project = relationship("Project", back_populates="tasks")
     phase = relationship("ProjectPhase", back_populates="tasks")
     milestone = relationship("ProjectMilestone", back_populates="tasks")
