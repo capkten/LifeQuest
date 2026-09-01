@@ -1,0 +1,92 @@
+name: Build Windows Desktop
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'VERSION'
+      - 'frontend/**'
+      - 'desktop/**'
+      - 'scripts/build-desktop.ps1'
+      - 'scripts/check-version.mjs'
+      - 'scripts/check-desktop-version.mjs'
+      - 'scripts/sync-version.mjs'
+      - '.github/workflows/desktop-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lifequest-windows-desktop
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and upload Windows installers
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            desktop/package-lock.json
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Check version contracts
+        shell: pwsh
+        run: |
+          npm --prefix frontend run check:version
+          npm --prefix desktop run check:version
+
+      - name: Run desktop Rust tests
+        working-directory: desktop/src-tauri
+        run: cargo test
+
+      - name: Run desktop frontend regression tests
+        working-directory: frontend
+        run: node --test src/views/note-sync-regressions.test.mjs
+
+      - name: Configure desktop API endpoint
+        shell: pwsh
+        env:
+          DESKTOP_API_BASE_URL: ${{ secrets.DESKTOP_API_BASE_URL }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:DESKTOP_API_BASE_URL)) {
+            throw 'DESKTOP_API_BASE_URL GitHub Secret is required to build a usable Windows client.'
+          }
+          if ($env:DESKTOP_API_BASE_URL -notmatch '^https?://') {
+            throw 'DESKTOP_API_BASE_URL must start with http:// or https://.'
+          }
+          $endpoint = $env:DESKTOP_API_BASE_URL.TrimEnd('/')
+          "VITE_API_BASE_URL=$endpoint" | Set-Content -Path 'frontend/.env.production' -Encoding utf8
+
+      - name: Build Windows installers
+        working-directory: desktop
+        run: npm run build
+
+      - name: Upload Windows installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: lifequest-windows-installers-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            desktop/src-tauri/target/release/bundle/nsis/*-setup.exe
+            desktop/src-tauri/target/release/bundle/msi/*.msi

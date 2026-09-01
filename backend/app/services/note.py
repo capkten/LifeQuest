@@ -4,6 +4,7 @@ import pathlib
 import re
 import shutil
 import logging
+import hashlib
 from datetime import date, datetime, time, timedelta, timezone
 from typing import List, Optional, Sequence, Tuple
 from uuid import UUID, uuid4
@@ -14,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.models.note import Notebook, Attachment
 from app.models.note_node import NoteNode, normalize_name
 from app.models.note_sharing import NotebookMember, NoteUserActivity, NoteCollabDocument, NoteCollabEvent
+from app.models.note_sync import NoteSyncChange
 from app.models.user import User
 from app.repositories.note import NotebookRepository, NoteNodeRepository, AttachmentRepository
 from app.schemas.note import (
@@ -319,7 +321,70 @@ class NoteService:
             raise ValueError("Cannot create children under a note")
         return parent.path, parent
 
-    def create_folder(self, notebook_id: UUID, user_id: UUID, folder_in: FolderCreate) -> NoteNode:
+    @staticmethod
+    def content_hash(content: str) -> str:
+        return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+    def node_content_hash(self, node: NoteNode) -> Optional[str]:
+        if node.type != "note":
+            return None
+        return self.content_hash(self.get_note_content(node.id))
+
+    def record_sync_change(
+        self,
+        notebook_id: UUID,
+        node_id: Optional[UUID],
+        operation: str,
+        path: str,
+        parent_id: Optional[UUID],
+        node_type: str,
+        content_revision: Optional[int],
+        content_hash: Optional[str],
+    ) -> NoteSyncChange:
+        """Allocate a notebook cursor and append a change in the open transaction."""
+        notebook = (
+            self.db.query(Notebook)
+            .filter(Notebook.id == notebook_id)
+            .with_for_update()
+            .first()
+        )
+        if not notebook:
+            raise ValueError("Notebook not found")
+        notebook.sync_revision = (notebook.sync_revision or 0) + 1
+        change = NoteSyncChange(
+            notebook_id=notebook_id,
+            sequence=notebook.sync_revision,
+            node_id=node_id,
+            operation=operation,
+            node_type=node_type,
+            path=path,
+            parent_id=parent_id,
+            content_revision=content_revision,
+            content_hash=content_hash,
+        )
+        self.db.add(change)
+        self.db.flush()
+        return change
+
+    def _record_node_change(self, node: NoteNode, operation: str) -> NoteSyncChange:
+        return self.record_sync_change(
+            notebook_id=node.notebook_id,
+            node_id=node.id,
+            operation=operation,
+            path=node.path,
+            parent_id=node.parent_id,
+            node_type=node.type,
+            content_revision=(node.content_revision if node.type == "note" else None),
+            content_hash=self.node_content_hash(node),
+        )
+
+    def create_folder(
+        self,
+        notebook_id: UUID,
+        user_id: UUID,
+        folder_in: FolderCreate,
+        commit: bool = True,
+    ) -> NoteNode:
         norm = normalize_name(folder_in.name)
         parent_path, _ = self._get_parent_path(folder_in.parent_id, notebook_id)
 
@@ -338,11 +403,20 @@ class NoteService:
             tags_normalized=True,
         )
         self.db.add(node)
-        self.db.commit()
-        self.db.refresh(node)
+        self.db.flush()
+        self._record_node_change(node, "create")
+        if commit:
+            self.db.commit()
+            self.db.refresh(node)
         return node
 
-    def create_note(self, notebook_id: UUID, user_id: UUID, note_in: NoteCreate) -> NoteNode:
+    def create_note(
+        self,
+        notebook_id: UUID,
+        user_id: UUID,
+        note_in: NoteCreate,
+        commit: bool = True,
+    ) -> NoteNode:
         norm = normalize_name(note_in.title)
         parent_path, _ = self._get_parent_path(note_in.parent_id, notebook_id)
 
@@ -374,8 +448,11 @@ class NoteService:
         self.db.add(node)
         try:
             _write_content_atomically(content_path, note_in.content or "")
-            self.db.commit()
-            self.db.refresh(node)
+            self.db.flush()
+            self._record_node_change(node, "create")
+            if commit:
+                self.db.commit()
+                self.db.refresh(node)
         except Exception:
             self.db.rollback()
             if os.path.exists(content_path):
@@ -384,7 +461,7 @@ class NoteService:
 
         # Check note_count achievements
         try:
-            self.achievement_service.check_notes(user_id)
+            self.achievement_service.check_notes(user_id, commit=commit)
         except Exception:
             logger.exception("Note achievement processing failed for user %s", user_id)
 
@@ -445,11 +522,19 @@ class NoteService:
                 )
 
         if commit:
+            self._record_node_change(node, "move")
+            for desc in descendants:
+                self._record_node_change(desc, "move")
             self.db.commit()
             self.db.refresh(node)
         return node
 
-    def move_node(self, node_id: UUID, new_parent_id: Optional[UUID]) -> NoteNode:
+    def move_node(
+        self,
+        node_id: UUID,
+        new_parent_id: Optional[UUID],
+        commit: bool = True,
+    ) -> NoteNode:
         node = self.node_repo.get_by_id(node_id)
         if not node:
             raise ValueError("Node not found")
@@ -511,11 +596,21 @@ class NoteService:
                     old_path.lstrip("/") + "/", new_path.lstrip("/") + "/", 1
                 )
 
-        self.db.commit()
-        self.db.refresh(node)
+        self._record_node_change(node, "move")
+        for desc in descendants:
+            self._record_node_change(desc, "move")
+        if commit:
+            self.db.commit()
+            self.db.refresh(node)
         return node
 
-    def update_note(self, node_id: UUID, note_in: NoteUpdate, user_id: Optional[UUID] = None) -> NoteNode:
+    def update_note(
+        self,
+        node_id: UUID,
+        note_in: NoteUpdate,
+        user_id: Optional[UUID] = None,
+        commit: bool = True,
+    ) -> NoteNode:
         node = self.node_repo.get_by_id(node_id)
         if not node or node.type != "note":
             raise ValueError("Note not found")
@@ -526,6 +621,7 @@ class NoteService:
         if note_in.base_revision is not None and note_in.base_revision != (node.content_revision or 1):
             raise NoteRevisionConflict(node, self.get_note_content(node_id))
 
+        old_path = node.path
         if note_in.title is not None:
             self.rename_node(node_id, note_in.title, commit=False)
 
@@ -560,8 +656,11 @@ class NoteService:
                 node.updated_by = user_id
 
         try:
-            self.db.commit()
-            self.db.refresh(node)
+            if changed:
+                self._record_node_change(node, "move" if old_path != node.path else "update")
+            if commit:
+                self.db.commit()
+                self.db.refresh(node)
         except Exception:
             self.db.rollback()
             if note_in.content is not None and content_path and previous_content is not None:
@@ -581,6 +680,7 @@ class NoteService:
             node.word_count = len(content.split())
             node.content_revision = (node.content_revision or 1) + 1
             node.updated_by = user_id
+            self._record_node_change(node, "update")
             self.db.commit()
             self.db.refresh(node)
             return node
@@ -599,13 +699,16 @@ class NoteService:
                 return f.read()
         return ""
 
-    def delete_node(self, node_id: UUID) -> None:
+    def delete_node(self, node_id: UUID, commit: bool = True) -> None:
         node = self.node_repo.get_by_id(node_id)
         if not node:
             raise ValueError("Node not found")
 
         # Delete descendants first
         descendants = self.node_repo.get_descendants(node_id)
+        deleted_nodes = sorted([*descendants, node], key=lambda item: item.path.count("/"), reverse=True)
+        for deleted in deleted_nodes:
+            self._record_node_change(deleted, "delete")
         for desc in sorted(descendants, key=lambda item: item.path.count("/"), reverse=True):
             self._delete_note_related_data(desc)
             if desc.type == "note" and desc.content_path and os.path.exists(desc.content_path):
@@ -618,7 +721,8 @@ class NoteService:
             os.remove(node.content_path)
 
         self.db.delete(node)
-        self.db.commit()
+        if commit:
+            self.db.commit()
 
     def _delete_note_related_data(self, node: NoteNode) -> None:
         if node.type != "note":

@@ -6,6 +6,10 @@ const repositoryRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const version = readFileSync(resolve(repositoryRoot, 'VERSION'), 'utf8').trim()
 const packageJson = JSON.parse(readFileSync(resolve(repositoryRoot, 'frontend/package.json'), 'utf8'))
 const packageLock = JSON.parse(readFileSync(resolve(repositoryRoot, 'frontend/package-lock.json'), 'utf8'))
+const desktopPackage = JSON.parse(readFileSync(resolve(repositoryRoot, 'desktop/package.json'), 'utf8'))
+const desktopLock = JSON.parse(readFileSync(resolve(repositoryRoot, 'desktop/package-lock.json'), 'utf8'))
+const desktopConfig = JSON.parse(readFileSync(resolve(repositoryRoot, 'desktop/src-tauri/tauri.conf.json'), 'utf8'))
+const desktopCargo = readFileSync(resolve(repositoryRoot, 'desktop/src-tauri/Cargo.toml'), 'utf8')
 
 if (!/^\d+\.\d+\.\d+$/.test(version)) {
   throw new Error(`VERSION must contain a semantic version like 1.8.2, got: ${version}`)
@@ -15,6 +19,11 @@ const resolvedVersions = [
   ['frontend/package.json', packageJson.version],
   ['frontend/package-lock.json', packageLock.version],
   ['frontend/package-lock.json packages[""].version', packageLock.packages?.['']?.version],
+  ['desktop/package.json', desktopPackage.version],
+  ['desktop/package-lock.json', desktopLock.version],
+  ['desktop/package-lock.json packages[""].version', desktopLock.packages?.['']?.version],
+  ['desktop/src-tauri/tauri.conf.json', desktopConfig.version],
+  ['desktop/src-tauri/Cargo.toml', desktopCargo.match(/^version\s*=\s*"([^"]+)"\s*$/m)?.[1]],
 ]
 const mismatches = resolvedVersions.filter(([, value]) => value !== version)
 if (mismatches.length > 0) {

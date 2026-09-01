@@ -1,0 +1,14 @@
+{
+  "name": "lifequest-desktop",
+  "version": "1.8.8",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build --bundles nsis,msi",
+    "check:version": "node ../scripts/check-desktop-version.mjs"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.5.0"
+  }
+}

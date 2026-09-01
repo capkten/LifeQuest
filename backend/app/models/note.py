@@ -16,6 +16,7 @@ class Notebook(Base):
     name = Column(String(100), nullable=False)
     description = Column(Text)
     icon = Column(String(50))
+    sync_revision = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 

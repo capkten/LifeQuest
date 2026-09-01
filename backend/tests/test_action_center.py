@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from app.models.todo import Habit
+from app.models.todo import Habit, Task
 
 
 def _login(client, username):
@@ -33,7 +33,7 @@ def _create_task(client, headers, title, deadline, priority="medium"):
     return response.json()
 
 
-def test_action_center_orders_open_tasks_and_excludes_completed_tasks(client):
+def test_action_center_orders_open_tasks_and_excludes_completed_tasks(client, db_session):
     headers = _login(client, "action-order-user")
     overdue = _create_task(
         client,
@@ -67,6 +67,9 @@ def test_action_center_orders_open_tasks_and_excludes_completed_tasks(client):
         headers=headers,
     )
     assert completion.status_code == 200
+    completed_row = db_session.get(Task, UUID(completed["id"]))
+    completed_row.completed_at = datetime(2026, 8, 31, 12, tzinfo=timezone.utc)
+    db_session.commit()
 
     response = client.get(
         "/api/action-center/today?date=2026-08-31",

@@ -521,6 +521,112 @@ username=用户名&password=密码
 }
 ```
 
+### Windows 文件夹同步
+
+> 以下接口均需认证，且仅笔记本所有者可调用。浏览器端只读取权限和冲突记录；本地文件夹选择、预览和文件写入由 Windows 客户端完成。
+
+#### GET /api/notes/notebooks/{notebook_id}/sync/manifest
+获取笔记本的完整同步清单。响应包含当前 `revision`，以及每个文件夹/笔记的节点 ID、父节点、相对路径、内容修订号、内容哈希和更新时间。
+
+**响应:**
+```json
+{
+  "notebook_id": "uuid",
+  "revision": 12,
+  "items": [
+    {
+      "node_id": "uuid",
+      "parent_id": "uuid|null",
+      "node_type": "folder|note",
+      "name": "string",
+      "path": "/资料/读书笔记.md",
+      "content_revision": 3,
+      "content_hash": "sha256|null",
+      "updated_at": "2026-01-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+#### GET /api/notes/notebooks/{notebook_id}/sync/changes?after=0&limit=100
+按笔记本修订游标获取增量变化。`after` 为客户端已确认的序号，`limit` 范围为 1–200；响应中的 `cursor` 可作为下一次请求的 `after`。
+
+#### POST /api/notes/notebooks/{notebook_id}/sync/content
+批量读取笔记正文。最多 200 个 `node_ids`，只接受笔记节点。
+
+**请求体:**
+```json
+{
+  "node_ids": ["uuid", "uuid"]
+}
+```
+
+**响应:**
+```json
+{
+  "notebook_id": "uuid",
+  "contents": {
+    "note-uuid": "Markdown 正文"
+  }
+}
+```
+
+#### POST /api/notes/notebooks/{notebook_id}/sync/apply
+批量应用来自 Windows 客户端的目录和内容变化。每个操作都必须携带客户端生成且在当前笔记本内唯一的 `client_operation_id`；重复提交会返回 `already_applied`，不会再次修改数据。
+
+支持的 `kind`：`create_folder`、`create_note`、`update_note`、`move_node`、`delete_node`。更新笔记时需要携带 `base_revision`，内容更新可同时携带 `base_hash`；基础版本过期会返回 `conflict` 并创建可恢复的冲突记录。`path` 和 `local_path` 必须是以 `/` 开始的相对路径，不允许 `..`、反斜杠或隐藏路径。
+
+**请求体示例:**
+```json
+{
+  "operations": [
+    {
+      "client_operation_id": "device-uuid:operation-uuid",
+      "kind": "update_note",
+      "node_id": "uuid",
+      "path": "/资料/读书笔记.md",
+      "local_path": "资料/读书笔记.md",
+      "content": "新的 Markdown 正文",
+      "base_revision": 3,
+      "base_hash": "sha256"
+    }
+  ]
+}
+```
+
+**响应:**
+```json
+{
+  "notebook_id": "uuid",
+  "revision": 13,
+  "results": [
+    {
+      "client_operation_id": "device-uuid:operation-uuid",
+      "status": "applied|already_applied|conflict|rejected",
+      "node": "同步清单节点|null",
+      "error_code": "string|null",
+      "message": "string|null",
+      "conflict_id": "uuid|null"
+    }
+  ]
+}
+```
+
+#### GET /api/notes/notebooks/{notebook_id}/sync/conflicts
+获取当前笔记本的冲突记录，包含本地路径、远端修订号、基础哈希、状态和解决方式。
+
+#### POST /api/notes/notebooks/{notebook_id}/sync/conflicts/{conflict_id}/resolve
+解决未处理的冲突。`resolution` 可取 `keep_local`、`keep_remote` 或 `merged_content`；前两者分别保留客户端正文或远端正文，`merged_content` 需要额外提供合并后的 `content`。需要写入正文时应携带冲突记录中的 `base_revision`，避免覆盖更新后的远端版本。
+
+**请求体:**
+```json
+{
+  "resolution": "keep_local|keep_remote|merged_content",
+  "content": "合并后的 Markdown 正文（可选）",
+  "base_revision": 4
+}
+```
+
 ---
 
 ## 商店 (Shop)

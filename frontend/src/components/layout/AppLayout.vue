@@ -125,6 +125,7 @@ const pageTitle = computed(() => {
     Tasks: '任务',
     Goals: '目标',
     Notes: '笔记',
+    NoteSync: '文件夹同步',
     Calendar: '日历',
     WeeklyReview: '周复盘',
     NotebookFileManage: '笔记本',

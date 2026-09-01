@@ -11,6 +11,7 @@
 - `SERVER_SSH_KEY`: 对应 SSH 私钥的完整内容
 - `SERVER_KNOWN_HOSTS`: 本地执行 `ssh-keyscan -H <服务器地址>` 的完整输出
 - `SERVER_APP_DIR`: 项目目录，例如 `/root/LifeQuest`，也可以不填
+- `DESKTOP_API_BASE_URL`: Windows 客户端访问的正式后端地址，例如 `https://example.com`
 
 不要添加或提交服务器的 `.env`、数据库文件、上传目录和私钥。
 

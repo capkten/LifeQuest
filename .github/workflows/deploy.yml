@@ -51,6 +51,7 @@ jobs:
           src/views/cultivation-regressions.test.mjs
           src/views/immortal-regressions.test.mjs
           src/views/localization-regressions.test.mjs
+          src/views/note-sync-regressions.test.mjs
           src/views/sects-request-state.test.mjs
           src/views/ui-regressions.test.mjs
 

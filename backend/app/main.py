@@ -16,7 +16,7 @@ from app.config import settings
 from app.database import engine, Base, SessionLocal
 from app import models  # noqa: F401  # Register all ORM models before create_all.
 from app.services.note import NoteService
-from app.api import auth, users, notes, todos, shop, backpack, achievements, checkin, titles, coins, calendar, stats, finance, projects, cultivation, immortal, action_center, review
+from app.api import auth, users, notes, note_sync, todos, shop, backpack, achievements, checkin, titles, coins, calendar, stats, finance, projects, cultivation, immortal, action_center, review
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -695,6 +695,15 @@ def _migrate_columns():
     inspector = inspect(engine)
     with engine.begin() as conn:
         uuid_type = _uuid_column_type(conn)
+        try:
+            notebook_cols = {c["name"] for c in inspector.get_columns("notebooks")}
+        except (KeyError, NoSuchTableError):
+            notebook_cols = None
+        if notebook_cols is not None and "sync_revision" not in notebook_cols:
+            conn.execute(text(
+                "ALTER TABLE notebooks ADD COLUMN sync_revision INTEGER NOT NULL DEFAULT 0"
+            ))
+            logger.info("Migration: added notebooks.sync_revision")
         # Mortal resource columns were introduced after the first cultivation
         # profile schema. Preserve existing values and initialize only missing
         # balances with the established profile defaults.
@@ -1086,6 +1095,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(notes.router)
+app.include_router(note_sync.router)
 app.include_router(todos.router)
 app.include_router(shop.router)
 app.include_router(backpack.router)

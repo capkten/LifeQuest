@@ -3,6 +3,7 @@ from app.models.note import Notebook, Attachment
 from app.models.note_node import NoteNode
 from app.models.note_link import TaskNoteLink, GoalNoteLink, ProjectNoteLink
 from app.models.note_sharing import NotebookMember, NoteUserActivity, NoteCollabDocument, NoteCollabEvent
+from app.models.note_sync import NoteSyncChange, NoteSyncOperation, NoteSyncConflict
 from app.models.todo import Habit, Task, Goal, Subtask
 from app.models.habit_completion import HabitCompletion
 from app.models.task_schedule import TaskSchedule, TaskOccurrence
@@ -31,6 +32,7 @@ __all__ = [
     "User",
     "Notebook", "Attachment", "NoteNode", "NotebookMember", "NoteUserActivity",
     "NoteCollabDocument", "NoteCollabEvent",
+    "NoteSyncChange", "NoteSyncOperation", "NoteSyncConflict",
     "TaskNoteLink", "GoalNoteLink", "ProjectNoteLink",
     "Habit", "HabitCompletion", "Task", "Goal", "Subtask",
     "TaskSchedule", "TaskOccurrence",

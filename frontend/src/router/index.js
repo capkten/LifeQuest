@@ -38,6 +38,11 @@ const routes = [
         component: () => import('../views/NotebookFileManage.vue')
       },
       {
+        path: 'notes/:notebookId/sync',
+        name: 'NoteSync',
+        component: () => import('../views/NoteSync.vue')
+      },
+      {
         path: 'notes/:notebookId/view/:noteId',
         name: 'NotebookWorkspaceView',
         component: () => import('../views/NotebookFileManage.vue')
