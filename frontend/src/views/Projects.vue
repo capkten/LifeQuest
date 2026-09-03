@@ -435,10 +435,13 @@ onMounted(() => {
 
 /* Filter Tabs */
 .filter-tabs {
-  display: flex;
-  gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-xl);
-  border-bottom: 1px solid var(--color-border);
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: var(--spacing-lg);
+  padding: 4px;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
 }
 
 .project-summary-card {
@@ -447,11 +450,14 @@ onMounted(() => {
   justify-content: space-between;
   gap: var(--spacing-lg);
   margin-bottom: var(--spacing-lg);
-  padding: var(--spacing-lg);
-  background: linear-gradient(135deg, var(--color-hero-start), var(--color-primary));
+  padding: clamp(20px, 2.5vw, 28px);
+  background:
+    radial-gradient(circle at 86% 18%, rgba(56, 189, 248, 0.28), transparent 36%),
+    linear-gradient(135deg, #0F172A 0%, #1E293B 52%, #0369A1 100%);
   border-radius: var(--surface-radius);
   color: #fff;
   box-shadow: var(--shadow-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .project-summary-kicker {
@@ -466,12 +472,12 @@ onMounted(() => {
 .project-summary-card h3 {
   color: #fff;
   font-size: var(--font-size-xl);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .project-summary-copy {
   margin-top: 6px;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.84);
   font-size: var(--font-size-sm);
   line-height: 1.5;
 }
@@ -485,11 +491,12 @@ onMounted(() => {
 
 .project-summary-stats span {
   min-width: 92px;
-  padding: 10px 12px;
+  padding: 10px 14px;
   border: 1px solid rgba(255, 255, 255, 0.24);
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(8px);
+  color: rgba(255, 255, 255, 0.82);
   font-size: var(--font-size-xs);
   text-align: center;
 }
@@ -504,18 +511,17 @@ onMounted(() => {
 .tab-btn {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-lg);
-  font-size: var(--font-size-sm);
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--color-text-secondary);
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-family: var(--font-family);
-  transition: color 0.15s ease, border-color 0.15s ease;
-  margin-bottom: -1px;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .tab-btn:hover {
@@ -523,17 +529,24 @@ onMounted(() => {
 }
 
 .tab-btn--active {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
+  color: var(--color-text);
+  background: #FFFFFF;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .tab-count {
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
   border-radius: var(--radius-full);
+  background: var(--color-surface-container);
+  color: var(--color-text-secondary);
+}
+
+.tab-btn--active .tab-count {
   background: var(--color-bg-tertiary);
-  color: var(--color-text-tertiary);
+  color: var(--color-primary-dark);
 }
 
 /* Loading / Error / Empty */
@@ -644,11 +657,12 @@ onMounted(() => {
   border-radius: var(--surface-radius);
   overflow: hidden;
   cursor: pointer;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .project-card:hover {
-  border-color: var(--color-primary);
+  border-color: var(--color-border-strong);
   box-shadow: var(--shadow-md);
   transform: translateY(-2px);
 }
@@ -680,41 +694,42 @@ onMounted(() => {
   align-items: center;
   gap: var(--spacing-sm);
   font-size: var(--font-size-base);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--color-text);
   margin: 0;
   word-break: break-word;
+  letter-spacing: -0.01em;
 }
 
 .project-card-name svg {
   width: 18px;
   height: 18px;
-  color: var(--color-text-tertiary);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
 .status-badge {
   font-size: var(--font-size-xs);
-  padding: 2px 10px;
+  padding: 3px 10px;
   border-radius: var(--radius-full);
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .status-badge--planning {
   background: rgba(156, 163, 175, 0.15);
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
 }
 
 .status-badge--active {
   background: rgba(14, 165, 233, 0.12);
-  color: var(--color-secondary);
+  color: var(--color-primary-dark);
 }
 
 .status-badge--completed {
-  background: rgba(81, 207, 102, 0.15);
-  color: var(--color-success);
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--color-accent-dark);
 }
 
 .status-badge--archived {
@@ -731,7 +746,7 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--spacing-xs);
+  margin-bottom: 4px;
 }
 
 .progress-label {
@@ -742,7 +757,7 @@ onMounted(() => {
 
 .progress-value {
   font-size: var(--font-size-xs);
-  color: var(--color-primary);
+  color: var(--color-primary-dark);
   font-weight: 700;
 }
 
@@ -756,7 +771,8 @@ onMounted(() => {
 .progress-fill {
   height: 100%;
   border-radius: var(--radius-full);
-  transition: width 0.5s ease;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Card Footer */

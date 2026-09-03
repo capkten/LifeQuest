@@ -1,6 +1,6 @@
 {
   "name": "lifequest-frontend",
-  "version": "1.8.8",
+  "version": "1.8.9",
   "private": true,
   "type": "module",
   "scripts": {
@@ -23,6 +23,7 @@
     "@kangc/v-md-editor": "^2.3.18",
     "axios": "^1.6.2",
     "element-plus": "^2.4.3",
+    "lucide-vue-next": "^0.577.0",
     "pinia": "^2.1.7",
     "prismjs": "^1.30.0",
     "vue": "^3.3.8",

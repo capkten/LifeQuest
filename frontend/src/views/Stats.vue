@@ -755,51 +755,55 @@ onMounted(fetchAll)
   gap: var(--spacing-lg);
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--surface-radius);
   padding: var(--spacing-lg);
-  transition: border-color 0.2s ease;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .overview-card:hover {
-  border-color: var(--color-primary);
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .overview-icon {
   width: 48px;
   height: 48px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
 }
 
 .overview-card--tasks .overview-icon {
-  background: rgba(14, 165, 233, 0.15);
+  background: rgba(14, 165, 233, 0.14);
 }
 .overview-card--tasks .overview-icon svg {
   color: var(--color-primary);
 }
 
 .overview-card--coins .overview-icon {
-  background: rgba(255, 217, 61, 0.15);
+  background: rgba(245, 158, 11, 0.14);
 }
 .overview-card--coins .overview-icon svg {
-  color: var(--color-warning);
+  color: #b45309;
 }
 
 .overview-card--streak .overview-icon {
-  background: rgba(255, 107, 107, 0.15);
+  background: rgba(239, 68, 68, 0.14);
 }
 .overview-card--streak .overview-icon svg {
   color: var(--color-error);
 }
 
 .overview-card--active .overview-icon {
-  background: rgba(14, 165, 233, 0.15);
+  background: rgba(16, 185, 129, 0.14);
 }
 .overview-card--active .overview-icon svg {
-  color: var(--color-secondary);
+  color: var(--color-accent-dark);
 }
 
 .overview-icon svg {
@@ -816,19 +820,22 @@ onMounted(fetchAll)
   font-size: var(--font-size-2xl);
   font-weight: 700;
   color: var(--color-text);
+  letter-spacing: -0.02em;
 }
 
 .overview-label {
   font-size: var(--font-size-sm);
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
+  font-weight: 500;
 }
 
 /* Chart Section */
 .chart-section {
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--surface-radius);
   margin-bottom: var(--spacing-xl);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 

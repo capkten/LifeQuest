@@ -2126,7 +2126,7 @@ onMounted(() => {
   overflow: hidden;
 }
 
-.dialog--sm { max-width: 400px; }
+.dialog--sm { max-width: 420px; }
 
 .dialog-header {
   display: flex;
@@ -2138,13 +2138,14 @@ onMounted(() => {
 
 .dialog-title {
   font-size: var(--font-size-lg);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--color-text);
+  letter-spacing: -0.02em;
 }
 
 .dialog-close {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2153,7 +2154,7 @@ onMounted(() => {
   border-radius: var(--radius-md);
   cursor: pointer;
   color: var(--color-text-tertiary);
-  transition: background 0.15s ease;
+  transition: all 0.15s ease;
 }
 
 .dialog-close:hover { background: var(--color-bg-tertiary); color: var(--color-text); }
@@ -2173,20 +2174,23 @@ onMounted(() => {
 .form-input,
 .form-textarea {
   width: 100%;
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: 10px 14px;
   font-size: var(--font-size-sm);
   font-family: var(--font-family);
   color: var(--color-text);
-  background: var(--color-bg-secondary);
+  background: #FFFFFF;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   outline: none;
-  transition: border-color 0.15s ease;
+  transition: all 0.15s ease;
   box-sizing: border-box;
 }
 
 .form-input:focus,
-.form-textarea:focus { border-color: var(--color-primary); }
+.form-textarea:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.14);
+}
 .form-textarea { resize: vertical; min-height: 60px; }
 
 .color-picker {
@@ -2224,7 +2228,7 @@ onMounted(() => {
   color: var(--color-text-secondary);
   background: transparent;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   cursor: pointer;
   font-family: var(--font-family);
   transition: background 0.15s ease;
@@ -2238,17 +2242,22 @@ onMounted(() => {
   gap: var(--spacing-xs);
   padding: var(--spacing-sm) var(--spacing-lg);
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: 700;
   color: #fff;
   background: var(--color-primary);
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   cursor: pointer;
   font-family: var(--font-family);
-  transition: background 0.15s ease;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 6px rgba(14, 165, 233, 0.2);
 }
 
-.btn-primary:hover { background: var(--color-primary-dark); }
+.btn-primary:hover {
+  background: var(--color-primary-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+}
 .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .btn-danger {

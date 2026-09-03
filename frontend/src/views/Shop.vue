@@ -131,14 +131,14 @@
         v-for="(item, index) in filteredItems"
         :key="item.id"
         class="item-card"
-        :class="{ 'item-card--featured': index === 0 }"
+        :class="[`item-card--${getItemTheme(item.icon)}`, { 'item-card--featured': index === 0 }]"
       >
-        <span v-if="index === 0" class="item-card-featured">本页推荐</span>
+        <span v-if="index === 0" class="item-card-featured">✨ 精选推荐</span>
         <div class="item-card-top">
-          <div class="item-card-icon">
+          <div class="item-card-icon" :class="`icon-theme--${getItemTheme(item.icon)}`">
             <component :is="resolveShopIcon(item.icon)" />
           </div>
-          <div class="item-card-meta">
+          <div class="item-card-top-right">
             <div v-if="user && item.created_by === user.id" class="item-card-admin">
               <button class="btn-icon btn-icon--edit" @click.stop="openEditDialog(item)" aria-label="编辑" title="编辑">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -153,31 +153,31 @@
                 </svg>
               </button>
             </div>
-            <div class="item-price">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 6v12M6 12h12" />
-              </svg>
-              <span class="item-price-label">兑换</span>
-              <strong>{{ item.coin_price }}</strong>
-              <small>金币</small>
+            <div class="item-card-tags">
+              <span v-if="item.category" class="item-tag item-tag--category">{{ labelItemType(item.category) }}</span>
+              <span v-if="item.stock === -1" class="item-tag item-tag--stock">无限</span>
+              <span v-else class="item-tag item-tag--stock" :class="{ 'item-tag--low-stock': item.stock <= 5 }">
+                余 {{ item.stock }}
+              </span>
             </div>
           </div>
         </div>
         <div class="item-card-body">
           <h3 class="item-card-name">{{ item.name }}</h3>
-          <p v-if="item.description" class="item-card-desc">{{ item.description }}</p>
-          <div class="item-card-tags">
-            <span v-if="item.category" class="item-tag item-tag--category">{{ labelItemType(item.category) }}</span>
-            <span v-if="item.stock === -1" class="item-tag item-tag--stock">无限</span>
-            <span v-else class="item-tag item-tag--stock" :class="{ 'item-tag--low-stock': item.stock <= 5 }">
-              库存: {{ item.stock }}
-            </span>
-          </div>
+          <p class="item-card-desc">{{ item.description || '完成日常挑战，兑换生活里的小确幸' }}</p>
         </div>
         <div class="item-card-footer">
+          <div class="item-price">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 6v12M6 12h12" />
+            </svg>
+            <strong>{{ item.coin_price }}</strong>
+            <small>金币</small>
+          </div>
           <button
             class="btn-purchase"
+            :class="{ 'btn-purchase--affordable': (user?.coins || 0) >= item.coin_price && (item.stock === -1 || item.stock > 0) }"
             :disabled="purchasingId === item.id"
             :aria-disabled="isPurchaseBlocked(item)"
             @click="purchaseItem(item)"
@@ -233,7 +233,7 @@
         >
           <div class="dialog-header">
             <h3 id="create-dialog-title" class="dialog-title">{{ dialogMode === 'edit' ? '编辑商品' : '新建商品' }}</h3>
-          <button class="dialog-close" @click="cancelDialog" aria-label="关闭对话框">
+            <button class="dialog-close" @click="cancelDialog" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -242,31 +242,31 @@
           </div>
           <form class="dialog-body" @submit.prevent="dialogMode === 'edit' ? updateItem() : createItem()">
             <div class="form-group">
-              <label class="form-label" for="item-name">名称</label>
+              <label class="form-label" for="item-name">商品名称</label>
               <input
                 id="item-name"
                 ref="dialogNameInput"
                 v-model="form.name"
                 type="text"
                 class="form-input"
-                placeholder="商品名称"
+                placeholder="例如：喝一杯星巴克、周末去看一场电影"
                 required
                 maxlength="200"
               />
             </div>
             <div class="form-group">
-              <label class="form-label" for="item-description">描述</label>
+              <label class="form-label" for="item-description">商品描述（可选）</label>
               <textarea
                 id="item-description"
                 v-model="form.description"
                 class="form-textarea"
-                placeholder="可选描述..."
+                placeholder="描述你的心愿奖励，给自己满满的期待感..."
                 rows="2"
               ></textarea>
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label" for="item-price">价格（金币）</label>
+                <label class="form-label" for="item-price">兑换价格（金币）</label>
                 <input
                   id="item-price"
                   v-model.number="form.coin_price"
@@ -278,34 +278,61 @@
                 />
               </div>
               <div class="form-group">
-                <label class="form-label" for="item-category">分类</label>
+                <label class="form-label" for="item-category">商品分类</label>
                 <input
                   id="item-category"
                   v-model="form.category"
                   type="text"
                   class="form-input"
-                  placeholder="例如：消耗品、装备"
+                  placeholder="例如：美食、娱乐、数码、休闲"
                   maxlength="50"
                 />
               </div>
             </div>
             <div class="form-group">
-              <label class="form-label">图标</label>
+              <div class="form-label-row">
+                <label class="form-label">商品图标 ({{ displayedIconOptions.length }}款可选)</label>
+                <div class="icon-cat-bar">
+                  <button
+                    v-for="cat in iconCategories"
+                    :key="cat.id"
+                    type="button"
+                    class="icon-cat-btn"
+                    :class="{ 'icon-cat-btn--active': selectedIconCategory === cat.id }"
+                    @click="selectedIconCategory = cat.id"
+                  >
+                    {{ cat.name }}
+                  </button>
+                </div>
+              </div>
+              <div class="icon-search-bar">
+                <input
+                  v-model="iconSearchQuery"
+                  type="text"
+                  class="form-input form-input--icon-search"
+                  placeholder="搜索图标（如：咖啡、游戏、电影、旅行、礼物、美食...）"
+                />
+              </div>
               <div class="icon-grid">
                 <button
-                  v-for="option in iconOptions"
+                  v-for="option in displayedIconOptions"
                   :key="option.value"
                   type="button"
                   class="icon-option"
-                  :class="{ 'icon-option--active': form.icon === option.value }"
+                  :class="[
+                    `icon-option--${option.theme}`,
+                    { 'icon-option--active': form.icon === option.value }
+                  ]"
+                  :title="option.label"
                   @click="form.icon = option.value"
                 >
                   <component :is="option.component" />
+                  <span class="icon-option-name">{{ option.label }}</span>
                 </button>
               </div>
             </div>
             <div class="form-group">
-              <label class="form-label" for="item-stock">库存</label>
+              <label class="form-label" for="item-stock">库存数量</label>
               <input
                 id="item-stock"
                 v-model.number="form.stock"
@@ -315,7 +342,7 @@
                 max="100000"
                 required
               />
-              <span class="form-hint">使用 -1 表示无限库存</span>
+              <span class="form-hint">填写 -1 表示无限库存，填写大于 0 的数字表示有限库存</span>
             </div>
             <div v-if="dialogError" class="dialog-error" role="alert">{{ dialogError }}</div>
             <div class="dialog-actions">
@@ -342,7 +369,7 @@
         >
           <div class="dialog-header">
             <h3 id="delete-dialog-title" class="dialog-title">确认删除</h3>
-          <button class="dialog-close" @click="cancelDelete" aria-label="关闭对话框">
+            <button class="dialog-close" @click="cancelDelete" aria-label="关闭对话框">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -375,23 +402,14 @@ import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelItemType } from '../utils/displayLabels'
 import {
-  Apple,
-  Box,
-  Coffee,
-  Coin,
-  Goblet,
-  Goods,
-  Handbag,
-  MagicStick,
-  Medal,
-  Moon,
-  Present,
-  Shop,
-  Star,
-  SwitchButton,
-  Ticket,
-  Trophy
-} from '@element-plus/icons-vue'
+  iconCategories,
+  iconOptions,
+  iconMap,
+  iconThemeMap,
+  legacyMap,
+  getItemTheme,
+  resolveShopIcon
+} from '../utils/shopIcons'
 
 const authStore = useAuthStore()
 const user = computed(() => authStore.user)
@@ -437,26 +455,24 @@ const showDeleteDialog = ref(false)
 const deletingItem = ref(null)
 const deleting = ref(false)
 
-const iconOptions = [
-  { value: 'Box', component: Box },
-  { value: 'Present', component: Present },
-  { value: 'Goods', component: Goods },
-  { value: 'Handbag', component: Handbag },
-  { value: 'Shop', component: Shop },
-  { value: 'Ticket', component: Ticket },
-  { value: 'Coin', component: Coin },
-  { value: 'Trophy', component: Trophy },
-  { value: 'Medal', component: Medal },
-  { value: 'Star', component: Star },
-  { value: 'MagicStick', component: MagicStick },
-  { value: 'Goblet', component: Goblet },
-  { value: 'Coffee', component: Coffee },
-  { value: 'Apple', component: Apple },
-  { value: 'Moon', component: Moon },
-  { value: 'SwitchButton', component: SwitchButton }
-]
+const selectedIconCategory = ref('all')
+const iconSearchQuery = ref('')
 
-const iconMap = Object.fromEntries(iconOptions.map((option) => [option.value, option.component]))
+const displayedIconOptions = computed(() => {
+  let list = iconOptions
+  if (selectedIconCategory.value !== 'all') {
+    list = list.filter(opt => opt.category === selectedIconCategory.value)
+  }
+  const q = iconSearchQuery.value.trim().toLowerCase()
+  if (q) {
+    list = list.filter(opt =>
+      opt.label.toLowerCase().includes(q) ||
+      opt.value.toLowerCase().includes(q) ||
+      (opt.keywords && opt.keywords.toLowerCase().includes(q))
+    )
+  }
+  return list
+})
 
 const form = ref({
   name: '',
@@ -507,10 +523,6 @@ function trapFocus(event) {
       first.focus()
     }
   }
-}
-
-function resolveShopIcon(icon) {
-  return iconMap[icon] || Box
 }
 
 async function fetchItems() {
@@ -969,8 +981,8 @@ onMounted(() => {
 /* Items Grid */
 .items-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
 }
 
 .item-card {
@@ -979,58 +991,87 @@ onMounted(() => {
   border-radius: var(--surface-radius);
   display: flex;
   flex-direction: column;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  padding: 12px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
   position: relative;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .item-card:hover {
-  border-color: var(--color-primary);
+  border-color: var(--color-border-strong);
   box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
-.item-card-top,
-.item-card-footer {
-  display: flex;
-  align-items: stretch;
-  justify-content: space-between;
-  gap: 10px;
+.item-card-featured {
+  position: absolute;
+  top: -10px;
+  left: 14px;
+  background: linear-gradient(135deg, #F59E0B, #D97706);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.35);
 }
 
 .item-card-top {
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .item-card-icon {
-  width: 40px;
-  height: 40px;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg-tertiary);
-  border-radius: 12px;
   flex-shrink: 0;
+  transition: transform 0.2s ease;
 }
 
-.item-card-icon svg {
-  width: 20px;
-  height: 20px;
-  color: var(--color-primary);
+.item-card:hover .item-card-icon {
+  transform: scale(1.05);
 }
 
+.icon-theme--amber {
+  background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  color: #D97706;
+}
+
+.icon-theme--emerald {
+  background: linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%);
+  color: #059669;
+}
+
+.icon-theme--cyan {
+  background: linear-gradient(135deg, #E0F2FE 0%, #BAE6FD 100%);
+  color: #0284C7;
+}
+
+.icon-theme--purple {
+  background: linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%);
+  color: #7C3AED;
+}
+
+.item-card-icon svg,
 .item-card-icon :deep(svg) {
-  width: 20px;
-  height: 20px;
-  color: var(--color-primary);
+  width: 26px;
+  height: 26px;
+  color: inherit;
 }
 
-.item-card-meta {
+.item-card-top-right {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  justify-content: flex-start;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -1039,7 +1080,7 @@ onMounted(() => {
   flex-direction: row;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 4px;
   flex-wrap: nowrap;
 }
 
@@ -1049,11 +1090,11 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-card);
+  background: var(--color-surface-low);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   cursor: pointer;
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
   transition: all 0.15s ease;
 }
 
@@ -1074,102 +1115,114 @@ onMounted(() => {
   color: #fff;
 }
 
-.item-card-body {
-  padding: 10px 0 0;
-  flex: 1;
-}
-
-.item-card-name {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--color-text);
-  margin-bottom: 4px;
-  line-height: 1.3;
-}
-
-.item-card-desc {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-tertiary);
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  margin-bottom: 6px;
-}
-
 .item-card-tags {
   display: flex;
-  gap: var(--spacing-xs);
+  gap: 4px;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .item-tag {
-  font-size: 10px;
-  padding: 1px 6px;
+  font-size: 10.5px;
+  padding: 2px 7px;
   border-radius: var(--radius-full);
-  font-weight: 500;
-  text-transform: capitalize;
-  line-height: 18px;
+  font-weight: 600;
+  line-height: 1.3;
 }
 
 .item-tag--category {
-  background: rgba(14, 165, 233, 0.12);
-  color: var(--color-primary);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
 }
 
 .item-tag--stock {
-  background: rgba(81, 207, 102, 0.12);
-  color: var(--color-success);
+  background: #F0FDF4;
+  color: #16A34A;
+  border: 1px solid #BBF7D0;
 }
 
 .item-tag--low-stock {
-  background: rgba(255, 107, 107, 0.12);
-  color: var(--color-error);
+  background: #FEF2F2;
+  color: #DC2626;
+  border: 1px solid #FECACA;
+}
+
+.item-card-body {
+  padding: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.item-card-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 4px;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.item-card-desc {
+  font-size: 12.5px;
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 36px;
+  margin-bottom: 0;
 }
 
 .item-card-footer {
-  padding: 10px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 10px;
   border-top: 1px solid var(--color-border);
-  margin-top: 10px;
+  margin-top: 4px;
 }
 
 .item-price {
   display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  font-size: var(--font-size-sm);
-  font-weight: 700;
-  color: var(--color-warning);
-  justify-content: flex-end;
-  text-align: right;
+  align-items: baseline;
+  gap: 4px;
 }
 
-.item-price-label,
-.item-price small {
-  color: var(--color-text-tertiary);
-  font-size: 10px;
-  font-weight: 500;
+.item-price svg {
+  width: 15px;
+  height: 15px;
+  color: #F59E0B;
+  align-self: center;
 }
 
 .item-price strong {
   color: var(--color-text);
   font-family: var(--font-family-display);
-  font-size: 1.15rem;
+  font-size: 1.25rem;
+  font-weight: 800;
   line-height: 1;
+  letter-spacing: -0.02em;
 }
 
-.item-price svg {
-  width: 16px;
-  height: 16px;
+.item-price small {
+  color: var(--color-text-tertiary);
+  font-size: 10.5px;
+  font-weight: 600;
 }
 
 .btn-purchase {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 0;
-  padding: var(--spacing-xs) var(--spacing-lg);
-  font-size: var(--font-size-sm);
+  min-width: 90px;
+  height: 38px;
+  padding: 0 16px;
+  font-size: 13px;
   font-weight: 600;
   color: #fff;
   background: var(--color-primary);
@@ -1177,9 +1230,19 @@ onMounted(() => {
   border-radius: var(--radius-md);
   cursor: pointer;
   font-family: var(--font-family);
-  transition: background 0.15s ease;
-  width: 100%;
-  min-height: 44px;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-purchase--affordable {
+  background: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.25);
+}
+
+.btn-purchase--affordable:hover {
+  background: var(--color-primary-dark);
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
+  transform: translateY(-1px);
 }
 
 .btn-purchase:hover:not(:disabled) {
@@ -1191,6 +1254,7 @@ onMounted(() => {
   cursor: not-allowed;
   background: var(--color-bg-tertiary);
   color: var(--color-text-tertiary);
+  box-shadow: none;
 }
 
 /* Toast Notifications */
@@ -1386,40 +1450,143 @@ onMounted(() => {
   color: var(--color-text-tertiary);
 }
 
+.form-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.icon-cat-bar {
+  display: flex;
+  gap: 4px;
+  background: var(--color-bg-tertiary);
+  padding: 4px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  overflow-x: auto;
+  max-width: 100%;
+  scrollbar-width: none;
+  flex-wrap: nowrap;
+}
+
+.icon-cat-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.icon-cat-btn {
+  border: none;
+  background: transparent;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-family);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.icon-cat-btn:hover {
+  color: var(--color-text);
+}
+
+.icon-cat-btn--active {
+  background: #FFFFFF;
+  color: var(--color-primary-dark);
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+}
+
+.icon-search-bar {
+  margin-bottom: 6px;
+}
+
+.form-input--icon-search {
+  padding: 7px 12px;
+  font-size: 12.5px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-low);
+}
+
 .icon-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
 }
 
 .icon-option {
-  height: 44px;
+  height: 52px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg-secondary);
+  gap: 3px;
+  background: #FFFFFF;
   border: 1px solid var(--color-border);
-  border-radius: 12px;
-  color: var(--color-text-tertiary);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 4px;
 }
 
-.icon-option :deep(svg) {
-  width: 18px;
-  height: 18px;
+.icon-option-name {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  line-height: 1;
+}
+
+.icon-option :deep(svg),
+.icon-option svg {
+  width: 20px;
+  height: 20px;
+  color: inherit;
 }
 
 .icon-option:hover {
-  border-color: var(--color-primary);
+  border-color: var(--color-primary-light);
   color: var(--color-primary);
-  background: rgba(14, 165, 233, 0.06);
+  background: #FFFFFF;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .icon-option--active {
   border-color: var(--color-primary);
   color: var(--color-primary);
-  background: rgba(14, 165, 233, 0.1);
+  background: #FFFFFF;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.25);
+  transform: scale(1.02);
+}
+
+.icon-option--amber:hover,
+.icon-option--amber.icon-option--active {
+  color: #D97706;
+  border-color: #F59E0B;
+}
+
+.icon-option--emerald:hover,
+.icon-option--emerald.icon-option--active {
+  color: #059669;
+  border-color: #10B981;
+}
+
+.icon-option--purple:hover,
+.icon-option--purple.icon-option--active {
+  color: #7C3AED;
+  border-color: #8B5CF6;
 }
 
 .dialog-error {

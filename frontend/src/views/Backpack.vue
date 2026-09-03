@@ -736,14 +736,15 @@ onMounted(() => {
 
 .item-card-name {
   font-size: var(--font-size-base);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--color-text);
-  margin-bottom: var(--spacing-xs);
+  margin-bottom: 2px;
+  letter-spacing: -0.01em;
 }
 
 .item-card-desc {
   font-size: var(--font-size-sm);
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -759,36 +760,36 @@ onMounted(() => {
 .type-badge,
 .status-badge {
   font-size: var(--font-size-xs);
-  padding: 2px 10px;
+  padding: 3px 10px;
   border-radius: var(--radius-full);
-  font-weight: 500;
+  font-weight: 600;
   text-transform: capitalize;
   white-space: nowrap;
 }
 
 .type-badge--consumable {
-  background: rgba(255, 107, 107, 0.12);
+  background: rgba(239, 68, 68, 0.12);
   color: var(--color-error);
 }
 
 .type-badge--gear {
   background: rgba(14, 165, 233, 0.12);
-  color: var(--color-secondary);
+  color: var(--color-primary-dark);
 }
 
 .type-badge--collectible {
-  background: rgba(14, 165, 233, 0.12);
-  color: var(--color-primary);
+  background: rgba(168, 85, 247, 0.12);
+  color: #7e22ce;
 }
 
 .type-badge--quest {
-  background: rgba(255, 217, 61, 0.12);
-  color: var(--color-warning);
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
 }
 
 .status-badge--equipped {
-  background: rgba(81, 207, 102, 0.15);
-  color: var(--color-success);
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--color-accent-dark);
 }
 
 .status-badge--active {
@@ -834,15 +835,15 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
-  padding: var(--spacing-xs) var(--spacing-sm);
+  padding: 6px 12px;
   font-size: var(--font-size-xs);
   font-weight: 600;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   cursor: pointer;
   font-family: var(--font-family);
-  transition: all 0.15s ease;
-  background: transparent;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  background: #FFFFFF;
 }
 
 .btn-action:disabled {

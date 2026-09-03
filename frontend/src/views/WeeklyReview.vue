@@ -386,6 +386,8 @@ onMounted(loadReview)
 .summary-item {
   border: 1px solid var(--color-border);
   background: var(--color-card);
+  border-radius: var(--surface-radius);
+  box-shadow: var(--shadow-sm);
 }
 
 .review-period {
@@ -396,6 +398,8 @@ onMounted(loadReview)
 .review-period h2 {
   margin-top: var(--spacing-xs);
   font-size: var(--font-size-lg);
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .timezone-label,
@@ -426,6 +430,13 @@ onMounted(loadReview)
   justify-content: space-between;
   padding: var(--spacing-lg);
   border-top: 3px solid var(--color-border);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.summary-item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-border-strong);
 }
 
 .summary-item--accent { border-top-color: var(--color-primary); }

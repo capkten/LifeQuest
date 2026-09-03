@@ -38,6 +38,10 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   min-height: 112px;
+  background: linear-gradient(135deg, #FFFFFF 0%, rgba(240, 249, 255, 0.8) 100%);
+  border: 1px solid rgba(14, 165, 233, 0.18);
+  border-radius: var(--surface-radius);
+  box-shadow: var(--shadow-sm);
 }
 
 .cultivation-status-bar__metrics,
@@ -51,9 +55,21 @@
   grid-auto-flow: column;
   grid-auto-columns: max-content;
   justify-content: end;
+  gap: 8px;
 }
 
-.cultivation-status-bar__metrics span,
+.cultivation-status-bar__metrics span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
 .cultivation-section-heading span,
 .cultivation-eyebrow,
 .cultivation-probability-details dt,
@@ -94,6 +110,15 @@
   transition: width var(--transition-base);
 }
 
+@keyframes lq-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
 .cultivation-progress-skeleton,
 .cultivation-status-bar__skeleton,
 .cultivation-resource-summary__skeleton,
@@ -101,7 +126,9 @@
 .cultivation-slot--skeleton {
   min-height: 48px;
   border-radius: var(--radius-md);
-  background: var(--color-bg-tertiary);
+  background: linear-gradient(90deg, var(--color-bg-tertiary) 25%, rgba(255, 255, 255, 0.8) 50%, var(--color-bg-tertiary) 75%);
+  background-size: 200% 100%;
+  animation: lq-shimmer 1.8s infinite ease-in-out;
 }
 
 .cultivation-status-bar__skeleton {

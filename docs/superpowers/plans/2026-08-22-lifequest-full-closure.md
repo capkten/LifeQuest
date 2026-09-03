@@ -20,6 +20,18 @@
 - 浏览器验收覆盖 `375x812`、`768x1024`、`1024x900`、`1440x1000`。
 - 不引入新的可配置后台资源规则；跨界比例写入领域常量并由测试锁定。
 
+## Baseline (verified 2026-08-22)
+
+> 以下能力在代码库中已存在并通过既有测试。所有任务必须在这个基线上“补齐缺口并保持向后兼容”，**不是从零新建**。每个任务开始前先运行相关既有测试确认基线，再叠加修改。
+
+- `CultivationService.settle_todo_reward` 已实现且幂等（`source_key` + `IntegrityError` 重试，见 `backend/app/services/cultivation.py` 的 `settle_todo_reward` / `_settle_todo_reward_in_session`），但 `RewardSettlement` 当前只含凡界字段（`backend/app/schemas/cultivation.py`）。Task 6/11 是给 settlement 增加仙元/仙石 delta 并保证不双结，而不是新建结算方法。
+- `ASCENDED_REALM_KEY`（实际值为 `"n"`）已存在，已接入 `ascended` 语义：`CultivationOverview.ascended`、渡劫 terminal lock、`_ensure_fixed_core_npcs`、仙石/飞升境文案（见 `backend/app/services/cultivation.py`、`backend/app/schemas/cultivation.py`、`backend/app/services/content_catalog.py`）。
+- 已有“飞升后完成凡界待办不改凡界修为”的后端测试：`backend/tests/test_todos.py::test_n_todo_completion_keeps_rewards_and_does_not_progress_mortal_stage`。
+- 宗门试炼状态机（messenger / objective / trial_status）、隐藏宗门评估（`evaluate_hidden_sects`）、世界节点（`region_key` / `required_project_phase` / `is_hidden` + `WorldNodeProgress`）、NPC 唯一性和固定核心人物已实现（`backend/app/models/world.py` + `backend/app/services/cultivation.py`）。Task 7–9 是“补齐缺口 + 验证”，不是从零实现。
+- `frontend/src/composables/useNoteWorkspace.js` 已有 `treeRequestId`（树加载代际）和 `actionLocks`（独立操作锁），但 `selectNote` 本身不触发请求代际。Task 1 的缺口是“选择/查看器切换的代际保护”，不是重写整个 composable。
+- `ProjectService.delete_phase` 已拒绝删除有任务的阶段（409 `PROJECT_PHASE_HAS_TASKS`）；前端 `ProjectDetail.vue` 已有 `deleting`/`deletingPhaseId` 系列锁，但阶段删除**没有确认对话框**、失败路径只 `showError`。Task 2 补齐“确认 + 失败保留对话框/上下文 + 重复提交抑制”，后端保持既有阻断合约。
+- 迁移体系：**无 Alembic**，使用 `Base.metadata.create_all` + `backend/app/main.py` 启动时手工迁移（含大量数据去重和唯一索引补建）。Task 10 的回滚测试必须适配这套 SQLite 手工迁移模式（幂等 + 预检 + 失败恢复），不能假设有正式迁移框架。
+
 ## File map
 
 - Mortal cultivation rules: `backend/app/models/cultivation.py`, `backend/app/models/technique.py`, `backend/app/services/cultivation.py`, `backend/app/schemas/cultivation.py`, `backend/app/api/cultivation.py`.
@@ -43,11 +55,17 @@
 - `useNoteWorkspace` must expose independent pending state for create, rename, move, and delete actions.
 - Selection changes must increment a request generation so stale list/view responses cannot replace current state.
 
+**Contract G-11 (defined 2026-08-22): notebook write race closure**
+- For each of create / rename / move on a notebook node, a second click while the first request is in flight must not start a duplicate request and must surface a clear “已在进行中” message (assert the request count for that action is 1 in the browser network log).
+- When a rename and a move are dispatched back-to-back and the first resolves after the second, the final tree must match the second operation's result; the stale first response must not overwrite it (assert final node name/parent, and that exactly one reload reflects the second result).
+- Failed mutations (route returns 500/503 once) must keep the dialog open with an inline error and a retry action; retrying must succeed and the tree must update with no console errors.
+- Rapid notebook selection (switch A → B → A within one second) must render only the latest selected notebook's content; the intermediate selection's stale response must not replace final content.
+
 - [ ] **Step 1: Write failing tests** for rename and move requests resolving out of order, failed mutations preserving the dialog, and rapid notebook selection.
 - [ ] **Step 2: Run** `cd frontend; node --test src/views/ui-regressions.test.mjs`; expect the new assertions to fail.
 - [ ] **Step 3: Implement** per-action request generations and visible error/retry state without clearing the active notebook context.
 - [ ] **Step 4: Run** the focused test file; expect all related assertions to pass.
-- [ ] **Step 5: Run** the authenticated browser flow at all four viewports; assert one rename, one move, one failure/retry, and no stale overwrite.
+- [ ] **Step 5: Run** the authenticated browser flow for Contract G-11 at all four viewports; assert one rename, one move, one failure/retry, and no stale overwrite.
 - [ ] **Step 6: Commit** `fix(notes): close notebook write race contracts`.
 
 ### Task 2: Close project detail write and delete contracts
@@ -60,11 +78,17 @@
 - Project mutation handlers must expose `savePending`, `phasePending`, and `deletePending` independently.
 - Phase deletion must preserve task ownership and return a stable confirmation/error result.
 
+**Contract G-12 (defined 2026-08-22): project detail write/delete race closure**
+- Save, phase-create, phase-delete, and project-delete each have an independent pending lock; a second click while a request is in flight must not duplicate the request and must show an inline “正在处理” message (assert request count per action is 1).
+- Deleting a phase that still has tasks must show the server's stable 409 `PROJECT_PHASE_HAS_TASKS` message as an inline error and keep the phase row visible; tasks must keep their `phase_id` (ownership preserved) and the dialog must remain dismissible and reopenable.
+- Project delete must show a native confirmation dialog; confirming dispatches exactly one DELETE request; failure keeps the confirmation context and shows an inline retry instead of silently closing.
+- Failed save must keep the edit dialog open with the entered values, show an inline error, and a retry that succeeds without duplicating the record.
+
 - [ ] **Step 1: Add failing backend tests** for unauthorized phase deletion, task ownership preservation, duplicate mutation submission, and failed save transaction rollback.
 - [ ] **Step 2: Add failing frontend tests** for confirmation, pending dialog retention, retry, and duplicate-click suppression.
 - [ ] **Step 3: Implement** backend transaction boundaries and frontend independent locks.
 - [ ] **Step 4: Run** `cd backend; pytest tests/test_projects.py -q` and the focused frontend tests; expect green.
-- [ ] **Step 5: Run** strict browser flows for save, phase delete, and failure recovery at four viewports.
+- [ ] **Step 5: Run** strict browser flows for Contract G-12 (save, phase delete, project delete, failure recovery) at four viewports.
 - [ ] **Step 6: Commit** `fix(projects): close detail mutation contracts`.
 
 ### Task 3: Close Header menu propagation and ledger updates
@@ -74,10 +98,20 @@
 - Test: `frontend/src/views/ui-regressions.test.mjs`
 - Report: `docs/superpowers/reports/2026-08-22-general-stability-verification.md`
 
+**Interfaces:**
+- Header user menu clicks must not bubble to the outer toggle after navigation.
+- Navigation and logout must close the menu and never reopen it.
+
+**Contract G-13 (defined 2026-08-22): header menu propagation closure**
+- Clicking 个人资料 navigates to the profile route; after navigation the menu is closed and stays closed (assert menu absence on the profile page without further clicks).
+- Clicking 退出登录 closes the menu and shows the login screen; the menu must not reopen on the login page.
+- Clicking the avatar to open the menu, then clicking an empty area (not an item), must close the menu; clicking the avatar again reopens it.
+- At all four viewports the menu must not overflow horizontally and no unexpected console errors may occur.
+
 - [ ] **Step 1: Add a failing test** proving profile navigation and logout do not reopen the menu.
 - [ ] **Step 2: Implement** `stopPropagation()` on inner actions and close the menu before navigation.
 - [ ] **Step 3: Run** the focused frontend tests and build.
-- [ ] **Step 4: Run** strict browser flows for G-11, G-12, and G-13.
+- [ ] **Step 4: Run** strict browser flows for Contracts G-11, G-12, and G-13 at all four viewports.
 - [ ] **Step 5: Change ledger states only when the browser evidence exists and write the verification report.
 - [ ] **Step 6: Commit** `test: verify general stability closure`.
 
@@ -127,7 +161,7 @@
 
 **Interfaces:**
 - `TechniqueService.calculate_effective_modifiers(user_id) -> EffectModifiers` is the only source for equipped technique effects.
-- `CultivationService.settle_todo_reward(...)` returns both mortal and immortal-facing deltas without double settlement.
+- `CultivationService.settle_todo_reward(...)` 在既有幂等结算上扩展，返回含凡界/仙界两套视角的 delta（新增仙元/仙石），并保证不双结；不得重建既有结算路径。
 
 - [ ] **Step 1: Add failing tests** for equip/unequip efficiency, conflict handling, resource growth from check-in/todo/sect activity, and reward idempotency.
 - [ ] **Step 2: Implement** structured effect aggregation with the existing `+0.80` efficiency cap.
@@ -137,7 +171,7 @@
 
 ## Workstream 3 — Sect, world, and NPC state machines
 
-### Task 7: Implement sect trial state machine and contribution effects
+### Task 7: Close and verify sect trial state machine and contribution effects
 
 **Files:**
 - Modify: `backend/app/models/world.py`, `backend/app/services/cultivation.py`, `backend/app/api/cultivation.py`
@@ -153,9 +187,9 @@
 - [ ] **Step 3: Implement** state transitions and server-ordered eligibility fields.
 - [ ] **Step 4: Update frontend** to show objectives and actionable blocked reasons.
 - [ ] **Step 5: Run** focused tests and strict sect flows at four viewports.
-- [ ] **Step 6: Commit** `feat(sects): implement trial state machine`.
+- [ ] **Step 6: Commit** `feat(sects): close and verify trial state machine contracts`.
 
-### Task 8: Implement hidden sects and progressive world map
+### Task 8: Close and verify hidden sects and progressive world map
 
 **Files:**
 - Modify: `backend/app/models/world.py`, `backend/app/services/cultivation.py`, `backend/app/api/cultivation.py`
@@ -166,9 +200,9 @@
 - [ ] **Step 2: Implement** explicit reveal and region-progress records with unique constraints.
 - [ ] **Step 3: Return server-authoritative node states and lock reasons; remove frontend assumptions based only on realm.
 - [ ] **Step 4: Run** focused tests and strict world/sect flows.
-- [ ] **Step 5: Commit** `feat(world): add progressive regions and hidden sect unlocks`.
+- [ ] **Step 5: Commit** `feat(world): close and verify progressive regions and hidden sect unlocks`.
 
-### Task 9: Add NPC uniqueness, limits, and event cooldowns
+### Task 9: Close and verify NPC uniqueness, limits, and event cooldowns
 
 **Files:**
 - Modify: `backend/app/models/world.py`, `backend/app/services/cultivation.py`, `backend/app/api/cultivation.py`
@@ -179,7 +213,7 @@
 - [ ] **Step 2: Add database uniqueness and bounded counters with migration-safe cleanup of duplicate legacy rows.
 - [ ] **Step 3: Implement** server-side NPC event state transitions and actionable frontend feedback.
 - [ ] **Step 4: Run** focused tests, migration tests, and browser NPC flows.
-- [ ] **Step 5: Commit** `fix(world): constrain NPC relationships and events`.
+- [ ] **Step 5: Commit** `fix(world): close NPC relationship and event constraints`.
 
 ## Workstream 4 — Ascension and complete immortal loop
 
@@ -195,8 +229,8 @@
 - `AscensionRecord` and `CrossRealmSettlement` have unique source/request keys.
 
 - [ ] **Step 1: Add failing migration tests** proving existing users keep mortal values and no immortal row exists before ascension.
-- [ ] **Step 2: Add models, indexes, defaults, and startup migration logic without rewriting mortal tables.
-- [ ] **Step 3: Add rollback test that restores the pre-migration database snapshot when immortal table creation or backfill fails.
+- [ ] **Step 2: Add models, indexes, defaults, and startup migration logic (`Base.metadata.create_all` + idempotent manual DDL) without rewriting mortal tables.
+- [ ] **Step 3: Add a rollback test that restores the pre-migration database state when immortal table creation or backfill fails, using the existing `create_all` + startup manual-migration pattern (idempotent preflight checks, no Alembic assumptions).
 - [ ] **Step 4: Run** `cd backend; pytest tests/test_ascension_migration.py -q`.
 - [ ] **Step 5: Commit** `feat(ascension): add dual-track immortal data model`.
 
@@ -215,7 +249,7 @@
 - [ ] **Step 1: Add failing tests** for eligibility, successful ascension, repeated requests, concurrent requests, failed transaction rollback, and post-ascension todo settlement.
 - [ ] **Step 2: Implement fixed constants in `backend/app/services/ascension.py`: `MORTAL_EXP_TO_IMMORTAL_ESSENCE = 1` and `MORTAL_COIN_TO_IMMORTAL_STONE = 1`; keep them internal and covered by tests.
 - [ ] **Step 3: Implement one transaction for ascension and unique-source settlement records.
-- [ ] **Step 4: Update todo completion to branch on authoritative ascended state without duplicating the completion path.
+- [ ] **Step 4: Update todo completion to branch on the existing authoritative `"n"` ascended state (reuse `settle_todo_reward` + `"n"`-realm logic) without duplicating the completion path.
 - [ ] **Step 5: Run** focused backend tests plus the existing todo reward suite.
 - [ ] **Step 6: Commit** `feat(ascension): add idempotent transition and cross-realm rewards`.
 
@@ -227,7 +261,7 @@
 - Test: `backend/tests/test_immortal.py`, `frontend/src/views/immortal-regressions.test.mjs`
 
 **Interfaces:**
-- `ImmortalService.get_overview(user_id) -> ImmortalOverview` returns authoritative resources, realm, regions, officials, activities, and stage goals.
+- `ImmortalService.get_overview(user_id) -> ImmortalOverview` returns authoritative resources, realm, regions, officials, activities, and stage goals; the immortal profile is created by ascension and coexists with the existing `"n"` realm marker (defining `ImmortalProfile` as the settlement record, not a replacement realm).
 - `ImmortalService.run_activity(user_id, activity_id, request_id) -> ImmortalActivityResult` enforces unlocks/cooldowns and records one reward settlement.
 - `ImmortalService.advance_stage(user_id, request_id) -> ImmortalStageResult` checks goals and updates progression once.
 

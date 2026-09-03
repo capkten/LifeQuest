@@ -107,18 +107,19 @@ onUnmounted(() => {
 <style scoped>
 .header {
   height: var(--header-height);
-  padding-top: var(--safe-area-top);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 var(--page-padding-x);
   padding-top: var(--safe-area-top);
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.82);
   border-bottom: 1px solid var(--color-border);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   position: sticky;
   top: 0;
   z-index: 50;
+  transition: background-color var(--transition-base), border-color var(--transition-base);
 }
 
 .header-left {
@@ -145,6 +146,7 @@ onUnmounted(() => {
 .sidebar-toggle:hover {
   background: var(--color-bg-tertiary);
   color: var(--color-text);
+  border-color: var(--color-border-strong);
 }
 
 .sidebar-toggle svg {
@@ -155,12 +157,13 @@ onUnmounted(() => {
 .page-title {
   font-family: var(--font-family-display);
   font-size: var(--font-size-lg);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--color-text);
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: -0.02em;
 }
 
 .header-right {
@@ -171,32 +174,34 @@ onUnmounted(() => {
 .user-dropdown {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  min-height: var(--touch-target-min);
-  padding: 6px 10px;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 10px;
   border-radius: var(--radius-md);
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
 }
 
 .user-dropdown:hover {
-  background: var(--color-bg-tertiary);
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.04);
 }
 
 .user-avatar-sm {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-full);
-  background: var(--color-primary);
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .user-avatar-sm svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   color: #fff;
 }
 
@@ -208,16 +213,16 @@ onUnmounted(() => {
 }
 
 .user-name {
-  font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-size: 13.5px;
+  font-weight: 600;
   color: var(--color-text);
 }
 
 .chevron {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   color: var(--color-text-tertiary);
-  transition: transform 0.2s ease;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .chevron--open {
@@ -228,38 +233,44 @@ onUnmounted(() => {
   position: absolute;
   top: 100%;
   right: 0;
-  margin-top: var(--spacing-xs);
-  min-width: 160px;
-  background: var(--color-bg-secondary);
+  margin-top: 6px;
+  min-width: 168px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
   z-index: 100;
+  padding: 4px;
 }
 
 .dropdown-item {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: 8px 12px;
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   transition: all 0.15s ease;
   text-decoration: none;
   border: none;
+  border-radius: var(--radius-md);
   background: none;
   width: 100%;
   cursor: pointer;
   font-family: var(--font-family);
+  font-weight: 500;
 }
 
 .dropdown-item:hover {
-  background: var(--color-bg-secondary);
-  color: var(--color-text);
+  background: var(--color-bg-tertiary);
+  color: var(--color-primary-dark);
 }
 
 .dropdown-item--danger:hover {
+  background: rgba(239, 68, 68, 0.08);
   color: var(--color-error);
 }
 

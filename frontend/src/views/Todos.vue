@@ -1688,12 +1688,13 @@ onMounted(() => {
 .tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
   margin-bottom: var(--spacing-md);
-  padding: 6px;
-  background: rgba(255, 255, 255, 0.72);
+  padding: 8px;
+  background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: 16px;
+  border-radius: var(--surface-radius);
+  box-shadow: var(--shadow-sm);
   min-width: 0;
 }
 
@@ -1790,33 +1791,34 @@ onMounted(() => {
 
 .tab-btn {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 8px;
   width: 100%;
   min-width: 0;
   min-height: 44px;
-  padding: 10px 8px;
+  padding: 10px 16px;
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--color-text-secondary);
   background: transparent;
   border: none;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   font-family: var(--font-family);
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .tab-btn:hover {
-  color: var(--color-text);
-  background: rgba(14, 165, 233, 0.08);
+  color: var(--color-primary);
+  background: var(--color-surface-low);
 }
 
 .tab-btn--active {
   color: #fff;
-  background: var(--color-primary);
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
 }
 
 .tab-icon {
@@ -1975,22 +1977,24 @@ onMounted(() => {
 .todo-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .todo-card {
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-left: 3px solid var(--color-border);
-  border-radius: var(--surface-radius-sm);
-  padding: 12px 14px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  border-left: 4px solid var(--color-border);
+  border-radius: var(--surface-radius);
+  padding: 16px 20px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .todo-card:hover {
-  border-color: var(--color-primary);
+  border-color: var(--color-border-strong);
   border-left-color: var(--color-primary);
   box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .todo-card--completed {
@@ -2402,15 +2406,22 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
-  background: var(--color-bg-secondary);
+  padding: 8px 12px;
+  background: var(--color-bg-tertiary);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  transition: opacity 0.2s ease;
+  border-radius: var(--radius-lg);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.subtask-item:hover {
+  background: #FFFFFF;
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-sm);
 }
 
 .subtask-item--done {
   opacity: 0.6;
+  background: rgba(0, 0, 0, 0.02);
 }
 
 .subtask-complete-btn {
@@ -2432,6 +2443,7 @@ onMounted(() => {
   border-color: var(--color-success);
   color: var(--color-success);
   background: rgba(81, 207, 102, 0.1);
+  transform: scale(1.05);
 }
 
 .subtask-complete-btn--done {
@@ -2457,6 +2469,7 @@ onMounted(() => {
   color: var(--color-text);
   min-width: 0;
   word-break: break-word;
+  font-weight: 500;
 }
 
 .subtask-title--done {
@@ -2506,7 +2519,7 @@ onMounted(() => {
 .subtask-add-form {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin-top: 8px;
 }
 
@@ -2517,11 +2530,11 @@ onMounted(() => {
   font-size: var(--font-size-sm);
   font-family: var(--font-family);
   color: var(--color-text);
-  background: var(--color-bg-secondary);
+  background: #FFFFFF;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   outline: none;
-  transition: border-color 0.15s ease;
+  transition: all 0.15s ease;
 }
 
 .subtask-input::placeholder {
@@ -2530,6 +2543,7 @@ onMounted(() => {
 
 .subtask-input:focus {
   border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
 }
 
 .subtask-add-btn {
@@ -2541,15 +2555,17 @@ onMounted(() => {
   justify-content: center;
   background: var(--color-primary);
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   cursor: pointer;
   color: #fff;
-  transition: background 0.15s ease, transform 0.15s ease;
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 2px 6px rgba(14, 165, 233, 0.2);
 }
 
 .subtask-add-btn:hover:not(:disabled) {
   background: var(--color-primary-dark);
   transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(14, 165, 233, 0.3);
 }
 
 .subtask-add-btn:disabled {
@@ -3038,20 +3054,20 @@ onMounted(() => {
 /* Project Filter */
 .project-filter {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
   margin-bottom: var(--spacing-md);
   min-width: 0;
-  padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.72);
+  padding: 12px 18px;
+  background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: 16px;
+  border-radius: var(--surface-radius);
+  box-shadow: var(--shadow-sm);
 }
 
 .project-filter-label {
-  padding-top: 7px;
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--color-text-secondary);
   white-space: nowrap;
 }
@@ -3068,44 +3084,48 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 34px;
-  padding: 6px 11px;
+  min-height: 36px;
+  padding: 6px 14px;
   color: var(--color-text-secondary);
-  background: var(--color-bg-primary);
+  background: var(--color-surface-low);
   border: 1px solid var(--color-border);
-  border-radius: 9px;
+  border-radius: var(--radius-full);
   cursor: pointer;
   font-family: var(--font-family);
-  font-size: var(--font-size-sm);
-  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .project-filter-btn:hover {
-  color: var(--color-primary);
-  border-color: var(--color-primary-light);
+  color: var(--color-primary-dark);
+  border-color: var(--color-border-strong);
+  background: #ffffff;
+  transform: translateY(-1px);
 }
 
 .project-filter-btn--active {
-  color: var(--color-primary);
-  background: var(--color-primary-light);
-  border-color: var(--color-primary);
-  font-weight: 600;
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(14, 165, 233, 0.25);
 }
 
 .project-filter-count {
   min-width: 20px;
-  padding: 1px 5px;
+  padding: 1px 6px;
   color: var(--color-text-tertiary);
   background: var(--color-bg-tertiary);
   border-radius: var(--radius-full);
   font-size: 11px;
   line-height: 18px;
   text-align: center;
+  font-weight: 700;
 }
 
 .project-filter-btn--active .project-filter-count {
-  color: var(--color-primary);
-  background: rgba(255, 255, 255, 0.75);
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.25);
 }
 
 /* Project Tag */

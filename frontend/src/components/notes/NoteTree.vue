@@ -24,11 +24,154 @@
         <span>新建笔记</span>
       </button>
     </div>
+    <ul
+      :role="nested ? 'group' : 'tree'"
+      :aria-label="nested ? undefined : label"
+      class="note-tree__list"
+    >
+      <li
+        v-for="(node, index) in nodes"
+        :key="node.id"
+        role="treeitem"
+        class="note-tree__item"
+        :class="{ 'note-tree__item--selected': isSelected(node) }"
+        :aria-level="level"
+        :aria-posinset="index + 1"
+        :aria-setsize="nodes.length"
+        :aria-expanded="isFolder(node) ? isExpanded(node) : undefined"
+        :aria-selected="isSelected(node)"
+      >
+        <div class="note-tree__row">
+          <button
+            type="button"
+            class="note-tree__label"
+            :class="{ 'note-tree__label--focused': controller.focusedId.value === node.id }"
+            :data-note-tree-id="node.id"
+            :tabindex="controller.focusedId.value === node.id ? 0 : -1"
+            @focus="controller.setFocus(node.id)"
+            @click="controller.emit('select', node)"
+            @keydown="controller.handleKeydown($event, node)"
+          >
+            <span
+              class="note-tree__disclosure"
+              :class="{ 'note-tree__disclosure--open': isExpanded(node) }"
+              :aria-hidden="!isFolder(node)"
+              @click.stop="isFolder(node) && controller.emit('toggle', node.id)"
+            >
+              <svg v-if="isFolder(node)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </span>
+            <svg v-if="isFolder(node)" class="note-tree__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            </svg>
+            <svg v-else class="note-tree__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <path d="M14 2v6h6" />
+            </svg>
+            <span class="note-tree__name">{{ node.name }}</span>
+          </button>
+
+          <div v-if="!readOnly" class="note-tree__actions" aria-label="节点操作">
+            <button
+              v-if="isFolder(node)"
+              type="button"
+              class="note-tree__action"
+              aria-label="在此文件夹中新建文件夹"
+              title="新建文件夹"
+              @click.stop="controller.emit('create-folder', { parentId: node.id, node })"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                <path d="M12 11v6M9 14h6" />
+              </svg>
+            </button>
+            <button
+              v-if="isFolder(node)"
+              type="button"
+              class="note-tree__action"
+              aria-label="在此文件夹中新建笔记"
+              title="新建笔记"
+              @click.stop="controller.emit('create-note', { parentId: node.id, node })"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <path d="M14 2v6h6M12 11v6M9 14h6" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="note-tree__action"
+              aria-label="重命名"
+              title="重命名"
+              @click.stop="controller.emit('rename', node)"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="note-tree__action"
+              aria-label="移动"
+              title="移动"
+              @click.stop="controller.emit('move', node)"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="note-tree__action note-tree__action--danger"
+              aria-label="删除"
+              title="删除"
+              @click.stop="controller.emit('delete', node)"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 10v7M14 10v7" />
+              </svg>
+            </button>
+          </div>
+          <button
+            v-if="!readOnly"
+            type="button"
+            class="note-tree__mobile-trigger"
+            aria-label="打开节点操作"
+            :aria-expanded="mobileMenuOpen"
+            @click.stop="mobileMenuOpen = !mobileMenuOpen"
+          >
+            <span aria-hidden="true">•••</span>
+          </button>
+          <div v-if="!readOnly && mobileMenuOpen" class="note-tree__mobile-menu" role="menu" aria-label="节点操作">
+            <button v-if="isFolder(node)" type="button" role="menuitem" @click.stop="emitMobile('create-folder', { parentId: node.id, node })">新建文件夹</button>
+            <button v-if="isFolder(node)" type="button" role="menuitem" @click.stop="emitMobile('create-note', { parentId: node.id, node })">新建笔记</button>
+            <button type="button" role="menuitem" @click.stop="emitMobile('rename', node)">重命名</button>
+            <button type="button" role="menuitem" @click.stop="emitMobile('move', node)">移动</button>
+            <button type="button" role="menuitem" @click.stop="emitMobile('delete', node)">删除</button>
+          </div>
+        </div>
+
+        <NoteTree
+          v-if="isFolder(node) && isExpanded(node) && node.children?.length"
+          :nodes="node.children"
+          :selected-id="selectedId"
+          :current-folder-id="currentFolderId"
+          :expanded-ids="expandedIds"
+          :level="level + 1"
+          :nested="true"
+          :show-toolbar="false"
+          :read-only="readOnly"
+        />
+      </li>
+      <li v-if="!nodes.length" class="note-tree__empty" role="none">{{ emptyLabel }}</li>
+    </ul>
   </div>
 
   <ul
-    :role="nested ? 'group' : 'tree'"
-    :aria-label="nested ? undefined : label"
+    v-else
+    :role="'group'"
     class="note-tree__list"
   >
     <li
@@ -340,22 +483,58 @@ function emitMobile(eventName, payload) {
   text-align: left;
 }
 
+.note-tree__toolbar {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px 12px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.note-tree__toolbar-button {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
 .note-tree__toolbar-button:hover,
 .note-tree__toolbar-button:focus-visible,
 .note-tree__action:hover,
 .note-tree__action:focus-visible {
-  color: var(--color-primary);
-  background: var(--color-bg-tertiary);
+  color: var(--color-primary-dark);
+  background: var(--color-surface-low);
+  border-color: var(--color-border-strong);
   outline: none;
 }
 
 .note-tree__toolbar-button--primary {
-  color: var(--color-primary);
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 2px 6px rgba(14, 165, 233, 0.2);
+}
+
+.note-tree__toolbar-button--primary:hover {
+  background: var(--color-primary-dark);
+  color: #ffffff;
 }
 
 .note-tree__toolbar-button svg {
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   flex: 0 0 auto;
 }
 
@@ -366,7 +545,8 @@ function emitMobile(eventName, payload) {
 }
 
 .note-tree__list[role='group'] {
-  padding: 0 0 0 20px;
+  padding: 0 0 0 16px;
+  position: relative;
 }
 
 .note-tree__item {
@@ -378,12 +558,16 @@ function emitMobile(eventName, payload) {
   display: flex;
   align-items: center;
   min-width: 0;
-  min-height: 44px;
+  min-height: 38px;
   border-radius: var(--radius-md);
+  transition: all 0.15s ease;
 }
 
 .note-tree__item--selected > .note-tree__row {
-  background: rgba(14, 165, 233, 0.1);
+  background: #E0F2FE;
+  color: #0369A1;
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 #0284C7;
 }
 
 .note-tree__label {
@@ -391,21 +575,22 @@ function emitMobile(eventName, payload) {
   align-items: center;
   flex: 1;
   min-width: 0;
-  min-height: 44px;
-  gap: 5px;
-  padding: 0 4px;
+  min-height: 38px;
+  gap: 6px;
+  padding: 0 6px;
   border: 0;
   border-radius: var(--radius-md);
-  color: var(--color-text);
+  color: inherit;
   background: transparent;
   cursor: pointer;
   font: inherit;
   text-align: left;
+  font-size: 14px;
 }
 
 .note-tree__label:hover,
 .note-tree__label--focused {
-  background: var(--color-bg-tertiary);
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .note-tree__label:focus-visible {
@@ -414,17 +599,19 @@ function emitMobile(eventName, payload) {
 }
 
 .note-tree__disclosure {
-  width: 44px;
-  min-width: 44px;
-  min-height: 44px;
+  width: 24px;
+  min-width: 24px;
+  min-height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border-radius: 4px;
+  color: var(--color-text-tertiary);
 }
 
 .note-tree__disclosure svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   transition: transform 0.15s ease;
 }
 
@@ -433,8 +620,8 @@ function emitMobile(eventName, payload) {
 }
 
 .note-tree__icon {
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
   flex: 0 0 auto;
   color: var(--color-primary);
 }

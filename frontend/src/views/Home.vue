@@ -391,28 +391,28 @@ onMounted(() => {
 }
 
 .hero-card {
-  display: grid;
-  gap: var(--spacing-md);
-  padding: var(--surface-padding);
-  margin-bottom: var(--spacing-md);
+  padding: clamp(20px, 2.5vw, 32px);
   border-radius: var(--surface-radius);
+  color: #fff;
   background:
-    radial-gradient(circle at 88% 16%, rgba(110, 231, 183, 0.32), transparent 24%),
-    linear-gradient(135deg, #123B5D 0%, #0A6C94 58%, var(--color-primary) 100%);
-  box-shadow: var(--shadow-lg);
+    radial-gradient(circle at 86% 18%, rgba(56, 189, 248, 0.28), transparent 36%),
+    radial-gradient(circle at 14% 88%, rgba(16, 185, 129, 0.2), transparent 32%),
+    linear-gradient(135deg, #0F172A 0%, #1E293B 52%, #0369A1 100%);
+  box-shadow: var(--shadow-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .hero-main {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--spacing-md);
+  gap: var(--spacing-lg);
 }
 
 .hero-copy {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: 6px;
   min-width: 0;
 }
 
@@ -494,8 +494,17 @@ onMounted(() => {
   padding: 10px 12px;
   border-radius: var(--surface-radius-sm);
   background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   color: #fff;
   text-align: center;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hero-meta-item:hover {
+  background: rgba(255, 255, 255, 0.22);
+  transform: translateY(-2px);
 }
 
 .hero-meta-item strong {
@@ -507,9 +516,10 @@ onMounted(() => {
 
 .hero-meta-label {
   font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.76);
+  color: rgba(255, 255, 255, 0.82);
   line-height: 1.2;
   white-space: nowrap;
+  font-weight: 500;
 }
 
 .checkin-btn,
@@ -519,26 +529,30 @@ onMounted(() => {
   justify-content: center;
   gap: var(--spacing-sm);
   min-height: var(--touch-target-min);
-  padding: 10px 16px;
-  border-radius: var(--radius-lg);
+  padding: 10px 18px;
+  border-radius: var(--radius-xl);
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: 700;
   flex-shrink: 0;
 }
 
 .checkin-btn {
-  color: var(--color-primary);
+  color: var(--color-primary-dark);
   background: #fff;
   border: none;
   cursor: pointer;
   font-family: var(--font-family);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  box-shadow: var(--shadow-md);
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
 }
 
 .checkin-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+.checkin-btn:active {
+  transform: translateY(0) scale(0.98);
 }
 
 .checkin-btn:disabled {
@@ -787,21 +801,34 @@ onMounted(() => {
 .task-item,
 .goal-item {
   min-width: 0;
-  padding: 12px 0;
-  border-bottom: 1px solid rgba(186, 230, 253, 0.7);
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-low);
+  border: 1px solid var(--color-border);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .daily-item:last-child,
 .task-item:last-child,
 .goal-item:last-child {
-  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.daily-item:hover,
+.task-item:hover,
+.goal-item:hover {
+  background: #ffffff;
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
 }
 
 .daily-item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .daily-item--done {
@@ -854,6 +881,7 @@ onMounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-weight: 600;
 }
 
 .daily-item-title {
@@ -869,7 +897,7 @@ onMounted(() => {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .task-status {

@@ -260,83 +260,84 @@ const isHomeActive = computed(() => route.path === '/')
 <style scoped>
 .sidebar {
   width: var(--sidebar-width);
-  height: 100vh;
-  background: var(--color-card);
-  border-right: 1px solid var(--color-border);
+  height: 100dvh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 50;
   display: flex;
   flex-direction: column;
-  padding: var(--spacing-md);
-  position: fixed;
-  left: 0;
-  top: 0;
-  z-index: 100;
-  transition: width 0.3s ease, transform 0.3s ease;
-  overflow-x: hidden;
-  overflow-y: auto;
+  background: var(--color-bg);
+  border-right: 1px solid var(--color-border);
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 16px 10px;
 }
 
 .sidebar--collapsed {
   width: var(--sidebar-collapsed-width);
-  padding: var(--spacing-lg) var(--spacing-sm);
+  padding: 16px 8px;
 }
 
 .sidebar-header {
-  padding-bottom: var(--spacing-md);
-  margin-bottom: var(--spacing-lg);
+  padding: 4px 6px 14px;
+  margin-bottom: 12px;
   border-bottom: 1px solid var(--color-border);
 }
 
 .sidebar--collapsed .sidebar-header {
-  padding-bottom: var(--spacing-md);
-  margin-bottom: var(--spacing-md);
+  padding-bottom: 10px;
+  margin-bottom: 10px;
   text-align: center;
 }
 
 .logo {
   font-family: var(--font-family-display);
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: var(--color-primary);
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: var(--color-text);
+  letter-spacing: -0.02em;
 }
 
 .logo-row {
   display: flex;
   align-items: baseline;
-  gap: var(--spacing-xs);
+  gap: 6px;
 }
 
 .logo-version {
   color: var(--color-text-tertiary);
-  font-size: var(--font-size-xs);
+  font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
 }
 
 .sidebar--collapsed .logo {
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-base);
 }
 
 .logo-subtitle {
-  font-size: var(--font-size-xs);
+  font-size: 11px;
   color: var(--color-text-tertiary);
-  margin-top: var(--spacing-xs);
+  margin-top: 2px;
 }
 
 .user-card {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm);
-  background: var(--color-surface-low);
+  gap: 10px;
+  padding: 10px;
+  background: #FFFFFF;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  margin-bottom: var(--spacing-md);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 12px;
 }
 
 .user-avatar {
-  width: 44px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   border-radius: var(--radius-full);
-  background: var(--color-primary);
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -344,8 +345,8 @@ const isHomeActive = computed(() => route.path === '/')
 }
 
 .user-avatar svg {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   color: #fff;
 }
 
@@ -363,8 +364,8 @@ const isHomeActive = computed(() => route.path === '/')
 }
 
 .user-name {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--color-text);
   white-space: nowrap;
   overflow: hidden;
@@ -372,14 +373,15 @@ const isHomeActive = computed(() => route.path === '/')
 }
 
 .user-title {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-tertiary);
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  font-weight: 500;
 }
 
 .user-stats {
   display: flex;
-  gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-sm);
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .stat-item {
@@ -387,10 +389,12 @@ const isHomeActive = computed(() => route.path === '/')
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-sm);
-  background: var(--color-surface-low);
+  gap: 1px;
+  padding: 6px 4px;
+  background: #FFFFFF;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .stat-icon {
@@ -400,36 +404,39 @@ const isHomeActive = computed(() => route.path === '/')
 }
 
 .stat-icon svg {
-  width: 18px;
-  height: 18px;
-  color: var(--color-primary-light);
+  width: 14px;
+  height: 14px;
+  color: var(--color-primary);
 }
 
 .stat-label {
-  font-size: var(--font-size-xs);
+  font-size: 10px;
   color: var(--color-text-tertiary);
+  font-weight: 500;
 }
 
 .stat-value {
-  font-size: var(--font-size-lg);
+  font-size: 13px;
   font-weight: 700;
   color: var(--color-text);
 }
 
 .exp-bar-container {
-  margin-bottom: var(--spacing-md);
+  margin-bottom: 12px;
+  padding: 0 4px;
 }
 
 .exp-bar-label {
   display: flex;
   justify-content: space-between;
-  font-size: var(--font-size-xs);
-  color: var(--color-text-tertiary);
-  margin-bottom: var(--spacing-xs);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: 3px;
 }
 
 .exp-bar {
-  height: 6px;
+  height: 5px;
   background: var(--color-bg-tertiary);
   border-radius: var(--radius-full);
   overflow: hidden;
@@ -437,15 +444,15 @@ const isHomeActive = computed(() => route.path === '/')
 
 .exp-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+  background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
   border-radius: var(--radius-full);
-  transition: width 0.5s ease;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: 2px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -454,12 +461,12 @@ const isHomeActive = computed(() => route.path === '/')
 }
 
 .nav-section-label {
-  padding: 10px var(--spacing-sm) 3px;
+  padding: 10px 8px 3px;
   color: var(--color-text-tertiary);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  line-height: 1;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .sidebar-nav::-webkit-scrollbar {
@@ -469,37 +476,39 @@ const isHomeActive = computed(() => route.path === '/')
 .nav-item {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  min-height: var(--touch-target-min);
-  padding: 9px var(--spacing-sm);
-  border-radius: var(--radius-lg);
+  gap: 10px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
   color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
+  font-size: 13.5px;
   font-weight: 500;
-  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   text-decoration: none;
   white-space: nowrap;
 }
 
 .sidebar--collapsed .nav-item {
   justify-content: center;
-  padding: var(--spacing-sm);
+  padding: 8px;
   gap: 0;
 }
 
 .nav-item:hover {
-  background: var(--color-bg-tertiary);
+  background: rgba(0, 0, 0, 0.04);
   color: var(--color-text);
 }
 
 .nav-item--active {
-  background: var(--color-bg-tertiary);
-  color: var(--color-primary-dark);
-  box-shadow: inset 3px 0 0 var(--color-primary);
+  background: #FFFFFF;
+  color: var(--color-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.04);
 }
 
 .nav-item--active:hover {
-  background: var(--color-surface-container);
+  background: #FFFFFF;
   color: var(--color-primary-dark);
 }
 

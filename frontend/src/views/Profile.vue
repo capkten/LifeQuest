@@ -471,8 +471,11 @@ function goToEditProfile() {
   display: grid;
   gap: 16px;
   background:
-    radial-gradient(circle at top right, rgba(16, 185, 129, 0.16), transparent 30%),
-    linear-gradient(135deg, #ffffff 0%, #eef9fb 100%);
+    radial-gradient(circle at top right, rgba(2, 132, 199, 0.08), transparent 40%),
+    linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid var(--color-border);
+  border-radius: var(--surface-radius);
+  box-shadow: var(--shadow-sm);
 }
 
 .profile-hero-main {
@@ -483,15 +486,16 @@ function goToEditProfile() {
 }
 
 .profile-avatar {
-  width: 96px;
-  height: 96px;
-  border-radius: 30px;
+  width: 80px;
+  height: 80px;
+  border-radius: 24px;
   overflow: hidden;
   background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
 }
 
 .profile-avatar-img {

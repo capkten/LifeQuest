@@ -3,8 +3,8 @@
     <Sidebar :is-open="sidebarOpen" :is-collapsed="sidebarCollapsed" />
     <div class="app-main">
       <Header :title="pageTitle" />
-      <main class="app-content">
-        <div class="app-content-shell">
+      <main class="app-content" :class="{ 'app-content--full-width': isFullWidthRoute }">
+        <div class="app-content-shell" :class="{ 'app-content-shell--full-width': isFullWidthRoute }">
           <router-view />
         </div>
       </main>
@@ -118,6 +118,11 @@ provide('toggleSidebar', toggleSidebar)
 provide('sidebarOpen', sidebarOpen)
 provide('isMobile', isMobile)
 
+const isFullWidthRoute = computed(() => {
+  const fullWidthNames = ['NotebookFileManage', 'NotebookWorkspaceView', 'NotebookWorkspaceEdit', 'NoteEditor', 'NoteSync']
+  return fullWidthNames.includes(route.name) || String(route.path).startsWith('/notes/')
+})
+
 const pageTitle = computed(() => {
   const titles = {
     Home: '首页',
@@ -171,13 +176,24 @@ const pageTitle = computed(() => {
 
 .app-content-shell {
   width: 100%;
-  max-width: none;
-  margin: 0;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
   min-width: 0;
   padding: var(--page-padding-y) var(--page-padding-x);
   display: flex;
   flex-direction: column;
   gap: var(--page-gap);
+}
+
+.app-content--full-width {
+  padding-bottom: 0;
+}
+
+.app-content-shell--full-width {
+  max-width: 100%;
+  margin: 0;
+  padding: 8px 16px 16px;
+  gap: 0;
 }
 
 .app-content-shell > * {
@@ -226,10 +242,12 @@ const pageTitle = computed(() => {
     right: 0;
     bottom: 0;
     height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
-    padding: 6px 10px calc(6px + var(--safe-area-bottom));
-    background: rgba(248, 249, 255, 0.92);
-    backdrop-filter: blur(12px);
-    border-top: 1px solid var(--color-border);
+    padding: 6px 12px calc(6px + var(--safe-area-bottom));
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 1px solid rgba(217, 231, 239, 0.8);
+    box-shadow: 0 -4px 20px rgba(22, 50, 79, 0.05);
     z-index: 80;
     justify-content: space-around;
     align-items: center;
@@ -256,26 +274,32 @@ const pageTitle = computed(() => {
   min-width: 44px;
   min-height: 44px;
   gap: 3px;
-  padding: 5px 8px;
+  padding: 5px 10px;
   color: var(--color-text-tertiary);
   text-decoration: none;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  transition: color 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   border-radius: var(--radius-xl);
 }
 
 .bottom-nav-item:hover,
 .bottom-nav-item--active {
-  color: var(--color-primary);
+  color: var(--color-primary-dark);
   background: var(--color-bg-tertiary);
+  transform: translateY(-1px);
 }
 
 .bottom-nav-item svg {
   width: 22px;
   height: 22px;
   flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.bottom-nav-item--active svg {
+  transform: scale(1.08);
 }
 
 @media (pointer: coarse) {

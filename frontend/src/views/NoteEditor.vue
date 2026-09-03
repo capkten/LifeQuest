@@ -47,20 +47,22 @@
       <section class="editor-meta" aria-label="笔记详情">
         <label class="field field--title" for="note-title">
           <span class="sr-only">标题</span>
-            <input id="note-title" v-model="noteTitle" :disabled="!canEdit" type="text" class="title-input" placeholder="笔记标题" maxlength="200" />
+          <input id="note-title" v-model="noteTitle" :disabled="!canEdit" type="text" class="title-input" placeholder="笔记标题" maxlength="200" />
         </label>
-        <label class="field" for="note-summary">
-          <span class="field-label">摘要</span>
-          <textarea id="note-summary" v-model="noteSummary" :disabled="!canEdit" class="meta-input meta-input--summary" rows="2" maxlength="500" placeholder="为读者写一段简短摘要"></textarea>
-        </label>
-        <label class="field" for="note-tags">
-          <span class="field-label">标签</span>
-          <input id="note-tags" v-model="noteTags" :disabled="!canEdit" type="text" class="meta-input" placeholder="工作、想法、参考" maxlength="500" />
-        </label>
-        <label class="pin-field" for="note-pinned">
-          <input id="note-pinned" v-model="isPinned" :disabled="!canEdit" type="checkbox" />
-          <span>置顶这篇笔记</span>
-        </label>
+        <div class="editor-meta-grid">
+          <label class="field" for="note-summary">
+            <span class="field-label">摘要</span>
+            <input id="note-summary" v-model="noteSummary" :disabled="!canEdit" type="text" class="meta-input meta-input--summary" maxlength="500" placeholder="写一段简短摘要..." />
+          </label>
+          <label class="field" for="note-tags">
+            <span class="field-label">标签</span>
+            <input id="note-tags" v-model="noteTags" :disabled="!canEdit" type="text" class="meta-input" placeholder="工作、想法、参考" maxlength="500" />
+          </label>
+          <label class="pin-field" :class="{ 'pin-field--active': isPinned }" for="note-pinned">
+            <input id="note-pinned" v-model="isPinned" :disabled="!canEdit" type="checkbox" />
+            <span>{{ isPinned ? '已置顶' : '置顶笔记' }}</span>
+          </label>
+        </div>
       </section>
 
       <section v-if="isEditing" class="execution-links" aria-labelledby="execution-links-title">
@@ -526,18 +528,123 @@ onUnmounted(() => {
 .save-btn:hover:not(:disabled), .save-btn:focus-visible { background: var(--color-primary-dark); outline: 2px solid var(--color-primary-light); outline-offset: 2px; }
 .save-btn:disabled { opacity: .6; cursor: not-allowed; }
 .save-btn svg { width: 18px; height: 18px; }
-.editor-body { display: flex; flex: 1; flex-direction: column; min-height: 0; }
-.editor-meta { display: grid; grid-template-columns: minmax(220px, 1.4fr) minmax(220px, 1fr) minmax(180px, .8fr) auto; align-items: end; gap: var(--spacing-md); padding: var(--spacing-lg) var(--spacing-xl); border-bottom: 1px solid var(--color-border); background: var(--color-card); }
-.field { display: flex; flex-direction: column; min-width: 0; }
-.field--title { align-self: stretch; justify-content: center; }
-.title-input, .meta-input { width: 100%; box-sizing: border-box; border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text); background: var(--color-bg-secondary); outline: none; font: inherit; }
-.title-input { padding: var(--spacing-sm) 0; border-width: 0 0 2px; border-radius: 0; font-family: var(--font-family-display); font-size: var(--font-size-2xl); font-weight: 700; }
-.meta-input { min-height: 44px; padding: var(--spacing-sm); font-size: var(--font-size-sm); }
-.meta-input--summary { resize: vertical; min-height: 60px; }
-.title-input:focus, .meta-input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(14, 165, 233, .12); }
-.title-input:disabled, .meta-input:disabled { opacity: .65; cursor: not-allowed; }
-.pin-field { display: inline-flex; align-items: center; gap: var(--spacing-xs); min-height: 44px; color: var(--color-text-secondary); font-size: var(--font-size-sm); white-space: nowrap; cursor: pointer; }
-.pin-field input { width: 18px; height: 18px; accent-color: var(--color-primary); }
+.editor-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 32px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-card);
+}
+
+.field--title {
+  width: 100%;
+}
+
+.title-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: #0F172A;
+  background: transparent;
+  outline: none;
+  font-family: var(--font-family-display);
+  font-size: clamp(1.6rem, 2.5vw, 2.2rem);
+  font-weight: 800;
+  padding: 4px 0;
+  letter-spacing: -0.02em;
+  transition: border-color 0.2s ease;
+}
+
+.title-input:focus {
+  border-bottom-color: var(--color-primary);
+}
+
+.title-input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.editor-meta-grid {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.3fr) minmax(180px, 1fr) auto;
+  align-items: end;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.meta-input {
+  width: 100%;
+  height: 40px;
+  min-height: 40px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  background: var(--color-surface-low);
+  padding: 8px 12px;
+  font-size: 13px;
+  outline: none;
+  font: inherit;
+  transition: all 0.15s ease;
+}
+
+.meta-input:focus {
+  border-color: var(--color-primary);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
+}
+
+.title-input:disabled,
+.meta-input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.pin-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-low);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+}
+
+.pin-field:hover {
+  background: #ffffff;
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.pin-field--active {
+  background: #E0F2FE;
+  border-color: #0284C7;
+  color: #0369A1;
+}
+
+.pin-field input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary);
+  margin: 0;
+  cursor: pointer;
+}
 .editor-wrapper { flex: 1; min-height: 0; }
 .editor-wrapper :deep(.v-md-editor) { height: 100%; border: 0; border-radius: 0; box-shadow: none; background: var(--color-bg-secondary); }
 .editor-wrapper :deep(.v-md-editor__toolbar) { background: var(--color-bg-tertiary); border-bottom-color: var(--color-border); }

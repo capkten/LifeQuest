@@ -818,7 +818,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-lg);
-  padding: 0 0 var(--spacing-lg);
+  padding: 0 0 10px;
   border-bottom: 1px solid var(--workspace-line);
 }
 
@@ -832,7 +832,7 @@ onUnmounted(() => {
 .panel-kicker,
 .selection-eyebrow,
 .dialog-kicker {
-  margin: 0 0 4px;
+  margin: 0 0 2px;
   color: var(--color-primary);
   font-size: 11px;
   font-weight: 700;
@@ -856,7 +856,7 @@ onUnmounted(() => {
 
 .workspace-subtitle {
   max-width: 58vw;
-  margin: 5px 0 0;
+  margin: 4px 0 0;
   overflow: hidden;
   color: var(--color-text-tertiary);
   font-size: var(--font-size-sm);
@@ -873,45 +873,56 @@ onUnmounted(() => {
 
 .workspace-layout {
   flex: 1;
-  min-height: 0;
-  padding-top: var(--spacing-lg);
-  gap: var(--spacing-lg);
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  min-height: calc(100vh - 160px);
+  min-height: calc(100dvh - 160px);
+  margin-top: 8px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--surface-radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }
 
 .directory-panel {
   display: flex;
-  flex: 0 0 min(350px, 31%);
   flex-direction: column;
   min-width: 0;
-  min-height: 420px;
+  height: 100%;
   overflow: hidden;
-  background: var(--color-card);
-  border: 1px solid var(--workspace-line);
-  border-radius: var(--radius-xl);
+  background: var(--color-surface-low);
+  border-right: 1px solid var(--color-border);
 }
 
 .directory-header {
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-sm);
-  padding: var(--spacing-lg);
-  border-bottom: 1px solid var(--workspace-line);
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.panel-kicker {
+  color: var(--color-primary-dark);
 }
 
 .panel-title {
   overflow: hidden;
   font-size: var(--font-size-base);
+  font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .directory-panel :deep(.note-tree) {
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .directory-panel :deep(.note-tree__list) {
-  padding: var(--spacing-sm);
+  padding: 12px;
 }
 
 .directory-state {
@@ -940,20 +951,19 @@ onUnmounted(() => {
   flex: 1;
   flex-direction: column;
   min-width: 0;
-  min-height: 420px;
-  overflow: hidden;
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--workspace-line);
-  border-radius: var(--radius-xl);
+  height: 100%;
+  overflow-y: auto;
+  background: var(--color-card);
 }
 
 .content-toolbar {
+  display: flex;
   align-items: center;
   min-width: 0;
-  min-height: 58px;
+  min-height: 52px;
   gap: var(--spacing-md);
-  padding: 0 var(--spacing-lg);
-  border-bottom: 1px solid var(--workspace-line);
+  padding: 0 32px;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .breadcrumbs {
@@ -1126,11 +1136,11 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   min-height: 44px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   font-size: var(--font-size-sm);
   font-weight: 600;
   text-decoration: none;
-  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .button {
@@ -1143,10 +1153,13 @@ onUnmounted(() => {
 .button--primary {
   color: #fff;
   background: var(--color-primary);
+  box-shadow: 0 2px 6px rgba(14, 165, 233, 0.2);
 }
 
 .button--primary:hover {
   background: var(--color-primary-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
 }
 
 .button--quiet {
@@ -1161,7 +1174,7 @@ onUnmounted(() => {
 .toolbar-button:focus-visible,
 .icon-button:hover,
 .icon-button:focus-visible {
-  color: var(--color-primary);
+  color: var(--color-primary-dark);
   background: var(--workspace-soft);
 }
 
