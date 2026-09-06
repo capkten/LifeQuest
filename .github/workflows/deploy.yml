@@ -113,10 +113,11 @@ jobs:
           test -n "$SERVER_HOST"
           test -n "$SERVER_USER"
           APP_DIR="${SERVER_APP_DIR:-/opt/lifequest}"
+          DEPLOY_UNIT="lifequest-deploy-${GITHUB_SHA:0:12}"
           SSH_ARGS=(
             -o BatchMode=yes
-            -o ServerAliveInterval=30
-            -o ServerAliveCountMax=20
+            -o ServerAliveInterval=5
+            -o ServerAliveCountMax=12
             -o ConnectTimeout=30
           )
 
@@ -128,6 +129,28 @@ jobs:
             )
           fi
 
-          ssh "${SSH_ARGS[@]}" \
-            "$SERVER_USER@$SERVER_HOST" \
-            "cd '$APP_DIR' && git fetch origin main && git checkout main && git pull --ff-only origin main && bash '$APP_DIR/deploy/update-systemd.sh' '$APP_DIR'"
+          run_ssh() {
+            ssh "${SSH_ARGS[@]}" "$SERVER_USER@$SERVER_HOST" "$1"
+          }
+
+          run_ssh "cd '$APP_DIR' && git fetch origin main && git checkout main && git pull --ff-only origin main && systemd-run --user --unit='$DEPLOY_UNIT' --description='LifeQuest deployment' --setenv=HOME=/home/capkin --setenv=LIFEQUEST_SYSTEMD_SCOPE=user --setenv=LIFEQUEST_CONDA_PREFIX=/home/capkin/miniforge3/envs/lifequest --setenv=PATH=/home/capkin/miniforge3/envs/lifequest/bin:/usr/local/bin:/usr/bin bash '$APP_DIR/deploy/update-systemd.sh' '$APP_DIR'"
+
+          for _ in {1..180}; do
+            unit_status="$(run_ssh "systemctl --user show '$DEPLOY_UNIT' -p ActiveState -p Result --value" 2>/dev/null || true)"
+            unit_state="$(printf '%s\n' "$unit_status" | sed -n '1p')"
+            unit_result="$(printf '%s\n' "$unit_status" | sed -n '2p')"
+            if [[ "$unit_state" == "inactive" || "$unit_state" == "failed" ]]; then
+              if [[ "$unit_result" == "success" ]]; then
+                echo "LifeQuest deployment completed successfully."
+                exit 0
+              fi
+              echo "LifeQuest deployment failed (state=$unit_state result=$unit_result)." >&2
+              run_ssh "journalctl --user -u '$DEPLOY_UNIT' --no-pager -n 120" >&2 || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+          echo "LifeQuest deployment timed out." >&2
+          run_ssh "journalctl --user -u '$DEPLOY_UNIT' --no-pager -n 120" >&2 || true
+          exit 1
