@@ -63,7 +63,7 @@ resolve_npm() {
   fi
 
   if [[ -d "$HOME/.nvm/versions/node" ]]; then
-    npm_bin="$(find "$HOME/.nvm/versions/node" -type f -path '*/bin/npm' -perm -u+x -print 2>/dev/null | sort -V | tail -n 1)"
+    npm_bin="$(find "$HOME/.nvm/versions/node" -regextype posix-extended -regex "$HOME/.nvm/versions/node/[^/]+/bin/npm" -perm -u+x -print 2>/dev/null | sort -V | tail -n 1)"
     if [[ -n "$npm_bin" ]]; then
       printf '%s\n' "$npm_bin"
       return
