@@ -79,18 +79,55 @@ jobs:
           printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
 
+      - name: Install Cloudflare client for Tunnel SSH
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CLOUDFLARE_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CLOUDFLARE_ACCESS_CLIENT_SECRET }}
+        run: |
+          if [[ -z "$TUNNEL_SERVICE_TOKEN_ID" && -z "$TUNNEL_SERVICE_TOKEN_SECRET" ]]; then
+            echo "Cloudflare Access credentials not configured; using direct SSH."
+            exit 0
+          fi
+
+          test -n "$TUNNEL_SERVICE_TOKEN_ID"
+          test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
+          case "$(uname -m)" in
+            x86_64) CLOUDFLARED_ASSET=cloudflared-linux-amd64 ;;
+            aarch64|arm64) CLOUDFLARED_ASSET=cloudflared-linux-arm64 ;;
+            *) echo "Unsupported runner architecture: $(uname -m)" >&2; exit 1 ;;
+          esac
+          curl --fail --silent --show-error --location \
+            "https://github.com/cloudflare/cloudflared/releases/latest/download/$CLOUDFLARED_ASSET" \
+            --output "$RUNNER_TEMP/cloudflared"
+          chmod 700 "$RUNNER_TEMP/cloudflared"
+          "$RUNNER_TEMP/cloudflared" version
+
       - name: Update systemd deployment
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SERVER_APP_DIR: ${{ secrets.SERVER_APP_DIR }}
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CLOUDFLARE_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CLOUDFLARE_ACCESS_CLIENT_SECRET }}
         run: |
           test -n "$SERVER_HOST"
           test -n "$SERVER_USER"
-          APP_DIR="${SERVER_APP_DIR:-/root/LifeQuest}"
-          ssh -o BatchMode=yes \
-            -o ServerAliveInterval=30 \
-            -o ServerAliveCountMax=20 \
-            -o ConnectTimeout=30 \
+          APP_DIR="${SERVER_APP_DIR:-/opt/lifequest}"
+          SSH_ARGS=(
+            -o BatchMode=yes
+            -o ServerAliveInterval=30
+            -o ServerAliveCountMax=20
+            -o ConnectTimeout=30
+          )
+
+          if [[ -n "$TUNNEL_SERVICE_TOKEN_ID" || -n "$TUNNEL_SERVICE_TOKEN_SECRET" ]]; then
+            test -n "$TUNNEL_SERVICE_TOKEN_ID"
+            test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
+            SSH_ARGS+=(
+              -o "ProxyCommand=$RUNNER_TEMP/cloudflared access ssh --hostname %h"
+            )
+          fi
+
+          ssh "${SSH_ARGS[@]}" \
             "$SERVER_USER@$SERVER_HOST" \
             "bash '$APP_DIR/deploy/update-systemd.sh' '$APP_DIR'"
