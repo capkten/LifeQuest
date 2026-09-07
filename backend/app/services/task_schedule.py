@@ -36,8 +36,12 @@ class TaskScheduleService:
         return value.astimezone(cls.APP_TIMEZONE).date()
 
     @classmethod
+    def _now_utc(cls) -> datetime:
+        return datetime.now(timezone.utc)
+
+    @classmethod
     def _today(cls) -> date:
-        return datetime.now(timezone.utc).astimezone(cls.APP_TIMEZONE).date()
+        return cls._now_utc().astimezone(cls.APP_TIMEZONE).date()
 
     @classmethod
     def _aware_utc(cls, value: datetime) -> datetime:
@@ -329,7 +333,7 @@ class TaskScheduleService:
             raise self._error(409, "TASK_ALREADY_COMPLETED", "已完成任务不能延期。")
 
         until_utc = self._aware_utc(until)
-        if until_utc <= datetime.now(timezone.utc):
+        if until_utc <= self._now_utc():
             raise self._error(422, "TASK_SNOOZE_IN_PAST", "延期时间必须晚于当前时间。")
 
         target_date = occurrence_date or self._local_date(task.deadline)
@@ -356,7 +360,7 @@ class TaskScheduleService:
 
         today = self._today()
         if deadline is not None:
-            if self._aware_utc(deadline) <= datetime.now(timezone.utc):
+            if self._aware_utc(deadline) <= self._now_utc():
                 raise self._error(422, "TASK_DATE_IN_PAST", "截止时间必须晚于当前时间。")
             task.deadline = deadline
             target_date = self._local_date(deadline) or today

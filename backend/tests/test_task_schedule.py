@@ -1,8 +1,15 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from uuid import UUID
+import pytest
 
 from app.models.task_schedule import TaskOccurrence
 from app.services.task_schedule import TaskScheduleService
+
+
+@pytest.fixture(autouse=True)
+def _freeze_schedule_clock(monkeypatch):
+    baseline = datetime(2026, 8, 31, 0, 0, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(TaskScheduleService, "_now_utc", classmethod(lambda cls: baseline))
 
 
 def _login(client, username):

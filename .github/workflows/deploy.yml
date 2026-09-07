@@ -85,18 +85,78 @@ jobs:
           printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
 
+      - name: Install Cloudflare client for Tunnel SSH
+        env:
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CLOUDFLARE_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CLOUDFLARE_ACCESS_CLIENT_SECRET }}
+        run: |
+          if [[ -z "$TUNNEL_SERVICE_TOKEN_ID" && -z "$TUNNEL_SERVICE_TOKEN_SECRET" ]]; then
+            echo "Cloudflare Access credentials not configured; using direct SSH."
+            exit 0
+          fi
+
+          test -n "$TUNNEL_SERVICE_TOKEN_ID"
+          test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
+          case "$(uname -m)" in
+            x86_64) CLOUDFLARED_ASSET=cloudflared-linux-amd64 ;;
+            aarch64|arm64) CLOUDFLARED_ASSET=cloudflared-linux-arm64 ;;
+            *) echo "Unsupported runner architecture: $(uname -m)" >&2; exit 1 ;;
+          esac
+          curl --fail --silent --show-error --location \
+            "https://github.com/cloudflare/cloudflared/releases/latest/download/$CLOUDFLARED_ASSET" \
+            --output "$RUNNER_TEMP/cloudflared"
+          chmod 700 "$RUNNER_TEMP/cloudflared"
+          "$RUNNER_TEMP/cloudflared" version
+
       - name: Update systemd deployment
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SERVER_APP_DIR: ${{ secrets.SERVER_APP_DIR }}
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CLOUDFLARE_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CLOUDFLARE_ACCESS_CLIENT_SECRET }}
         run: |
           test -n "$SERVER_HOST"
           test -n "$SERVER_USER"
-          APP_DIR="${SERVER_APP_DIR:-/root/LifeQuest}"
-          ssh -o BatchMode=yes \
-            -o ServerAliveInterval=30 \
-            -o ServerAliveCountMax=20 \
-            -o ConnectTimeout=30 \
-            "$SERVER_USER@$SERVER_HOST" \
-            "bash '$APP_DIR/deploy/update-systemd.sh' '$APP_DIR'"
+          APP_DIR="${SERVER_APP_DIR:-/opt/lifequest}"
+          DEPLOY_UNIT="lifequest-deploy-${GITHUB_SHA:0:12}"
+          SSH_ARGS=(
+            -o BatchMode=yes
+            -o ServerAliveInterval=5
+            -o ServerAliveCountMax=12
+            -o ConnectTimeout=30
+          )
+
+          if [[ -n "$TUNNEL_SERVICE_TOKEN_ID" || -n "$TUNNEL_SERVICE_TOKEN_SECRET" ]]; then
+            test -n "$TUNNEL_SERVICE_TOKEN_ID"
+            test -n "$TUNNEL_SERVICE_TOKEN_SECRET"
+            SSH_ARGS+=(
+              -o "ProxyCommand=$RUNNER_TEMP/cloudflared access ssh --hostname %h"
+            )
+          fi
+
+          run_ssh() {
+            ssh "${SSH_ARGS[@]}" "$SERVER_USER@$SERVER_HOST" "$1"
+          }
+
+          run_ssh "cd '$APP_DIR' && git fetch origin main && git checkout main && git pull --ff-only origin main && systemd-run --user --unit='$DEPLOY_UNIT' --description='LifeQuest deployment' --setenv=HOME=/home/capkin --setenv=LIFEQUEST_SYSTEMD_SCOPE=user --setenv=LIFEQUEST_CONDA_PREFIX=/home/capkin/miniforge3/envs/lifequest --setenv=PATH=/home/capkin/miniforge3/envs/lifequest/bin:/usr/local/bin:/usr/bin bash '$APP_DIR/deploy/update-systemd.sh' '$APP_DIR'"
+
+          for _ in {1..180}; do
+            unit_status="$(run_ssh "systemctl --user show '$DEPLOY_UNIT' -p ActiveState -p Result --value" 2>/dev/null || true)"
+            unit_state="$(printf '%s\n' "$unit_status" | sed -n '1p')"
+            unit_result="$(printf '%s\n' "$unit_status" | sed -n '2p')"
+            if [[ "$unit_state" == "inactive" || "$unit_state" == "failed" ]]; then
+              if [[ "$unit_result" == "success" ]]; then
+                echo "LifeQuest deployment completed successfully."
+                exit 0
+              fi
+              echo "LifeQuest deployment failed (state=$unit_state result=$unit_result)." >&2
+              run_ssh "journalctl --user -u '$DEPLOY_UNIT' --no-pager -n 120" >&2 || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+          echo "LifeQuest deployment timed out." >&2
+          run_ssh "journalctl --user -u '$DEPLOY_UNIT' --no-pager -n 120" >&2 || true
+          exit 1
