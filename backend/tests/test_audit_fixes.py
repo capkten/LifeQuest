@@ -437,7 +437,7 @@ def test_updating_transfer_beyond_source_balance_rolls_back_everything(database)
     assert session.query(FinanceTransaction).count() == 1
 
 
-def test_same_china_day_finance_reward_is_awarded_only_for_first_transaction(database):
+def test_same_china_day_finance_reward_is_awarded_only_for_first_transaction(database, clock):
     session, factory = database
     user = make_user(session)
     account = make_account(session, user, 100)
