@@ -352,6 +352,7 @@ import { financeService } from '../services/finance'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelTransactionType } from '../utils/displayLabels'
+import { chinaDateKey, formatChinaDate, shiftDateKey, todayChinaDateKey } from '../utils/dateTime'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -397,11 +398,9 @@ const showDeleteDialog = ref(false)
 const deletingTx = ref(null)
 const deleting = ref(false)
 
-const today = new Date().toISOString().split('T')[0]
-
 const txForm = ref({
   type: 'expense', amount: null, account_id: '', to_account_id: '',
-  category_id: '', description: '', date: today
+  category_id: '', description: '', date: todayChinaDateKey()
 })
 
 const filteredCategories = computed(() => {
@@ -425,7 +424,8 @@ const activeFilterCount = computed(() => {
 const groupedTransactions = computed(() => {
   const groups = {}
   for (const tx of transactions.value) {
-    const key = (tx.date || '').split('T')[0]
+    const key = chinaDateKey(tx.date)
+    if (!key) continue
     if (!groups[key]) groups[key] = []
     groups[key].push(tx)
   }
@@ -439,19 +439,14 @@ function formatMoney(val) { return Number(val || 0).toFixed(2) }
 
 function formatGroupDate(dateKey) {
   if (!dateKey) return ''
-  const d = new Date(dateKey + 'T00:00:00')
-  const today = new Date()
-  const todayStr = today.toISOString().split('T')[0]
-  const yesterday = new Date(today)
-  yesterday.setDate(yesterday.getDate() - 1)
-  const yesterdayStr = yesterday.toISOString().split('T')[0]
-  if (dateKey === todayStr) return '今天'
-  if (dateKey === yesterdayStr) return '昨天'
-  return d.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })
+  const today = todayChinaDateKey()
+  if (dateKey === today) return '今天'
+  if (dateKey === shiftDateKey(today, -1)) return '昨天'
+  return formatChinaDate(dateKey, { month: 'long', day: 'numeric', weekday: 'short' })
 }
 
 function resetTxForm() {
-  txForm.value = { type: 'expense', amount: null, account_id: '', to_account_id: '', category_id: '', description: '', date: today }
+  txForm.value = { type: 'expense', amount: null, account_id: '', to_account_id: '', category_id: '', description: '', date: todayChinaDateKey() }
   txDialogError.value = null
   editingTx.value = null
 }
@@ -463,7 +458,7 @@ function openEdit(tx) {
   txForm.value = {
     type: tx.type, amount: tx.amount, account_id: tx.account_id || '',
     to_account_id: tx.to_account_id || '', category_id: tx.category_id || '',
-    description: tx.description || '', date: (tx.date || '').split('T')[0]
+    description: tx.description || '', date: chinaDateKey(tx.date) || ''
   }
   txDialogError.value = null
   showDialog.value = true

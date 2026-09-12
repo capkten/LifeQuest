@@ -360,6 +360,7 @@ import { ref, computed, onMounted } from 'vue'
 import { financeService } from '../services/finance'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
+import { formatChinaDate, todayChinaDateKey } from '../utils/dateTime'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -380,8 +381,6 @@ const savingTx = ref(false)
 const txError = ref(null)
 const editingTx = ref(null)
 
-const today = new Date().toISOString().split('T')[0]
-
 const txForm = ref({
   type: 'expense',
   amount: null,
@@ -389,7 +388,7 @@ const txForm = ref({
   to_account_id: '',
   category_id: '',
   description: '',
-  date: today
+  date: todayChinaDateKey()
 })
 
 const filteredCategories = computed(() => {
@@ -406,9 +405,7 @@ function formatNet(val) {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+  return formatChinaDate(dateStr, { month: 'short', day: 'numeric' })
 }
 
 function budgetPercent(b) {
@@ -431,7 +428,7 @@ function resetTxForm() {
     to_account_id: '',
     category_id: '',
     description: '',
-    date: today
+    date: todayChinaDateKey()
   }
   txError.value = null
   editingTx.value = null

@@ -265,6 +265,7 @@ import { ref, onMounted } from 'vue'
 import { financeService } from '../services/finance'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
+import { chinaDateKey, formatChinaDate, todayChinaDateKey } from '../utils/dateTime'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -288,26 +289,22 @@ const payingDebt = ref(null)
 const paying = ref(false)
 const paymentError = ref(null)
 
-const today = new Date().toISOString().split('T')[0]
-
 const form = ref({
   creditor_name: '', type: 'borrowed', amount: null,
   interest_rate: 0, due_date: '', description: ''
 })
 
-const paymentForm = ref({ amount: null, date: today, description: '' })
+const paymentForm = ref({ amount: null, date: todayChinaDateKey(), description: '' })
 
 function formatMoney(val) { return Number(val || 0).toFixed(2) }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
+  return formatChinaDate(dateStr, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
 function isOverdue(dateStr) {
-  if (!dateStr) return false
-  return new Date(dateStr) < new Date(new Date().toDateString())
+  const dueDate = chinaDateKey(dateStr)
+  return Boolean(dueDate && dueDate < todayChinaDateKey())
 }
 
 function togglePayments(id) {
@@ -329,7 +326,7 @@ function openEdit(d) {
   form.value = {
     creditor_name: d.creditor_name, type: d.type || activeTab.value,
     amount: d.amount, interest_rate: d.interest_rate || 0,
-    due_date: d.due_date ? d.due_date.split('T')[0] : '',
+    due_date: chinaDateKey(d.due_date) || '',
     description: d.description || ''
   }
   dialogError.value = null
@@ -340,7 +337,7 @@ function cancelDialog() { showDialog.value = false; editingDebt.value = null; di
 
 function openPayment(d) {
   payingDebt.value = d
-  paymentForm.value = { amount: null, date: today, description: '' }
+  paymentForm.value = { amount: null, date: todayChinaDateKey(), description: '' }
   paymentError.value = null
   showPaymentDialog.value = true
 }
