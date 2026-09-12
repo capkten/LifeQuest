@@ -1,13 +1,10 @@
 import base64
-import threading
-from functools import wraps
-from datetime import date, datetime, timezone
-from typing import List
+from datetime import date, datetime, timedelta, timezone
+from typing import List, Optional
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
-from sqlalchemy import or_, update
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.models.todo import Habit, Task, Goal, Subtask, TaskStatus, GOAL_COMPLETED_PROGRESS
@@ -21,6 +18,9 @@ from app.repositories.user import UserRepository
 from app.schemas.todo import (
     HabitCreate,
     HabitUpdate,
+    HabitCompletionCreate,
+    HabitBackfillCreate,
+    HabitLeaveCreate,
     TaskCreate,
     TaskUpdate,
     GoalCreate,
@@ -39,19 +39,23 @@ from app.services.content_catalog import (
 )
 from app.services.title import TitleService
 from app.services.cultivation import CultivationService
-
-
-_TODO_COMPLETION_LOCK = threading.Lock()
-_APP_TIMEZONE = ZoneInfo("Asia/Shanghai")
-
-
-def _completion_guard(method):
-    @wraps(method)
-    def guarded(self, *args, **kwargs):
-        with _TODO_COMPLETION_LOCK:
-            return method(self, *args, **kwargs)
-
-    return guarded
+from app.timezone import local_date, day_start_utc, as_utc
+from app.services.transaction import rollback_on_error
+from app.services.habit_schedule import (
+    is_due,
+    is_excused_on,
+    is_excluded_on,
+    is_paused_on,
+    month_has_active_schedule,
+    month_period,
+    previous_scheduled_date,
+    week_has_active_schedule,
+    week_start,
+)
+from app.services.habit_metrics import calculate_habit_metrics, weekly_target_progress
+from app.models.habit_completion import HabitCompletion
+from app.models.habit_pause import HabitPauseInterval
+from app.models.habit_leave import HabitLeaveInterval
 
 
 class TodoService:
@@ -77,9 +81,7 @@ class TodoService:
     @staticmethod
     def _local_date(value: datetime) -> date:
         """Return the calendar date in the app's user-facing timezone."""
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=timezone.utc)
-        return value.astimezone(_APP_TIMEZONE).date()
+        return local_date(value)
 
     @classmethod
     def _today(cls) -> date:
@@ -87,23 +89,384 @@ class TodoService:
 
     @classmethod
     def _today_start_utc(cls) -> datetime:
-        local_now = datetime.now(timezone.utc).astimezone(_APP_TIMEZONE)
-        local_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
-        return local_start.astimezone(timezone.utc)
+        return day_start_utc(cls._today())
 
-    @staticmethod
-    def _set_completed_today(habit: Habit) -> Habit:
-        if habit.last_completed_at is None:
-            habit.completed_today = False
-            return habit
+    def _habit_pause_intervals(self, habit: Habit):
+        return self.db.query(HabitPauseInterval).filter(
+            HabitPauseInterval.habit_id == habit.id,
+            HabitPauseInterval.user_id == habit.user_id,
+        ).order_by(HabitPauseInterval.paused_on.asc(), HabitPauseInterval.created_at.asc()).all()
 
-        completed_at = habit.last_completed_at
-        if completed_at.tzinfo is None:
-            completed_at = completed_at.replace(tzinfo=timezone.utc)
-        else:
-            completed_at = completed_at.astimezone(timezone.utc)
-        habit.completed_today = TodoService._local_date(completed_at) == TodoService._today()
+    def _habit_leave_intervals(self, habit: Habit):
+        return self.db.query(HabitLeaveInterval).filter(
+            HabitLeaveInterval.habit_id == habit.id,
+            HabitLeaveInterval.user_id == habit.user_id,
+        ).order_by(HabitLeaveInterval.leave_on.asc(), HabitLeaveInterval.created_at.asc()).all()
+
+    def _completion_dates(self, habit: Habit) -> set[date]:
+        records = self.db.query(HabitCompletion).filter(
+            HabitCompletion.habit_id == habit.id,
+            HabitCompletion.user_id == habit.user_id,
+        ).all()
+        return {record.completed_on for record in records}
+
+    def _habit_metrics(self, habit: Habit, today: date, pause_intervals, leave_intervals):
+        completion_dates = self._completion_dates(habit)
+        created_on = self._local_date(habit.created_at) if habit.created_at else today
+        return calculate_habit_metrics(
+            habit,
+            completion_dates,
+            created_on,
+            today,
+            pause_intervals,
+            leave_intervals,
+        )
+
+    def _set_completed_today(self, habit: Habit) -> Habit:
+        today = self._today()
+        pause_intervals = self._habit_pause_intervals(habit)
+        leave_intervals = self._habit_leave_intervals(habit)
+        habit.pause_intervals = pause_intervals
+        habit.leave_intervals = leave_intervals
+        habit.paused_today = not habit.is_active or is_paused_on(pause_intervals, today)
+        habit.excused_today = is_excused_on(leave_intervals, today)
+        habit.scheduled_today = is_due(habit, today) and not habit.paused_today and not habit.excused_today
+        completion_dates = self._completion_dates(habit)
+        habit.weekly_completed = 0
+        habit.weekly_remaining = 0
+        if habit.frequency == "weekly_target" and habit.weekly_target:
+            habit.weekly_completed, habit.weekly_remaining = weekly_target_progress(
+                habit, completion_dates, today, pause_intervals, leave_intervals,
+            )
+        metrics = self._habit_metrics(habit, today, pause_intervals, leave_intervals)
+        habit.total_completed = metrics.total_completed
+        habit.scheduled_count = metrics.scheduled_count
+        habit.completed_count = metrics.completed_count
+        habit.completion_rate = metrics.completion_rate
+        habit.completed_today = today in completion_dates
         return habit
+
+    def _weekly_completion_count(self, habit_id: UUID, target_date: date) -> int:
+        current_week = week_start(target_date)
+        return self._weekly_completion_count_for_week(habit_id, current_week)
+
+    def _weekly_completion_count_for_week(self, habit_id: UUID, current_week: date) -> int:
+        return self.db.query(HabitCompletion.id).filter(
+            HabitCompletion.habit_id == habit_id,
+            HabitCompletion.completed_on >= current_week,
+            HabitCompletion.completed_on < current_week + timedelta(days=7),
+        ).count()
+
+    def _recalculate_habit_streak(self, habit: Habit, pause_intervals, leave_intervals) -> None:
+        records = self.db.query(HabitCompletion).filter(
+            HabitCompletion.habit_id == habit.id,
+            HabitCompletion.user_id == habit.user_id,
+        ).order_by(HabitCompletion.completed_on.asc()).all()
+        completion_dates = {record.completed_on for record in records}
+
+        if habit.frequency in {"daily", "weekdays"}:
+            valid_dates = {
+                completed_on
+                for completed_on in completion_dates
+                if is_due(habit, completed_on)
+                and not is_excluded_on(completed_on, pause_intervals, leave_intervals)
+            }
+            current_streak = 0
+            best_streak = 0
+            for completed_on in sorted(valid_dates):
+                previous = previous_scheduled_date(
+                    habit, completed_on, pause_intervals, leave_intervals,
+                )
+                current_streak = current_streak + 1 if previous in valid_dates else 1
+                best_streak = max(best_streak, current_streak)
+        elif habit.frequency == "weekly_target" and habit.weekly_target:
+            counts = {}
+            for completed_on in completion_dates:
+                if not is_excluded_on(completed_on, pause_intervals, leave_intervals):
+                    period = week_start(completed_on)
+                    counts[period] = counts.get(period, 0) + 1
+            completed_periods = {
+                period for period, count in counts.items()
+                if count >= habit.weekly_target
+                and week_has_active_schedule(habit, period, pause_intervals, leave_intervals)
+            }
+            current_streak = 0
+            best_streak = 0
+            for period in sorted(completed_periods):
+                previous = period - timedelta(days=7)
+                while not week_has_active_schedule(
+                    habit, previous, pause_intervals, leave_intervals,
+                ):
+                    previous -= timedelta(days=7)
+                current_streak = current_streak + 1 if previous in completed_periods else 1
+                best_streak = max(best_streak, current_streak)
+        else:
+            period_for = week_start if habit.frequency == "weekly" else month_period
+            periods = {
+                period_for(completed_on)
+                for completed_on in completion_dates
+                if not is_excluded_on(completed_on, pause_intervals, leave_intervals)
+            }
+            current_streak = 0
+            best_streak = 0
+            for period in sorted(periods):
+                if habit.frequency == "weekly":
+                    previous = period - timedelta(days=7)
+                    while not week_has_active_schedule(
+                        habit, previous, pause_intervals, leave_intervals,
+                    ):
+                        previous -= timedelta(days=7)
+                else:
+                    previous = period - 1
+                    while not month_has_active_schedule(
+                        habit, previous, pause_intervals, leave_intervals,
+                    ):
+                        previous -= 1
+                current_streak = current_streak + 1 if previous in periods else 1
+                best_streak = max(best_streak, current_streak)
+
+        if completion_dates:
+            habit.streak = current_streak
+            habit.best_streak = max(habit.best_streak or 0, best_streak, current_streak)
+            latest_date = max(completion_dates)
+            latest_record = next(
+                (record for record in reversed(records) if record.completed_on == latest_date),
+                None,
+            )
+            if latest_record and (
+                habit.last_completed_at is None
+                or self._local_date(habit.last_completed_at) <= latest_date
+            ):
+                habit.last_completed_at = latest_record.completed_at
+        self.db.flush()
+
+    def get_pause_intervals(self, habit_id: UUID, user_id: UUID):
+        self.get_habit_for_user(habit_id, user_id)
+        return self.db.query(HabitPauseInterval).filter(
+            HabitPauseInterval.habit_id == habit_id,
+            HabitPauseInterval.user_id == user_id,
+        ).order_by(HabitPauseInterval.paused_on.asc(), HabitPauseInterval.created_at.asc()).all()
+
+    def get_leave_intervals(self, habit_id: UUID, user_id: UUID):
+        self.get_habit_for_user(habit_id, user_id)
+        return self.db.query(HabitLeaveInterval).filter(
+            HabitLeaveInterval.habit_id == habit_id,
+            HabitLeaveInterval.user_id == user_id,
+        ).order_by(HabitLeaveInterval.leave_on.asc(), HabitLeaveInterval.created_at.asc()).all()
+
+    def _pause_habit_locked(self, habit: Habit, today: date) -> None:
+        open_interval = self.db.query(HabitPauseInterval).filter(
+            HabitPauseInterval.habit_id == habit.id,
+            HabitPauseInterval.user_id == habit.user_id,
+            HabitPauseInterval.resumed_on.is_(None),
+        ).order_by(HabitPauseInterval.paused_on.desc()).first()
+        if open_interval is None:
+            self.db.add(HabitPauseInterval(
+                habit_id=habit.id,
+                user_id=habit.user_id,
+                paused_on=today,
+            ))
+        habit.is_active = False
+
+    def _resume_habit_locked(self, habit: Habit, today: date) -> None:
+        open_interval = self.db.query(HabitPauseInterval).filter(
+            HabitPauseInterval.habit_id == habit.id,
+            HabitPauseInterval.user_id == habit.user_id,
+            HabitPauseInterval.resumed_on.is_(None),
+        ).order_by(HabitPauseInterval.paused_on.desc()).first()
+        if open_interval is not None:
+            open_interval.resumed_on = today
+        habit.is_active = True
+
+    @rollback_on_error
+    def pause_habit(self, habit: Habit, user_id: UUID) -> Habit:
+        today = self._today()
+        self.user_repo.lock(user_id)
+        self.db.refresh(habit)
+        if habit.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        self._pause_habit_locked(habit, today)
+        self.db.commit()
+        self.db.refresh(habit)
+        return self._set_completed_today(habit)
+
+    @rollback_on_error
+    def resume_habit(self, habit: Habit, user_id: UUID) -> Habit:
+        today = self._today()
+        self.user_repo.lock(user_id)
+        self.db.refresh(habit)
+        if habit.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        self._resume_habit_locked(habit, today)
+        self.db.commit()
+        self.db.refresh(habit)
+        return self._set_completed_today(habit)
+
+    @rollback_on_error
+    def create_habit_leave(self, habit: Habit, user_id: UUID, leave_in: HabitLeaveCreate) -> Habit:
+        today = self._today()
+        self.user_repo.lock(user_id)
+        self.db.refresh(habit)
+        if habit.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        if leave_in.leave_on < today:
+            raise HTTPException(status_code=422, detail="请假开始日期不能早于今天")
+        overlap = self.db.query(HabitLeaveInterval.id).filter(
+            HabitLeaveInterval.habit_id == habit.id,
+            HabitLeaveInterval.user_id == user_id,
+            HabitLeaveInterval.leave_on < leave_in.return_on,
+            HabitLeaveInterval.return_on > leave_in.leave_on,
+        ).first()
+        if overlap:
+            raise HTTPException(status_code=409, detail="请假区间与已有记录重叠")
+        self.db.add(HabitLeaveInterval(
+            habit_id=habit.id,
+            user_id=user_id,
+            leave_on=leave_in.leave_on,
+            return_on=leave_in.return_on,
+            reason=leave_in.reason,
+        ))
+        self.db.commit()
+        self.db.refresh(habit)
+        return self._set_completed_today(habit)
+
+    @rollback_on_error
+    def delete_habit_leave(self, habit: Habit, leave_id: UUID, user_id: UUID) -> Habit:
+        self.user_repo.lock(user_id)
+        self.db.refresh(habit)
+        if habit.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        leave = self.db.query(HabitLeaveInterval).filter(
+            HabitLeaveInterval.id == leave_id,
+            HabitLeaveInterval.habit_id == habit.id,
+            HabitLeaveInterval.user_id == user_id,
+        ).first()
+        if leave is None:
+            raise HTTPException(status_code=404, detail="请假记录不存在")
+        self.db.delete(leave)
+        self.db.commit()
+        self.db.refresh(habit)
+        return self._set_completed_today(habit)
+
+    @rollback_on_error
+    def backfill_habit(self, habit: Habit, user_id: UUID, completion_in: HabitBackfillCreate) -> Habit:
+        today = self._today()
+        completed_on = completion_in.completed_on
+        self.user_repo.lock(user_id)
+        self.db.refresh(habit)
+        if habit.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        if completed_on >= today:
+            raise HTTPException(status_code=422, detail="补记日期必须早于今天")
+        if completed_on < today - timedelta(days=90):
+            raise HTTPException(status_code=422, detail="补记最多支持最近 90 天")
+        created_on = self._local_date(habit.created_at) if habit.created_at else today
+        if completed_on < created_on:
+            raise HTTPException(status_code=422, detail="补记日期不能早于习惯创建日期")
+        if not is_due(habit, completed_on):
+            raise HTTPException(status_code=409, detail="补记日期不是该习惯的计划日")
+        pause_intervals = self._habit_pause_intervals(habit)
+        leave_intervals = self._habit_leave_intervals(habit)
+        if is_excluded_on(completed_on, pause_intervals, leave_intervals):
+            raise HTTPException(status_code=409, detail="补记日期处于暂停或请假区间")
+
+        existing = self.db.query(HabitCompletion).filter(
+            HabitCompletion.habit_id == habit.id,
+            HabitCompletion.user_id == user_id,
+            HabitCompletion.completed_on == completed_on,
+        ).first()
+        if existing is not None:
+            if completion_in.note is not None:
+                existing.note = completion_in.note
+        else:
+            if (
+                habit.frequency == "weekly_target"
+                and self._weekly_completion_count(habit.id, completed_on) >= habit.weekly_target
+            ):
+                raise HTTPException(status_code=409, detail="本周已完成目标次数")
+            completed_at = day_start_utc(completed_on) + timedelta(hours=12)
+            from app.services.habit_history import record_completion
+            record_completion(
+                self.db,
+                habit,
+                completed_at,
+                note=completion_in.note,
+                is_makeup=True,
+            )
+        self._recalculate_habit_streak(habit, pause_intervals, leave_intervals)
+        self.db.commit()
+        self.db.refresh(habit)
+        return self._set_completed_today(habit)
+
+    def get_habit_history(
+        self,
+        habit_id: UUID,
+        user_id: UUID,
+        start_on: Optional[date] = None,
+        end_on: Optional[date] = None,
+    ) -> dict:
+        habit = self.get_habit_for_user(habit_id, user_id)
+        today = self._today()
+        end_on = end_on or today
+        created_on = self._local_date(habit.created_at) if habit.created_at else end_on
+        start_on = start_on or max(created_on, end_on - timedelta(days=83))
+        if start_on > end_on:
+            raise HTTPException(status_code=422, detail="历史开始日期不能晚于结束日期")
+        if end_on > today:
+            raise HTTPException(status_code=422, detail="历史结束日期不能晚于今天")
+        if (end_on - start_on).days > 365:
+            raise HTTPException(status_code=422, detail="历史查询最多支持 366 天")
+
+        pause_intervals = self._habit_pause_intervals(habit)
+        leave_intervals = self._habit_leave_intervals(habit)
+        records = self.db.query(HabitCompletion).filter(
+            HabitCompletion.habit_id == habit.id,
+            HabitCompletion.user_id == user_id,
+        ).all()
+        completion_dates = {record.completed_on for record in records}
+        records_by_date = {
+            record.completed_on: record
+            for record in records
+            if start_on <= record.completed_on <= end_on
+        }
+        days = []
+        cursor = start_on
+        while cursor <= end_on:
+            paused = is_paused_on(pause_intervals, cursor)
+            excused = is_excused_on(leave_intervals, cursor)
+            scheduled = cursor >= created_on and is_due(habit, cursor) and not paused and not excused
+            record = records_by_date.get(cursor)
+            days.append({
+                "date": cursor,
+                "scheduled": scheduled,
+                "completed": record is not None,
+                "paused": paused,
+                "excused": excused,
+                "completion_id": record.id if record else None,
+                "completed_at": record.completed_at if record else None,
+                "note": record.note if record else None,
+                "is_makeup": bool(record.is_makeup) if record else False,
+            })
+            cursor += timedelta(days=1)
+
+        metrics = calculate_habit_metrics(
+            habit,
+            completion_dates,
+            start_on,
+            end_on,
+            pause_intervals,
+            leave_intervals,
+        )
+        return {
+            "habit_id": habit.id,
+            "start_on": start_on,
+            "end_on": end_on,
+            "total_completed": metrics.total_completed,
+            "scheduled_count": metrics.scheduled_count,
+            "completed_count": metrics.completed_count,
+            "completion_rate": metrics.completion_rate,
+            "days": days,
+        }
 
     @staticmethod
     def _coin_source_id(source: str, entity_id: UUID, completed_on: date = None) -> str:
@@ -171,31 +534,90 @@ class TodoService:
     def get_habits(self, user_id: UUID) -> List[Habit]:
         return [self._set_completed_today(habit) for habit in self.habit_repo.get_by_user(user_id)]
 
+    @rollback_on_error
     def update_habit(self, habit: Habit, habit_in: HabitUpdate) -> Habit:
+        self.user_repo.lock(habit.user_id)
+        self.db.refresh(habit)
         update_data = habit_in.model_dump(exclude_unset=True)
+        old_frequency = habit.frequency
+        old_weekdays = habit.weekdays
+        old_weekly_target = habit.weekly_target
+        desired_active = update_data.pop("is_active", None)
+        frequency = update_data.get("frequency", habit.frequency)
+        weekdays = update_data.get("weekdays", habit.weekdays)
+        weekly_target = update_data.get("weekly_target", habit.weekly_target)
+        if frequency is None or (frequency == "weekdays" and not weekdays):
+            raise HTTPException(status_code=422, detail="指定日期习惯至少需要一天")
+        if frequency != "weekdays":
+            if update_data.get("weekdays") is not None:
+                raise HTTPException(status_code=422, detail="仅指定日期习惯可设置执行日期")
+            update_data["weekdays"] = None
+            habit.weekdays = None
+        if frequency == "weekly_target" and weekly_target is None:
+            raise HTTPException(status_code=422, detail="每周目标习惯需要设置完成次数")
+        if frequency != "weekly_target":
+            if update_data.get("weekly_target") is not None:
+                raise HTTPException(status_code=422, detail="仅每周目标习惯可设置完成次数")
+            update_data["weekly_target"] = None
+            habit.weekly_target = None
+        if (
+            frequency != old_frequency
+            or weekdays != old_weekdays
+            or weekly_target != old_weekly_target
+        ):
+            update_data["streak"] = 0
+        if desired_active is False:
+            self._pause_habit_locked(habit, self._today())
+        elif desired_active is True:
+            self._resume_habit_locked(habit, self._today())
         return self._set_completed_today(self.habit_repo.update(habit, update_data))
 
     def delete_habit(self, habit_id: UUID) -> bool:
         return self.habit_repo.delete(habit_id)
 
-    @_completion_guard
-    def complete_habit(self, habit: Habit, user_id: UUID) -> Habit:
+    @rollback_on_error
+    def complete_habit(
+        self,
+        habit: Habit,
+        user_id: UUID,
+        completion_in: Optional[HabitCompletionCreate] = None,
+    ) -> Habit:
         """Mark habit as completed for today, incrementing streak and awarding rewards."""
         now = datetime.now(timezone.utc)
-        day_start = self._today_start_utc()
         completed_on = self._local_date(now)
-        changed = self.db.execute(update(Habit).where(
-            Habit.id == habit.id, Habit.user_id == user_id,
-            or_(Habit.last_completed_at.is_(None), Habit.last_completed_at < day_start),
-        ).values(last_completed_at=now, streak=Habit.streak + 1).execution_options(
-            synchronize_session=False
-        )).rowcount
-        if not changed:
-            self.db.refresh(habit)
+        self.user_repo.lock(user_id)
+        self.db.refresh(habit)
+        if habit.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        from app.services.habit_history import record_completion
+        if not habit.is_active:
+            raise HTTPException(status_code=409, detail="习惯已暂停")
+        if habit.frequency == "weekdays" and not is_due(habit, completed_on):
+            raise HTTPException(status_code=409, detail="今天不是该习惯的计划日")
+        pause_intervals = self._habit_pause_intervals(habit)
+        leave_intervals = self._habit_leave_intervals(habit)
+        if is_excluded_on(completed_on, pause_intervals, leave_intervals):
+            raise HTTPException(status_code=409, detail="今天处于暂停或请假区间")
+        existing = self.db.query(HabitCompletion).filter(
+            HabitCompletion.habit_id == habit.id,
+            HabitCompletion.user_id == user_id,
+            HabitCompletion.completed_on == completed_on,
+        ).first()
+        if existing is not None:
+            if completion_in is not None:
+                existing.note = completion_in.note
+            self.db.commit()
             return self._set_completed_today(habit)
-        self.db.execute(update(Habit).where(
-            Habit.id == habit.id, Habit.streak > Habit.best_streak
-        ).values(best_streak=Habit.streak).execution_options(synchronize_session=False))
+        weekly_target = habit.weekly_target if habit.frequency == "weekly_target" else None
+        if weekly_target is not None and self._weekly_completion_count(habit.id, completed_on) >= weekly_target:
+            raise HTTPException(status_code=409, detail="本周已完成目标次数")
+        record_completion(
+            self.db,
+            habit,
+            now,
+            note=completion_in.note if completion_in is not None else None,
+        )
+        self._recalculate_habit_streak(habit, pause_intervals, leave_intervals)
 
         user = self.user_repo.get_by_id(user_id)
         settlement = None
@@ -207,16 +629,38 @@ class TodoService:
                 cultivation_base_exp=CULTIVATION_REWARD_BASES["habit"],
             )
             self._check_achievements(user)
-            self.db.commit()
+        self.db.commit()
 
         self.habit_repo.db.refresh(habit)
         habit.cultivation_reward = settlement
         return self._set_completed_today(habit)
 
     # --- Task operations ---
+    def _validate_task_links(self, user_id: UUID, data: dict) -> None:
+        from app.services.project import ProjectService
+
+        project_id = data.get("project_id")
+        service = ProjectService(self.db)
+        if project_id is not None:
+            service.get_project_for_user(project_id, user_id)
+        for field, getter in (
+            ("phase_id", service.get_phase_for_project),
+            ("milestone_id", service.get_milestone_for_project),
+        ):
+            if data.get(field) is not None:
+                if project_id is None:
+                    raise HTTPException(status_code=400, detail="Task association requires a project")
+                if field == "phase_id":
+                    getter(data[field], project_id, for_update=True)
+                else:
+                    getter(data[field], project_id)
+
+    @rollback_on_error
     def create_task(self, user_id: UUID, task_in: TaskCreate) -> Task:
+        self.user_repo.lock(user_id)
         data = task_in.model_dump()
         data["user_id"] = user_id
+        self._validate_task_links(user_id, data)
         return self.task_repo.create(data)
 
     def get_tasks(self, user_id: UUID) -> List[Task]:
@@ -227,22 +671,48 @@ class TodoService:
             Task.user_id == user_id, Task.project_id == project_id
         ).all()
 
+    @rollback_on_error
     def update_task(self, task: Task, task_in: TaskUpdate) -> Task:
         update_data = task_in.model_dump(exclude_unset=True)
-        return self.task_repo.update(task, update_data)
+        self.user_repo.lock(task.user_id)
+        self.db.refresh(task)
+        if "project_id" in update_data and update_data["project_id"] != task.project_id:
+            update_data.setdefault("phase_id", None)
+            update_data.setdefault("milestone_id", None)
+        links = {field: update_data.get(field, getattr(task, field)) for field in ("project_id", "phase_id", "milestone_id")}
+        self._validate_task_links(task.user_id, links)
+        status = update_data.pop("status", None)
+        nullable = {"project_id", "phase_id", "milestone_id", "deadline", "start_date", "description"}
+        for field, value in update_data.items():
+            if value is not None or field in nullable:
+                setattr(task, field, value)
+        self.db.flush()
+        if status == TaskStatus.COMPLETED:
+            task = self.complete_task(task, task.user_id)
+        elif status is not None:
+            task.status = status
+            task.completed_at = None
+        self.db.commit()
+        self.db.refresh(task)
+        return task
 
     def delete_task(self, task_id: UUID) -> bool:
         return self.task_repo.delete(task_id)
 
-    @_completion_guard
+    @rollback_on_error
     def complete_task(self, task: Task, user_id: UUID) -> Task:
         """Complete a task and award coins and experience to the user."""
         now = datetime.now(timezone.utc)
+        self.user_repo.lock(user_id)
+        self.db.refresh(task)
+        if task.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
         changed = self.db.execute(update(Task).where(
             Task.id == task.id, Task.user_id == user_id, Task.status != TaskStatus.COMPLETED
         ).values(status=TaskStatus.COMPLETED, completed_at=now)).rowcount
         if not changed:
             self.db.refresh(task)
+            self.db.commit()
             return task
 
         user = self.user_repo.get_by_id(user_id)
@@ -283,15 +753,20 @@ class TodoService:
     def delete_goal(self, goal_id: UUID) -> bool:
         return self.goal_repo.delete(goal_id)
 
-    @_completion_guard
+    @rollback_on_error
     def complete_goal(self, goal: Goal, user_id: UUID) -> Goal:
         """Complete a goal and award coins and experience to the user."""
         now = datetime.now(timezone.utc)
+        self.user_repo.lock(user_id)
+        self.db.refresh(goal)
+        if goal.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
         changed = self.db.execute(update(Goal).where(
             Goal.id == goal.id, Goal.user_id == user_id, Goal.status != TaskStatus.COMPLETED
         ).values(status=TaskStatus.COMPLETED, progress=GOAL_COMPLETED_PROGRESS)).rowcount
         if not changed:
             self.db.refresh(goal)
+            self.db.commit()
             return goal
 
         user = self.user_repo.get_by_id(user_id)
@@ -383,7 +858,7 @@ class TodoService:
         self.achievement_service.check_and_unlock(uid, "goal_count", completed_goals, commit=False)
 
         # Check titles based on level
-        self.title_service.check_and_unlock(uid, "level", user.level)
+        self.title_service.check_and_unlock(uid, "level", user.level, commit=False)
 
     # --- Daily summary ---
     def get_daily_summary(self, user_id: UUID) -> dict:
@@ -394,11 +869,8 @@ class TodoService:
         habits = self.habit_repo.get_active_by_user(user_id)
         daily_habits = []
         for h in habits:
-            if h.frequency == "daily":
-                daily_habits.append(h)
-            elif h.frequency == "weekly" and today.weekday() == 0:  # Monday
-                daily_habits.append(h)
-            elif h.frequency == "monthly" and today.day == 1:
+            self._set_completed_today(h)
+            if h.scheduled_today:
                 daily_habits.append(h)
 
         # 2. Tasks with deadline today (or overdue and still pending)
@@ -407,7 +879,7 @@ class TodoService:
         due_tasks = [
             t
             for t in (pending_tasks + in_progress_tasks)
-            if t.deadline and t.deadline.date() <= today
+            if t.deadline and self._local_date(t.deadline) <= today
         ]
 
         # 3. Active goals (in_progress)
@@ -419,11 +891,19 @@ class TodoService:
                     "id": h.id,
                     "title": h.title,
                     "difficulty": h.difficulty,
-                    "completed_today": h.last_completed_at
-                    and h.last_completed_at.date() == today,
+                    "completed_today": h.completed_today,
                     "streak": h.streak,
                     "coins_reward": h.coins_reward,
                     "exp_reward": h.exp_reward,
+                    "frequency": h.frequency,
+                    "weekly_target": h.weekly_target,
+                    "weekly_completed": h.weekly_completed,
+                    "weekly_remaining": h.weekly_remaining,
+                    "total_completed": h.total_completed,
+                    "scheduled_count": h.scheduled_count,
+                    "completed_count": h.completed_count,
+                    "completion_rate": h.completion_rate,
+                    "excused_today": h.excused_today,
                 }
                 for h in daily_habits
             ],
@@ -433,7 +913,7 @@ class TodoService:
                     "title": t.title,
                     "difficulty": t.difficulty,
                     "status": t.status,
-                    "deadline": t.deadline.isoformat() if t.deadline else None,
+                    "deadline": as_utc(t.deadline).isoformat() if t.deadline else None,
                     "coins_reward": t.coins_reward,
                     "exp_reward": t.exp_reward,
                 }
@@ -445,7 +925,7 @@ class TodoService:
                     "title": g.title,
                     "difficulty": g.difficulty,
                     "progress": g.progress,
-                    "deadline": g.deadline.isoformat() if g.deadline else None,
+                    "deadline": as_utc(g.deadline).isoformat() if g.deadline else None,
                     "coins_reward": g.coins_reward,
                     "exp_reward": g.exp_reward,
                 }
@@ -456,7 +936,7 @@ class TodoService:
                 "completed_habits": sum(
                     1
                     for h in daily_habits
-                    if h.last_completed_at and h.last_completed_at.date() == today
+                    if h.completed_today
                 ),
                 "due_tasks": len(due_tasks),
                 "active_goals": len(active_goals),
@@ -478,8 +958,11 @@ class TodoService:
     def delete_subtask(self, subtask_id: UUID) -> bool:
         return self.subtask_repo.delete(subtask_id)
 
-    @_completion_guard
+    @rollback_on_error
     def complete_subtask(self, subtask: Subtask, user_id: UUID) -> Subtask:
+        self.user_repo.lock(user_id)
+        self.db.refresh(subtask)
+        self.get_task_for_user(subtask.task_id, user_id)
         if not subtask.is_completed:
             subtask.is_completed = True
         settlement = self.cultivation_service.settle_todo_reward(

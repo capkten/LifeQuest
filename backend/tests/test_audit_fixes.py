@@ -531,21 +531,47 @@ def test_transfer_commit_failure_rolls_back_both_accounts(database, monkeypatch)
 def test_habit_streak_respects_period_gaps(database, clock, frequency, previous, expected):
     session, factory = database
     user = make_user(session)
-    habit = Habit(user_id=user.id, title="习惯", frequency=frequency,
-                  last_completed_at=previous, streak=7, best_streak=7)
+    habit = Habit(user_id=user.id, title="习惯", frequency=frequency, streak=7, best_streak=7)
     session.add(habit)
+    session.flush()
+    if frequency == "daily":
+        completion_dates = [previous.date() - timedelta(days=offset) for offset in range(6, -1, -1)]
+    elif frequency == "weekly":
+        last_week = previous.date() - timedelta(days=previous.weekday())
+        completion_dates = [last_week - timedelta(days=7 * offset) for offset in range(6, -1, -1)]
+    else:
+        completion_dates = [
+            date(previous.year, previous.month - offset, 1)
+            if previous.month > offset
+            else date(previous.year - 1, previous.month - offset + 12, 1)
+            for offset in range(6, -1, -1)
+        ]
+    for completed_on in completion_dates:
+        session.add(HabitCompletion(
+            habit_id=habit.id,
+            user_id=user.id,
+            completed_on=completed_on,
+            completed_at=datetime.combine(completed_on, datetime.min.time()),
+        ))
     session.commit()
     TodoService(session).complete_habit(habit, user.id)
     assert habit.streak == expected
     assert habit.best_streak == max(7, expected)
-    assert session.query(HabitCompletion).filter_by(habit_id=habit.id).count() == 2
+    assert session.query(HabitCompletion).filter_by(habit_id=habit.id).count() == 8
 
 
 def test_habit_history_survives_new_completion_deactivation_and_deletion(database, clock):
     session, factory = database
     user = make_user(session)
-    habit = Habit(user_id=user.id, title="习惯", last_completed_at=datetime(2026, 9, 11, 2))
+    habit = Habit(user_id=user.id, title="习惯")
     session.add(habit)
+    session.flush()
+    session.add(HabitCompletion(
+        habit_id=habit.id,
+        user_id=user.id,
+        completed_on=date(2026, 9, 11),
+        completed_at=datetime(2026, 9, 11, 2),
+    ))
     session.commit()
     service = StatsService(session)
     TodoService(session).complete_habit(habit, user.id)
