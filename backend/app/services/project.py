@@ -101,7 +101,10 @@ class ProjectService:
         stats = self._compute_project_stats(project)
         phases = self.phase_repo.get_by_project_ordered(project_id)
         milestones = self.milestone_repo.get_by_project_ordered(project_id)
-        tasks = self.db.query(Task).filter(Task.project_id == project_id).all()
+        tasks = self.db.query(Task).filter(
+            Task.project_id == project_id,
+            Task.user_id == project.user_id,
+        ).all()
         stats["phases"] = phases
         stats["milestones"] = milestones
         stats["tasks"] = tasks
@@ -237,10 +240,14 @@ class ProjectService:
     def get_project_tasks(
         self,
         project_id: UUID,
+        user_id: UUID,
         phase_id: Optional[UUID] = None,
         milestone_id: Optional[UUID] = None,
     ) -> List[Task]:
-        query = self.db.query(Task).filter(Task.project_id == project_id)
+        query = self.db.query(Task).filter(
+            Task.project_id == project_id,
+            Task.user_id == user_id,
+        )
         if phase_id:
             query = query.filter(Task.phase_id == phase_id)
         if milestone_id:
@@ -285,9 +292,14 @@ class ProjectService:
 
     # --- Stats helper ---
     def _compute_project_stats(self, project: Project) -> dict:
-        total = self.db.query(Task).filter(Task.project_id == project.id).count()
+        total = self.db.query(Task).filter(
+            Task.project_id == project.id,
+            Task.user_id == project.user_id,
+        ).count()
         completed = self.db.query(Task).filter(
-            Task.project_id == project.id, Task.status == TaskStatus.COMPLETED
+            Task.project_id == project.id,
+            Task.user_id == project.user_id,
+            Task.status == TaskStatus.COMPLETED,
         ).count()
         progress = (completed / total * 100) if total > 0 else 0.0
         return {

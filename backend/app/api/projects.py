@@ -266,7 +266,7 @@ def get_project_tasks(
 ):
     service = ProjectService(db)
     service.get_project_for_user(project_id, current_user.id)
-    tasks = service.get_project_tasks(project_id, phase_id, milestone_id)
+    tasks = service.get_project_tasks(project_id, current_user.id, phase_id, milestone_id)
     # Populate project_name and project_color
     result = []
     for t in tasks:
