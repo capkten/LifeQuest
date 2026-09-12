@@ -140,8 +140,8 @@ const emit = defineEmits(['changed'])
 const authStore = useAuthStore()
 const cultivationStore = useCultivationStore()
 const {
-  data, loading, loadError, actionError, feedback, warning, pendingAction, busy,
-  draft, editingFocus, focusDraft, focusError, candidates, draftTasks,
+  data, loading, loadError, actionError, feedback, warning, pendingAction,
+  draft, editingFocus, focusDraft, focusError,
   load, createTask, completeTask, beginFocus, cancelFocus, toggleFocus, moveFocus, saveFocus, dispose
 } = useDailyWorkbench(todoService, {
   refreshRewards: () => Promise.all([authStore.fetchUser(), cultivationStore.refresh()]),
@@ -153,6 +153,14 @@ const focusTrigger = ref(null)
 const focusSearchInput = ref(null)
 const focusSearch = ref('')
 const expandedGroups = ref({})
+const busy = computed(() => pendingAction.value !== null)
+const candidates = computed(() => [...new Map([
+  ...(data.value?.focus_tasks || []),
+  ...Object.values(data.value?.task_groups || {}).flat()
+].map(task => [task.id, task])).values()])
+const draftTasks = computed(() => focusDraft.value.map(id =>
+  candidates.value.find(task => task.id === id) || { id, title: '任务已不可用，请移除后重选' }
+))
 const filteredCandidates = computed(() => candidates.value.filter(task => task.title.toLocaleLowerCase().includes(focusSearch.value.trim().toLocaleLowerCase())))
 const taskGroups = [
   { key: 'today', label: '今日到期', empty: '今天没有待完成的到期任务。' },

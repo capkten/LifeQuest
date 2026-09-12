@@ -266,8 +266,8 @@ export function useDailyWorkbench(api, {
   }
 
   return {
-    data, loading, loadError, actionError, feedback, warning, pendingAction, busy,
-    draft, editingFocus, focusDraft, focusError, candidates, draftTasks,
+    data, loading, loadError, actionError, feedback, warning, pendingAction,
+    draft, editingFocus, focusDraft, focusError,
     load, createTask, completeTask, beginFocus, cancelFocus, toggleFocus, moveFocus, saveFocus, dispose
   }
 }

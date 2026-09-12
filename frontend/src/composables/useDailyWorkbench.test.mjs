@@ -48,6 +48,17 @@ test('workbench re-exports the shared China date implementation', () => {
   assert.equal(chinaDateKey, utilityChinaDateKey)
 })
 
+test('workbench public state does not expose derived reactive internals', () => {
+  const { state } = harness()
+
+  for (const key of ['data', 'loading', 'loadError', 'actionError', 'feedback', 'warning', 'pendingAction', 'draft', 'editingFocus', 'focusDraft', 'focusError']) {
+    assert.ok(key in state)
+  }
+  assert.equal('busy' in state, false)
+  assert.equal('candidates' in state, false)
+  assert.equal('draftTasks' in state, false)
+})
+
 test('failed initial load is not presented as a legitimate empty workbench', async () => {
   const { state } = harness({ getWorkbench: async () => { throw new Error('offline') } })
   assert.equal(await state.load(), false)
@@ -96,7 +107,7 @@ test('pending completion suppresses duplicate requests and preserves failure con
   assert.equal(await pending, false)
   assert.equal(state.data.value.focus_tasks[0].status, 'pending')
   assert.ok(state.actionError.value)
-  assert.equal(state.busy.value, false)
+  assert.equal(state.pendingAction.value, null)
 })
 
 test('refresh failures do not undo a committed completion or report it as failed', async () => {
