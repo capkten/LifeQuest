@@ -345,6 +345,14 @@ test('habit entry points respect all server lock fields and non-retryable refres
   assert.match(todos, /无需再次提交/)
 })
 
+test('habit history initializes date forms when mounted already visible', async () => {
+  const source = await readFile(new URL('../components/HabitHistoryDialog.vue', import.meta.url), 'utf8')
+  const mounted = source.match(/onMounted\(\(\) => \{([\s\S]*?)\n\}\)/)?.[1]
+
+  assert.ok(mounted, 'habit history needs a mounted lifecycle handler')
+  assert.match(mounted, /if \(props\.visible\) \{[\s\S]*resetForms\(\)[\s\S]*loadHistory\(\)/)
+})
+
 test('notes preserve prior results and expose retryable errors for search and discovery', async () => {
   const source = await readFile(new URL('./Notes.vue', viewsDirectory), 'utf8')
 

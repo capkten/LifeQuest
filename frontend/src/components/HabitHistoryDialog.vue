@@ -363,7 +363,10 @@ watch(() => props.habit?.last_completed_at, (current, previous) => {
 })
 
 onMounted(() => {
-  if (props.visible) loadHistory()
+  if (props.visible) {
+    resetForms()
+    loadHistory()
+  }
 })
 </script>
 

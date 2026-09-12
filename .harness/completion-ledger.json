@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-22",
-  "branch": "codex/notebook-write-race-closure",
+  "generated_at": "2026-09-12",
+  "branch": "main",
   "model": "gpt-5.6luna",
   "items": {
     "general-stability": "implemented",
@@ -12,13 +12,28 @@
     "backend-unit-regression-suite": "verified",
     "frontend-regression-suite": "verified",
     "production-build": "verified",
-    "authenticated-four-viewport-browser-contracts": "planned",
-    "deployment-healthcheck": "planned"
+    "authenticated-four-viewport-browser-contracts": "verified",
+    "deployment-healthcheck": "planned",
+    "stability-sec-01-project-read-isolation": "verified",
+    "stability-fin-01-atomic-transaction-updates": "verified",
+    "stability-fin-02-china-day-finance-rewards": "verified",
+    "stability-hab-01-weekly-target-metrics": "verified",
+    "stability-hab-02-weekly-capacity": "verified",
+    "stability-date-01-china-date-contract": "verified",
+    "feat-01-daily-workbench": "verified",
+    "feat-02-habit-records": "verified",
+    "android-real-device": "planned",
+    "android-production-signing": "planned",
+    "github-actions-test-and-deploy": "planned",
+    "github-actions-android-release": "planned",
+    "github-release-artifacts": "planned"
   },
   "evidence": {
-    "backend": "306 passed",
-    "frontend": "102 passed",
-    "build": "successful; main entry chunk reduced from approximately 1498 kB to 1040 kB",
-    "browser": "not verified in this workspace because the strict runner and authenticated fixture are absent"
+    "backend": "404 passed, 952 warnings in 119.73s",
+    "frontend": "155 passed, 0 failed",
+    "build": "successful at 1.14.0; 2031 modules; existing >500 kB warning: index 1050.71 kB and element-plus 1069.31 kB",
+    "browser": "21 core checks and 24 fixed-clock checks passed; .superpowers/sdd/2026-09-12-lifequest-stability-workbench-habits/evidence-2026-09-12/",
+    "verification_report": "docs/superpowers/reports/2026-09-12-lifequest-stability-workbench-habits-verification.md",
+    "external_release": "pending: Android real device, production signing, both GitHub Actions final success conclusions, GitHub Release artifacts, and live health check"
   }
 }
