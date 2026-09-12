@@ -548,6 +548,15 @@ def test_legacy_foreign_project_name_is_not_exposed(client, db_session):
     db_session.commit()
     headers = {"Authorization": "Bearer " + create_access_token({"sub": str(user.id)})}
     tasks = client.get("/api/todos/tasks", headers=headers).json()
+    assert tasks[0]["project_id"] is None
     assert tasks[0]["project_name"] is None
+    assert tasks[0]["project_color"] is None
     events = client.get("/api/calendar/events?start=2026-09-12&end=2026-09-12", headers=headers).json()
+    assert events[0]["project_id"] is None
     assert events[0]["project_name"] is None
+    assert events[0]["project_color"] is None
+    day = client.get("/api/calendar/day/2026-09-12", headers=headers)
+    assert day.status_code == 200
+    assert day.json()["tasks"][0]["project_id"] is None
+    assert day.json()["tasks"][0]["project_name"] is None
+    assert day.json()["tasks"][0]["project_color"] is None
