@@ -85,7 +85,7 @@ export function weekdayForDateKey(dateKey) {
 export function formatChinaDate(value, options = {}) {
   const date = isDateKey(value) ? dateForDateKey(value) : dateFromValue(value)
   if (!date) return ''
-  return new Intl.DateTimeFormat('zh-CN', { timeZone: CHINA_TIME_ZONE, ...options }).format(date)
+  return new Intl.DateTimeFormat('zh-CN', { ...options, timeZone: CHINA_TIME_ZONE }).format(date)
 }
 
 export function formatChinaDateTime(value, options = {}) {
@@ -93,7 +93,6 @@ export function formatChinaDateTime(value, options = {}) {
   const date = dateFromValue(value)
   if (!date) return ''
   return new Intl.DateTimeFormat('zh-CN', {
-    timeZone: CHINA_TIME_ZONE,
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -101,5 +100,6 @@ export function formatChinaDateTime(value, options = {}) {
     minute: '2-digit',
     hourCycle: 'h23',
     ...options,
+    timeZone: CHINA_TIME_ZONE,
   }).format(date)
 }
