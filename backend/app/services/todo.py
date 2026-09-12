@@ -592,7 +592,7 @@ class TodoService:
         from app.services.habit_history import record_completion
         if not habit.is_active:
             raise HTTPException(status_code=409, detail="习惯已暂停")
-        if habit.frequency == "weekdays" and not is_due(habit, completed_on):
+        if not is_due(habit, completed_on):
             raise HTTPException(status_code=409, detail="今天不是该习惯的计划日")
         pause_intervals = self._habit_pause_intervals(habit)
         leave_intervals = self._habit_leave_intervals(habit)

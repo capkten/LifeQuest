@@ -531,6 +531,10 @@ def test_transfer_commit_failure_rolls_back_both_accounts(database, monkeypatch)
 def test_habit_streak_respects_period_gaps(database, clock, frequency, previous, expected):
     session, factory = database
     user = make_user(session)
+    if frequency == "weekly":
+        clock(datetime(2026, 9, 7, 2, tzinfo=timezone.utc))
+    elif frequency == "monthly":
+        clock(datetime(2026, 9, 1, 2, tzinfo=timezone.utc))
     habit = Habit(user_id=user.id, title="习惯", frequency=frequency, streak=7, best_streak=7)
     session.add(habit)
     session.flush()

@@ -212,6 +212,42 @@ def test_schedule_change_resets_current_streak_not_history(client, db_session, c
         service.complete_habit(habit, user.id)
 
 
+@pytest.mark.parametrize("frequency,completed_at", [
+    ("weekly", datetime(2026, 9, 8, 2, tzinfo=timezone.utc)),
+    ("monthly", datetime(2026, 9, 2, 2, tzinfo=timezone.utc)),
+])
+def test_off_plan_normal_completion_is_rejected_without_reward_or_streak_change(
+    client, db_session, clock, frequency, completed_at,
+):
+    user = make_user(db_session)
+    habit = Habit(
+        user_id=user.id,
+        title="非计划日",
+        frequency=frequency,
+        streak=4,
+        best_streak=5,
+        created_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+    )
+    db_session.add(habit)
+    db_session.commit()
+    service = TodoService(db_session)
+    before_coins = user.coins
+    before_experience = user.experience
+    clock(completed_at)
+
+    with pytest.raises(HTTPException) as error:
+        service.complete_habit(habit, user.id)
+
+    assert error.value.status_code == 409
+    db_session.refresh(user)
+    db_session.refresh(habit)
+    assert db_session.query(HabitCompletion).filter_by(habit_id=habit.id).count() == 0
+    assert user.coins == before_coins
+    assert user.experience == before_experience
+    assert habit.streak == 4
+    assert habit.best_streak == 5
+
+
 def test_weekly_target_counts_days_caps_rewards_and_advances_weekly_streak(client, db_session, clock):
     user = make_user(db_session)
     service = TodoService(db_session)
