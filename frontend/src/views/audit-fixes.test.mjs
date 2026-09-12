@@ -69,3 +69,14 @@ test('habit history ignores stale responses and identifies weekly targets as pla
   assert.match(source, /计划槽位/)
   assert.match(source, /计划日/)
 })
+
+test('habit history keeps business-locked check-ins clickable with their reason', async () => {
+  const source = await readFile(new URL('../components/HabitHistoryDialog.vue', import.meta.url), 'utf8')
+
+  assert.match(source, /:disabled="busy"/)
+  assert.doesNotMatch(source, /:disabled="busy \|\| !canCompleteToday"/)
+  assert.match(source, /:aria-disabled="!canCompleteToday"/)
+  assert.match(source, /:title="todayBlockedReason"/)
+  assert.match(source, /v-if="!canCompleteToday"[\s\S]*todayBlockedReason/)
+  assert.match(source, /if \(!canCompleteToday\.value \|\| busy\.value\) return/)
+})
