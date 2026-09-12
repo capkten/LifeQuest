@@ -221,6 +221,10 @@ class FinanceService:
             raise HTTPException(
                 status_code=400, detail="Use /accounts/transfer for transfers"
             )
+        if data.to_account_id is not None:
+            raise HTTPException(
+                status_code=400, detail="Non-transfer transactions cannot have a target account"
+            )
 
         account = self._get_account_for_user(data.account_id, user_id)
         self._validate_category_for_user(data.category_id, user_id)
@@ -362,6 +366,8 @@ class FinanceService:
     # --- Recurring ---
 
     def create_recurring(self, user_id: UUID, data: RecurringCreate) -> RecurringTransaction:
+        if data.type == FinanceTransactionType.TRANSFER:
+            raise HTTPException(status_code=400, detail="Recurring transfers are not supported")
         self._get_account_for_user(data.account_id, user_id)
         self._validate_category_for_user(data.category_id, user_id)
         d = data.model_dump()

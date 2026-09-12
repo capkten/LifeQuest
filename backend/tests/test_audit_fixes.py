@@ -20,7 +20,7 @@ from app.models.todo import Habit, Task, TaskStatus
 from app.models.user import User
 from app.models.finance_transaction import FinanceTransaction
 from app.models.recurring_transaction import RecurringTransaction
-from app.schemas.finance import TransactionCreate, TransactionUpdate
+from app.schemas.finance import RecurringCreate, TransactionCreate, TransactionUpdate
 from app.schemas.shop import ExchangeHistoryCreate
 from app.schemas.todo import TaskCreate, TaskUpdate
 from app.services.auth import create_access_token
@@ -452,6 +452,54 @@ def test_same_china_day_finance_reward_is_awarded_only_for_first_transaction(dat
     assert first_experience == 7
     assert user.experience == 9
     assert session.query(FinanceTransaction).filter_by(user_id=user.id, date=date(2026, 9, 12)).count() == 2
+
+
+def test_non_transfer_transaction_rejects_target_account(database):
+    session, factory = database
+    user = make_user(session)
+    other = make_user(session)
+    account = make_account(session, user, 100)
+    foreign_target = make_account(session, other, 100)
+
+    with pytest.raises(HTTPException) as error:
+        FinanceService(session).create_transaction(
+            user.id,
+            TransactionCreate(
+                account_id=account.id,
+                to_account_id=foreign_target.id,
+                type="expense",
+                amount=10,
+                date=date(2026, 9, 12),
+            ),
+        )
+
+    assert error.value.status_code == 400
+    session.refresh(account)
+    session.refresh(foreign_target)
+    assert account.balance == 100
+    assert foreign_target.balance == 100
+    assert session.query(FinanceTransaction).count() == 0
+
+
+def test_recurring_transfer_is_rejected_before_persistence(database):
+    session, factory = database
+    user = make_user(session)
+    account = make_account(session, user, 100)
+
+    with pytest.raises(HTTPException) as error:
+        FinanceService(session).create_recurring(
+            user.id,
+            RecurringCreate(
+                account_id=account.id,
+                type="transfer",
+                amount=10,
+                frequency="daily",
+                next_date=date(2026, 9, 12),
+            ),
+        )
+
+    assert error.value.status_code == 400
+    assert session.query(RecurringTransaction).count() == 0
 
 
 def test_transfer_commit_failure_rolls_back_both_accounts(database, monkeypatch):
