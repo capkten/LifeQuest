@@ -1,10 +1,11 @@
 from datetime import date, timezone
+from decimal import Decimal
 import logging
 from typing import List, Optional
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import func
+from sqlalchemy import func, update
 from sqlalchemy.orm import Session
 
 from app.models.account import Account
@@ -29,6 +30,8 @@ from app.schemas.finance import (
     DebtCreate, DebtUpdate, DebtPaymentCreate,
 )
 from app.services.achievement import AchievementService
+from app.services.transaction import rollback_on_error
+from app.timezone import today as china_today
 
 
 class FinanceService:
@@ -67,6 +70,27 @@ class FinanceService:
         category = self.category_repo.get_by_id(category_id)
         if not category or (not category.is_system and category.user_id != user_id):
             raise HTTPException(status_code=404, detail="Category not found")
+
+    def _change_balance(self, account_id: UUID, amount: Decimal, require_sufficient: bool = False) -> None:
+        amount = Decimal(str(amount))
+        statement = update(Account).where(Account.id == account_id)
+        if require_sufficient and amount < 0:
+            statement = statement.where(Account.balance >= -amount)
+        changed = self.db.execute(
+            statement.values(balance=Account.balance + amount)
+            .execution_options(synchronize_session=False)
+        ).rowcount
+        if not changed:
+            raise HTTPException(status_code=400, detail="Insufficient balance or account unavailable")
+
+    def _lock_transaction(self, transaction_id: UUID, user_id: UUID) -> FinanceTransaction:
+        self.user_repo.lock(user_id)
+        transaction = self.db.query(FinanceTransaction).filter_by(
+            id=transaction_id, user_id=user_id,
+        ).populate_existing().first()
+        if transaction is None:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        return transaction
 
     # --- Seed categories ---
 
@@ -111,10 +135,13 @@ class FinanceService:
         self.db.refresh(account)
         return True
 
+    @rollback_on_error
     def transfer(
         self, user_id: UUID, from_id: UUID, to_id: UUID,
         amount: float, description: str = "", transfer_date: date | None = None,
     ) -> dict:
+        self.user_repo.lock(user_id)
+        amount = Decimal(str(amount))
         if amount <= 0:
             raise HTTPException(status_code=422, detail="Amount must be greater than zero")
         from_acc = self.account_repo.get_by_id(from_id)
@@ -123,8 +150,8 @@ class FinanceService:
             raise HTTPException(status_code=404, detail="Source account not found")
         if not to_acc or to_acc.user_id != user_id:
             raise HTTPException(status_code=404, detail="Target account not found")
-        if float(from_acc.balance) < amount:
-            raise HTTPException(status_code=400, detail="Insufficient balance")
+        if from_id == to_id:
+            raise HTTPException(status_code=400, detail="Source and target accounts must differ")
 
         # Create transfer transaction + update both balances atomically
         txn = FinanceTransaction(
@@ -133,35 +160,31 @@ class FinanceService:
             type=FinanceTransactionType.TRANSFER,
             amount=amount,
             description=description or f"转账：{from_acc.name} -> {to_acc.name}",
-            date=transfer_date or date.today(),
+            date=transfer_date or china_today(),
             to_account_id=to_id,
         )
         self.db.add(txn)
-        from_acc.balance = float(from_acc.balance) - amount
-        to_acc.balance = float(to_acc.balance) + amount
+        self._change_balance(from_id, -amount, require_sufficient=True)
+        self._change_balance(to_id, amount)
         self.db.commit()
         self.db.refresh(txn)
         return {"transaction": txn, "from_balance": from_acc.balance, "to_balance": to_acc.balance}
 
     def _apply_transaction_balance_effect(self, transaction: FinanceTransaction, reverse: bool = False) -> None:
         multiplier = -1 if reverse else 1
-        amount = float(transaction.amount) * multiplier
+        amount = Decimal(str(transaction.amount)) * multiplier
 
         if transaction.type == FinanceTransactionType.INCOME:
-            account = self.account_repo.get_by_id(transaction.account_id)
-            if account:
-                account.balance = float(account.balance) + amount
+            self._change_balance(transaction.account_id, amount)
         elif transaction.type == FinanceTransactionType.EXPENSE:
-            account = self.account_repo.get_by_id(transaction.account_id)
-            if account:
-                account.balance = float(account.balance) - amount
+            self._change_balance(
+                transaction.account_id, -amount, require_sufficient=not reverse,
+            )
         elif transaction.type == FinanceTransactionType.TRANSFER:
-            from_acc = self.account_repo.get_by_id(transaction.account_id)
-            to_acc = self.account_repo.get_by_id(transaction.to_account_id) if transaction.to_account_id else None
-            if from_acc:
-                from_acc.balance = float(from_acc.balance) - amount
-            if to_acc:
-                to_acc.balance = float(to_acc.balance) + amount
+            self._change_balance(
+                transaction.account_id, -amount, require_sufficient=not reverse,
+            )
+            self._change_balance(transaction.to_account_id, amount)
 
     # --- Category CRUD ---
 
@@ -191,7 +214,9 @@ class FinanceService:
 
     # --- Transaction CRUD ---
 
+    @rollback_on_error
     def create_transaction(self, user_id: UUID, data: TransactionCreate) -> FinanceTransaction:
+        self.user_repo.lock(user_id)
         if data.type == FinanceTransactionType.TRANSFER:
             raise HTTPException(
                 status_code=400, detail="Use /accounts/transfer for transfers"
@@ -203,18 +228,15 @@ class FinanceService:
         d = data.model_dump()
         d["user_id"] = user_id
         if not d.get("date"):
-            d["date"] = date.today()
+            d["date"] = china_today()
 
         # Create transaction and update account balance atomically
         txn = FinanceTransaction(**d)
         self.db.add(txn)
-        if data.type == FinanceTransactionType.INCOME:
-            account.balance = float(account.balance) + data.amount
-        elif data.type == FinanceTransactionType.EXPENSE:
-            account.balance = float(account.balance) - data.amount
+        self._apply_transaction_balance_effect(txn)
         try:
-            self._award_transaction_exp(user_id)
             self.db.flush()
+            self._award_transaction_exp(user_id)
             count = self.transaction_repo.count_by_user(user_id)
             self.achievement_service.check_and_unlock(
                 user_id, "transaction_count", count, commit=False
@@ -257,31 +279,43 @@ class FinanceService:
             "has_more": offset + len(txns) < total,
         }
 
+    @rollback_on_error
     def update_transaction(
         self, transaction: FinanceTransaction, data: TransactionUpdate, user_id: UUID
     ) -> FinanceTransaction:
+        transaction = self._lock_transaction(transaction.id, user_id)
         update_data = data.model_dump(exclude_unset=True)
         new_account_id = update_data.get("account_id", transaction.account_id)
         new_category_id = update_data.get("category_id", transaction.category_id)
         new_type = update_data.get("type", transaction.type)
+        new_amount = Decimal(str(update_data.get("amount", transaction.amount)))
         new_to_account_id = update_data.get("to_account_id", transaction.to_account_id)
         self._get_account_for_user(new_account_id, user_id)
         self._validate_category_for_user(new_category_id, user_id)
+        if new_amount <= 0:
+            raise HTTPException(status_code=422, detail="Amount must be greater than zero")
         if new_type == FinanceTransactionType.TRANSFER and not new_to_account_id:
             raise HTTPException(status_code=400, detail="Transfer requires target account")
-        if new_to_account_id:
+        if new_type == FinanceTransactionType.TRANSFER:
             self._get_account_for_user(new_to_account_id, user_id)
+            if new_account_id == new_to_account_id:
+                raise HTTPException(status_code=400, detail="Source and target accounts must differ")
+        elif new_to_account_id:
+            raise HTTPException(status_code=400, detail="Non-transfer transactions cannot have a target account")
 
         self._apply_transaction_balance_effect(transaction, reverse=True)
         for key, value in update_data.items():
             setattr(transaction, key, value)
+        self.db.flush()
         self._apply_transaction_balance_effect(transaction, reverse=False)
 
         self.db.commit()
         self.db.refresh(transaction)
         return transaction
 
+    @rollback_on_error
     def delete_transaction(self, transaction: FinanceTransaction) -> bool:
+        transaction = self._lock_transaction(transaction.id, transaction.user_id)
         # Reverse the balance change
         self._apply_transaction_balance_effect(transaction, reverse=True)
         self.db.delete(transaction)
@@ -298,7 +332,7 @@ class FinanceService:
 
     def get_budgets(self, user_id: UUID) -> List[dict]:
         budgets = self.budget_repo.get_by_user(user_id)
-        today = date.today()
+        today = china_today()
         result = []
         for b in budgets:
             spent = self.budget_repo.get_spent_amount(b, today.year, today.month)
@@ -345,18 +379,25 @@ class FinanceService:
     def delete_recurring(self, rec: RecurringTransaction) -> bool:
         return self.recurring_repo.delete(rec.id)
 
+    @rollback_on_error
     def trigger_recurring(self, recurring: RecurringTransaction) -> FinanceTransaction:
+        requested_date = recurring.next_date
+        self.user_repo.lock(recurring.user_id)
+        self.db.refresh(recurring)
         # Idempotency: check if already triggered for this date
         existing = (
             self.db.query(FinanceTransaction)
             .filter(
                 FinanceTransaction.recurring_id == recurring.id,
-                FinanceTransaction.date == recurring.next_date,
+                FinanceTransaction.date == requested_date,
             )
             .first()
         )
         if existing:
+            self.db.commit()
             return existing
+        if recurring.next_date != requested_date:
+            raise HTTPException(status_code=409, detail="Recurring date changed; reload before retrying")
 
         # Create the actual transaction
         txn = FinanceTransaction(
@@ -372,12 +413,7 @@ class FinanceService:
         self.db.add(txn)
 
         # Update account balance
-        account = self.account_repo.get_by_id(recurring.account_id)
-        if account:
-            if recurring.type == FinanceTransactionType.INCOME:
-                account.balance = float(account.balance) + float(recurring.amount)
-            elif recurring.type == FinanceTransactionType.EXPENSE:
-                account.balance = float(account.balance) - float(recurring.amount)
+        self._apply_transaction_balance_effect(txn)
 
         # Advance next_date based on frequency
         from datetime import timedelta
@@ -432,12 +468,15 @@ class FinanceService:
     def delete_debt(self, debt: Debt) -> bool:
         return self.debt_repo.delete(debt.id)
 
+    @rollback_on_error
     def add_payment(
         self, debt_id: UUID, user_id: UUID, data: DebtPaymentCreate
     ) -> DebtPayment:
+        self.user_repo.lock(user_id)
         debt = self.debt_repo.get_by_id(debt_id)
         if not debt or debt.user_id != user_id:
             raise HTTPException(status_code=404, detail="Debt not found")
+        self.db.refresh(debt)
         if debt.status == DebtStatus.SETTLED:
             raise HTTPException(status_code=400, detail="Debt already settled")
         if data.amount > debt.remaining:
@@ -451,7 +490,7 @@ class FinanceService:
         )
         self.db.add(payment)
 
-        debt.remaining = float(debt.remaining) - data.amount
+        debt.remaining = Decimal(str(debt.remaining)) - Decimal(str(data.amount))
         if debt.remaining <= 0:
             debt.remaining = 0
             debt.status = DebtStatus.SETTLED
@@ -463,7 +502,7 @@ class FinanceService:
     # --- Dashboard ---
 
     def get_dashboard(self, user_id: UUID) -> dict:
-        today = date.today()
+        today = china_today()
         total_balance = self.account_repo.get_total_balance(user_id)
         month_summary = self.transaction_repo.get_month_summary(
             user_id, today.year, today.month
@@ -492,7 +531,7 @@ class FinanceService:
             return
         exp = 2
         # +5 bonus for first finance transaction of the day
-        today_start = date.today()
+        today_start = china_today()
         existing_today = (
             self.db.query(FinanceTransaction)
             .filter(

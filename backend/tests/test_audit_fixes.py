@@ -412,6 +412,48 @@ def test_stale_transaction_update_and_delete_reverse_latest_amount(database):
     assert account.balance == 100
 
 
+def test_updating_transfer_beyond_source_balance_rolls_back_everything(database):
+    session, factory = database
+    user = make_user(session)
+    source, target = make_account(session, user, 100), make_account(session, user, 0)
+    created = FinanceService(session).transfer(user.id, source.id, target.id, 80)
+    transaction = created["transaction"]
+
+    with pytest.raises(HTTPException) as error:
+        FinanceService(session).update_transaction(
+            transaction,
+            TransactionUpdate(amount=150),
+            user.id,
+        )
+
+    assert error.value.status_code == 400
+    session.refresh(source)
+    session.refresh(target)
+    session.refresh(transaction)
+    assert source.balance == 20
+    assert target.balance == 80
+    assert transaction.amount == Decimal("80.00")
+    assert transaction.type == "transfer"
+    assert session.query(FinanceTransaction).count() == 1
+
+
+def test_same_china_day_finance_reward_is_awarded_only_for_first_transaction(database):
+    session, factory = database
+    user = make_user(session)
+    account = make_account(session, user, 100)
+    service = FinanceService(session)
+
+    expense(session, user.id, account.id, 10)
+    session.refresh(user)
+    first_experience = user.experience
+    expense(session, user.id, account.id, 10)
+    session.refresh(user)
+
+    assert first_experience == 7
+    assert user.experience == 9
+    assert session.query(FinanceTransaction).filter_by(user_id=user.id, date=date(2026, 9, 12)).count() == 2
+
+
 def test_transfer_commit_failure_rolls_back_both_accounts(database, monkeypatch):
     session, factory = database
     user = make_user(session)
