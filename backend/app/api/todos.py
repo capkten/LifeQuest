@@ -130,9 +130,11 @@ def get_tasks(
     result = []
     for t in tasks:
         resp = TaskResponse.model_validate(t)
-        if t.project:
+        if t.project and t.project.user_id == current_user.id:
             resp.project_name = t.project.name
             resp.project_color = t.project.color
+        else:
+            resp.project_id = None
         result.append(resp)
     return result
 
