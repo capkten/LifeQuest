@@ -230,9 +230,13 @@ test('todo habit completion uses the server completed_today field for all lock s
 
   assert.match(source, /'todo-card--completed': habit\.completed_today/)
   assert.match(source, /'complete-btn--done': habit\.completed_today/)
-  assert.match(source, /:aria-disabled="habit\.completed_today"/)
+  assert.match(source, /:disabled="completingId === habit\.id"/)
+  assert.match(source, /:aria-disabled="Boolean\(habitBlockReason\(habit\)\)"/)
+  assert.match(source, /function habitBlockReason\(habit\)/)
   assert.match(source, /if \(habit\.completed_today\)/)
-  assert.doesNotMatch(source, /habit\.is_active/)
+  assert.match(source, /v-model="form\.weekdays" type="checkbox"/)
+  assert.match(source, /v-model\.number="form\.weekly_target"/)
+  assert.match(source, /habit\.weekly_completed.*habit\.weekly_target/)
 })
 
 test('todo task filters use project buttons and show unfinished tasks first', async () => {
@@ -319,6 +323,26 @@ test('home daily summary keeps request failures separate from the legitimate emp
   assert.match(source, /dailyError/)
   assert.match(source, /v-else-if="dailyError"[\s\S]*重试[\s\S]*fetchDailySummary/)
   assert.match(source, /dailyError\.value\s*=\s*getErrorMessage\(e/)
+})
+
+test('habit entry points respect all server lock fields and non-retryable refresh failures', async () => {
+  const [todos, home, history] = await Promise.all([
+    readFile(new URL('./Todos.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('./Home.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('../components/HabitHistoryDialog.vue', import.meta.url), 'utf8'),
+  ])
+
+  for (const source of [todos, home]) {
+    assert.match(source, /completed_today/)
+    assert.match(source, /paused_today/)
+    assert.match(source, /excused_today/)
+    assert.match(source, /scheduled_today/)
+    assert.match(source, /weekly_remaining/)
+  }
+  assert.match(history, /shiftDateKey/)
+  assert.doesNotMatch(history, /function shiftDate\(/)
+  assert.match(todos, /Promise\.allSettled\(/)
+  assert.match(todos, /无需再次提交/)
 })
 
 test('notes preserve prior results and expose retryable errors for search and discovery', async () => {

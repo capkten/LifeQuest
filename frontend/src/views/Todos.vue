@@ -126,8 +126,8 @@
               <button
                 class="complete-btn"
                 :class="{ 'complete-btn--done': habit.completed_today }"
-                :disabled="completingId === habit.id || habit.completed_today"
-                :aria-disabled="habit.completed_today"
+                :disabled="completingId === habit.id"
+                :aria-disabled="Boolean(habitBlockReason(habit))"
                 @click="completeHabit(habit)"
                 :aria-label="'完成 ' + habit.title"
               >
@@ -142,6 +142,13 @@
                   <div class="todo-card-title-meta">
                     <span class="difficulty-badge" :class="'difficulty-badge--' + habit.difficulty">{{ labelDifficulty(habit.difficulty) }}</span>
                     <span class="frequency-badge" :class="'frequency-badge--' + habit.frequency">{{ labelFrequency(habit.frequency) }}</span>
+                    <span
+                      v-if="habitBlockReason(habit)"
+                      class="status-badge"
+                      :class="habit.paused_today || !habit.is_active ? 'status-badge--paused' : 'status-badge--excused'"
+                    >{{ habitBlockReason(habit) }}</span>
+                    <span v-if="habit.frequency === 'weekdays'" class="frequency-badge">{{ habit.weekdays.map(day => weekdayLabels[day]).join('、') }}{{ habit.scheduled_today ? '' : ' · 今日休息' }}</span>
+                    <span v-if="habit.frequency === 'weekly_target'" class="frequency-badge frequency-badge--weekly_target">本周 {{ habit.weekly_completed }}/{{ habit.weekly_target }}</span>
                   </div>
                 </div>
                 <p v-if="habit.description" class="todo-card-desc">{{ habit.description }}</p>
@@ -149,6 +156,36 @@
             </div>
             <div class="todo-card-actions">
               <div class="action-buttons">
+                <button
+                  class="action-btn"
+                  :class="habit.is_active ? 'action-btn--pause' : 'action-btn--resume'"
+                  :disabled="togglingHabitId === habit.id"
+                  :aria-label="habit.is_active ? '暂停习惯' : '恢复习惯'"
+                  :title="habit.is_active ? '暂停习惯' : '恢复习惯'"
+                  @click="toggleHabitPause(habit)"
+                >
+                  <span v-if="togglingHabitId === habit.id" class="loading-spinner loading-spinner--sm"></span>
+                  <svg v-else-if="habit.is_active" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <rect x="6" y="4" width="4" height="16" rx="1" />
+                    <rect x="14" y="4" width="4" height="16" rx="1" />
+                  </svg>
+                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </button>
+                <button
+                  class="action-btn action-btn--history"
+                  type="button"
+                  aria-label="查看习惯记录"
+                  title="查看习惯记录"
+                  @click="openHabitHistory(habit)"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="17" rx="2" />
+                    <path d="M8 2v4M16 2v4M3 10h18" />
+                    <path d="M8 14h3M8 17h5" />
+                  </svg>
+                </button>
                 <button class="action-btn action-btn--edit" @click="openEditDialog(habit, 'habits')" aria-label="编辑">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -172,6 +209,9 @@
                 </svg>
                 连续: {{ habit.streak }} (最佳: {{ habit.best_streak }})
               </span>
+              <span class="stat-item">
+                完成 {{ habit.total_completed }} 次 · 计划完成率 {{ habit.completion_rate }}%
+              </span>
               <span class="stat-item stat-item--coins">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <circle cx="12" cy="12" r="10" />
@@ -184,6 +224,9 @@
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
                 +{{ habit.exp_reward }} 经验
+              </span>
+              <span v-if="habit.pause_intervals?.length" class="stat-item habit-pause-history" :title="formatPauseInterval(habit.pause_intervals[habit.pause_intervals.length - 1])">
+                暂停 {{ habit.pause_intervals.length }} 次
               </span>
             </div>
           </div>
@@ -565,7 +608,20 @@
                   <option value="daily">每日</option>
                   <option value="weekly">每周</option>
                   <option value="monthly">每月</option>
+                  <option value="weekdays">每周指定日期</option>
+                  <option value="weekly_target">每周完成 N 次</option>
                 </select>
+                <fieldset v-if="form.frequency === 'weekdays'" class="weekday-picker">
+                  <legend>执行日期（中国时间，至少一天）</legend>
+                  <label v-for="(label, day) in weekdayLabels" :key="day">
+                    <input v-model="form.weekdays" type="checkbox" :value="day" />{{ label }}
+                  </label>
+                </fieldset>
+                <div v-if="form.frequency === 'weekly_target'" class="weekly-target-input">
+                  <label class="form-label" for="item-weekly-target">每周完成次数</label>
+                  <input id="item-weekly-target" v-model.number="form.weekly_target" type="number" min="1" max="7" step="1" class="form-input" />
+                  <span class="form-help">周一至周日累计，最多 7 次；每天最多打卡一次。</span>
+                </div>
               </div>
               <!-- Task/Goal-specific: deadline -->
               <div v-if="activeTab === 'tasks' || activeTab === 'goals'" class="form-group">
@@ -651,10 +707,21 @@
         </div>
       </div>
     </Teleport>
+
+    <HabitHistoryDialog
+      v-if="historyHabit"
+      :visible="showHistoryDialog"
+      :habit="historyHabit"
+      :completing="completingId === historyHabit.id"
+      @close="closeHabitHistory"
+      @complete="completeHabitFromHistory"
+      @updated="updateHabitFromHistory"
+    />
   </div>
 </template>
 
 <script setup>
+import { formatDateTimeInput } from '../utils/dateTime'
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { todoService } from '../services/todo'
@@ -663,6 +730,7 @@ import { useAuthStore } from '../stores/auth'
 import { useCultivationStore } from '../stores/cultivation'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelDifficulty, labelFrequency, labelTaskStatus } from '../utils/displayLabels'
+import HabitHistoryDialog from '../components/HabitHistoryDialog.vue'
 
 const authStore = useAuthStore()
 const cultivationStore = useCultivationStore()
@@ -681,6 +749,7 @@ const error = ref(null)
 const completingId = ref(null)
 const completionLoadingId = ref(null)
 const completionLoadingTimer = ref(null)
+const togglingHabitId = ref(null)
 const rewardToast = ref(null)
 const rewardToastTimeout = ref(null)
 const errorToast = ref(null)
@@ -697,6 +766,8 @@ const showDeleteDialog = ref(false)
 const deletingItem = ref(null)
 const deletingType = ref(null)
 const deleting = ref(false)
+const showHistoryDialog = ref(false)
+const historyHabit = ref(null)
 
 // Subtask state
 const expandedTaskId = ref(null)
@@ -720,12 +791,15 @@ const tabs = [
   { id: 'goals', label: '目标' }
 ]
 
+const weekdayLabels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 const defaultForms = {
   habits: {
     title: '',
     description: '',
     difficulty: 'medium',
     frequency: 'daily',
+    weekdays: [0, 1, 2, 3, 4],
+    weekly_target: 3,
     coins_reward: 10,
     exp_reward: 5
   },
@@ -753,10 +827,27 @@ const form = ref(getDefaultForm(activeTab.value))
 
 function getDefaultForm(tab) {
   const defaults = { ...defaultForms[tab] }
+  if (tab === 'habits') defaults.weekdays = [...defaultForms.habits.weekdays]
   if (tab === 'tasks') {
     defaults.project_id = contextProjectId.value
   }
   return defaults
+}
+
+function validateHabitPlan() {
+  if (activeTab.value !== 'habits') return true
+  if (form.value.frequency === 'weekdays' && !form.value.weekdays.length) {
+    dialogError.value = '请至少选择一个执行日期。'
+    return false
+  }
+  if (form.value.frequency === 'weekly_target') {
+    const target = Number(form.value.weekly_target)
+    if (!Number.isInteger(target) || target < 1 || target > 7) {
+      dialogError.value = '每周完成次数必须是 1 至 7 的整数。'
+      return false
+    }
+  }
+  return true
 }
 
 const activeTabSingular = computed(() => {
@@ -953,17 +1044,14 @@ function endCompletion() {
 }
 
 async function settleCompletion(updated) {
-  try {
-    if (updated.cultivation_reward) {
-      await cultivationStore.applySettlement(updated.cultivation_reward)
-    } else {
-      await cultivationStore.refresh()
-    }
-  } catch (e) {
-    // Reward display must retain the legacy completion result if cultivation is unavailable.
-    console.warn('Cultivation refresh failed after todo completion:', e)
-  }
   showReward(updated)
+  const cultivationRefresh = updated.cultivation_reward
+    ? cultivationStore.applySettlement(updated.cultivation_reward)
+    : cultivationStore.refresh()
+  const results = await Promise.allSettled([authStore.fetchUser(), cultivationRefresh])
+  if (results.some(result => result.status === 'rejected')) {
+    showError('操作已保存，奖励状态刷新失败，请稍后刷新页面，无需再次提交。')
+  }
 }
 
 async function fetchHabits() {
@@ -1024,25 +1112,78 @@ function handleProjectChange() {
   loadProjectMilestones(form.value.project_id)
 }
 
-async function completeHabit(habit) {
-  if (habit.completed_today) { explainBlocked('该习惯今天已经完成，明天再来继续。'); return }
+async function completeHabit(habit, completionData) {
+  const blockReason = habitBlockReason(habit)
+  if (blockReason) { explainBlocked(blockReason); return }
   if (completingId.value) { explainBlocked('已有其他待办正在提交，请等待完成后再试。'); return }
   beginCompletion(habit.id)
   try {
-    const updated = await todoService.completeHabit(habit.id)
+    const updated = await todoService.completeHabit(habit.id, completionData)
     const idx = habits.value.findIndex(h => h.id === habit.id)
     if (idx !== -1) {
       habits.value[idx] = updated
     }
+    if (historyHabit.value?.id === habit.id) historyHabit.value = updated
     await settleCompletion(updated)
-    // Refresh user data to update coins/exp in header
-    await authStore.fetchUser()
   } catch (e) {
     console.error('Failed to complete habit:', e)
-    showError(getErrorMessage(e), () => completeHabit(habit))
+    showError(getErrorMessage(e), () => completeHabit(habit, completionData))
   } finally {
     endCompletion()
   }
+}
+
+function habitBlockReason(habit) {
+  if (habit.completed_today) return '该习惯今天已经完成，明天再来继续。'
+  if (habit.paused_today || !habit.is_active) return '该习惯已暂停。'
+  if (habit.excused_today) return '该习惯今天已请假。'
+  if (!habit.scheduled_today) return '今天不是该习惯的计划日。'
+  if (habit.frequency === 'weekly_target' && habit.weekly_remaining <= 0) return '本周已完成目标次数，下周再继续。'
+  return ''
+}
+
+function formatPauseInterval(interval) {
+  return `最近暂停：${interval.paused_on} 至 ${interval.resumed_on || '进行中'}`
+}
+
+async function toggleHabitPause(habit) {
+  if (togglingHabitId.value) {
+    explainBlocked('已有习惯状态正在提交，请等待完成后再试。')
+    return
+  }
+  togglingHabitId.value = habit.id
+  try {
+    const updated = habit.is_active
+      ? await todoService.pauseHabit(habit.id)
+      : await todoService.resumeHabit(habit.id)
+    const idx = habits.value.findIndex(item => item.id === habit.id)
+    if (idx !== -1) habits.value[idx] = updated
+    showSuccess(updated.is_active ? '习惯已恢复。' : '习惯已暂停，暂停区间已记录。')
+  } catch (e) {
+    showError(getErrorMessage(e))
+  } finally {
+    togglingHabitId.value = null
+  }
+}
+
+function openHabitHistory(habit) {
+  historyHabit.value = habit
+  showHistoryDialog.value = true
+}
+
+function closeHabitHistory() {
+  showHistoryDialog.value = false
+  historyHabit.value = null
+}
+
+function updateHabitFromHistory(updated) {
+  const index = habits.value.findIndex(habit => habit.id === updated.id)
+  if (index !== -1) habits.value[index] = updated
+  if (historyHabit.value?.id === updated.id) historyHabit.value = updated
+}
+
+async function completeHabitFromHistory(completionData) {
+  if (historyHabit.value) await completeHabit(historyHabit.value, completionData)
 }
 
 async function completeTask(task) {
@@ -1056,8 +1197,6 @@ async function completeTask(task) {
       tasks.value[idx] = updated
     }
     await settleCompletion(updated)
-    // Refresh user data to update coins/exp in header
-    await authStore.fetchUser()
   } catch (e) {
     console.error('Failed to complete task:', e)
     showError(getErrorMessage(e), () => completeTask(task))
@@ -1077,8 +1216,6 @@ async function completeGoal(goal) {
       goals.value[idx] = updated
     }
     await settleCompletion(updated)
-    // Refresh user data to update coins/exp in header
-    await authStore.fetchUser()
   } catch (e) {
     console.error('Failed to complete goal:', e)
     showError(getErrorMessage(e), () => completeGoal(goal))
@@ -1185,6 +1322,7 @@ function cancelDialog() {
 }
 
 async function createItem() {
+  if (!validateHabitPlan()) return
   if (!form.value.title.trim()) { dialogError.value = '请先填写标题。'; explainBlocked('请先填写标题。'); return }
   creating.value = true
   dialogError.value = null
@@ -1204,6 +1342,8 @@ async function createItem() {
 
     if (activeTab.value === 'habits') {
       const payload = { ...base, frequency: form.value.frequency }
+      if (form.value.frequency === 'weekdays') payload.weekdays = form.value.weekdays
+      if (form.value.frequency === 'weekly_target') payload.weekly_target = form.value.weekly_target
       const habit = await todoService.createHabit(payload)
       habits.value.push(habit)
     } else if (activeTab.value === 'tasks') {
@@ -1228,14 +1368,14 @@ async function createItem() {
 function openEditDialog(item, type) {
   editingItem.value = item
   editingType.value = type
-  const deadlineValue = item.deadline
-    ? new Date(item.deadline).toISOString().slice(0, 16)
-    : ''
+  const deadlineValue = formatDateTimeInput(item.deadline)
   form.value = {
     title: item.title || '',
     description: item.description || '',
     difficulty: item.difficulty || 'medium',
     frequency: item.frequency || 'daily',
+    weekdays: [...(item.weekdays || [0, 1, 2, 3, 4])],
+    weekly_target: item.weekly_target ?? 3,
     deadline: deadlineValue,
     coins_reward: item.coins_reward ?? 10,
     exp_reward: item.exp_reward ?? 5,
@@ -1253,6 +1393,7 @@ function openEditDialog(item, type) {
 }
 
 async function saveItem() {
+  if (!validateHabitPlan()) return
   if (!form.value.title.trim()) { dialogError.value = '请先填写标题。'; explainBlocked('请先填写标题。'); return }
   if (!isEditing.value) {
     return createItem()
@@ -1281,6 +1422,8 @@ async function saveItem() {
 
     if (editingType.value === 'habits') {
       base.frequency = form.value.frequency
+      base.weekdays = form.value.frequency === 'weekdays' ? form.value.weekdays : null
+      base.weekly_target = form.value.frequency === 'weekly_target' ? form.value.weekly_target : null
       const updated = await todoService.updateHabit(editingItem.value.id, base)
       const idx = habits.value.findIndex(h => h.id === editingItem.value.id)
       if (idx !== -1) habits.value[idx] = updated
@@ -1343,6 +1486,22 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.weekday-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  border: 1px solid var(--color-border);
+}
+
+.weekday-picker label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 8px;
+}
+
 .todos-page {
   padding: var(--page-padding-y) var(--page-padding-x);
   width: 100%;
@@ -1915,6 +2074,11 @@ onMounted(() => {
   color: var(--color-error);
 }
 
+.frequency-badge--weekly_target {
+  background: rgba(81, 207, 102, 0.14);
+  color: var(--color-success);
+}
+
 .status-badge--pending {
   background: rgba(156, 163, 175, 0.15);
   color: var(--color-text-tertiary);
@@ -2396,6 +2560,18 @@ onMounted(() => {
   gap: var(--spacing-xs);
 }
 
+.weekly-target-input {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-sm);
+}
+
+.form-help {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+}
+
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2542,10 +2718,42 @@ onMounted(() => {
   background: rgba(14, 165, 233, 0.08);
 }
 
+.action-btn--pause:hover {
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+  background: rgba(255, 217, 61, 0.1);
+}
+
+.action-btn--resume:hover {
+  border-color: var(--color-success);
+  color: var(--color-success);
+  background: rgba(81, 207, 102, 0.1);
+}
+
+.action-btn--history:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(14, 165, 233, 0.08);
+}
+
 .action-btn--delete:hover {
   border-color: var(--color-error);
   color: var(--color-error);
   background: rgba(255, 107, 107, 0.08);
+}
+
+.status-badge--paused {
+  background: rgba(156, 163, 175, 0.15);
+  color: var(--color-text-tertiary);
+}
+
+.status-badge--excused {
+  background: rgba(255, 217, 61, 0.18);
+  color: #855400;
+}
+
+.habit-pause-history {
+  color: var(--color-text-tertiary);
 }
 
 /* Delete Dialog */

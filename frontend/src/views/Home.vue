@@ -1,5 +1,6 @@
 <template>
   <div class="home-page">
+    <TodayWorkbench ref="todayWorkbench" class="home-workbench" @changed="refreshHomeTasks" />
     <section class="hero-card">
       <div class="hero-main">
         <div class="hero-copy">
@@ -53,13 +54,14 @@
           <strong>{{ checkinStatus?.streak || 0 }} 天</strong>
         </div>
         <div class="hero-meta-item">
-          <span class="hero-meta-label">今日待办</span>
-          <strong>{{ dailySummary?.summary?.due_tasks || 0 }}</strong>
+          <span class="hero-meta-label">待完成任务</span>
+          <strong>{{ pendingTasksCount }}</strong>
         </div>
       </div>
     </section>
 
     <CultivationStatusBar
+      class="home-cultivation"
       :overview="cultivationOverview"
       :loading="cultivationLoading"
       :error="cultivationError"
@@ -75,11 +77,10 @@
             <line x1="8" y1="2" x2="8" y2="6" />
             <line x1="3" y1="10" x2="21" y2="10" />
           </svg>
-          <h3 class="daily-title">今日任务</h3>
+          <h3 class="daily-title">今日习惯与目标</h3>
         </div>
         <span v-if="dailySummary" class="daily-overview">
           今日: {{ dailySummary.summary.completed_habits }}/{{ dailySummary.summary.total_habits }} 习惯已完成,
-          {{ dailySummary.summary.due_tasks }} 个任务到期,
           {{ dailySummary.summary.active_goals }} 个目标进行中
         </span>
       </div>
@@ -92,9 +93,9 @@
           <p>{{ dailyError }}</p>
           <button type="button" class="retry-btn" @click="fetchDailySummary">重试</button>
         </div>
-        <div v-else-if="dailySummary && dailySummary.habits.length === 0 && dailySummary.tasks.length === 0 && dailySummary.goals.length === 0" class="empty-state">
-          <p>今天没有待办事项，去创建一些吧！</p>
-          <router-link to="/todos" class="empty-state-action">创建任务</router-link>
+        <div v-else-if="dailySummary && dailySummary.habits.length === 0 && dailySummary.goals.length === 0" class="empty-state">
+          <p>暂无今日习惯或进行中目标，可以前往待办页创建。</p>
+          <router-link to="/todos" class="empty-state-action">创建任务或习惯</router-link>
         </div>
         <div v-else class="daily-groups">
           <div v-if="dailySummary.habits.length > 0" class="daily-group">
@@ -110,8 +111,9 @@
                 <button
                   class="daily-check-btn"
                   :class="{ 'daily-check-btn--done': habit.completed_today }"
-                  :disabled="completingHabitId === habit.id || habit.completed_today"
-                  :aria-disabled="habit.completed_today"
+                  :disabled="completingHabitId !== null"
+                  :aria-disabled="Boolean(dailyHabitBlockReason(habit))"
+                  :title="dailyHabitBlockReason(habit) || '完成习惯'"
                   @click="completeDailyHabit(habit)"
                 >
                   <svg v-if="habit.completed_today" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
@@ -122,6 +124,8 @@
                   </svg>
                 </button>
                 <span class="daily-item-title" :class="{ 'daily-item-title--done': habit.completed_today }">{{ habit.title }}</span>
+                <span v-if="dailyHabitBlockReason(habit)" class="daily-habit-lock">{{ dailyHabitBlockReason(habit) }}</span>
+                <span v-if="habit.frequency === 'weekly_target'" class="daily-weekly-progress">本周 {{ habit.weekly_completed }}/{{ habit.weekly_target }}</span>
                 <span class="daily-streak">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                     <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
@@ -130,24 +134,6 @@
                 </span>
                 <span class="task-difficulty" :class="'task-difficulty--' + habit.difficulty">{{ labelDifficulty(habit.difficulty) }}</span>
               </div>
-            </div>
-          </div>
-
-          <div v-if="dailySummary.tasks.length > 0" class="daily-group">
-            <h4 class="daily-group-title">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 8v4l3 3" />
-              </svg>
-              今日到期任务
-            </h4>
-            <div class="daily-list">
-              <router-link v-for="task in dailySummary.tasks" :key="task.id" to="/todos" class="daily-item daily-item--link">
-                <span class="task-status" :class="'task-status--' + task.status"></span>
-                <span class="daily-item-title">{{ task.title }}</span>
-                <span v-if="isOverdue(task.deadline)" class="daily-overdue">逾期</span>
-                <span class="task-difficulty" :class="'task-difficulty--' + task.difficulty">{{ labelDifficulty(task.difficulty) }}</span>
-              </router-link>
             </div>
           </div>
 
@@ -183,11 +169,11 @@
           <h3>快速行动</h3>
         </div>
         <div class="quick-actions-list">
-          <router-link to="/todos" class="quick-action-item">
+          <button type="button" class="quick-action-item" @click="todayWorkbench?.focusQuickAdd()">
             <span class="quick-action-icon quick-action-icon--primary">+</span>
             <span>创建任务</span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-          </router-link>
+          </button>
           <router-link to="/projects" class="quick-action-item">
             <span class="quick-action-icon quick-action-icon--secondary">◇</span>
             <span>新建项目</span>
@@ -322,15 +308,18 @@ import { useUserStats } from '../composables/useUserStats'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelDifficulty } from '../utils/displayLabels'
 import CultivationStatusBar from '../components/cultivation/CultivationStatusBar.vue'
+import TodayWorkbench from '../components/home/TodayWorkbench.vue'
 
 const authStore = useAuthStore()
+const todayWorkbench = ref(null)
 const user = computed(() => authStore.user)
 const {
   expPercent,
   cultivationOverview,
   cultivationLoading,
   cultivationError,
-  loadCultivation
+  loadCultivation,
+  refreshCultivation
 } = useUserStats()
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -382,15 +371,16 @@ async function fetchCheckinStatus() {
 }
 
 async function doCheckin() {
+  if (checkinLoading.value) return
   if (checkinStatus.value?.checked_in) { showError('今天已经签到过了。'); return }
   checkinLoading.value = true
   try {
     const result = await checkinService.checkin()
     checkinStatus.value = { checked_in: true, streak: result.streak || 0 }
-    await authStore.fetchUser()
-    const coins = result.coins_earned || 0
-    const exp = result.exp_earned || 0
+    const coins = result.reward_coins || 0
+    const exp = result.reward_exp || 0
     showSuccess(`签到成功！获得 ${coins} 金币、${exp} 经验值`)
+    await refreshActionRewards()
   } catch (e) {
     showError(getErrorMessage(e))
   } finally {
@@ -416,25 +406,31 @@ async function fetchDailySummary() {
   dailyError.value = null
   try {
     const summary = await todoService.getDailySummary()
-    if (requestId === dailyRequestId) dailySummary.value = summary
+    if (requestId !== dailyRequestId) return false
+    dailySummary.value = summary
+    return true
   } catch (e) {
     if (requestId === dailyRequestId) {
       dailyError.value = getErrorMessage(e, '今日待办加载失败，请重试。')
       showError(dailyError.value)
     }
+    return false
   } finally {
     if (requestId === dailyRequestId) loadingDaily.value = false
   }
 }
 
 async function completeDailyHabit(habit) {
-  if (habit.completed_today) { showError('该习惯今天已经完成，明天再来继续。'); return }
+  if (completingHabitId.value !== null) return
+  const blockReason = dailyHabitBlockReason(habit)
+  if (blockReason) { showError(blockReason); return }
   completingHabitId.value = habit.id
   try {
     await todoService.completeHabit(habit.id)
     showSuccess('习惯完成！')
-    await fetchDailySummary()
-    await authStore.fetchUser()
+    const refreshed = await fetchDailySummary()
+    if (!refreshed) showError('习惯已完成，今日列表刷新失败，请稍后刷新页面，无需再次提交。')
+    await refreshActionRewards()
   } catch (e) {
     showError(getErrorMessage(e))
   } finally {
@@ -442,9 +438,24 @@ async function completeDailyHabit(habit) {
   }
 }
 
-function isOverdue(deadline) {
-  if (!deadline) return false
-  return new Date(deadline) < new Date(new Date().toDateString())
+function dailyHabitBlockReason(habit) {
+  if (habit.completed_today) return '该习惯今天已经完成，明天再来继续。'
+  if (habit.paused_today || !habit.is_active) return '该习惯已暂停。'
+  if (habit.excused_today) return '该习惯今天已请假。'
+  if (!habit.scheduled_today) return '今天不是该习惯的计划日。'
+  if (habit.frequency === 'weekly_target' && habit.weekly_remaining <= 0) return '本周已完成目标次数，下周再继续。'
+  return ''
+}
+
+function refreshHomeTasks() {
+  return Promise.all([fetchTasks(), fetchDailySummary()])
+}
+
+async function refreshActionRewards() {
+  const results = await Promise.allSettled([authStore.fetchUser(), refreshCultivation()])
+  if (results.some(result => result.status === 'rejected')) {
+    showError('操作已保存，奖励状态刷新失败，请稍后刷新页面，无需再次提交。')
+  }
 }
 
 onMounted(() => {
@@ -471,18 +482,30 @@ onMounted(() => {
 
   .hero-card {
     grid-column: 1 / -1;
+    grid-row: 2;
     margin-bottom: 0;
+  }
+
+  .home-workbench {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    margin-bottom: 0;
+  }
+
+  .home-cultivation {
+    grid-column: 1;
+    grid-row: 5;
   }
 
   .daily-card {
     grid-column: 1;
-    grid-row: 2;
+    grid-row: 3;
     margin-bottom: 0;
   }
 
   .home-aside-actions {
     grid-column: 2;
-    grid-row: 2;
+    grid-row: 3;
   }
 
   .content-grid {
@@ -491,17 +514,17 @@ onMounted(() => {
 
   .content-grid .content-section:first-child {
     grid-column: 1;
-    grid-row: 3;
+    grid-row: 4;
   }
 
   .content-grid .content-section:last-child {
     grid-column: 2;
-    grid-row: 3;
+    grid-row: 4;
   }
 
   .habit-progress-card {
     grid-column: 2;
-    grid-row: 4;
+    grid-row: 5;
   }
 }
 
@@ -914,7 +937,7 @@ onMounted(() => {
 
 .daily-item {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 10px;
 }
@@ -1050,6 +1073,24 @@ onMounted(() => {
   color: var(--color-warning);
   font-weight: 600;
   flex-shrink: 0;
+}
+
+.daily-weekly-progress {
+  font-size: var(--font-size-xs);
+  color: var(--color-secondary);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.daily-habit-lock {
+  min-width: 0;
+  color: var(--color-error);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .daily-streak svg {
@@ -1277,6 +1318,8 @@ onMounted(() => {
   }
 
   .daily-streak,
+  .daily-weekly-progress,
+  .daily-habit-lock,
   .daily-overdue,
   .task-difficulty {
     margin-left: 44px;

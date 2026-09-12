@@ -43,3 +43,29 @@ test('project completion refreshes server rewards without undoing a successful a
   assert.equal((source.match(/await refreshTaskReward\(updated\)/g) || []).length, 2)
   assert.match(source, /Object\.assign\(task, updated\)/)
 })
+
+test('todo completion settles server rewards without making refresh failures retryable', async () => {
+  const source = await readFile(new URL('./Todos.vue', import.meta.url), 'utf8')
+  const settlement = source.match(/async function settleCompletion\(updated\) \{([\s\S]*?)\n\}/)?.[1]
+
+  assert.ok(settlement, 'settleCompletion must remain available')
+  assert.match(settlement, /showReward\(updated\)/)
+  assert.match(settlement, /Promise\.allSettled\(\[authStore\.fetchUser\(\)/)
+  assert.match(settlement, /无需再次提交/)
+  for (const handler of ['completeHabit', 'completeTask', 'completeGoal']) {
+    const body = source.match(new RegExp(`async function ${handler}\\([^)]*\\) \\{([\\s\\S]*?)\\n\\}`))?.[1]
+    assert.ok(body, `${handler} must remain available`)
+    assert.doesNotMatch(body, /await authStore\.fetchUser\(\)/)
+  }
+})
+
+test('habit history ignores stale responses and identifies weekly targets as planned slots', async () => {
+  const source = await readFile(new URL('../components/HabitHistoryDialog.vue', import.meta.url), 'utf8')
+
+  assert.match(source, /from ['"]\.\.\/utils\/dateTime['"][\s\S]*chinaDateKey[\s\S]*shiftDateKey[\s\S]*weekdayForDateKey/)
+  assert.match(source, /let historyRequestId = 0/)
+  assert.match(source, /const requestId = \+\+historyRequestId/)
+  assert.match(source, /props\.visible && props\.habit\?\.id === habitId && requestId === historyRequestId/)
+  assert.match(source, /计划槽位/)
+  assert.match(source, /计划日/)
+})
