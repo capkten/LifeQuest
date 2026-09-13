@@ -19,6 +19,15 @@ class ProjectRepository(BaseRepository[Project]):
             query = query.filter(Project.status == status)
         return query.order_by(Project.created_at.desc()).all()
 
+    def get_for_update(self, project_id: UUID) -> Optional[Project]:
+        return (
+            self.db.query(Project)
+            .filter(Project.id == project_id)
+            .with_for_update()
+            .populate_existing()
+            .first()
+        )
+
     def update(self, db_obj: Project, obj_in: dict) -> Project:
         for key, value in obj_in.items():
             setattr(db_obj, key, value)
@@ -30,7 +39,7 @@ class ProjectRepository(BaseRepository[Project]):
         project = self.get_by_id(project_id)
         if project is None:
             return None
-        total, completed = self._compute_stats(project_id)
+        total, completed = self._compute_stats(project_id, project.user_id)
         return {
             "project": project,
             "total_tasks": total,
@@ -38,10 +47,13 @@ class ProjectRepository(BaseRepository[Project]):
             "progress": (completed / total * 100) if total > 0 else 0.0,
         }
 
-    def _compute_stats(self, project_id: UUID) -> tuple:
-        total = self.db.query(Task).filter(Task.project_id == project_id).count()
+    def _compute_stats(self, project_id: UUID, user_id: Optional[UUID] = None) -> tuple:
+        filters = [Task.project_id == project_id]
+        if user_id is not None:
+            filters.append(Task.user_id == user_id)
+        total = self.db.query(Task).filter(*filters).count()
         completed = self.db.query(Task).filter(
-            Task.project_id == project_id, Task.status == TaskStatus.COMPLETED
+            *filters, Task.status == TaskStatus.COMPLETED
         ).count()
         return total, completed
 
@@ -61,7 +73,14 @@ class PhaseRepository(BaseRepository[ProjectPhase]):
         ).order_by(ProjectPhase.sort_order).all()
 
     def count_tasks(self, phase_id: UUID) -> int:
-        return self.db.query(Task).filter(Task.phase_id == phase_id).count()
+        return self.db.query(Task).join(
+            ProjectPhase, Task.phase_id == ProjectPhase.id
+        ).join(
+            Project, ProjectPhase.project_id == Project.id
+        ).filter(
+            ProjectPhase.id == phase_id,
+            Task.user_id == Project.user_id,
+        ).count()
 
     def get_for_update(self, phase_id: UUID) -> Optional[ProjectPhase]:
         return (
@@ -72,10 +91,19 @@ class PhaseRepository(BaseRepository[ProjectPhase]):
         )
 
     def delete_if_empty(self, phase_id: UUID) -> bool:
+        owner_id = (
+            self.db.query(Project.user_id)
+            .filter(Project.id == ProjectPhase.project_id)
+            .correlate(ProjectPhase)
+            .scalar_subquery()
+        )
         result = self.db.execute(
             delete(ProjectPhase).where(
                 ProjectPhase.id == phase_id,
-                ~exists().where(Task.phase_id == phase_id),
+                ~exists().where(
+                    Task.phase_id == ProjectPhase.id,
+                    Task.user_id == owner_id,
+                ),
             )
         )
         return result.rowcount == 1
@@ -94,3 +122,20 @@ class MilestoneRepository(BaseRepository[ProjectMilestone]):
         return self.db.query(ProjectMilestone).filter(
             ProjectMilestone.project_id == project_id
         ).order_by(ProjectMilestone.sort_order).all()
+
+    def get_for_update(self, milestone_id: UUID) -> Optional[ProjectMilestone]:
+        return (
+            self.db.query(ProjectMilestone)
+            .filter(ProjectMilestone.id == milestone_id)
+            .with_for_update()
+            .populate_existing()
+            .first()
+        )
+
+    def update(self, db_obj: ProjectMilestone, obj_in: dict) -> ProjectMilestone:
+        """Apply explicit nulls so optional milestone dates can be cleared."""
+        for key, value in obj_in.items():
+            setattr(db_obj, key, value)
+        self.db.commit()
+        self.db.refresh(db_obj)
+        return db_obj

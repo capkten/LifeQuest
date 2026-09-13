@@ -2,17 +2,33 @@ export function formatDateTimeInput(value) {
   if (!value) return ''
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-  return local.toISOString().slice(0, 16)
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+  const values = Object.fromEntries(
+    parts.filter(({ type }) => type !== 'literal').map(({ type, value: part }) => [type, part]),
+  )
+  return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`
 }
 
 const CHINA_TIME_ZONE = 'Asia/Shanghai'
 const DATE_KEY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
+const CHINA_DATETIME_INPUT_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/
 
 function validDateKeyParts(year, monthIndex, day) {
   if (!Number.isInteger(year) || !Number.isInteger(monthIndex) || !Number.isInteger(day)) return false
   const date = new Date(Date.UTC(year, monthIndex, day))
   return date.getUTCFullYear() === year && date.getUTCMonth() === monthIndex && date.getUTCDate() === day
+}
+
+function pad(value) {
+  return String(value).padStart(2, '0')
 }
 
 function dateFromValue(value) {
@@ -54,7 +70,33 @@ export function dateKeyParts(dateKey) {
 
 export function dateKeyFromParts(year, monthIndex, day) {
   if (!validDateKeyParts(year, monthIndex, day)) return ''
-  return `${String(year).padStart(4, '0')}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  return `${String(year).padStart(4, '0')}-${pad(monthIndex + 1)}-${pad(day)}`
+}
+
+export function chinaDateTimeInputToUtcIso(value) {
+  if (typeof value !== 'string') return ''
+  const match = CHINA_DATETIME_INPUT_PATTERN.exec(value)
+  if (!match) return ''
+  const year = Number(match[1])
+  const monthIndex = Number(match[2]) - 1
+  const day = Number(match[3])
+  const hour = Number(match[4])
+  const minute = Number(match[5])
+  const second = Number(match[6] || 0)
+  if (!validDateKeyParts(year, monthIndex, day) || hour > 23 || minute > 59 || second > 59) return ''
+  return new Date(Date.UTC(year, monthIndex, day, hour - 8, minute, second)).toISOString()
+}
+
+export function dateKeyTimestamp(dateKey) {
+  const parts = dateKeyParts(dateKey)
+  return parts ? Date.UTC(parts.year, parts.monthIndex, parts.day) : null
+}
+
+export function dateKeyFromTimestamp(timestamp) {
+  if (!Number.isFinite(timestamp)) return ''
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return ''
+  return dateKeyFromParts(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
 }
 
 export function chinaDateKey(value = new Date()) {

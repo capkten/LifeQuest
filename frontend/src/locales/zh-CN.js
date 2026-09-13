@@ -100,9 +100,11 @@ export const DIFFICULTY_LABELS = Object.freeze({
 })
 
 export const FREQUENCY_LABELS = Object.freeze({
+  weekdays: '指定日期',
   daily: '每日',
   weekly: '每周',
   monthly: '每月',
+  weekly_target: '每周目标',
 })
 
 export const ACCOUNT_TYPE_LABELS = Object.freeze({
@@ -160,6 +162,7 @@ export const ACTION_TYPE_LABELS = Object.freeze({
   discard: '丢弃',
   add: '添加',
   unequip: '卸下',
+  refund: '退货',
 })
 
 export const EXCHANGE_STATUS_LABELS = Object.freeze({

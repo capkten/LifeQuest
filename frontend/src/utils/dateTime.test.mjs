@@ -2,8 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   chinaDateKey,
+  dateKeyFromTimestamp,
   dateKeyFromParts,
   dateKeyParts,
+  dateKeyTimestamp,
   formatChinaDate,
   formatChinaDateTime,
   shiftDateKey,
@@ -25,6 +27,8 @@ test('China date keys ignore the browser runtime timezone', () => {
     assert.equal(shiftDateKey('2026-12-31', 1), '2027-01-01')
     assert.deepEqual(dateKeyParts('2026-09-12'), { year: 2026, monthIndex: 8, day: 12 })
     assert.equal(dateKeyFromParts(2026, 8, 12), '2026-09-12')
+    assert.equal(dateKeyTimestamp('2026-09-12'), Date.UTC(2026, 8, 12))
+    assert.equal(dateKeyFromTimestamp(Date.UTC(2026, 8, 12)), '2026-09-12')
     assert.equal(weekdayForDateKey('2026-09-14'), 0)
     assert.equal(formatChinaDate('2026-09-12', { year: 'numeric', month: '2-digit', day: '2-digit' }), '2026/09/12')
   } finally {

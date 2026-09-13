@@ -29,6 +29,7 @@ def clock(monkeypatch):
 
     monkeypatch.setattr("app.timezone.datetime", FrozenDatetime)
     monkeypatch.setattr("app.services.todo.datetime", FrozenDatetime)
+    monkeypatch.setattr("app.models.todo.datetime", FrozenDatetime)
     return lambda value: instant.__setitem__(0, value)
 
 

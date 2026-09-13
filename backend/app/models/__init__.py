@@ -3,6 +3,10 @@ from app.models.note import Notebook, Attachment
 from app.models.note_node import NoteNode
 from app.models.note_sharing import NotebookMember, NoteUserActivity, NoteCollabDocument, NoteCollabEvent
 from app.models.todo import Habit, Task, Goal, Subtask
+from app.models.habit_completion import HabitCompletion
+from app.models.habit_pause import HabitPauseInterval
+from app.models.habit_leave import HabitLeaveInterval
+from app.models.daily_workbench import DailyFocusPlan, WorkbenchTaskRequest
 from app.models.shop import ShopItem, ExchangeHistory, ExchangeStatus
 from app.models.backpack import (
     BackpackItem, ItemType, ItemStatus,
@@ -12,6 +16,7 @@ from app.models.achievement import Achievement, UserAchievement
 from app.models.checkin import DailyCheckin
 from app.models.title import Title, UserTitle
 from app.models.coin_transaction import CoinTransaction, CoinSource, CoinType
+from app.models.finance_daily_reward import FinanceDailyRewardClaim
 from app.models.account import Account, AccountType
 from app.models.finance_category import FinanceCategory, CategoryType
 from app.models.finance_transaction import FinanceTransaction, FinanceTransactionType
@@ -28,7 +33,7 @@ __all__ = [
     "User",
     "Notebook", "Attachment", "NoteNode", "NotebookMember", "NoteUserActivity",
     "NoteCollabDocument", "NoteCollabEvent",
-    "Habit", "Task", "Goal", "Subtask",
+    "Habit", "HabitCompletion", "HabitPauseInterval", "HabitLeaveInterval", "DailyFocusPlan", "WorkbenchTaskRequest", "Task", "Goal", "Subtask",
     "ShopItem", "ExchangeHistory", "ExchangeStatus",
     "BackpackItem", "ItemType", "ItemStatus",
     "UsageHistory", "UsageAction", "TribulationPillSettlement", "TribulationPillLedger",
@@ -36,6 +41,7 @@ __all__ = [
     "DailyCheckin",
     "Title", "UserTitle",
     "CoinTransaction", "CoinSource", "CoinType",
+    "FinanceDailyRewardClaim",
     "Account", "AccountType",
     "FinanceCategory", "CategoryType",
     "FinanceTransaction", "FinanceTransactionType",

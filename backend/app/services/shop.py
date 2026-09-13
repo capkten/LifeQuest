@@ -1,16 +1,21 @@
 from typing import List
 import logging
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import update
 
 from app.models.shop import ShopItem, ExchangeHistory, ExchangeStatus
+from app.models.coin_transaction import CoinSource, CoinType
 from app.repositories.shop import ShopItemRepository, ExchangeHistoryRepository
+from app.repositories.coin_transaction import CoinTransactionRepository
 from app.repositories.user import UserRepository
 from app.schemas.shop import ShopItemCreate, ShopItemUpdate, ExchangeHistoryCreate
 from app.services.achievement import AchievementService
 from app.services.backpack import BackpackService
+from app.models.backpack import BackpackItem, ItemStatus, UsageAction
+from app.services.transaction import rollback_on_error
 
 
 class ShopService:
@@ -32,6 +37,7 @@ class ShopService:
         self.db = db
         self.item_repo = ShopItemRepository(db)
         self.exchange_repo = ExchangeHistoryRepository(db)
+        self.coin_repo = CoinTransactionRepository(db)
         self.user_repo = UserRepository(db)
         self.achievement_service = AchievementService(db)
 
@@ -114,11 +120,21 @@ class ShopService:
         return self.item_repo.delete(item_id)
 
     # --- Exchange (purchase) operations ---
+    @staticmethod
+    def _coin_source_id(exchange_id: UUID, action: str) -> str:
+        if action == "purchase":
+            return str(exchange_id)
+        return str(uuid5(NAMESPACE_URL, f"lifequest:shop:{action}:{exchange_id}"))
+
+    @rollback_on_error
     def purchase_item(self, user_id: UUID, exchange_in: ExchangeHistoryCreate) -> ExchangeHistory:
-        # Fetch item first to determine stock type
-        item = self.item_repo.get_by_id(exchange_in.item_id)
+        self.user_repo.lock(user_id)
+        # The price, active flag, and stock decision must come from the same
+        # locked row used for this purchase.
+        item = self.item_repo.get_for_update(exchange_in.item_id)
         if item is None:
             raise HTTPException(status_code=404, detail="Shop item not found")
+        self.db.refresh(item)
         if not item.is_active:
             raise HTTPException(status_code=400, detail="Item is not available")
 
@@ -131,11 +147,8 @@ class ShopService:
         user = self.user_repo.get_by_id(user_id)
         if user is None:
             raise HTTPException(status_code=404, detail="User not found")
-        if user.coins < total_cost:
-            raise HTTPException(status_code=400, detail="Insufficient coins")
-
-        # Deduct coins (no commit)
-        self.user_repo._update_coins_no_commit(user, -total_cost)
+        self.user_repo.debit_coins(user_id, total_cost)
+        self.db.refresh(user)
 
         # Create exchange record (no commit -- we commit everything at once below)
         exchange_data = {
@@ -146,14 +159,24 @@ class ShopService:
             "status": ExchangeStatus.COMPLETED,
         }
         exchange = self.exchange_repo._create_no_commit(exchange_data)
+        self.coin_repo._create_no_commit({
+            "user_id": user_id,
+            "amount": total_cost,
+            "type": CoinType.SPEND,
+            "source": CoinSource.SHOP.value,
+            "source_id": self._coin_source_id(exchange.id, "purchase"),
+            "description": f"商城购买：{item.name}",
+        })
 
         # Add purchased items to user's backpack (defer commit)
         backpack_service = BackpackService(self.db)
         backpack_service._add_item_no_commit(user_id, item.id, quantity=exchange_in.quantity)
 
-        # Single commit for the entire purchase-to-backpack operation
-        self.db.commit()
+        # Flush and refresh before commit so an exceptional refresh is still
+        # covered by the all-or-nothing transaction.
+        self.db.flush()
         self.db.refresh(exchange)
+        self.db.commit()
 
         # Check coins_spent and transaction_count achievements
         try:
@@ -167,9 +190,46 @@ class ShopService:
     def get_user_exchanges(self, user_id: UUID) -> List[ExchangeHistory]:
         return self.exchange_repo.get_by_user(user_id)
 
+    @rollback_on_error
     def refund_exchange(self, exchange: ExchangeHistory) -> ExchangeHistory:
-        if exchange.status != ExchangeStatus.COMPLETED.value:
+        self.user_repo.lock(exchange.user_id)
+        self.db.refresh(exchange)
+        changed = self.db.execute(update(ExchangeHistory).where(
+            ExchangeHistory.id == exchange.id,
+            ExchangeHistory.status == ExchangeStatus.COMPLETED.value,
+        ).values(status=ExchangeStatus.REFUNDED.value)).rowcount
+        if not changed:
             raise HTTPException(status_code=400, detail="Can only refund completed exchanges")
+
+        backpack_service = BackpackService(self.db)
+        rows = self.db.query(BackpackItem).filter(
+            BackpackItem.user_id == exchange.user_id,
+            BackpackItem.shop_item_id == exchange.item_id,
+            BackpackItem.status == ItemStatus.ACTIVE,
+        ).order_by(BackpackItem.id).populate_existing().all()
+        remaining = exchange.quantity
+        for item in rows:
+            quantity = min(item.quantity, remaining)
+            if quantity <= 0:
+                continue
+            changed = self.db.execute(update(BackpackItem).where(
+                BackpackItem.id == item.id,
+                BackpackItem.status == ItemStatus.ACTIVE,
+                BackpackItem.quantity >= quantity,
+            ).values(quantity=BackpackItem.quantity - quantity)).rowcount
+            if not changed:
+                raise HTTPException(status_code=400, detail="Insufficient refundable items")
+            backpack_service._log_history_no_commit(
+                exchange.user_id, item.id, item.shop_item_id, UsageAction.REFUND, quantity
+            )
+            self.db.refresh(item)
+            if item.quantity == 0:
+                self.db.delete(item)
+            remaining -= quantity
+            if remaining == 0:
+                break
+        if remaining:
+            raise HTTPException(status_code=400, detail="Insufficient refundable items; unequip or return unused items first")
 
         user = self.user_repo.get_by_id(exchange.user_id)
 
@@ -180,7 +240,17 @@ class ShopService:
         # Atomically restore stock
         self.item_repo.restore_stock_atomic(exchange.item_id, exchange.quantity)
 
+        self.coin_repo._create_no_commit({
+            "user_id": exchange.user_id,
+            "amount": exchange.total_cost,
+            "type": CoinType.EARN,
+            "source": CoinSource.SHOP.value,
+            "source_id": self._coin_source_id(exchange.id, "refund"),
+            "description": "商城退款",
+        })
+
         exchange.status = ExchangeStatus.REFUNDED
-        self.exchange_repo.db.commit()
+        self.db.flush()
         self.exchange_repo.db.refresh(exchange)
+        self.exchange_repo.db.commit()
         return exchange

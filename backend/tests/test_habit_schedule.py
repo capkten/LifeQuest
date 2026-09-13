@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone
+from uuid import UUID
 
 import pytest
 from fastapi import HTTPException
@@ -12,7 +13,13 @@ from app.services.calendar import CalendarService
 from app.schemas.todo import HabitBackfillCreate, HabitCreate, HabitUpdate
 from app.services.todo import TodoService
 from app.services.calendar import CalendarService
-from app.services.habit_schedule import is_due
+from app.services.habit_schedule import (
+    is_due,
+    month_has_active_schedule,
+    month_period,
+    week_has_active_schedule,
+    week_start,
+)
 from tests.test_daily_workbench import clock, make_user, headers
 
 
@@ -110,10 +117,152 @@ def test_weekly_target_backfill_cannot_exceed_target(client, db_session, clock):
     assert db_session.query(HabitCompletion).filter_by(habit_id=habit.id).count() == 3
 
 
+def test_weekly_target_backfill_counts_later_completed_days_in_current_week(
+    client, db_session, clock,
+):
+    user = make_user(db_session)
+    habit = Habit(
+        user_id=user.id,
+        title="补记不能挤占已完成容量",
+        frequency="weekly_target",
+        weekly_target=3,
+        created_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+    )
+    db_session.add(habit)
+    db_session.flush()
+    db_session.add_all([
+        HabitCompletion(
+            habit_id=habit.id,
+            user_id=user.id,
+            completed_on=completed_on,
+            completed_at=datetime.combine(completed_on, datetime.min.time()),
+        )
+        for completed_on in (
+            date(2026, 9, 8),
+            date(2026, 9, 9),
+            date(2026, 9, 11),
+        )
+    ])
+    db_session.commit()
+    clock(datetime(2026, 9, 12, 2, tzinfo=timezone.utc))
+
+    with pytest.raises(HTTPException) as error:
+        TodoService(db_session).backfill_habit(
+            habit,
+            user.id,
+            HabitBackfillCreate(completed_on=date(2026, 9, 10)),
+        )
+
+    assert error.value.status_code == 409
+    assert db_session.query(HabitCompletion).filter_by(habit_id=habit.id).count() == 3
+
+
+def test_habit_metrics_ignore_invalid_completion_facts(client, db_session, clock):
+    user = make_user(db_session)
+    habit = Habit(
+        user_id=user.id,
+        title="只统计有效计划日",
+        frequency="weekdays",
+        weekdays=[0],
+        created_at=datetime(2026, 9, 5, tzinfo=timezone.utc),
+    )
+    db_session.add(habit)
+    db_session.flush()
+    db_session.add_all([
+        HabitCompletion(
+            habit_id=habit.id,
+            user_id=user.id,
+            completed_on=completed_on,
+            completed_at=datetime.combine(completed_on, datetime.min.time()),
+        )
+        for completed_on in (
+            date(2026, 8, 31),  # before the habit was created
+            date(2026, 9, 7),   # valid Monday
+            date(2026, 9, 12),  # not a planned day
+            date(2026, 9, 14),  # future relative to today
+        )
+    ])
+    db_session.commit()
+
+    service = TodoService(db_session)
+    current = service._set_completed_today(habit)
+    service._recalculate_habit_streak(habit, [], [])
+
+    assert current.total_completed == 1
+    assert current.scheduled_count == 1
+    assert current.completed_count == 1
+    assert current.completed_today is False
+    assert habit.streak == 1
+
+
+def test_schedule_activity_respects_habit_creation_date():
+    weekly_target = Habit(
+        title="新建周目标",
+        user_id=UUID(int=1),
+        frequency="weekly_target",
+        weekly_target=3,
+        created_at=datetime(2026, 9, 10, tzinfo=timezone.utc),
+    )
+    monthly = Habit(
+        title="新建月计划",
+        user_id=UUID(int=1),
+        frequency="monthly",
+        created_at=datetime(2026, 9, 2, tzinfo=timezone.utc),
+    )
+
+    assert week_has_active_schedule(weekly_target, week_start(date(2026, 8, 31))) is False
+    assert week_has_active_schedule(weekly_target, week_start(date(2026, 9, 7))) is True
+    assert month_has_active_schedule(monthly, month_period(date(2026, 9, 1))) is False
+    assert month_has_active_schedule(monthly, month_period(date(2026, 10, 1))) is True
+
+
 @pytest.mark.parametrize("days", [[], [0, 0], [-1], [7], [True], ["1"], None])
 def test_invalid_weekdays(days):
     with pytest.raises(ValidationError):
         HabitCreate(title="阅读", frequency="weekdays", weekdays=days)
+
+
+def test_non_string_completion_note_returns_validation_error(client, db_session, clock):
+    user = make_user(db_session)
+    auth = headers(user)
+    habit = client.post("/api/todos/habits", headers=auth, json={"title": "训练"}).json()
+
+    response = client.post(
+        f"/api/todos/habits/{habit['id']}/complete",
+        headers=auth,
+        json={"note": 123},
+    )
+
+    assert response.status_code == 422
+
+
+def test_non_string_leave_reason_returns_validation_error(client, db_session, clock):
+    user = make_user(db_session)
+    auth = headers(user)
+    habit = client.post("/api/todos/habits", headers=auth, json={"title": "训练"}).json()
+
+    response = client.post(
+        f"/api/todos/habits/{habit['id']}/leave",
+        headers=auth,
+        json={"leave_on": "2026-09-12", "return_on": "2026-09-13", "reason": 123},
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("empty_note", [None, ""])
+def test_repeated_completion_does_not_clear_existing_note(client, db_session, clock, empty_note):
+    user = make_user(db_session)
+    auth = headers(user)
+    habit = client.post("/api/todos/habits", headers=auth, json={"title": "训练"}).json()
+    path = f"/api/todos/habits/{habit['id']}/complete"
+
+    assert client.post(path, headers=auth, json={"note": "保留这条备注"}).status_code == 200
+    response = client.post(path, headers=auth, json={"note": empty_note})
+
+    assert response.status_code == 200
+    record = db_session.query(HabitCompletion).one()
+    assert record.note == "保留这条备注"
 
 
 def test_legacy_schedule_migration_is_repeatable(tmp_path, monkeypatch):
@@ -127,15 +276,235 @@ def test_legacy_schedule_migration_is_repeatable(tmp_path, monkeypatch):
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE habits DROP COLUMN weekdays"))
             connection.execute(text("ALTER TABLE habits DROP COLUMN weekly_target"))
+            habit_columns = {column[1] for column in connection.execute(text("PRAGMA table_info(habits)"))}
+            if "streak_reset_on" in habit_columns:
+                connection.execute(text("ALTER TABLE habits DROP COLUMN streak_reset_on"))
             connection.execute(text("INSERT INTO habits (id, user_id, title, frequency) VALUES ('habit', 'user', '旧习惯', 'weekly')"))
         monkeypatch.setattr(main_module, "engine", engine)
         main_module._migrate_columns()
         main_module._migrate_columns()
         assert "weekdays" in {column["name"] for column in inspect(engine).get_columns("habits")}
+        assert "streak_reset_on" in {column["name"] for column in inspect(engine).get_columns("habits")}
         with engine.connect() as connection:
             assert connection.execute(text("SELECT title, frequency, weekdays FROM habits")).one() == ("旧习惯", "weekly", None)
     finally:
         engine.dispose()
+
+
+def test_legacy_completion_migration_merges_duplicate_metadata_and_adds_unique_guard(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine, inspect, text
+    from app import main as main_module
+    from app.database import Base
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'duplicate-completions.db'}")
+    try:
+        Base.metadata.create_all(engine)
+        with engine.begin() as connection:
+            connection.execute(text("DROP TABLE habit_completions"))
+            connection.execute(text(
+                "CREATE TABLE habit_completions ("
+                "id VARCHAR(36) PRIMARY KEY, habit_id VARCHAR(36) NOT NULL, "
+                "user_id VARCHAR(36) NOT NULL, completed_on DATE NOT NULL, "
+                "completed_at DATETIME NOT NULL, note VARCHAR(500), "
+                "is_makeup BOOLEAN NOT NULL DEFAULT 0, created_at DATETIME)"
+            ))
+            connection.execute(text(
+                "INSERT INTO habit_completions "
+                "(id, habit_id, user_id, completed_on, completed_at, note, is_makeup) VALUES "
+                "('completion-old', 'habit', 'user', '2026-09-12', '2026-09-12 02:00:00', '保留的历史备注', 1), "
+                "('completion-new', 'habit', 'user', '2026-09-12', '2026-09-12 12:00:00', NULL, 0)"
+            ))
+        monkeypatch.setattr(main_module, "engine", engine)
+        main_module._migrate_columns()
+        main_module._migrate_columns()
+
+        indexes = [index for index in inspect(engine).get_indexes("habit_completions")
+                   if index["unique"] and index["column_names"] == ["habit_id", "completed_on"]]
+        with engine.connect() as connection:
+            rows = connection.execute(text(
+                "SELECT id, note, is_makeup FROM habit_completions ORDER BY id"
+            )).fetchall()
+
+        assert rows == [("completion-new", "保留的历史备注", 1)]
+        assert len(indexes) == 1
+    finally:
+        engine.dispose()
+
+
+def test_legacy_completion_migration_adds_missing_timestamp_before_deduplication(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine, inspect, text
+    from app import main as main_module
+    from app.database import Base
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'old-completions.db'}")
+    try:
+        Base.metadata.create_all(engine)
+        with engine.begin() as connection:
+            connection.execute(text("DROP TABLE habit_completions"))
+            connection.execute(text(
+                "CREATE TABLE habit_completions ("
+                "id VARCHAR(36) PRIMARY KEY, habit_id VARCHAR(36) NOT NULL, "
+                "user_id VARCHAR(36) NOT NULL, completed_on DATE NOT NULL, "
+                "created_at DATETIME)"
+            ))
+            connection.execute(text(
+                "INSERT INTO habit_completions "
+                "(id, habit_id, user_id, completed_on, created_at) VALUES "
+                "('completion-old', 'habit', 'user', '2026-09-12', '2026-09-12 02:00:00'), "
+                "('completion-new', 'habit', 'user', '2026-09-12', '2026-09-12 12:00:00')"
+            ))
+        monkeypatch.setattr(main_module, "engine", engine)
+
+        main_module._migrate_columns()
+        main_module._migrate_columns()
+
+        columns = {column["name"] for column in inspect(engine).get_columns("habit_completions")}
+        with engine.connect() as connection:
+            rows = connection.execute(text(
+                "SELECT id, completed_at, note, is_makeup FROM habit_completions"
+            )).fetchall()
+
+        assert {"completed_at", "note", "is_makeup"}.issubset(columns)
+        assert rows == [("completion-new", "2026-09-12 12:00:00", None, 0)]
+    finally:
+        engine.dispose()
+
+
+def test_legacy_completion_migration_backfills_existing_null_timestamps_before_deduplication(
+    tmp_path, monkeypatch,
+):
+    from sqlalchemy import create_engine, inspect, text
+    from app import main as main_module
+    from app.database import Base
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'nullable-completions.db'}")
+    try:
+        Base.metadata.create_all(engine)
+        with engine.begin() as connection:
+            connection.execute(text("DROP TABLE habit_completions"))
+            connection.execute(text(
+                "CREATE TABLE habit_completions ("
+                "id VARCHAR(36) PRIMARY KEY, habit_id VARCHAR(36) NOT NULL, "
+                "user_id VARCHAR(36) NOT NULL, completed_on DATE NOT NULL, "
+                "completed_at DATETIME, note VARCHAR(500), "
+                "is_makeup BOOLEAN NOT NULL DEFAULT 0, created_at DATETIME)"
+            ))
+            connection.execute(text(
+                "INSERT INTO habit_completions "
+                "(id, habit_id, user_id, completed_on, completed_at, note, created_at) VALUES "
+                "('completion-old', 'habit', 'user', '2026-09-12', "
+                "'2026-09-12 02:00:00', NULL, '2026-09-12 02:00:00'), "
+                "('completion-null', 'habit', 'user', '2026-09-12', NULL, "
+                "'回填后的最新备注', '2026-09-12 12:00:00')"
+            ))
+        monkeypatch.setattr(main_module, "engine", engine)
+
+        main_module._migrate_columns()
+        main_module._migrate_columns()
+
+        columns = {column["name"] for column in inspect(engine).get_columns("habit_completions")}
+        with engine.connect() as connection:
+            rows = connection.execute(text(
+                "SELECT id, completed_at, note FROM habit_completions"
+            )).fetchall()
+
+        assert "completed_at" in columns
+        assert rows == [("completion-null", "2026-09-12 12:00:00", "回填后的最新备注")]
+    finally:
+        engine.dispose()
+
+
+def test_changing_habit_schedule_resets_streak_history_boundary(client, db_session, clock):
+    user = make_user(db_session)
+    habit = Habit(
+        user_id=user.id,
+        title="周末训练",
+        frequency="daily",
+        created_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+    )
+    db_session.add(habit)
+    db_session.commit()
+    service = TodoService(db_session)
+
+    clock(datetime(2026, 9, 12, 2, tzinfo=timezone.utc))
+    service.complete_habit(habit, user.id)
+    changed = service.update_habit(
+        habit,
+        HabitUpdate(frequency="weekdays", weekdays=[0, 5]),
+    )
+
+    assert changed.streak == 0
+    assert changed.streak_reset_on == date(2026, 9, 12)
+
+    clock(datetime(2026, 9, 14, 2, tzinfo=timezone.utc))
+    completed = service.complete_habit(changed, user.id)
+
+    assert completed.streak == 1
+
+
+def test_schedule_change_allows_same_day_completion_when_no_prior_completion(client, db_session, clock):
+    user = make_user(db_session)
+    habit = Habit(
+        user_id=user.id,
+        title="当天改计划后完成",
+        frequency="daily",
+        created_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+    )
+    db_session.add(habit)
+    db_session.commit()
+    service = TodoService(db_session)
+
+    clock(datetime(2026, 9, 12, 2, tzinfo=timezone.utc))
+    changed = service.update_habit(
+        habit,
+        HabitUpdate(frequency="weekdays", weekdays=[5]),
+    )
+
+    assert changed.streak == 0
+    assert changed.streak_reset_on == date(2026, 9, 11)
+
+    completed = service.complete_habit(changed, user.id)
+
+    assert completed.streak == 1
+    assert completed.best_streak == 1
+
+
+def test_daily_streak_can_cross_a_pause_longer_than_a_year(client, db_session):
+    user = make_user(db_session)
+    habit = Habit(
+        user_id=user.id,
+        title="长期暂停后的习惯",
+        frequency="daily",
+        created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+    )
+    db_session.add(habit)
+    db_session.flush()
+    db_session.add_all([
+        HabitCompletion(
+            habit_id=habit.id,
+            user_id=user.id,
+            completed_on=date(2025, 1, 1),
+            completed_at=datetime(2025, 1, 1, 2),
+        ),
+        HabitCompletion(
+            habit_id=habit.id,
+            user_id=user.id,
+            completed_on=date(2026, 2, 1),
+            completed_at=datetime(2026, 2, 1, 2),
+        ),
+    ])
+    pause = HabitPauseInterval(
+        habit_id=habit.id,
+        user_id=user.id,
+        paused_on=date(2025, 1, 2),
+        resumed_on=date(2026, 2, 1),
+    )
+    db_session.add(pause)
+    db_session.commit()
+
+    TodoService(db_session)._recalculate_habit_streak(habit, [pause], [])
+
+    assert habit.streak == 2
 
 
 def test_schedule_round_trip_and_partial_updates(client, db_session, clock):
@@ -164,6 +533,8 @@ def test_schedule_calendar_and_summary_agree(client, db_session, clock):
     user = make_user(db_session)
     service = TodoService(db_session)
     habit = service.create_habit(user.id, HabitCreate(title="跑步", frequency="weekdays", weekdays=[0, 5]))
+    habit.created_at = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    db_session.commit()
     assert is_due(habit, date(2026, 9, 12))
     assert not is_due(habit, date(2026, 9, 13))
     for offset in range(7):
@@ -176,6 +547,27 @@ def test_schedule_calendar_and_summary_agree(client, db_session, clock):
         service.complete_habit(habit, user.id)
     assert error.value.status_code == 409
     assert db_session.query(HabitCompletion).count() == 0
+
+
+def test_calendar_excludes_habits_before_their_creation_date(client, db_session):
+    user = make_user(db_session)
+    habit = Habit(
+        user_id=user.id,
+        title="未来才开始的习惯",
+        frequency="daily",
+        created_at=datetime(2026, 9, 12, 16, tzinfo=timezone.utc),
+    )
+    db_session.add(habit)
+    db_session.commit()
+    calendar = CalendarService(db_session)
+
+    before_events = calendar.get_events(user.id, date(2026, 9, 12), date(2026, 9, 12))
+    after_events = calendar.get_events(user.id, date(2026, 9, 13), date(2026, 9, 13))
+
+    assert [event for event in before_events if event["type"] == "habit"] == []
+    assert len([event for event in after_events if event["type"] == "habit"]) == 1
+    assert calendar.get_day_detail(user.id, date(2026, 9, 12))["habits"] == []
+    assert len(calendar.get_day_detail(user.id, date(2026, 9, 13))["habits"]) == 1
 
 
 def test_rest_days_do_not_break_streak_and_no_duplicate_rewards(client, db_session, clock):
@@ -288,6 +680,61 @@ def test_weekly_target_counts_days_caps_rewards_and_advances_weekly_streak(clien
     assert habit.weekly_completed == 3
     assert habit.streak == 2
     assert db_session.query(HabitCompletion).filter_by(habit_id=habit.id).count() == 6
+
+
+@pytest.mark.parametrize("excluded_kind", ["pause", "leave"])
+def test_weekly_target_capacity_ignores_excluded_and_future_records(
+    client, db_session, clock, excluded_kind,
+):
+    user = make_user(db_session)
+    habit = Habit(
+        user_id=user.id,
+        title="清理异常记录",
+        frequency="weekly_target",
+        weekly_target=3,
+        created_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+    )
+    db_session.add(habit)
+    db_session.flush()
+    db_session.add_all([
+        HabitCompletion(
+            habit_id=habit.id,
+            user_id=user.id,
+            completed_on=completed_on,
+            completed_at=datetime.combine(completed_on, datetime.min.time()),
+        )
+        for completed_on in (
+            date(2026, 9, 8),  # excluded by the interval below
+            date(2026, 9, 9),
+            date(2026, 9, 10),
+            date(2026, 9, 13),  # future relative to the action date
+        )
+    ])
+    if excluded_kind == "pause":
+        db_session.add(HabitPauseInterval(
+            habit_id=habit.id,
+            user_id=user.id,
+            paused_on=date(2026, 9, 8),
+            resumed_on=date(2026, 9, 9),
+        ))
+    else:
+        db_session.add(HabitLeaveInterval(
+            habit_id=habit.id,
+            user_id=user.id,
+            leave_on=date(2026, 9, 8),
+            return_on=date(2026, 9, 9),
+        ))
+    db_session.commit()
+    clock(datetime(2026, 9, 12, 2, tzinfo=timezone.utc))
+    service = TodoService(db_session)
+
+    assert service._weekly_completion_count(habit.id, date(2026, 9, 12)) == 2
+
+    completed = service.complete_habit(habit, user.id)
+
+    assert completed.weekly_completed == 3
+    assert completed.weekly_remaining == 0
+    assert db_session.query(HabitCompletion).filter_by(habit_id=habit.id).count() == 5
 
 
 @pytest.mark.parametrize("payload", [
@@ -432,6 +879,8 @@ def test_habit_completion_note_is_persisted_without_duplicate_reward(client, db_
     assert repeated.status_code == 200
     after_repeated = client.get("/api/users/me", headers=auth).json()
     assert after_repeated["coins"] == after_first["coins"]
+    repeated_without_note = client.post(path + "/complete", headers=auth)
+    assert repeated_without_note.status_code == 200
     assert db_session.query(HabitCompletion).count() == 1
     record = db_session.query(HabitCompletion).one()
     assert record.note == "补充了训练感受"
@@ -509,6 +958,9 @@ def test_habit_leave_excludes_schedule_validates_overlap_and_can_be_revoked(clie
     user, other = make_user(db_session), make_user(db_session)
     auth = headers(user)
     habit = client.post("/api/todos/habits", headers=auth, json={"title": "跑步"}).json()
+    db_habit = db_session.query(Habit).filter(Habit.id == UUID(habit["id"])).one()
+    db_habit.created_at = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    db_session.commit()
     path = f'/api/todos/habits/{habit["id"]}'
 
     leave = client.post(path + "/leave", headers=auth, json={

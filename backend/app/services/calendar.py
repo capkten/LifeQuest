@@ -180,6 +180,8 @@ class CalendarService:
     @staticmethod
     def _is_habit_due_on_date(habit: Habit, d: date) -> bool:
         from app.services.habit_schedule import is_due
+        if habit.created_at is not None and d < local_date(habit.created_at):
+            return False
         return is_due(habit, d)
 
     def _pause_intervals_by_habit(self, habits, user_id):

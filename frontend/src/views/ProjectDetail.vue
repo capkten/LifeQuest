@@ -6,7 +6,7 @@
 
     <div v-else-if="error" class="error-state">
       <p>{{ error }}</p>
-      <button class="retry-btn" @click="fetchData">重试</button>
+      <button class="retry-btn" @click="fetchData(projectId)">重试</button>
     </div>
 
     <template v-else-if="project">
@@ -182,7 +182,7 @@
           <div v-if="expandedPhases.has(phase.id)" class="phase-body">
             <div v-for="task in getPhaseTasks(phase.id)" :key="task.id" class="task-card" :class="{ 'task-card--done': task.status === 'completed' }" :style="{ borderLeftColor: getPriorityColor(task.priority) }">
               <div class="task-card-main">
-                <button class="task-complete-btn" :class="{ 'task-complete-btn--done': task.status === 'completed' }" :disabled="completingTaskId === task.id" :aria-disabled="task.status === 'completed'" @click="completeTaskCard(task)">
+                <button class="task-complete-btn" :class="{ 'task-complete-btn--done': task.status === 'completed' }" :disabled="completingTaskId === task.id || taskPendingIds.has(task.id)" :aria-disabled="task.status === 'completed'" @click="completeTaskCard(task)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12" /></svg>
                 </button>
                 <div class="task-card-info">
@@ -196,10 +196,13 @@
                   </span>
                 </div>
               </div>
+              <button class="btn-icon task-edit-btn" type="button" @click="openTaskDialog(task)" :disabled="taskPendingIds.has(task.id)" aria-label="编辑任务" title="编辑任务">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+              </button>
             </div>
             <form class="inline-add-form" @submit.prevent="addTaskToPhase(phase.id, $event)">
               <input type="text" class="inline-add-input" placeholder="添加任务..." maxlength="200" />
-              <button type="submit" class="btn-sm">
+              <button type="submit" class="btn-sm" :disabled="taskCreationPending" :aria-disabled="taskCreationPending">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
               </button>
             </form>
@@ -218,7 +221,7 @@
           <div v-if="expandedPhases.has('__unphased')" class="phase-body">
             <div v-for="task in unphasedTasks" :key="task.id" class="task-card" :class="{ 'task-card--done': task.status === 'completed' }" :style="{ borderLeftColor: getPriorityColor(task.priority) }">
               <div class="task-card-main">
-                <button class="task-complete-btn" :class="{ 'task-complete-btn--done': task.status === 'completed' }" :disabled="completingTaskId === task.id" :aria-disabled="task.status === 'completed'" @click="completeTaskCard(task)">
+                <button class="task-complete-btn" :class="{ 'task-complete-btn--done': task.status === 'completed' }" :disabled="completingTaskId === task.id || taskPendingIds.has(task.id)" :aria-disabled="task.status === 'completed'" @click="completeTaskCard(task)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12" /></svg>
                 </button>
                 <div class="task-card-info">
@@ -232,10 +235,13 @@
                   </span>
                 </div>
               </div>
+              <button class="btn-icon task-edit-btn" type="button" @click="openTaskDialog(task)" :disabled="taskPendingIds.has(task.id)" aria-label="编辑任务" title="编辑任务">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+              </button>
             </div>
             <form class="inline-add-form" @submit.prevent="addTaskToPhase(null, $event)">
               <input type="text" class="inline-add-input" placeholder="添加任务..." maxlength="200" />
-              <button type="submit" class="btn-sm">
+              <button type="submit" class="btn-sm" :disabled="taskCreationPending" :aria-disabled="taskCreationPending">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
               </button>
             </form>
@@ -269,10 +275,15 @@
                 :key="task.id"
                 class="kanban-card"
                 :style="{ borderLeftColor: getPriorityColor(task.priority) }"
-                draggable="true"
+                :draggable="!taskPendingIds.has(task.id)"
                 @dragstart="onDragStart($event, task)"
               >
-                <span class="kanban-card-title">{{ task.title }}</span>
+                <div class="kanban-card-header">
+                  <span class="kanban-card-title">{{ task.title }}</span>
+                  <button class="btn-icon kanban-edit-btn" type="button" @click.stop="openTaskDialog(task)" :disabled="taskPendingIds.has(task.id)" aria-label="编辑任务" title="编辑任务">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                  </button>
+                </div>
                 <div class="kanban-card-meta">
                   <span class="priority-dot" :style="{ background: getPriorityColor(task.priority) }"></span>
                   <span v-if="task.deadline" class="task-deadline">{{ formatDateShort(task.deadline) }}</span>
@@ -281,7 +292,7 @@
               </div>
               <div v-if="col.status === 'pending'" class="kanban-add">
                 <form @submit.prevent="addKanbanTask($event)">
-                  <input type="text" class="inline-add-input" placeholder="添加任务..." maxlength="200" />
+                  <input type="text" class="inline-add-input" placeholder="添加任务..." maxlength="200" :disabled="taskCreationPending" />
                 </form>
               </div>
             </div>
@@ -493,8 +504,10 @@
             </div>
             <div v-if="msDialogError" class="dialog-error">{{ msDialogError }}</div>
             <div class="dialog-actions">
-              <button type="button" class="btn-secondary" @click="cancelMilestoneDialog">取消</button>
-              <button type="submit" class="btn-primary" :aria-disabled="!msForm.name.trim()">保存</button>
+              <button type="button" class="btn-secondary" @click="cancelMilestoneDialog" :disabled="milestonePending">取消</button>
+              <button type="submit" class="btn-primary" :disabled="milestonePending || !msForm.name.trim()" :aria-disabled="milestonePending || !msForm.name.trim()">
+                {{ milestonePending ? '保存中...' : msDialogError ? '重试保存里程碑' : '保存' }}
+              </button>
             </div>
           </form>
         </div>
@@ -596,18 +609,31 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, reactive, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { projectService } from '../services/project'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
 import { createPhaseDeleteState, reducePhaseDeleteState } from '../utils/phaseDeleteState'
+import {
+  chinaDateKey,
+  chinaDateTimeInputToUtcIso,
+  dateKeyFromTimestamp,
+  dateKeyParts,
+  dateKeyTimestamp,
+  formatChinaDate,
+  todayChinaDateKey,
+} from '../utils/dateTime'
+import { useAuthStore } from '../stores/auth'
+import { useCultivationStore } from '../stores/cultivation'
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
+const cultivationStore = useCultivationStore()
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
-const projectId = route.params.id
+const projectId = ref(route.params.id)
 
 // Core data
 const project = ref(null)
@@ -622,6 +648,21 @@ const deletePending = ref(false)
 const finishing = ref(false)
 const completingTaskId = ref(null)
 const descCollapsed = ref(true)
+const taskPendingIds = reactive(new Set())
+const taskMutationTokens = new Map()
+const taskCreationPending = ref(false)
+const milestonePending = ref(false)
+let routeRevision = 0
+let milestoneRequestId = 0
+let fetchRequestId = 0
+let taskCreationRequestId = 0
+let phaseRequestId = 0
+let phaseDeleteRequestId = 0
+let projectSaveRequestId = 0
+let projectCompletionRequestId = 0
+let projectDeleteRequestId = 0
+let rewardRequestId = 0
+let dataRevision = 0
 
 // View state
 const currentView = ref('list')
@@ -653,6 +694,7 @@ const showTaskDialog = ref(false)
 const editingTask = ref(null)
 const taskForm = ref({ title: '', priority: 'medium', phase_id: null, start_date: '', deadline: '' })
 const taskDialogError = ref(null)
+const taskDialogPending = computed(() => editingTask.value ? taskPendingIds.has(editingTask.value.id) : false)
 
 const showPhaseDialog = ref(false)
 const editingPhase = ref(null)
@@ -705,12 +747,12 @@ function formatTaskStatus(status) {
 
 function formatDateFull(d) {
   if (!d) return ''
-  return new Date(d).toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
+  return formatChinaDate(d, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
 function formatDateShort(d) {
   if (!d) return ''
-  return new Date(d).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+  return formatChinaDate(d, { month: 'short', day: 'numeric' })
 }
 
 function getPriorityColor(priority) {
@@ -733,14 +775,37 @@ function getKanbanTasks(status) {
 }
 
 // --- Data Fetching ---
-async function fetchData() {
+function createProjectRequestToken(requestId, targetId = projectId.value) {
+  return {
+    requestId,
+    projectId: String(targetId || ''),
+    routeRevision,
+  }
+}
+
+function isCurrentProjectRequest(token, latestRequestId) {
+  return token.requestId === latestRequestId
+    && token.routeRevision === routeRevision
+    && token.projectId === String(route.params.id)
+}
+
+function isCurrentFetch(requestId, targetId) {
+  return requestId === fetchRequestId
+    && String(route.params.id) === targetId
+}
+
+async function fetchData(targetId = projectId.value) {
+  const normalizedId = String(targetId || '')
+  const requestId = ++fetchRequestId
+  const revision = dataRevision
   loading.value = true
   error.value = null
   try {
     const [proj, taskList] = await Promise.all([
-      projectService.getProject(projectId),
-      projectService.getProjectTasks(projectId)
+      projectService.getProject(normalizedId),
+      projectService.getProjectTasks(normalizedId)
     ])
+    if (!isCurrentFetch(requestId, normalizedId) || revision !== dataRevision || taskPendingIds.size > 0) return
     project.value = proj
     phases.value = proj.phases || []
     milestones.value = proj.milestones || []
@@ -749,65 +814,210 @@ async function fetchData() {
     if (phases.value.length > 0) expandedPhases.add(phases.value[0].id)
     expandedPhases.add('__unphased')
   } catch (e) {
-    error.value = getErrorMessage(e)
+    if (isCurrentFetch(requestId, normalizedId) && revision === dataRevision) error.value = getErrorMessage(e)
   } finally {
-    loading.value = false
+    if (isCurrentFetch(requestId, normalizedId)) loading.value = false
   }
 }
 
 // --- Task operations ---
-function addTaskToPhase(phaseId, event) {
-  const input = event.target.querySelector('input')
+function beginTaskMutation(taskId) {
+  if (taskPendingIds.has(taskId)) return null
+  const token = {
+    projectId: String(projectId.value),
+    routeRevision,
+    revision: ++dataRevision,
+  }
+  taskPendingIds.add(taskId)
+  taskMutationTokens.set(taskId, token)
+  return token
+}
+
+function isCurrentTaskMutation(taskId, token) {
+  return taskMutationTokens.get(taskId) === token
+    && token.projectId === String(projectId.value)
+    && token.routeRevision === routeRevision
+    && String(route.params.id) === token.projectId
+}
+
+function endTaskMutation(taskId, token) {
+  if (!isCurrentTaskMutation(taskId, token)) return
+  taskMutationTokens.delete(taskId)
+  taskPendingIds.delete(taskId)
+  dataRevision += 1
+}
+
+function updateProjectCompletedCount(oldStatus, nextStatus) {
+  if (!project.value || oldStatus === nextStatus) return
+  if (nextStatus === 'completed') {
+    project.value.completed_tasks = (project.value.completed_tasks || 0) + 1
+  } else if (oldStatus === 'completed') {
+    project.value.completed_tasks = Math.max(0, (project.value.completed_tasks || 0) - 1)
+  }
+}
+
+function openTaskDialog(task) {
+  if (!task) {
+    showError('任务不存在，无法编辑。')
+    return
+  }
+  if (taskPendingIds.has(task.id)) {
+    showError('该任务正在保存，请等待完成后再试。')
+    return
+  }
+  editingTask.value = task
+  taskForm.value = {
+    title: task.title || '',
+    priority: task.priority || 'medium',
+    phase_id: task.phase_id || null,
+    start_date: task.start_date ? chinaDateKey(task.start_date) || '' : '',
+    deadline: task.deadline ? chinaDateKey(task.deadline) || '' : '',
+  }
+  taskDialogError.value = null
+  showTaskDialog.value = true
+}
+
+function cancelTaskDialog({ force = false } = {}) {
+  if (!force && taskDialogPending.value) {
+    showError('任务正在保存，请等待完成后再试。')
+    return false
+  }
+  showTaskDialog.value = false
+  editingTask.value = null
+  taskForm.value = { title: '', priority: 'medium', phase_id: null, start_date: '', deadline: '' }
+  taskDialogError.value = null
+  return true
+}
+
+function taskDateToUtcIso(value, time) {
+  if (!value) return null
+  return chinaDateTimeInputToUtcIso(`${value}T${time}`) || null
+}
+
+async function saveTask() {
+  if (!editingTask.value) return
+  if (!taskForm.value.title.trim()) {
+    taskDialogError.value = '请先填写任务标题。'
+    showError('请先填写任务标题。')
+    return
+  }
+  if (taskDialogPending.value) {
+    showError('任务正在保存，请等待完成后再试。')
+    return
+  }
+  const task = editingTask.value
+  const token = beginTaskMutation(task.id)
+  if (!token) {
+    showError('该任务正在保存，请等待完成后再试。')
+    return
+  }
+  taskDialogError.value = null
+  try {
+    const updated = await projectService.updateTask(task.id, {
+      title: taskForm.value.title.trim(),
+      priority: taskForm.value.priority,
+      phase_id: taskForm.value.phase_id || null,
+      start_date: taskDateToUtcIso(taskForm.value.start_date, '00:00'),
+      deadline: taskDateToUtcIso(taskForm.value.deadline, '23:59'),
+    })
+    if (!isCurrentTaskMutation(task.id, token)) return
+    const index = tasks.value.findIndex(item => item.id === task.id)
+    if (index !== -1) tasks.value[index] = updated
+    cancelTaskDialog({ force: true })
+    showSuccess('任务已更新')
+  } catch (e) {
+    if (isCurrentTaskMutation(task.id, token)) {
+      taskDialogError.value = getErrorMessage(e)
+      showError(getErrorMessage(e))
+    }
+  } finally {
+    endTaskMutation(task.id, token)
+  }
+}
+
+async function createTaskFromInlineForm(event, payload) {
+  const form = event.currentTarget || event.target
+  const input = form?.querySelector('input')
   const title = input?.value?.trim()
   if (!title) { showError('请先填写任务标题。'); return }
-  projectService.createTask(projectId, { title, phase_id: phaseId }).then(task => {
+  if (taskCreationPending.value) {
+    showError('已有任务正在创建，请等待完成后再试。')
+    return
+  }
+
+  const targetId = String(projectId.value)
+  const token = createProjectRequestToken(++taskCreationRequestId, targetId)
+  taskCreationPending.value = true
+  try {
+    const task = await projectService.createTask(targetId, { title, ...payload })
+    if (!isCurrentProjectRequest(token, taskCreationRequestId)) return
     tasks.value.push(task)
     input.value = ''
     if (project.value) {
       project.value.total_tasks = (project.value.total_tasks || 0) + 1
     }
-  }).catch(e => {
-    showError(getErrorMessage(e))
-  })
+  } catch (e) {
+    if (isCurrentProjectRequest(token, taskCreationRequestId)) showError(getErrorMessage(e))
+  } finally {
+    if (isCurrentProjectRequest(token, taskCreationRequestId)) taskCreationPending.value = false
+  }
+}
+
+function addTaskToPhase(phaseId, event) {
+  return createTaskFromInlineForm(event, { phase_id: phaseId })
 }
 
 function addKanbanTask(event) {
-  const input = event.target.querySelector('input')
-  const title = input?.value?.trim()
-  if (!title) { showError('请先填写任务标题。'); return }
-  projectService.createTask(projectId, { title, status: 'pending' }).then(task => {
-    tasks.value.push(task)
-    input.value = ''
-    if (project.value) {
-      project.value.total_tasks = (project.value.total_tasks || 0) + 1
-    }
-  }).catch(e => {
-    showError(getErrorMessage(e))
-  })
+  return createTaskFromInlineForm(event, { status: 'pending' })
+}
+
+async function refreshTaskReward(updated, taskId, taskToken) {
+  if (!updated.cultivation_reward) return
+  const rewardToken = createProjectRequestToken(++rewardRequestId)
+  const results = await Promise.allSettled([
+    authStore.fetchUser(),
+    cultivationStore.applySettlement(updated.cultivation_reward)
+  ])
+  if (!isCurrentProjectRequest(rewardToken, rewardRequestId)
+    || !isCurrentTaskMutation(taskId, taskToken)) return
+  if (results.some(result => result.status === 'rejected')) {
+    showError('任务已完成，奖励已结算；状态刷新失败，请稍后刷新页面。')
+  } else {
+    showSuccess('任务已完成，奖励已结算。')
+  }
 }
 
 async function completeTaskCard(task) {
   if (!task) { showError('任务不存在，无法完成。'); return }
   if (task.status === 'completed') { showError('该任务已经完成，无需重复提交。'); return }
+  if (taskPendingIds.has(task.id)) { showError('该任务正在提交，请等待完成后再试。'); return }
   if (completingTaskId.value) { showError('已有其他项目任务正在提交，请等待完成后再试。'); return }
+  const token = beginTaskMutation(task.id)
+  if (!token) { showError('该任务正在提交，请等待完成后再试。'); return }
   completingTaskId.value = task.id
   const oldStatus = task.status
   try {
     const updated = await projectService.moveTask(task.id, { status: 'completed' })
+    if (!isCurrentTaskMutation(task.id, token)) return
     const idx = tasks.value.findIndex(t => t.id === task.id)
     if (idx !== -1) tasks.value[idx] = { ...tasks.value[idx], ...updated }
-    if (project.value && oldStatus !== 'completed') {
-      project.value.completed_tasks = (project.value.completed_tasks || 0) + 1
-    }
+    updateProjectCompletedCount(oldStatus, updated.status || 'completed')
+    await refreshTaskReward(updated, task.id, token)
   } catch (e) {
-    showError(getErrorMessage(e))
+    if (isCurrentTaskMutation(task.id, token)) showError(getErrorMessage(e))
   } finally {
-    completingTaskId.value = null
+    if (isCurrentTaskMutation(task.id, token)) completingTaskId.value = null
+    endTaskMutation(task.id, token)
   }
 }
 
 // --- Drag and Drop ---
 function onDragStart(event, task) {
+  if (taskPendingIds.has(task.id)) {
+    event.preventDefault()
+    draggedTask = null
+    return
+  }
   draggedTask = task
   event.dataTransfer.effectAllowed = 'move'
 }
@@ -818,22 +1028,27 @@ function onDragOver(event) {
 
 async function onDrop(event, newStatus) {
   event.preventDefault()
-  if (!draggedTask || draggedTask.status === newStatus) return
-  const oldStatus = draggedTask.status
   const task = draggedTask
   draggedTask = null
+  if (!task || taskPendingIds.has(task.id) || task.status === newStatus) return
+  const oldStatus = task.status
+  const token = beginTaskMutation(task.id)
+  if (!token) return
   // Optimistic update
   task.status = newStatus
   try {
-    await projectService.moveTask(task.id, { status: newStatus })
-    // Update completed_tasks count
-    if (project.value) {
-      if (newStatus === 'completed') project.value.completed_tasks = (project.value.completed_tasks || 0) + 1
-      else if (oldStatus === 'completed') project.value.completed_tasks = Math.max(0, (project.value.completed_tasks || 0) - 1)
-    }
+    const updated = await projectService.moveTask(task.id, { status: newStatus })
+    if (!isCurrentTaskMutation(task.id, token)) return
+    Object.assign(task, updated)
+    updateProjectCompletedCount(oldStatus, updated.status || newStatus)
+    await refreshTaskReward(updated, task.id, token)
   } catch (e) {
-    task.status = oldStatus
-    showError(getErrorMessage(e))
+    if (isCurrentTaskMutation(task.id, token)) {
+      task.status = oldStatus
+      showError(getErrorMessage(e))
+    }
+  } finally {
+    endTaskMutation(task.id, token)
   }
 }
 
@@ -849,14 +1064,15 @@ function openPhaseDialog(phase) {
   showPhaseDialog.value = true
 }
 
-function cancelPhaseDialog() {
-  if (phasePending.value) {
+function cancelPhaseDialog({ force = false } = {}) {
+  if (!force && phasePending.value) {
     showError('阶段正在保存或删除，请等待完成后再试。')
     return false
   }
   showPhaseDialog.value = false
   editingPhase.value = null
   phaseForm.value = { name: '' }
+  phaseDialogError.value = null
   return true
 }
 
@@ -864,23 +1080,31 @@ async function savePhase() {
   if (phaseDeleteState.value.pending) { showError('阶段正在删除，请等待完成后再试。'); return }
   if (!phaseForm.value.name.trim()) { phaseDialogError.value = '请先填写阶段名称。'; showError('请先填写阶段名称。'); return }
   if (phasePending.value) { showError('阶段正在保存或删除，请等待完成后再试。'); return }
+  const targetId = String(projectId.value)
+  const token = createProjectRequestToken(++phaseRequestId, targetId)
+  const phase = editingPhase.value
+  const name = phaseForm.value.name.trim()
+  phaseDialogError.value = null
   phasePending.value = true
   try {
-    if (editingPhase.value) {
-      const updated = await projectService.updatePhase(editingPhase.value.id, { name: phaseForm.value.name.trim() })
-      const idx = phases.value.findIndex(p => p.id === editingPhase.value.id)
+    if (phase) {
+      const updated = await projectService.updatePhase(phase.id, { name })
+      if (!isCurrentProjectRequest(token, phaseRequestId)) return
+      const idx = phases.value.findIndex(p => p.id === phase.id)
       if (idx !== -1) phases.value[idx] = updated
     } else {
-      const created = await projectService.createPhase(projectId, { name: phaseForm.value.name.trim() })
+      const created = await projectService.createPhase(targetId, { name })
+      if (!isCurrentProjectRequest(token, phaseRequestId)) return
       phases.value.push(created)
     }
+    if (!isCurrentProjectRequest(token, phaseRequestId)) return
     showPhaseDialog.value = false
     editingPhase.value = null
     phaseForm.value = { name: '' }
   } catch (e) {
-    phaseDialogError.value = getErrorMessage(e)
+    if (isCurrentProjectRequest(token, phaseRequestId)) phaseDialogError.value = getErrorMessage(e)
   } finally {
-    phasePending.value = false
+    if (isCurrentProjectRequest(token, phaseRequestId)) phasePending.value = false
   }
 }
 
@@ -912,12 +1136,17 @@ async function confirmDeletePhase() {
     showError('阶段正在删除，请等待完成后再试。')
     return
   }
+  const targetId = String(projectId.value)
+  const token = createProjectRequestToken(++phaseDeleteRequestId, targetId)
+  const phaseId = current.phase.id
   phaseDeleteState.value = next
   try {
-    await projectService.deletePhase(current.phase.id)
-    phases.value = phases.value.filter(p => p.id !== current.phase.id)
+    await projectService.deletePhase(phaseId)
+    if (!isCurrentProjectRequest(token, phaseDeleteRequestId)) return
+    phases.value = phases.value.filter(p => p.id !== phaseId)
     transitionPhaseDelete({ type: 'succeed' })
   } catch (e) {
+    if (!isCurrentProjectRequest(token, phaseDeleteRequestId)) return
     const message = getErrorMessage(e)
     transitionPhaseDelete({ type: 'fail', error: message })
     showError(message)
@@ -926,37 +1155,61 @@ async function confirmDeletePhase() {
 
 // --- Milestone operations ---
 function openMilestoneDialog(ms) {
+  if (milestonePending.value) {
+    showError('里程碑正在保存，请等待完成后再试。')
+    return
+  }
   editingMilestone.value = ms || null
   msForm.value = {
     name: ms?.name || '',
-    due_date: ms?.due_date ? new Date(ms.due_date).toISOString().slice(0, 10) : ''
+    due_date: ms?.due_date ? chinaDateKey(ms.due_date) || '' : ''
   }
   msDialogError.value = null
   showMilestoneDialog.value = true
 }
 
-function cancelMilestoneDialog() {
+function cancelMilestoneDialog({ force = false } = {}) {
+  if (!force && milestonePending.value) {
+    showError('里程碑正在保存，请等待完成后再试。')
+    return false
+  }
   showMilestoneDialog.value = false
   editingMilestone.value = null
   msForm.value = { name: '', due_date: '' }
+  msDialogError.value = null
+  return true
 }
 
 async function saveMilestone() {
   if (!msForm.value.name.trim()) { msDialogError.value = '请先填写里程碑名称。'; showError('请先填写里程碑名称。'); return }
+  if (milestonePending.value) { showError('里程碑正在保存，请等待完成后再试。'); return }
+  const targetId = String(projectId.value)
+  const requestId = ++milestoneRequestId
+  milestonePending.value = true
   try {
-    const data = { name: msForm.value.name.trim() }
-    if (msForm.value.due_date) data.due_date = msForm.value.due_date
+    const data = {
+      name: msForm.value.name.trim(),
+      due_date: msForm.value.due_date || null,
+    }
     if (editingMilestone.value) {
       const updated = await projectService.updateMilestone(editingMilestone.value.id, data)
+      if (requestId !== milestoneRequestId || String(route.params.id) !== targetId) return
       const idx = milestones.value.findIndex(m => m.id === editingMilestone.value.id)
       if (idx !== -1) milestones.value[idx] = updated
     } else {
-      const created = await projectService.createMilestone(projectId, data)
+      const created = await projectService.createMilestone(targetId, data)
+      if (requestId !== milestoneRequestId || String(route.params.id) !== targetId) return
       milestones.value.push(created)
     }
-    cancelMilestoneDialog()
+    cancelMilestoneDialog({ force: true })
+    showSuccess('里程碑已保存')
   } catch (e) {
-    msDialogError.value = getErrorMessage(e)
+    if (requestId === milestoneRequestId && String(route.params.id) === targetId) {
+      msDialogError.value = getErrorMessage(e)
+      showError(getErrorMessage(e))
+    }
+  } finally {
+    if (requestId === milestoneRequestId) milestonePending.value = false
   }
 }
 
@@ -966,8 +1219,8 @@ function openEditProject() {
     name: project.value.name || '',
     description: project.value.description || '',
     color: project.value.color || '#0ea5e9',
-    start_date: project.value.start_date ? new Date(project.value.start_date).toISOString().slice(0, 10) : '',
-    end_date: project.value.end_date ? new Date(project.value.end_date).toISOString().slice(0, 10) : ''
+    start_date: project.value.start_date ? chinaDateKey(project.value.start_date) || '' : '',
+    end_date: project.value.end_date ? chinaDateKey(project.value.end_date) || '' : ''
   }
   editDialogError.value = null
   showEditProjectDialog.value = true
@@ -991,36 +1244,42 @@ function cancelEditProjectDialog() {
 async function saveEditProject() {
   if (!editForm.value.name.trim()) { editDialogError.value = '请先填写项目名称。'; showError('请先填写项目名称。'); return }
   if (savePending.value) { showError('项目正在保存，请等待完成后再试。'); return }
+  const targetId = String(projectId.value)
+  const token = createProjectRequestToken(++projectSaveRequestId, targetId)
+  const data = { name: editForm.value.name.trim(), color: editForm.value.color }
+  data.description = editForm.value.description ? editForm.value.description.trim() : ''
+  data.start_date = editForm.value.start_date || null
+  data.end_date = editForm.value.end_date || null
+  editDialogError.value = null
   savePending.value = true
   try {
-    const data = { name: editForm.value.name.trim(), color: editForm.value.color }
-    if (editForm.value.description) data.description = editForm.value.description.trim()
-    else data.description = ''
-    data.start_date = editForm.value.start_date || null
-    data.end_date = editForm.value.end_date || null
-    const updated = await projectService.updateProject(projectId, data)
+    const updated = await projectService.updateProject(targetId, data)
+    if (!isCurrentProjectRequest(token, projectSaveRequestId)) return
     project.value = updated
     closeEditProjectDialog({ force: true })
     showSuccess('项目已更新')
   } catch (e) {
-    editDialogError.value = getErrorMessage(e)
+    if (isCurrentProjectRequest(token, projectSaveRequestId)) editDialogError.value = getErrorMessage(e)
   } finally {
-    savePending.value = false
+    if (isCurrentProjectRequest(token, projectSaveRequestId)) savePending.value = false
   }
 }
 
 async function completeProject() {
   if (project.value?.status === 'completed') { showError('项目已经完成，无需重复提交。'); return }
   if (finishing.value) { showError('项目正在完成，请等待完成后再试。'); return }
+  const targetId = String(projectId.value)
+  const token = createProjectRequestToken(++projectCompletionRequestId, targetId)
   finishing.value = true
   try {
-    const updated = await projectService.completeProject(projectId)
+    const updated = await projectService.completeProject(targetId)
+    if (!isCurrentProjectRequest(token, projectCompletionRequestId)) return
     project.value = updated
     showSuccess('项目已完成')
   } catch (e) {
-    showError(getErrorMessage(e))
+    if (isCurrentProjectRequest(token, projectCompletionRequestId)) showError(getErrorMessage(e))
   } finally {
-    finishing.value = false
+    if (isCurrentProjectRequest(token, projectCompletionRequestId)) finishing.value = false
   }
 }
 
@@ -1029,8 +1288,8 @@ function openDeleteDialog() {
   showDeleteDialog.value = true
 }
 
-function closeDeleteDialog() {
-  if (deletePending.value) {
+function closeDeleteDialog({ force = false } = {}) {
+  if (!force && deletePending.value) {
     showError('项目正在删除，请等待完成后再试。')
     return false
   }
@@ -1041,15 +1300,20 @@ function closeDeleteDialog() {
 
 async function confirmDeleteProject() {
   if (deletePending.value) { showError('项目正在删除，请等待完成后再试。'); return }
+  const targetId = String(projectId.value)
+  const token = createProjectRequestToken(++projectDeleteRequestId, targetId)
   deletePending.value = true
   try {
-    await projectService.deleteProject(projectId)
+    await projectService.deleteProject(targetId)
+    if (!isCurrentProjectRequest(token, projectDeleteRequestId)) return
     router.push('/projects')
   } catch (e) {
-    deleteDialogError.value = getErrorMessage(e)
-    showError(getErrorMessage(e))
+    if (isCurrentProjectRequest(token, projectDeleteRequestId)) {
+      deleteDialogError.value = getErrorMessage(e)
+      showError(getErrorMessage(e))
+    }
   } finally {
-    deletePending.value = false
+    if (isCurrentProjectRequest(token, projectDeleteRequestId)) deletePending.value = false
   }
 }
 
@@ -1058,6 +1322,15 @@ const DAY_MS = 86400000
 const ganttRowHeight = 40
 const ganttDayWidth = computed(() => ganttScale.value === 'week' ? 40 : 10)
 const ganttHeaderHeight = 30
+
+function ganttDateTimestamp(value) {
+  const dateKey = chinaDateKey(value)
+  return dateKey ? dateKeyTimestamp(dateKey) : null
+}
+
+function currentGanttDateTimestamp() {
+  return dateKeyTimestamp(todayChinaDateKey()) ?? Date.now()
+}
 
 const ganttTasks = computed(() => {
   const result = []
@@ -1073,18 +1346,25 @@ const ganttTasks = computed(() => {
 })
 
 const ganttRange = computed(() => {
-  let min = Date.now() - 7 * DAY_MS
-  let max = Date.now() + 30 * DAY_MS
+  const todayTimestamp = currentGanttDateTimestamp()
+  let min = todayTimestamp - 7 * DAY_MS
+  let max = todayTimestamp + 30 * DAY_MS
   for (const t of tasks.value) {
-    if (t.start_date) min = Math.min(min, new Date(t.start_date).getTime())
-    if (t.deadline) max = Math.max(max, new Date(t.deadline).getTime())
-    if (t.created_at) min = Math.min(min, new Date(t.created_at).getTime())
+    const startTimestamp = ganttDateTimestamp(t.start_date)
+    const deadlineTimestamp = ganttDateTimestamp(t.deadline)
+    const createdTimestamp = ganttDateTimestamp(t.created_at)
+    if (startTimestamp !== null) min = Math.min(min, startTimestamp)
+    if (deadlineTimestamp !== null) max = Math.max(max, deadlineTimestamp)
+    if (createdTimestamp !== null) min = Math.min(min, createdTimestamp)
   }
   for (const ms of milestones.value) {
-    if (ms.due_date) max = Math.max(max, new Date(ms.due_date).getTime())
+    const dueTimestamp = ganttDateTimestamp(ms.due_date)
+    if (dueTimestamp !== null) max = Math.max(max, dueTimestamp)
   }
-  if (project.value?.start_date) min = Math.min(min, new Date(project.value.start_date).getTime())
-  if (project.value?.end_date) max = Math.max(max, new Date(project.value.end_date).getTime())
+  const projectStartTimestamp = ganttDateTimestamp(project.value?.start_date)
+  const projectEndTimestamp = ganttDateTimestamp(project.value?.end_date)
+  if (projectStartTimestamp !== null) min = Math.min(min, projectStartTimestamp)
+  if (projectEndTimestamp !== null) max = Math.max(max, projectEndTimestamp)
   min = Math.floor(min / DAY_MS) * DAY_MS
   max = Math.ceil(max / DAY_MS) * DAY_MS + DAY_MS
   return { min, max }
@@ -1098,7 +1378,7 @@ const ganttWidth = computed(() => {
 const ganttHeight = computed(() => ganttTasks.value.length * ganttRowHeight + ganttHeaderHeight + 20)
 
 const ganttTodayX = computed(() => {
-  return ((Date.now() - ganttRange.value.min) / DAY_MS) * ganttDayWidth.value
+  return ((currentGanttDateTimestamp() - ganttRange.value.min) / DAY_MS) * ganttDayWidth.value
 })
 
 const ganttGridLines = computed(() => {
@@ -1116,10 +1396,12 @@ const ganttTimeLabels = computed(() => {
   const days = Math.ceil((ganttRange.value.max - ganttRange.value.min) / DAY_MS)
   const step = ganttScale.value === 'week' ? 7 : 30
   for (let i = 0; i <= days; i += step) {
-    const d = new Date(ganttRange.value.min + i * DAY_MS)
+    const dateKey = dateKeyFromTimestamp(ganttRange.value.min + i * DAY_MS)
+    const parts = dateKeyParts(dateKey)
+    if (!parts) continue
     const text = ganttScale.value === 'week'
-      ? `${d.getMonth() + 1}/${d.getDate()}`
-      : `${d.getFullYear()}/${d.getMonth() + 1}`
+      ? `${parts.monthIndex + 1}/${parts.day}`
+      : `${parts.year}/${parts.monthIndex + 1}`
     labels.push({ x: i * ganttDayWidth.value + ganttDayWidth.value * step / 2, text })
   }
   return labels
@@ -1130,7 +1412,9 @@ const ganttMilestones = computed(() => {
 })
 
 function ganttDateToX(dateStr) {
-  return ((new Date(dateStr).getTime() - ganttRange.value.min) / DAY_MS) * ganttDayWidth.value
+  const timestamp = ganttDateTimestamp(dateStr)
+  if (timestamp === null) return 0
+  return ((timestamp - ganttRange.value.min) / DAY_MS) * ganttDayWidth.value
 }
 
 function getGanttBar(task) {
@@ -1153,8 +1437,55 @@ function getMilestoneDiamond(ms) {
 }
 
 // --- Init ---
+function invalidateRequests() {
+  routeRevision += 1
+  fetchRequestId += 1
+  dataRevision += 1
+  milestoneRequestId += 1
+  taskCreationRequestId += 1
+  phaseRequestId += 1
+  phaseDeleteRequestId += 1
+  projectSaveRequestId += 1
+  projectCompletionRequestId += 1
+  projectDeleteRequestId += 1
+  rewardRequestId += 1
+  taskMutationTokens.clear()
+  taskPendingIds.clear()
+  taskCreationPending.value = false
+  phasePending.value = false
+  savePending.value = false
+  deletePending.value = false
+  finishing.value = false
+  completingTaskId.value = null
+  milestonePending.value = false
+  draggedTask = null
+  cancelTaskDialog({ force: true })
+  cancelPhaseDialog({ force: true })
+  cancelMilestoneDialog({ force: true })
+  closeEditProjectDialog({ force: true })
+  closeDeleteDialog({ force: true })
+  phaseDeleteState.value = createPhaseDeleteState()
+}
+
+watch(() => route.params.id, (nextId, previousId) => {
+  if (!nextId || nextId === previousId) return
+  projectId.value = nextId
+  invalidateRequests()
+  project.value = null
+  phases.value = []
+  milestones.value = []
+  tasks.value = []
+  expandedPhases.clear()
+  descCollapsed.value = true
+  fetchData(nextId)
+})
+
 onMounted(() => {
-  fetchData()
+  fetchData(projectId.value)
+})
+
+onBeforeUnmount(() => {
+  invalidateRequests()
 })
 </script>
 

@@ -8,6 +8,8 @@ from app.models.backpack import BackpackItem, ItemType, ItemStatus, UsageAction,
 from app.models.shop import ShopItem
 from app.repositories.backpack import BackpackItemRepository, UsageHistoryRepository
 from app.repositories.shop import ShopItemRepository
+from app.repositories.user import UserRepository
+from app.services.transaction import rollback_on_error
 
 
 class BackpackService:
@@ -27,6 +29,14 @@ class BackpackService:
         return item
 
     # --- Core operations ---
+    def _lock_item(self, item: BackpackItem) -> BackpackItem:
+        UserRepository(self.db).lock(item.user_id)
+        current = self.db.query(BackpackItem).filter_by(id=item.id).populate_existing().first()
+        if current is None:
+            raise HTTPException(status_code=404, detail="Backpack item not found")
+        return current
+
+    @rollback_on_error
     def add_item(
         self,
         user_id: UUID,
@@ -43,12 +53,14 @@ class BackpackService:
         """
         if quantity <= 0:
             raise ValueError("quantity must be positive")
+        UserRepository(self.db).lock(user_id)
         shop_item = self.shop_item_repo.get_by_id(shop_item_id)
         if shop_item is None:
             raise HTTPException(status_code=404, detail="Shop item not found")
 
         existing = self.backpack_repo.get_by_user_and_shop_item(user_id, shop_item_id)
         if existing:
+            self.db.refresh(existing)
             existing.quantity += quantity
             self._log_history_no_commit(user_id, existing.id, shop_item_id, UsageAction.ADD, quantity)
             if commit:
@@ -70,10 +82,12 @@ class BackpackService:
             self.db.refresh(item)
         return item
 
+    @rollback_on_error
     def use_item(self, item: BackpackItem, quantity: int = 1) -> BackpackItem:
         """Use a consumable item. Decrements quantity; deletes entry when quantity reaches 0."""
         if quantity <= 0:
             raise ValueError("quantity must be positive")
+        item = self._lock_item(item)
         if item.item_type != ItemType.CONSUMABLE:
             raise HTTPException(status_code=400, detail="Only consumable items can be used")
 
@@ -92,8 +106,10 @@ class BackpackService:
         self.db.refresh(item)
         return item
 
+    @rollback_on_error
     def equip_item(self, item: BackpackItem) -> BackpackItem:
         """Equip an item. Unequips other items of the same item_type."""
+        item = self._lock_item(item)
         if item.status == ItemStatus.EQUIPPED:
             raise HTTPException(status_code=400, detail="Item is already equipped")
 
@@ -111,11 +127,13 @@ class BackpackService:
         self.db.refresh(item)
         return item
 
+    @rollback_on_error
     def discard_item(self, item: BackpackItem, quantity: int = 1) -> BackpackItem:
         """Discard items. Deletes entry when quantity reaches 0.
         If the item is equipped, unequips it first."""
         if quantity <= 0:
             raise ValueError("quantity must be positive")
+        item = self._lock_item(item)
         if item.status == ItemStatus.EQUIPPED:
             item.status = ItemStatus.ACTIVE
             self._log_history_no_commit(
@@ -156,7 +174,7 @@ class BackpackService:
             BackpackItem.quantity > 0,
         ).order_by(BackpackItem.id)
         if lock:
-            query = query.with_for_update()
+            query = query.with_for_update().populate_existing()
         return query.all()
 
     def consume_by_key(self, user_id: UUID, item_key: str, quantity: int) -> int:
@@ -165,6 +183,8 @@ class BackpackService:
         if quantity == 0:
             return 0
 
+        UserRepository(self.db).lock(user_id)
+
         rows = self.get_items_by_key(user_id, item_key, lock=True)
         owned = sum(row.quantity for row in rows)
         if owned < quantity:
@@ -172,19 +192,20 @@ class BackpackService:
                 f"TRIBULATION_PILL_INSUFFICIENT:{quantity}:{owned}"
             )
 
-        remaining = quantity
-        for row in rows:
-            consumed = min(row.quantity, remaining)
-            row.quantity -= consumed
-            self._log_history_no_commit(
-                user_id, row.id, row.shop_item_id, UsageAction.USE, consumed
-            )
-            remaining -= consumed
-            if row.quantity <= 0:
-                self.db.delete(row)
-            if remaining == 0:
-                break
-        self.db.flush()
+        with self.db.begin_nested():
+            remaining = quantity
+            for row in rows:
+                consumed = min(row.quantity, remaining)
+                row.quantity -= consumed
+                self._log_history_no_commit(
+                    user_id, row.id, row.shop_item_id, UsageAction.USE, consumed
+                )
+                remaining -= consumed
+                if row.quantity <= 0:
+                    self.db.delete(row)
+                if remaining == 0:
+                    break
+            self.db.flush()
         return quantity
 
     def get_usage_history_with_names(

@@ -45,14 +45,7 @@ jobs:
 
       - name: Run frontend regression tests
         working-directory: frontend
-        run: >-
-          node --test
-          src/composables/useNoteAutosave.test.mjs
-          src/views/cultivation-regressions.test.mjs
-          src/views/immortal-regressions.test.mjs
-          src/views/localization-regressions.test.mjs
-          src/views/sects-request-state.test.mjs
-          src/views/ui-regressions.test.mjs
+        run: npm test
 
       - name: Build frontend
         working-directory: frontend

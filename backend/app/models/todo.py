@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Boolean, Text, Float, Uuid
+from sqlalchemy import Column, String, Integer, Date, DateTime, ForeignKey, Boolean, Text, Float, Uuid, JSON
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -28,6 +28,8 @@ class Frequency(str, Enum):
     DAILY = "daily"
     WEEKLY = "weekly"
     MONTHLY = "monthly"
+    WEEKDAYS = "weekdays"
+    WEEKLY_TARGET = "weekly_target"
 
 
 class Habit(Base):
@@ -39,6 +41,9 @@ class Habit(Base):
     description = Column(Text)
     difficulty = Column(String(20), default=Difficulty.MEDIUM)
     frequency = Column(String(20), default=Frequency.DAILY)
+    weekdays = Column(JSON, nullable=True)
+    weekly_target = Column(Integer, nullable=True)
+    streak_reset_on = Column(Date, nullable=True)
     coins_reward = Column(Integer, default=10)
     exp_reward = Column(Integer, default=5)
     is_active = Column(Boolean, default=True)

@@ -28,6 +28,7 @@ class UsageAction(str, Enum):
     EQUIP = "equip"
     UNEQUIP = "unequip"
     DISCARD = "discard"
+    REFUND = "refund"
 
 
 class BackpackItem(Base):

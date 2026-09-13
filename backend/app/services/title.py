@@ -33,7 +33,7 @@ class TitleService:
             if not existing:
                 self.title_repo.create(data)
 
-    def check_and_unlock(self, user_id: UUID, condition_type: str, current_value: int) -> List[Title]:
+    def check_and_unlock(self, user_id: UUID, condition_type: str, current_value: int, commit: bool = True) -> List[Title]:
         """Check all titles of the given condition_type and unlock any
         that the user qualifies for but hasn't earned yet.
 
@@ -44,11 +44,13 @@ class TitleService:
         for title in titles:
             existing = self.user_title_repo.get_by_user_and_title(user_id, title.id)
             if not existing:
-                self.user_title_repo.create({
+                self.user_title_repo._create_no_commit({
                     "user_id": user_id,
                     "title_id": title.id,
                 })
                 unlocked.append(title)
+        if commit:
+            self.db.commit()
         return unlocked
 
     def get_all_titles(self) -> List[Title]:

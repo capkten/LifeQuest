@@ -13,6 +13,7 @@ from app.models.budget import Budget
 from app.models.debt import Debt, DebtPayment, DebtStatus
 from app.models.finance_category import FinanceCategory, CategoryType
 from app.models.finance_transaction import FinanceTransaction, FinanceTransactionType
+from app.models.finance_daily_reward import FinanceDailyRewardClaim
 from app.models.recurring_transaction import RecurringTransaction
 from app.models.coin_transaction import CoinSource, CoinType
 from app.repositories.account import AccountRepository
@@ -240,7 +241,7 @@ class FinanceService:
         self._apply_transaction_balance_effect(txn)
         try:
             self.db.flush()
-            self._award_transaction_exp(user_id)
+            self._award_transaction_exp(user_id, txn.date)
             count = self.transaction_repo.count_by_user(user_id)
             self.achievement_service.check_and_unlock(
                 user_id, "transaction_count", count, commit=False
@@ -531,21 +532,28 @@ class FinanceService:
 
     # --- Internal helpers ---
 
-    def _award_transaction_exp(self, user_id: UUID):
+    def _award_transaction_exp(self, user_id: UUID, reward_date: date):
         user = self.user_repo.get_by_id(user_id)
         if not user:
             return
         exp = 2
-        # +5 bonus for first finance transaction of the day
-        today_start = china_today()
-        existing_today = (
-            self.db.query(FinanceTransaction)
-            .filter(
+        # The claim survives transaction deletion, so recreating a deleted
+        # first transaction cannot grant the daily bonus again.
+        claim = self.db.query(FinanceDailyRewardClaim).filter_by(
+            user_id=user_id,
+            reward_date=reward_date,
+        ).one_or_none()
+        if claim is None:
+            # During rollout, infer an already-consumed bonus from an older
+            # same-day transaction before creating the durable claim.
+            existing_on_date = self.db.query(FinanceTransaction).filter(
                 FinanceTransaction.user_id == user_id,
-                FinanceTransaction.date == today_start,
-            )
-            .count()
-        )
-        if existing_today <= 1:  # the one we just created
-            exp += 5
+                FinanceTransaction.date == reward_date,
+            ).count()
+            self.db.add(FinanceDailyRewardClaim(
+                user_id=user_id,
+                reward_date=reward_date,
+            ))
+            if existing_on_date <= 1:  # the transaction currently being created
+                exp += 5
         self.user_repo._update_experience_no_commit(user, exp)

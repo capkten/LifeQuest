@@ -11,6 +11,7 @@ from app.repositories.coin_transaction import CoinTransactionRepository
 from app.repositories.user import UserRepository
 from app.services.achievement import AchievementService
 from app.services.cultivation import CultivationService
+from app.timezone import today as china_today
 
 BASE_COINS = 10
 BASE_EXP = 5
@@ -29,7 +30,7 @@ class CheckinService:
         self.cultivation_service = CultivationService(db)
 
     def get_status(self, user_id: UUID) -> dict:
-        today = date.today()
+        today = china_today()
         today_checkin = self.checkin_repo.get_by_user_and_date(user_id, today)
 
         latest = self.checkin_repo.get_latest_by_user(user_id)
@@ -54,13 +55,13 @@ class CheckinService:
 
         return {
             "checked_in": today_checkin is not None,
-            "streak": current_streak if today_checkin else current_streak,
+            "streak": current_streak if latest and latest.checkin_date >= today - timedelta(days=1) else 0,
             "reward_coins": reward_coins,
             "reward_exp": reward_exp,
         }
 
     def checkin(self, user_id: UUID):
-        today = date.today()
+        today = china_today()
         existing = self.checkin_repo.get_by_user_and_date(user_id, today)
         if existing:
             raise HTTPException(status_code=400, detail="Already checked in today")

@@ -159,6 +159,25 @@ test('changed quick-create content starts a new idempotency request', async () =
   assert.notEqual(payloads[0].request_id, payloads[1].request_id)
 })
 
+test('quick-create generates a valid request ID without secure-context crypto.randomUUID', async () => {
+  const originalCrypto = Object.getOwnPropertyDescriptor(globalThis, 'crypto')
+  const payloads = []
+  Object.defineProperty(globalThis, 'crypto', { configurable: true, value: {} })
+  try {
+    const { state } = harness({ createQuickTask: async payload => {
+      payloads.push(payload)
+      return task('lan-new', payload.title)
+    } }, { newRequestId: undefined })
+    await state.load()
+    state.draft.value.title = '局域网任务'
+
+    assert.equal(await state.createTask(), true)
+    assert.match(payloads[0].request_id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
+  } finally {
+    Object.defineProperty(globalThis, 'crypto', originalCrypto)
+  }
+})
+
 test('focus selection limits three tasks, preserves order and allows retry after failure', async () => {
   const { state, api } = harness()
   await state.load()

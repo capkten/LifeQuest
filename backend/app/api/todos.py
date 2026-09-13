@@ -1,3 +1,4 @@
+from datetime import date
 from typing import List, Optional
 from uuid import UUID
 
@@ -10,6 +11,12 @@ from app.schemas.todo import (
     HabitCreate,
     HabitUpdate,
     HabitResponse,
+    HabitPauseIntervalResponse,
+    HabitLeaveCreate,
+    HabitLeaveIntervalResponse,
+    HabitCompletionCreate,
+    HabitBackfillCreate,
+    HabitHistoryResponse,
     TaskCreate,
     TaskUpdate,
     TaskResponse,
@@ -21,9 +28,26 @@ from app.schemas.todo import (
     SubtaskResponse,
 )
 from app.services.todo import TodoService
+from app.services.daily_workbench import DailyWorkbenchService
+from app.schemas.daily_workbench import DailyFocusUpdate, QuickTaskCreate
 from app.api.auth import get_current_user
 
 router = APIRouter(prefix="/api/todos", tags=["todos"])
+
+
+@router.get("/workbench", response_model=dict)
+def get_workbench(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return DailyWorkbenchService(db).get_workbench(current_user.id)
+
+
+@router.put("/workbench/focus", response_model=dict)
+def update_daily_focus(data: DailyFocusUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return DailyWorkbenchService(db).update_focus(current_user.id, data)
+
+
+@router.post("/workbench/tasks", response_model=TaskResponse)
+def create_quick_task(data: QuickTaskCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return DailyWorkbenchService(db).create_quick_task(current_user.id, data)
 
 
 # --- Daily summary endpoint ---
@@ -68,6 +92,35 @@ def get_habit(
     return service.get_habit_for_user(habit_id, current_user.id)
 
 
+@router.get("/habits/{habit_id}/pause-intervals", response_model=List[HabitPauseIntervalResponse])
+def get_habit_pause_intervals(
+    habit_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return TodoService(db).get_pause_intervals(habit_id, current_user.id)
+
+
+@router.get("/habits/{habit_id}/leave-intervals", response_model=List[HabitLeaveIntervalResponse])
+def get_habit_leave_intervals(
+    habit_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return TodoService(db).get_leave_intervals(habit_id, current_user.id)
+
+
+@router.get("/habits/{habit_id}/history", response_model=HabitHistoryResponse)
+def get_habit_history(
+    habit_id: UUID,
+    start_on: Optional[date] = Query(None),
+    end_on: Optional[date] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return TodoService(db).get_habit_history(habit_id, current_user.id, start_on, end_on)
+
+
 @router.put("/habits/{habit_id}", response_model=HabitResponse)
 def update_habit(
     habit_id: UUID,
@@ -78,6 +131,52 @@ def update_habit(
     service = TodoService(db)
     habit = service.get_habit_for_user(habit_id, current_user.id)
     return service.update_habit(habit, habit_in)
+
+
+@router.post("/habits/{habit_id}/pause", response_model=HabitResponse)
+def pause_habit(
+    habit_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = TodoService(db)
+    habit = service.get_habit_for_user(habit_id, current_user.id)
+    return service.pause_habit(habit, current_user.id)
+
+
+@router.post("/habits/{habit_id}/resume", response_model=HabitResponse)
+def resume_habit(
+    habit_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = TodoService(db)
+    habit = service.get_habit_for_user(habit_id, current_user.id)
+    return service.resume_habit(habit, current_user.id)
+
+
+@router.post("/habits/{habit_id}/leave", response_model=HabitResponse)
+def create_habit_leave(
+    habit_id: UUID,
+    leave_in: HabitLeaveCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = TodoService(db)
+    habit = service.get_habit_for_user(habit_id, current_user.id)
+    return service.create_habit_leave(habit, current_user.id, leave_in)
+
+
+@router.delete("/habits/{habit_id}/leave/{leave_id}", response_model=HabitResponse)
+def delete_habit_leave(
+    habit_id: UUID,
+    leave_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = TodoService(db)
+    habit = service.get_habit_for_user(habit_id, current_user.id)
+    return service.delete_habit_leave(habit, leave_id, current_user.id)
 
 
 @router.delete("/habits/{habit_id}")
@@ -95,12 +194,25 @@ def delete_habit(
 @router.post("/habits/{habit_id}/complete", response_model=HabitResponse)
 def complete_habit(
     habit_id: UUID,
+    completion_in: Optional[HabitCompletionCreate] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     service = TodoService(db)
     habit = service.get_habit_for_user(habit_id, current_user.id)
-    return service.complete_habit(habit, current_user.id)
+    return service.complete_habit(habit, current_user.id, completion_in)
+
+
+@router.post("/habits/{habit_id}/completions", response_model=HabitResponse)
+def backfill_habit(
+    habit_id: UUID,
+    completion_in: HabitBackfillCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = TodoService(db)
+    habit = service.get_habit_for_user(habit_id, current_user.id)
+    return service.backfill_habit(habit, current_user.id, completion_in)
 
 
 # --- Task endpoints ---

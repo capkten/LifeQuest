@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-12",
+  "generated_at": "2026-09-13",
   "branch": "main",
   "model": "gpt-5.6luna",
   "items": {
@@ -29,10 +29,11 @@
     "github-release-artifacts": "planned"
   },
   "evidence": {
-    "backend": "404 passed, 952 warnings in 119.73s",
-    "frontend": "155 passed, 0 failed",
-    "build": "successful at 1.14.0; 2031 modules; existing >500 kB warning: index 1050.71 kB and element-plus 1069.31 kB",
-    "browser": "21 core checks and 24 fixed-clock checks passed; .superpowers/sdd/2026-09-12-lifequest-stability-workbench-habits/evidence-2026-09-12/",
+    "backend": "439 passed, 965 warnings in 126.98s",
+    "frontend": "170 passed, 0 failed in 1008 ms",
+    "build": "successful at 1.14.1; 2031 modules; existing >500 kB warning: index 1050.83 kB and element-plus 1069.31 kB",
+    "browser": "30 core flow assertions and 24 fixed-clock checks passed; core results carry flowId/artifact/requestRefs, including fourth focus candidate disabled/not sent. The current-fixture midnight rerun recorded 24 assertions and 148 HTTP 200 responses in midnight-browser-results.json and midnight-request-log.json; midnight response logs use the legacy format without request IDs: .superpowers/sdd/2026-09-12-lifequest-stability-workbench-habits/evidence-2026-09-12/",
+    "version_provenance": "Task 7 working-tree baseline was user-owned uncommitted 1.13.0, advanced to 1.14.0 and synchronized; the post-audit corrective fixes advanced 1.14.0 to 1.14.1 and synchronized the same source-of-truth metadata",
     "verification_report": "docs/superpowers/reports/2026-09-12-lifequest-stability-workbench-habits-verification.md",
     "external_release": "pending: Android real device, production signing, both GitHub Actions final success conclusions, GitHub Release artifacts, and live health check"
   }

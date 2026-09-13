@@ -68,5 +68,9 @@ export const projectService = {
   async moveTask(taskId, data) {
     const r = await api.put(`/projects/tasks/${taskId}/move`, data)
     return r.data
+  },
+  async updateTask(taskId, data) {
+    const r = await api.put(`/todos/tasks/${taskId}`, data)
+    return r.data
   }
 }

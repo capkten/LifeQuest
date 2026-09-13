@@ -519,6 +519,66 @@ test('project mutations use independent locks and phase deletion preserves task 
   assert.match(service, /params: options/)
 })
 
+test('ProjectDetail inline task creation locks duplicate submissions and keeps failed input retryable', async () => {
+  const source = await readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8')
+  const phaseHandler = source.match(/function addTaskToPhase\(phaseId, event\) \{([\s\S]*?)\n\}/)?.[1]
+  const kanbanHandler = source.match(/function addKanbanTask\(event\) \{([\s\S]*?)\n\}/)?.[1]
+  const creationHandler = source.match(/async function createTaskFromInlineForm\(event, payload\) \{([\s\S]*?)\n\}/)?.[1]
+
+  assert.ok(phaseHandler, 'phase task creation handler must remain available')
+  assert.ok(kanbanHandler, 'kanban task creation handler must remain available')
+  assert.ok(creationHandler, 'shared task creation handler must remain available')
+  assert.match(source, /const taskCreationPending = ref\(false\)/)
+  assert.match(source, /let taskCreationRequestId = 0/)
+  assert.match(source, /:disabled="taskCreationPending"/)
+  assert.match(phaseHandler, /return createTaskFromInlineForm\(event, \{ phase_id: phaseId \}\)/)
+  assert.match(kanbanHandler, /return createTaskFromInlineForm\(event, \{ status: 'pending' \}\)/)
+  assert.match(creationHandler, /if \(taskCreationPending\.value\)/)
+  assert.match(creationHandler, /const token = createProjectRequestToken\(\+\+taskCreationRequestId/)
+  assert.match(creationHandler, /isCurrentProjectRequest\(token, taskCreationRequestId\)/)
+  assert.match(creationHandler, /finally \{[\s\S]*taskCreationPending\.value = false/)
+})
+
+test('ProjectDetail project mutations ignore stale route responses and reset every dialog state', async () => {
+  const source = await readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8')
+  const handlers = ['savePhase', 'confirmDeletePhase', 'saveEditProject', 'completeProject', 'confirmDeleteProject']
+
+  for (const name of handlers) {
+    const handler = source.match(new RegExp(`async function ${name}\\([^)]*\\) \\{([\\s\\S]*?)\\n\\}`))?.[1]
+    assert.ok(handler, `${name} handler must remain available`)
+    assert.match(handler, /createProjectRequestToken\(\+\+/)
+    assert.match(handler, /isCurrentProjectRequest\(/)
+  }
+
+  assert.match(source, /let routeRevision = 0/)
+  assert.match(source, /function createProjectRequestToken\(/)
+  assert.match(source, /function isCurrentProjectRequest\(/)
+  assert.match(source, /fetchData\([\s\S]*revision !== dataRevision/)
+  assert.match(source, /finally \{[\s\S]*if \(isCurrentFetch\(requestId, normalizedId\)\) loading\.value = false/)
+
+  const routeWatcher = source.match(/watch\(\(\) => route\.params\.id, \(nextId, previousId\) => \{([\s\S]*?)\n\}\)/)?.[1]
+  const invalidationHandler = source.match(/function invalidateRequests\(\) \{([\s\S]*?)\n\}/)?.[1]
+  assert.ok(routeWatcher, 'project route watcher must remain available')
+  assert.ok(invalidationHandler, 'project request invalidation handler must remain available')
+  assert.match(routeWatcher, /invalidateRequests\(\)/)
+  assert.match(invalidationHandler, /cancelPhaseDialog\(\{ force: true \}\)/)
+  assert.match(invalidationHandler, /closeEditProjectDialog\(\{ force: true \}\)/)
+  assert.match(invalidationHandler, /closeDeleteDialog\(\{ force: true \}\)/)
+  assert.match(invalidationHandler, /phaseDeleteState\.value = createPhaseDeleteState\(\)/)
+})
+
+test('ProjectDetail suppresses stale settlement feedback after a route change', async () => {
+  const source = await readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8')
+  const rewardHandler = source.match(/async function refreshTaskReward\(updated, taskId, taskToken\) \{([\s\S]*?)\n\}/)?.[1]
+
+  assert.ok(rewardHandler, 'task reward refresh handler must remain available')
+  assert.match(source, /let rewardRequestId = 0/)
+  assert.match(source, /refreshTaskReward\(updated, task\.id, token\)/)
+  assert.match(rewardHandler, /const rewardToken = createProjectRequestToken\(\+\+rewardRequestId\)/)
+  assert.match(rewardHandler, /isCurrentProjectRequest\(rewardToken, rewardRequestId\)/)
+  assert.match(rewardHandler, /isCurrentTaskMutation\(taskId, taskToken\)/)
+})
+
 test('notebook mutations expose independent pending action state and preserve failed forms', async () => {
   const source = await readFile(new URL('./NotebookFileManage.vue', viewsDirectory), 'utf8')
 

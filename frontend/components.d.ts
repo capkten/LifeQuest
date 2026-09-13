@@ -19,6 +19,7 @@ declare module 'vue' {
     ElForm: typeof import('element-plus/es')['ElForm']
     ElFormItem: typeof import('element-plus/es')['ElFormItem']
     ElInput: typeof import('element-plus/es')['ElInput']
+    HabitHistoryDialog: typeof import('./src/components/HabitHistoryDialog.vue')['default']
     Header: typeof import('./src/components/layout/Header.vue')['default']
     MapNode: typeof import('./src/components/cultivation/MapNode.vue')['default']
     NotebookMembersDialog: typeof import('./src/components/notes/NotebookMembersDialog.vue')['default']
@@ -32,8 +33,10 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     Sidebar: typeof import('./src/components/layout/Sidebar.vue')['default']
     TechniqueSlotGrid: typeof import('./src/components/cultivation/TechniqueSlotGrid.vue')['default']
+    TodayWorkbench: typeof import('./src/components/home/TodayWorkbench.vue')['default']
     TreeItem: typeof import('./src/components/TreeItem.vue')['default']
     TribulationProbability: typeof import('./src/components/cultivation/TribulationProbability.vue')['default']
     UpdatePrompt: typeof import('./src/components/layout/UpdatePrompt.vue')['default']
+    WorkbenchTaskRow: typeof import('./src/components/home/WorkbenchTaskRow.vue')['default']
   }
 }

@@ -1,6 +1,20 @@
 import api from './api'
 
 export const todoService = {
+  async getWorkbench() {
+    const response = await api.get('/todos/workbench', { skipErrorToast: true })
+    return response.data
+  },
+
+  async saveDailyFocus(data) {
+    const response = await api.put('/todos/workbench/focus', data, { skipErrorToast: true })
+    return response.data
+  },
+
+  async createQuickTask(data) {
+    const response = await api.post('/todos/workbench/tasks', data, { skipErrorToast: true })
+    return response.data
+  },
   /**
    * Get daily summary (habits due today, due tasks, active goals)
    * @returns {Promise<Object>} Daily summary
@@ -83,8 +97,33 @@ export const todoService = {
    * @param {string} habitId - Habit ID
    * @returns {Promise<Object>} Updated habit
    */
-  async completeHabit(habitId) {
-    const response = await api.post(`/todos/habits/${habitId}/complete`)
+  async completeHabit(habitId, data) {
+    const response = await api.post(`/todos/habits/${habitId}/complete`, data)
+    return response.data
+  },
+
+  async backfillHabit(habitId, data) {
+    const response = await api.post(`/todos/habits/${habitId}/completions`, data)
+    return response.data
+  },
+
+  async getHabitHistory(habitId, params) {
+    const response = await api.get(`/todos/habits/${habitId}/history`, { params })
+    return response.data
+  },
+
+  async createHabitLeave(habitId, data) {
+    const response = await api.post(`/todos/habits/${habitId}/leave`, data)
+    return response.data
+  },
+
+  async getHabitLeaveIntervals(habitId) {
+    const response = await api.get(`/todos/habits/${habitId}/leave-intervals`)
+    return response.data
+  },
+
+  async deleteHabitLeave(habitId, leaveId) {
+    const response = await api.delete(`/todos/habits/${habitId}/leave/${leaveId}`)
     return response.data
   },
 
@@ -106,6 +145,21 @@ export const todoService = {
    */
   async updateHabit(habitId, data) {
     const response = await api.put(`/todos/habits/${habitId}`, data)
+    return response.data
+  },
+
+  async pauseHabit(habitId) {
+    const response = await api.post(`/todos/habits/${habitId}/pause`)
+    return response.data
+  },
+
+  async resumeHabit(habitId) {
+    const response = await api.post(`/todos/habits/${habitId}/resume`)
+    return response.data
+  },
+
+  async getHabitPauseIntervals(habitId) {
+    const response = await api.get(`/todos/habits/${habitId}/pause-intervals`)
     return response.data
   },
 

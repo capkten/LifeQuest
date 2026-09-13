@@ -1,4 +1,4 @@
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import List
 from uuid import UUID
@@ -11,6 +11,10 @@ from app.models.checkin import DailyCheckin
 from app.models.coin_transaction import CoinTransaction, CoinType
 from app.models.user import User
 from app.models.habit_completion import HabitCompletion
+from app.models.habit_leave import HabitLeaveInterval
+from app.models.habit_pause import HabitPauseInterval
+from app.services.habit_metrics import valid_completion_dates
+from app.services.habit_schedule import is_due, is_excluded_on
 from app.timezone import local_date, day_start_utc
 
 
@@ -84,16 +88,71 @@ class StatsService:
 
     def get_habit_stats(self, user_id: UUID, period: str = "week") -> List[dict]:
         periods = self._periods("week" if period == "week" else "month")
-        first_day, last_day = local_date(periods[0][1]), local_date(periods[-1][2])
-        completions = set(self.db.query(HabitCompletion.habit_id, HabitCompletion.completed_on).filter(
+        first_day = date.fromisoformat(periods[0][0])
+        last_day = date.fromisoformat(periods[-1][0])
+        today = local_date(datetime.now(timezone.utc))
+        completion_rows = self.db.query(HabitCompletion.habit_id, HabitCompletion.completed_on).filter(
             HabitCompletion.user_id == user_id,
             HabitCompletion.completed_on >= first_day,
-            HabitCompletion.completed_on < last_day,
-        ).all())
+            HabitCompletion.completed_on <= min(last_day, today),
+        ).all()
         habits = self.db.query(Habit).filter(Habit.user_id == user_id).all()
-        completed = Counter(completed_on.isoformat() for habit_id, completed_on in completions)
-        total = sum(habit.is_active for habit in habits)
-        return [{"date": label, "total": total, "completed": completed.get(label, 0)}
+        habits_by_id = {habit.id: habit for habit in habits}
+        pause_by_habit = defaultdict(list)
+        for interval in self.db.query(HabitPauseInterval).filter(
+            HabitPauseInterval.user_id == user_id,
+        ).all():
+            pause_by_habit[interval.habit_id].append(interval)
+        leave_by_habit = defaultdict(list)
+        for interval in self.db.query(HabitLeaveInterval).filter(
+            HabitLeaveInterval.user_id == user_id,
+        ).all():
+            leave_by_habit[interval.habit_id].append(interval)
+
+        dates_by_habit = defaultdict(set)
+        for habit_id, completed_on in completion_rows:
+            dates_by_habit[habit_id].add(completed_on)
+
+        completed = Counter()
+        for habit_id, completion_dates in dates_by_habit.items():
+            habit = habits_by_id.get(habit_id)
+            if habit is None:
+                # Deleted habits retain their completion facts but no longer have
+                # schedule metadata with which to invalidate an old record.
+                valid_dates = {
+                    completed_on for completed_on in completion_dates if completed_on <= today
+                }
+            else:
+                valid_dates = valid_completion_dates(
+                    habit,
+                    completion_dates,
+                    pause_by_habit[habit_id],
+                    leave_by_habit[habit_id],
+                    as_of=today,
+                )
+            for completed_on in valid_dates:
+                if first_day <= completed_on <= last_day:
+                    completed[completed_on.isoformat()] += 1
+
+        scheduled = Counter()
+        period_end = min(last_day, today)
+        for habit in habits:
+            created_on = local_date(habit.created_at) if habit.created_at else first_day
+            target = first_day
+            while target <= period_end:
+                if (
+                    target >= created_on
+                    and is_due(habit, target)
+                    and not is_excluded_on(
+                        target,
+                        pause_by_habit[habit.id],
+                        leave_by_habit[habit.id],
+                    )
+                ):
+                    scheduled[target.isoformat()] += 1
+                target += timedelta(days=1)
+
+        return [{"date": label, "total": scheduled.get(label, 0), "completed": completed.get(label, 0)}
                 for label, start, end in periods]
 
     def get_coin_trends(self, user_id: UUID, period: str = "month") -> List[dict]:

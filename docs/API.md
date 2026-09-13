@@ -1,5 +1,19 @@
 # LifeQuest API 文档
 
+## 习惯计划（1.10.0-1.13.0）
+
+`POST /api/todos/habits` 和 `PUT /api/todos/habits/{habit_id}` 支持
+`frequency: "weekdays"`、`weekdays: [0, 2, 4]`（周一、三、五）。日期必须是非空、无重复的整数数组，范围 0–6。
+也支持 `frequency: "weekly_target"` 和 `weekly_target: 3`，表示周一至周日任意完成 3 次；目标范围为 1–7。
+更新可只修改标题等字段并保留原计划；从其他频率切换到指定日期时必须提交日期，切回其他频率会清除日期。
+响应新增 `weekdays`、`scheduled_today`、`weekly_target`、`weekly_completed` 和 `weekly_remaining`。计划判断使用中国时间；旧每周固定周一、每月固定 1 日，与首页排期一致。
+指定日期习惯非计划日完成、暂停状态完成返回 409；计划日重复点击不重复计数或领奖。
+每周目标习惯每天都可完成；达到 `weekly_target` 后本周完成返回 409，目标内每个不同中国日各发放一次奖励。
+改变计划重置当前连续数，保留最佳值与历史；休息日不打断指定日期习惯的连续记录。
+习惯可暂停和恢复，暂停区间使用中国本地日期的半开区间 `[paused_on, resumed_on)`；暂停日不显示计划、不允许打卡，也不会打断连续记录。
+习惯支持请假区间、历史补记和打卡备注。请假区间也采用 `[leave_on, return_on)`，开始日期只能是今天或未来日期，重叠区间返回 409；请假日不计入计划完成率，撤销后恢复排期。
+补记只接受过去 90 天内、习惯创建日之后的计划日，不补发奖励；同一习惯同一中国日仍只有一条记录，重复补记只更新非空备注。习惯响应包含累计完成次数、按当前计划计算的完成率和请假区间。
+
 基础地址: `http://{服务器IP}:8000`
 
 认证方式: Bearer Token (JWT)，通过请求头 `Authorization: Bearer {access_token}` 传递。
@@ -129,6 +143,72 @@ username=用户名&password=密码
 
 ---
 
+### GET /api/todos/workbench
+
+获取当前用户的今日工作台，日期按 `Asia/Shanghai` 计算。
+
+**响应结构：**
+```json
+{
+  "date": "2026-09-12",
+  "revision": 0,
+  "focus_tasks": [],
+  "task_groups": {"today": [], "overdue": [], "unscheduled": [], "upcoming": []},
+  "summary": {
+    "completed_today": 0,
+    "open_tasks": 0,
+    "today": 0,
+    "overdue": 0,
+    "unscheduled": 0,
+    "focus_completed": 0
+  }
+}
+```
+
+任务数组中的元素为 `TaskResponse`。分组仅包含待办、进行中的任务；完成后的今日重点仍保留在 `focus_tasks` 中。已取消或删除的重点任务不再显示。`completed_today` 统计中国当天完成且当前状态仍为已完成的任务。
+
+### PUT /api/todos/workbench/focus
+
+保存当天最重要的最多三件事，数组顺序就是显示顺序；不修改任务本身的 `priority`。
+
+**请求体：**
+```json
+{
+  "date": "2026-09-12",
+  "revision": 0,
+  "task_ids": ["11111111-1111-4111-8111-111111111111"]
+}
+```
+
+- `date`、`revision` 应使用最近一次工作台响应中的值；`task_ids` 可以为空，以清空当天重点。
+- 成功返回更新后的完整工作台，版本号递增。
+- 超过三项或重复任务 ID 返回 `422`；任务不存在、已取消或属于其他用户返回 `404`。
+- 日期已经变化或其他页面已修改计划时返回 `409`，调用方应保留编辑内容，提示刷新后重新选择，不自动覆盖最新版本。
+- 次日开始使用新的空计划，旧计划不自动复制到次日。
+
+### POST /api/todos/workbench/tasks
+
+首页快速新增任务。使用请求 ID 防止网络重试重复创建。
+
+**请求体：**
+```json
+{
+  "title": "整理本周工作",
+  "schedule": "today",
+  "due_date": null,
+  "request_id": "22222222-2222-4222-8222-222222222222"
+}
+```
+
+- 标题去除首尾空白后需为 1 至 200 字。
+- `schedule`：`today` 表示服务器当前中国日期结束前；`unscheduled` 不设置截止时间；`date` 指定截止日期，此时必须提供 `due_date`（`YYYY-MM-DD`）。
+- 有截止日期时，时间保存为该中国日最后一微秒对应的 UTC 时间。响应中的时间携带时区。
+- 每次新建意图生成新的 UUID `request_id`；同一用户、相同请求 ID、相同内容重试返回同一任务，均返回 `200` 和 `TaskResponse`。
+- 同一请求 ID 改用其他内容，或其已创建任务后来被删除，返回 `409`，不会悄悄创建第二个任务。
+- 完成任务仍使用已有的 `POST /api/todos/tasks/{task_id}/complete`，共用奖励结算和幂等保护。
+
+---
+
 ### 习惯 (Habits)
 
 #### POST /api/todos/habits
@@ -140,7 +220,9 @@ username=用户名&password=密码
   "title": "习惯名称",
   "description": "描述（可选）",
   "difficulty": "easy|medium|hard（默认 medium）",
-  "frequency": "daily|weekly|monthly（默认 daily）",
+  "frequency": "daily|weekly|monthly|weekdays|weekly_target（默认 daily）",
+  "weekdays": [0, 2, 4],
+  "weekly_target": 3,
   "coins_reward": 10,
   "exp_reward": 5
 }
@@ -155,6 +237,19 @@ username=用户名&password=密码
   "description": "string|null",
   "difficulty": "medium",
   "frequency": "daily",
+  "weekdays": null,
+  "scheduled_today": true,
+  "paused_today": false,
+  "pause_intervals": [],
+  "excused_today": false,
+  "leave_intervals": [],
+  "weekly_target": null,
+  "weekly_completed": 0,
+  "weekly_remaining": 0,
+  "total_completed": 0,
+  "scheduled_count": 0,
+  "completed_count": 0,
+  "completion_rate": 0,
   "coins_reward": 10,
   "exp_reward": 5,
   "is_active": true,
@@ -175,11 +270,66 @@ username=用户名&password=密码
 #### PUT /api/todos/habits/{habit_id}
 更新习惯，所有字段可选。
 
+其中 `is_active: false` 和 `is_active: true` 分别兼容暂停和恢复操作，并记录对应的暂停区间。
+
+#### GET /api/todos/habits/{habit_id}/pause-intervals
+获取该习惯按开始日期排序的暂停区间。区间元素包含 `id`、`habit_id`、`user_id`、`paused_on`、`resumed_on` 和 `created_at`。
+
+#### POST /api/todos/habits/{habit_id}/pause
+按当前中国本地日期暂停习惯。重复请求保持幂等，已有开放区间时不会创建新记录；暂停后打卡返回 `409`。
+
+#### POST /api/todos/habits/{habit_id}/resume
+按当前中国本地日期恢复习惯。开放区间的 `resumed_on` 设置为当天，恢复当天不属于暂停区间；重复请求保持幂等。
+
+暂停区间为 `[paused_on, resumed_on)`：`resumed_on` 为空表示仍在暂停。暂停期间的首页排期和日历不显示该习惯，按计划计算的连续记录跳过没有活动计划日的周期。
+
 #### DELETE /api/todos/habits/{habit_id}
 删除习惯。
 
 #### POST /api/todos/habits/{habit_id}/complete
-完成今日习惯打卡。触发连续天数更新和金币/经验奖励。
+完成今日习惯打卡。触发连续天数更新和金币/经验奖励。请求体可省略，也可以填写备注：
+```json
+{"note": "完成了 30 分钟训练"}
+```
+同一中国日重复请求不会新增完成记录或重复发放奖励；再次提交非空备注会更新当天记录的备注。
+
+#### POST /api/todos/habits/{habit_id}/completions
+补记过去的习惯完成记录。
+
+**请求体：**
+```json
+{
+  "completed_on": "2026-09-11",
+  "note": "昨天完成了训练"
+}
+```
+
+`completed_on` 必须早于当前中国日期、在最近 90 天内、晚于习惯创建日期，并且是当前习惯的计划日且不在暂停/请假区间。重复补记保持同一条记录，不发放金币、经验或修仙奖励；返回的 `HabitResponse` 会更新累计次数、连续周期和计划完成率。
+
+#### GET /api/todos/habits/{habit_id}/history
+获取习惯历史热力图数据。可选查询参数 `start_on`、`end_on`，默认返回最近 84 天；结束日期不能晚于当前中国日期，查询跨度最多 366 天。
+
+响应中的 `days` 每天包含 `date`、`scheduled`、`completed`、`paused`、`excused`、`completed_at`、`note` 和 `is_makeup`。`scheduled_count`、`completed_count` 和 `completion_rate` 只针对本次查询区间，`total_completed` 是该习惯的累计完成次数。
+
+#### GET /api/todos/habits/{habit_id}/leave-intervals
+获取该习惯的请假区间，按开始日期排序。区间元素包含 `id`、`habit_id`、`user_id`、`leave_on`、`return_on`、`reason` 和 `created_at`。
+
+#### POST /api/todos/habits/{habit_id}/leave
+创建请假区间。
+
+**请求体：**
+```json
+{
+  "leave_on": "2026-09-12",
+  "return_on": "2026-09-15",
+  "reason": "出差"
+}
+```
+
+恢复日期为半开区间终点，当天重新纳入计划。开始日期早于今天、恢复日期不晚于开始日期或与已有区间重叠时，分别返回 `422` 或 `409`。
+
+#### DELETE /api/todos/habits/{habit_id}/leave/{leave_id}
+撤销一条属于当前用户和当前习惯的请假区间。撤销后受影响日期重新进入计划，已存在的完成记录不会被删除。
 
 ---
 

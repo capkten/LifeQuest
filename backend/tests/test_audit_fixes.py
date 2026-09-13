@@ -12,13 +12,16 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base
 from app.models.account import Account
 from app.models.backpack import BackpackItem, ItemStatus, UsageAction, UsageHistory
-from app.models.coin_transaction import CoinTransaction, CoinType
+from app.models.coin_transaction import CoinTransaction, CoinSource, CoinType
+from app.models.cultivation import CultivationLog
 from app.models.habit_completion import HabitCompletion
+from app.models.habit_pause import HabitPauseInterval
 from app.models.project import Project, ProjectPhase, ProjectMilestone
 from app.models.shop import ShopItem, ExchangeHistory
-from app.models.todo import Habit, Task, TaskStatus
+from app.models.todo import Goal, Habit, Task, TaskStatus
 from app.models.user import User
 from app.models.finance_transaction import FinanceTransaction
+from app.models.finance_daily_reward import FinanceDailyRewardClaim
 from app.models.recurring_transaction import RecurringTransaction
 from app.schemas.finance import RecurringCreate, TransactionCreate, TransactionUpdate
 from app.schemas.shop import ExchangeHistoryCreate
@@ -33,6 +36,9 @@ from app.services.project import ProjectService
 from app.services.shop import ShopService
 from app.services.stats import StatsService
 from app.services.todo import TodoService
+from app.repositories.user import UserRepository
+from app.repositories.project import ProjectRepository, PhaseRepository, MilestoneRepository
+from app.repositories.shop import ShopItemRepository
 
 
 @pytest.fixture
@@ -54,7 +60,7 @@ def clock(monkeypatch):
         def now(cls, tz=None):
             return instant[0].astimezone(tz) if tz else instant[0].replace(tzinfo=None)
 
-    for module in ("app.timezone", "app.services.todo", "app.services.stats"):
+    for module in ("app.timezone", "app.services.todo", "app.services.stats", "app.models.todo"):
         monkeypatch.setattr(f"{module}.datetime", FrozenDatetime)
 
     def set_time(value):
@@ -130,6 +136,84 @@ def test_legacy_foreign_project_tasks_are_hidden_from_project_reads(client, db_s
     assert project_tasks.json() == []
 
 
+@pytest.mark.parametrize(
+    ("resource_name", "task_field"),
+    [
+        ("project", "project_id"),
+        ("phase", "phase_id"),
+        ("milestone", "milestone_id"),
+    ],
+)
+def test_project_deletion_refuses_foreign_task_links(database, resource_name, task_field):
+    session, factory = database
+    owner, other = make_user(session), make_user(session)
+    project = Project(user_id=owner.id, name="项目")
+    session.add(project)
+    session.flush()
+    phase = ProjectPhase(project_id=project.id, name="阶段")
+    milestone = ProjectMilestone(project_id=project.id, name="里程碑")
+    session.add_all([phase, milestone])
+    session.flush()
+    target = {
+        "project": project,
+        "phase": phase,
+        "milestone": milestone,
+    }[resource_name]
+    foreign_task = Task(
+        user_id=other.id,
+        title="其他用户的历史任务",
+        **{task_field: target.id},
+    )
+    session.add(foreign_task)
+    session.commit()
+
+    with pytest.raises(HTTPException) as error:
+        getattr(ProjectService(session), f"delete_{resource_name}")(target)
+
+    assert error.value.status_code == 409
+    assert error.value.detail["code"] == "PROJECT_RESOURCE_HAS_FOREIGN_TASKS"
+    session.refresh(foreign_task)
+    assert getattr(foreign_task, task_field) == target.id
+    assert session.get(type(target), target.id) is not None
+
+
+def test_user_lock_uses_a_row_lock_instead_of_affected_rows():
+    calls = []
+
+    class Result:
+        rowcount = 0
+
+        def scalar_one_or_none(self):
+            return uuid4()
+
+    class Session:
+        bind = type("Bind", (), {
+            "dialect": type("Dialect", (), {"name": "mysql"})(),
+        })()
+
+        def execute(self, statement):
+            calls.append(statement)
+            return Result()
+
+    UserRepository(Session()).lock(uuid4())
+
+    assert len(calls) == 1
+    assert calls[0]._for_update_arg is not None
+
+
+def test_debit_coins_rejects_negative_amount_without_crediting_user(database):
+    session, factory = database
+    user = make_user(session)
+    repository = UserRepository(session)
+
+    repository.debit_coins(user.id, 0)
+    with pytest.raises(ValueError):
+        repository.debit_coins(user.id, -5)
+
+    session.refresh(user)
+    assert user.coins == 100
+
+
 @pytest.mark.parametrize("field,model", [("phase_id", ProjectPhase), ("milestone_id", ProjectMilestone)])
 def test_task_associations_require_matching_project(database, field, model):
     session, factory = database
@@ -151,8 +235,262 @@ def test_task_associations_require_matching_project(database, field, model):
     moved = ProjectService(session).move_task(task, user.id, project_id=projects[1].id)
     assert moved.project_id == projects[1].id
     assert getattr(moved, field) is None
+    cleared = ProjectService(session).move_task(
+        task,
+        user.id,
+        project_id=None,
+        phase_id=None,
+        milestone_id=None,
+    )
+    assert cleared.project_id is None
+    assert cleared.phase_id is None
+    assert cleared.milestone_id is None
     with pytest.raises(HTTPException):
         TodoService(session).update_task(task, TaskUpdate(**{field: uuid4()}))
+
+
+def test_project_task_validation_locks_parent_chain_after_user(database, monkeypatch):
+    session, factory = database
+    user = make_user(session)
+    project = Project(user_id=user.id, name="项目")
+    session.add(project)
+    session.flush()
+    phase = ProjectPhase(project_id=project.id, name="阶段")
+    milestone = ProjectMilestone(project_id=project.id, name="里程碑")
+    session.add_all([phase, milestone])
+    session.commit()
+
+    calls = []
+    original_user_lock = UserRepository.lock
+    original_project_lock = ProjectRepository.get_for_update
+    original_phase_lock = PhaseRepository.get_for_update
+    original_milestone_lock = MilestoneRepository.get_for_update
+
+    def record_user_lock(repository, user_id):
+        calls.append("user")
+        return original_user_lock(repository, user_id)
+
+    def record_project_lock(repository, project_id):
+        calls.append("project")
+        return original_project_lock(repository, project_id)
+
+    def record_phase_lock(repository, phase_id):
+        calls.append("phase")
+        return original_phase_lock(repository, phase_id)
+
+    def record_milestone_lock(repository, milestone_id):
+        calls.append("milestone")
+        return original_milestone_lock(repository, milestone_id)
+
+    monkeypatch.setattr(UserRepository, "lock", record_user_lock)
+    monkeypatch.setattr(ProjectRepository, "get_for_update", record_project_lock)
+    monkeypatch.setattr(PhaseRepository, "get_for_update", record_phase_lock)
+    monkeypatch.setattr(MilestoneRepository, "get_for_update", record_milestone_lock)
+
+    TodoService(session).create_task(user.id, TaskCreate(
+        title="按层级锁定",
+        project_id=project.id,
+        phase_id=phase.id,
+        milestone_id=milestone.id,
+    ))
+
+    assert calls[:4] == ["user", "project", "phase", "milestone"]
+
+
+def test_habit_history_only_marks_valid_scheduled_completions(database, clock):
+    session, factory = database
+    user = make_user(session)
+    habit = Habit(
+        user_id=user.id,
+        title="周一习惯",
+        frequency="weekdays",
+        weekdays=[0],
+        created_at=datetime(2026, 9, 1, 0, tzinfo=timezone.utc),
+    )
+    session.add(habit)
+    session.flush()
+    session.add_all([
+        HabitCompletion(
+            habit_id=habit.id,
+            user_id=user.id,
+            completed_on=date(2026, 9, 6),
+            completed_at=datetime(2026, 9, 6, 4),
+        ),
+        HabitCompletion(
+            habit_id=habit.id,
+            user_id=user.id,
+            completed_on=date(2026, 9, 7),
+            completed_at=datetime(2026, 9, 7, 4),
+        ),
+    ])
+    session.add(HabitPauseInterval(
+        habit_id=habit.id,
+        user_id=user.id,
+        paused_on=date(2026, 9, 12),
+        resumed_on=date(2026, 9, 21),
+    ))
+    session.commit()
+
+    history = TodoService(session).get_habit_history(
+        habit.id,
+        user.id,
+        start_on=date(2026, 9, 6),
+        end_on=date(2026, 9, 12),
+    )
+    days = {item["date"]: item for item in history["days"]}
+
+    assert days[date(2026, 9, 6)]["scheduled"] is False
+    assert days[date(2026, 9, 6)]["completed"] is False
+    assert days[date(2026, 9, 6)]["completion_id"] is None
+    assert days[date(2026, 9, 7)]["scheduled"] is True
+    assert days[date(2026, 9, 7)]["completed"] is True
+    assert days[date(2026, 9, 12)]["paused"] is True
+    assert days[date(2026, 9, 12)]["completed"] is False
+
+
+def test_habit_stats_total_is_scheduled_slots_not_active_habits(database, clock):
+    session, factory = database
+    user = make_user(session)
+    daily = Habit(
+        user_id=user.id,
+        title="每日",
+        frequency="daily",
+        created_at=datetime(2026, 9, 1, 0, tzinfo=timezone.utc),
+    )
+    monday = Habit(user_id=user.id, title="周一", frequency="weekly")
+    monday.created_at = datetime(2026, 9, 1, 0, tzinfo=timezone.utc)
+    session.add_all([daily, monday])
+    session.commit()
+
+    stats = StatsService(session).get_habit_stats(user.id, "week")
+    saturday = next(item for item in stats if item["date"] == "2026-09-12")
+    monday_stat = next(item for item in stats if item["date"] == "2026-09-07")
+
+    assert saturday["total"] == 1
+    assert monday_stat["total"] == 2
+
+
+def test_finance_first_transaction_bonus_survives_transaction_deletion(database):
+    session, factory = database
+    user = make_user(session)
+    account = make_account(session, user)
+    service = FinanceService(session)
+
+    first = service.create_transaction(user.id, TransactionCreate(
+        account_id=account.id,
+        amount=Decimal("10.00"),
+        type="expense",
+        date=date(2026, 9, 12),
+    ))
+    session.refresh(user)
+    first_experience = user.experience
+    service.delete_transaction(first)
+    recreated = service.create_transaction(user.id, TransactionCreate(
+        account_id=account.id,
+        amount=Decimal("10.00"),
+        type="expense",
+        date=date(2026, 9, 12),
+    ))
+
+    session.refresh(user)
+    assert user.experience == first_experience + 2
+    assert session.query(FinanceDailyRewardClaim).filter_by(
+        user_id=user.id,
+    ).count() == 1
+    assert recreated is not None
+
+
+def test_finance_first_transaction_bonus_uses_transaction_date(database, clock):
+    session, factory = database
+    user = make_user(session)
+    account = make_account(session, user)
+    service = FinanceService(session)
+
+    historical = service.create_transaction(user.id, TransactionCreate(
+        account_id=account.id,
+        amount=Decimal("10.00"),
+        type="expense",
+        date=date(2026, 9, 11),
+    ))
+    session.refresh(user)
+
+    assert historical.date == date(2026, 9, 11)
+    assert user.experience == 7
+    assert session.query(FinanceDailyRewardClaim).filter_by(
+        user_id=user.id,
+        reward_date=date(2026, 9, 11),
+    ).count() == 1
+
+    service.create_transaction(user.id, TransactionCreate(
+        account_id=account.id,
+        amount=Decimal("10.00"),
+        type="expense",
+        date=date(2026, 9, 12),
+    ))
+    session.refresh(user)
+
+    assert user.experience == 14
+    assert session.query(FinanceDailyRewardClaim).filter_by(
+        user_id=user.id,
+        reward_date=date(2026, 9, 12),
+    ).count() == 1
+
+
+def test_move_endpoint_can_explicitly_clear_project_associations(client, db_session):
+    user = make_user(db_session)
+    project = Project(user_id=user.id, name="项目")
+    db_session.add(project)
+    db_session.flush()
+    phase = ProjectPhase(project_id=project.id, name="阶段")
+    milestone = ProjectMilestone(project_id=project.id, name="里程碑")
+    db_session.add_all([phase, milestone])
+    db_session.commit()
+    task = TodoService(db_session).create_task(user.id, TaskCreate(
+        title="待解绑",
+        project_id=project.id,
+        phase_id=phase.id,
+        milestone_id=milestone.id,
+    ))
+
+    response = client.put(
+        f"/api/projects/tasks/{task.id}/move",
+        headers={"Authorization": "Bearer " + create_access_token({"sub": str(user.id)})},
+        json={"project_id": None, "phase_id": None, "milestone_id": None},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["project_id"] is None
+    assert response.json()["phase_id"] is None
+    assert response.json()["milestone_id"] is None
+    db_session.refresh(task)
+    assert task.project_id is None
+    assert task.phase_id is None
+    assert task.milestone_id is None
+
+
+def test_milestone_due_date_can_be_cleared(client, db_session):
+    user = make_user(db_session)
+    project = Project(user_id=user.id, name="项目")
+    db_session.add(project)
+    db_session.flush()
+    milestone = ProjectMilestone(
+        project_id=project.id,
+        name="有日期的里程碑",
+        due_date=date(2026, 9, 20),
+    )
+    db_session.add(milestone)
+    db_session.commit()
+
+    response = client.put(
+        f"/api/projects/milestones/{milestone.id}",
+        headers={"Authorization": "Bearer " + create_access_token({"sub": str(user.id)})},
+        json={"due_date": None},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["due_date"] is None
+    db_session.refresh(milestone)
+    assert milestone.due_date is None
 
 
 @pytest.mark.parametrize("entry", ["project", "update", "complete"])
@@ -201,6 +539,37 @@ def test_task_completion_failure_rolls_back_status_and_rewards(database, monkeyp
     assert session.query(CoinTransaction).filter_by(user_id=user.id, source="task").count() == 0
 
 
+@pytest.mark.parametrize(
+    ("model", "method", "source"),
+    [
+        (Task, "complete_task", "task"),
+        (Goal, "complete_goal", "goal"),
+    ],
+)
+def test_cancelled_todos_cannot_be_completed_or_rewarded(database, model, method, source):
+    session, factory = database
+    user = make_user(session)
+    todo = model(user_id=user.id, title="已取消", status=TaskStatus.CANCELLED)
+    session.add(todo)
+    session.commit()
+    before = (user.coins, user.experience)
+
+    with pytest.raises(HTTPException) as error:
+        getattr(TodoService(session), method)(todo, user.id)
+
+    assert error.value.status_code == 409
+    session.refresh(todo)
+    session.refresh(user)
+    assert todo.status == TaskStatus.CANCELLED
+    assert (user.coins, user.experience) == before
+    assert session.query(CoinTransaction).filter_by(
+        user_id=user.id, source=source,
+    ).count() == 0
+    assert session.query(CultivationLog).filter_by(
+        user_id=user.id, source=source,
+    ).count() == 0
+
+
 def test_refund_returns_stock_and_removes_items_once(database):
     session, factory = database
     user = make_user(session)
@@ -210,15 +579,52 @@ def test_refund_returns_stock_and_removes_items_once(database):
     session.refresh(user)
     session.refresh(item)
     assert user.coins == 100
-    assert user.total_coins_earned == 0
     assert item.stock == 5
     assert session.query(BackpackItem).filter_by(user_id=user.id).count() == 0
     history = session.query(UsageHistory).filter_by(action=UsageAction.REFUND).one()
     assert history.quantity == 2
+    transactions = session.query(CoinTransaction).filter_by(
+        user_id=user.id,
+        source="shop",
+    ).order_by(CoinTransaction.id).all()
+    assert [(transaction.type, transaction.amount) for transaction in transactions] == [
+        (CoinType.SPEND, 20),
+        (CoinType.EARN, 20),
+    ]
+    assert transactions[0].source_id != transactions[1].source_id
     with pytest.raises(HTTPException):
         ShopService(session).refund_exchange(exchange)
     session.refresh(user)
     assert user.coins == 100
+
+
+def test_consume_by_key_rolls_back_partial_mutation_inside_outer_transaction(database, monkeypatch):
+    session, factory = database
+    user = make_user(session)
+    pill = ShopItem(
+        item_key="tribulation-pill",
+        name="渡劫丹",
+        category="consumable",
+        coin_price=100,
+        stock=-1,
+        is_active=True,
+    )
+    session.add(pill)
+    session.commit()
+    backpack_item = BackpackService(session).add_item(user.id, pill.id, quantity=2)
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("history write failed")
+
+    monkeypatch.setattr(BackpackService, "_log_history_no_commit", fail)
+    with pytest.raises(RuntimeError):
+        BackpackService(session).consume_by_key(user.id, "tribulation-pill", 1)
+
+    session.commit()
+    session.refresh(backpack_item)
+    assert backpack_item.quantity == 2
+    assert session.query(UsageHistory).filter_by(action=UsageAction.USE).count() == 0
+    assert user.total_coins_earned == 0
 
 
 @pytest.mark.parametrize("action", ["use", "discard", "equip"])
@@ -270,6 +676,67 @@ def test_purchase_failure_restores_stock(database):
     assert item.stock == 5
     assert session.query(ExchangeHistory).count() == 0
     assert session.query(BackpackItem).count() == 0
+
+
+def test_purchase_reads_item_state_under_a_row_lock(database, monkeypatch):
+    session, factory = database
+    user = make_user(session)
+    item = make_item(session, user)
+    calls = []
+    original = ShopItemRepository.get_for_update
+
+    def record_lock(repository, item_id):
+        calls.append(item_id)
+        return original(repository, item_id)
+
+    monkeypatch.setattr(ShopItemRepository, "get_for_update", record_lock)
+    purchase(session, user.id, item.id)
+
+    assert calls == [item.id]
+
+
+def test_sequential_purchases_create_distinct_coin_source_ids(database):
+    session, factory = database
+    user = make_user(session)
+    item = make_item(session, user, stock=5)
+
+    first = purchase(session, user.id, item.id)
+    second = purchase(session, user.id, item.id)
+    transactions = session.query(CoinTransaction).filter_by(
+        user_id=user.id,
+        source=CoinSource.SHOP.value,
+    ).order_by(CoinTransaction.id).all()
+
+    assert [transaction.source_id for transaction in transactions] == [
+        str(first.id),
+        str(second.id),
+    ]
+    assert all(transaction.source_id for transaction in transactions)
+    assert len({transaction.source_id for transaction in transactions}) == 2
+
+
+def test_purchase_refresh_failure_rolls_back_the_entire_operation(database, monkeypatch):
+    session, factory = database
+    user = make_user(session)
+    item = make_item(session, user)
+    original_refresh = type(session).refresh
+
+    def fail_exchange_refresh(current_session, instance, *args, **kwargs):
+        if isinstance(instance, ExchangeHistory):
+            raise RuntimeError("exchange refresh failed")
+        return original_refresh(current_session, instance, *args, **kwargs)
+
+    monkeypatch.setattr(type(session), "refresh", fail_exchange_refresh)
+    with pytest.raises(RuntimeError):
+        purchase(session, user.id, item.id)
+
+    assert session.query(ExchangeHistory).count() == 0
+    assert session.query(BackpackItem).count() == 0
+    assert session.query(CoinTransaction).filter_by(source="shop").count() == 0
+    session.refresh(user)
+    session.refresh(item)
+    assert user.coins == 100
+    assert item.stock == 5
 
 
 def test_parallel_purchases_cannot_overdraw(database):
@@ -535,7 +1002,14 @@ def test_habit_streak_respects_period_gaps(database, clock, frequency, previous,
         clock(datetime(2026, 9, 7, 2, tzinfo=timezone.utc))
     elif frequency == "monthly":
         clock(datetime(2026, 9, 1, 2, tzinfo=timezone.utc))
-    habit = Habit(user_id=user.id, title="习惯", frequency=frequency, streak=7, best_streak=7)
+    habit = Habit(
+        user_id=user.id,
+        title="习惯",
+        frequency=frequency,
+        streak=7,
+        best_streak=7,
+        created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+    )
     session.add(habit)
     session.flush()
     if frequency == "daily":
@@ -567,7 +1041,11 @@ def test_habit_streak_respects_period_gaps(database, clock, frequency, previous,
 def test_habit_history_survives_new_completion_deactivation_and_deletion(database, clock):
     session, factory = database
     user = make_user(session)
-    habit = Habit(user_id=user.id, title="习惯")
+    habit = Habit(
+        user_id=user.id,
+        title="习惯",
+        created_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+    )
     session.add(habit)
     session.flush()
     session.add(HabitCompletion(
@@ -592,6 +1070,40 @@ def test_habit_history_survives_new_completion_deactivation_and_deletion(databas
     assert session.query(HabitCompletion).count() == 2
 
 
+def test_habit_stats_ignore_invalid_completion_facts(database, clock):
+    session, factory = database
+    user = make_user(session)
+    habit = Habit(
+        user_id=user.id,
+        title="统计有效计划日",
+        frequency="weekdays",
+        weekdays=[0],
+        created_at=datetime(2026, 9, 5, tzinfo=timezone.utc),
+    )
+    session.add(habit)
+    session.flush()
+    session.add_all([
+        HabitCompletion(
+            habit_id=habit.id,
+            user_id=user.id,
+            completed_on=completed_on,
+            completed_at=datetime.combine(completed_on, datetime.min.time()),
+        )
+        for completed_on in (
+            date(2026, 8, 31),
+            date(2026, 9, 7),
+            date(2026, 9, 12),
+            date(2026, 9, 14),
+        )
+    ])
+    session.commit()
+
+    stats = {row["date"]: row["completed"] for row in StatsService(session).get_habit_stats(user.id)}
+
+    assert stats["2026-09-07"] == 1
+    assert stats["2026-09-12"] == 0
+
+
 def test_habit_backfill_is_idempotent_and_does_not_invent_history(database, clock):
     session, factory = database
     user = make_user(session)
@@ -607,7 +1119,11 @@ def test_habit_backfill_is_idempotent_and_does_not_invent_history(database, cloc
 def test_china_midnight_is_shared_by_habits_checkin_and_summary(database, clock):
     session, factory = database
     user = make_user(session)
-    habit = Habit(user_id=user.id, title="习惯")
+    habit = Habit(
+        user_id=user.id,
+        title="习惯",
+        created_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+    )
     session.add(habit)
     session.commit()
     todo = TodoService(session)

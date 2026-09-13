@@ -28,6 +28,15 @@ class ShopItemRepository(BaseRepository[ShopItem]):
             .all()
         )
 
+    def get_for_update(self, item_id: UUID) -> Optional[ShopItem]:
+        return (
+            self.db.query(ShopItem)
+            .filter(ShopItem.id == item_id)
+            .with_for_update()
+            .populate_existing()
+            .first()
+        )
+
     def get_by_creator(self, creator_id: UUID) -> List[ShopItem]:
         return (
             self.db.query(ShopItem)
@@ -39,7 +48,11 @@ class ShopItemRepository(BaseRepository[ShopItem]):
         """Atomically decrement stock if sufficient. Returns True if successful."""
         affected = (
             self.db.query(ShopItem)
-            .filter(ShopItem.id == item_id, ShopItem.stock >= quantity)
+            .filter(
+                ShopItem.id == item_id,
+                ShopItem.is_active == True,  # noqa: E712
+                ShopItem.stock >= quantity,
+            )
             .update({"stock": ShopItem.stock - quantity})
         )
         return affected > 0

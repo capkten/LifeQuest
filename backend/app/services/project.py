@@ -4,6 +4,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import HTTPException
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models.project import (
@@ -25,11 +26,14 @@ from app.schemas.project import (
     MilestoneCreate,
     MilestoneUpdate,
 )
-from app.schemas.todo import TaskCreate
+from app.schemas.todo import TaskCreate, TaskUpdate
 from app.services.achievement import AchievementService
 from app.services.title import TitleService
 from app.models.coin_transaction import CoinSource, CoinType
 from app.repositories.coin_transaction import CoinTransactionRepository
+
+
+_UNSET = object()
 
 
 class ProjectService:
@@ -54,6 +58,14 @@ class ProjectService:
             raise HTTPException(status_code=403, detail="Not authorized")
         return project
 
+    def get_project_for_user_locked(self, project_id: UUID, user_id: UUID) -> Project:
+        project = self.project_repo.get_for_update(project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if project.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        return project
+
     def get_phase_for_project(
         self, phase_id: UUID, project_id: UUID, for_update: bool = False
     ) -> ProjectPhase:
@@ -70,6 +82,16 @@ class ProjectService:
 
     def get_milestone_for_project(self, milestone_id: UUID, project_id: UUID) -> ProjectMilestone:
         milestone = self.milestone_repo.get_by_id(milestone_id)
+        if milestone is None:
+            raise HTTPException(status_code=404, detail="Milestone not found")
+        if milestone.project_id != project_id:
+            raise HTTPException(status_code=403, detail="Milestone does not belong to this project")
+        return milestone
+
+    def get_milestone_for_project_locked(
+        self, milestone_id: UUID, project_id: UUID
+    ) -> ProjectMilestone:
+        milestone = self.milestone_repo.get_for_update(milestone_id)
         if milestone is None:
             raise HTTPException(status_code=404, detail="Milestone not found")
         if milestone.project_id != project_id:
@@ -118,11 +140,47 @@ class ProjectService:
             self.db.rollback()
             raise
 
+    def _ensure_no_foreign_task_links(self, task_filter, owner_id: UUID) -> None:
+        if self.db.query(Task.id).filter(
+            task_filter,
+            Task.user_id != owner_id,
+        ).first() is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "PROJECT_RESOURCE_HAS_FOREIGN_TASKS",
+                    "message": "项目层级存在其他用户的历史任务关联，暂不能删除。",
+                },
+            )
+
+    @staticmethod
+    def _project_task_link_filter(project_id: UUID):
+        return or_(
+            Task.project_id == project_id,
+            Task.phase_id.in_(
+                select(ProjectPhase.id).where(ProjectPhase.project_id == project_id)
+            ),
+            Task.milestone_id.in_(
+                select(ProjectMilestone.id).where(ProjectMilestone.project_id == project_id)
+            ),
+        )
+
     def delete_project(self, project: Project) -> None:
         try:
-            # Nullify task references before deleting
-            self.db.query(Task).filter(Task.project_id == project.id).update(
-                {Task.project_id: None, Task.phase_id: None, Task.milestone_id: None}
+            self.user_repo.lock(project.user_id)
+            locked_project = self.project_repo.get_for_update(project.id)
+            if locked_project is None:
+                raise HTTPException(status_code=404, detail="Project not found")
+            project = locked_project
+            task_filter = self._project_task_link_filter(project.id)
+            self._ensure_no_foreign_task_links(task_filter, project.user_id)
+            # Detach only the owner's tasks before deleting the project tree.
+            self.db.query(Task).filter(
+                task_filter,
+                Task.user_id == project.user_id,
+            ).update(
+                {Task.project_id: None, Task.phase_id: None, Task.milestone_id: None},
+                synchronize_session=False,
             )
             self.db.flush()
             self.project_repo.delete(project.id)
@@ -170,9 +228,15 @@ class ProjectService:
 
     def delete_phase(self, phase: ProjectPhase) -> None:
         try:
+            self.user_repo.lock(phase.project.user_id)
+            self.project_repo.get_for_update(phase.project_id)
             locked_phase = self.phase_repo.get_for_update(phase.id)
             if locked_phase is None:
                 raise HTTPException(status_code=404, detail="Phase not found")
+            self._ensure_no_foreign_task_links(
+                Task.phase_id == phase.id,
+                locked_phase.project.user_id,
+            )
             task_count = self.phase_repo.count_tasks(phase.id)
             if task_count:
                 raise HTTPException(
@@ -211,12 +275,32 @@ class ProjectService:
         return self.milestone_repo.update(milestone, update_data)
 
     def delete_milestone(self, milestone: ProjectMilestone) -> None:
-        # Nullify tasks referencing this milestone
-        self.db.query(Task).filter(Task.milestone_id == milestone.id).update(
-            {Task.milestone_id: None}
-        )
-        self.db.flush()
-        self.milestone_repo.delete(milestone.id)
+        try:
+            self.user_repo.lock(milestone.project.user_id)
+            locked_project = self.project_repo.get_for_update(milestone.project_id)
+            if locked_project is None:
+                raise HTTPException(status_code=404, detail="Project not found")
+            locked_milestone = self.milestone_repo.get_for_update(milestone.id)
+            if locked_milestone is None:
+                raise HTTPException(status_code=404, detail="Milestone not found")
+            milestone = locked_milestone
+            owner_id = locked_project.user_id
+            self._ensure_no_foreign_task_links(
+                Task.milestone_id == milestone.id,
+                owner_id,
+            )
+            self.db.query(Task).filter(
+                Task.milestone_id == milestone.id,
+                Task.user_id == owner_id,
+            ).update(
+                {Task.milestone_id: None},
+                synchronize_session=False,
+            )
+            self.db.flush()
+            self.milestone_repo.delete(milestone.id)
+        except Exception:
+            self.db.rollback()
+            raise
 
     def reach_milestone(self, milestone: ProjectMilestone) -> ProjectMilestone:
         milestone.status = MilestoneStatus.REACHED
@@ -227,15 +311,9 @@ class ProjectService:
 
     # --- Tasks within project ---
     def create_project_task(self, user_id: UUID, project_id: UUID, data: TaskCreate) -> Task:
-        self.get_project_for_user(project_id, user_id)
-        if data.phase_id is not None:
-            self.get_phase_for_project(data.phase_id, project_id, for_update=True)
-        if data.milestone_id is not None:
-            self.get_milestone_for_project(data.milestone_id, project_id)
-        obj_data = data.model_dump()
-        obj_data["user_id"] = user_id
-        obj_data["project_id"] = project_id
-        return self.task_repo.create(obj_data)
+        from app.services.todo import TodoService
+
+        return TodoService(self.db).create_task(user_id, data.model_copy(update={"project_id": project_id}))
 
     def get_project_tasks(
         self,
@@ -258,37 +336,20 @@ class ProjectService:
         self,
         task: Task,
         user_id: UUID,
-        project_id: Optional[UUID] = None,
-        phase_id: Optional[UUID] = None,
-        milestone_id: Optional[UUID] = None,
-        status: Optional[TaskStatus] = None,
+        project_id: UUID | None | object = _UNSET,
+        phase_id: UUID | None | object = _UNSET,
+        milestone_id: UUID | None | object = _UNSET,
+        status: TaskStatus | None | object = _UNSET,
     ) -> Task:
-        if project_id is not None:
-            self.get_project_for_user(project_id, user_id)
-        target_project_id = project_id or task.project_id
-        if phase_id is not None:
-            if target_project_id is None:
-                raise HTTPException(status_code=400, detail="Phase requires a project")
-            self.get_phase_for_project(phase_id, target_project_id, for_update=True)
-        if milestone_id is not None:
-            if target_project_id is None:
-                raise HTTPException(status_code=400, detail="Milestone requires a project")
-            self.get_milestone_for_project(milestone_id, target_project_id)
-        if project_id is not None:
-            task.project_id = project_id
-        if phase_id is not None:
-            task.phase_id = phase_id
-        if milestone_id is not None:
-            task.milestone_id = milestone_id
-        if status is not None:
-            task.status = status
-            if status == TaskStatus.COMPLETED:
-                task.completed_at = datetime.now(timezone.utc)
-            elif task.completed_at is not None:
-                task.completed_at = None
-        self.db.commit()
-        self.db.refresh(task)
-        return task
+        from app.services.todo import TodoService
+
+        if task.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        changes = {field: value for field, value in (
+            ("project_id", project_id), ("phase_id", phase_id),
+            ("milestone_id", milestone_id), ("status", status),
+        ) if value is not _UNSET}
+        return TodoService(self.db).update_task(task, TaskUpdate(**changes))
 
     # --- Stats helper ---
     def _compute_project_stats(self, project: Project) -> dict:

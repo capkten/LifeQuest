@@ -296,11 +296,4 @@ def move_task(
     from app.services.todo import TodoService
     todo_service = TodoService(db)
     task = todo_service.get_task_for_user(task_id, current_user.id)
-    return service.move_task(
-        task,
-        current_user.id,
-        project_id=body.project_id,
-        phase_id=body.phase_id,
-        milestone_id=body.milestone_id,
-        status=body.status,
-    )
+    return service.move_task(task, current_user.id, **body.model_dump(exclude_unset=True))

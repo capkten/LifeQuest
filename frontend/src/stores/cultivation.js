@@ -6,6 +6,7 @@ export const useCultivationStore = defineStore('cultivation', () => {
   const overview = ref(null)
   const loading = ref(false)
   const error = ref(null)
+  const appliedSettlementIds = new Set()
   let requestVersion = 0
   let requestSequence = 0
 
@@ -14,6 +15,7 @@ export const useCultivationStore = defineStore('cultivation', () => {
     overview.value = null
     loading.value = false
     error.value = null
+    appliedSettlementIds.clear()
   }
 
   async function loadOverview() {
@@ -40,7 +42,9 @@ export const useCultivationStore = defineStore('cultivation', () => {
   }
 
   async function applySettlement(settlement, refreshOverview = true) {
-    if (settlement) {
+    const settlementId = settlement?.log_id ? String(settlement.log_id) : null
+    const shouldApply = settlement && (!settlementId || !appliedSettlementIds.has(settlementId))
+    if (shouldApply) {
       const currentOverview = overview.value || {}
       overview.value = {
         ...currentOverview,
@@ -48,6 +52,7 @@ export const useCultivationStore = defineStore('cultivation', () => {
         spirit_stones: (currentOverview.spirit_stones || 0) + (settlement.spirit_stones || 0),
         merit: (currentOverview.merit || 0) + (settlement.merit || 0),
       }
+      if (settlementId) appliedSettlementIds.add(settlementId)
     }
     return refreshOverview ? await refresh() : overview.value
   }

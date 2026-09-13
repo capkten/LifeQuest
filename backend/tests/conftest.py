@@ -1,6 +1,11 @@
 import os
+import tempfile
+from pathlib import Path
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing-only")
+_runtime_directory = tempfile.TemporaryDirectory(prefix="lifequest-tests-")
+os.environ["DATABASE_URL"] = f"sqlite:///{Path(_runtime_directory.name) / 'startup.db'}"
+os.environ["MCP_AUTOSTART"] = "false"
 
 import pytest
 from fastapi.testclient import TestClient
@@ -31,6 +36,17 @@ def override_get_db():
 
 
 app.dependency_overrides[get_db] = override_get_db
+
+
+@pytest.fixture(autouse=True)
+def isolated_files(tmp_path):
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr("app.services.note.NOTES_DIR", tmp_path / "notes_data")
+        patch.setattr("app.api.notes.UPLOAD_DIR", tmp_path / "uploads" / "notes")
+        avatar_dir = tmp_path / "uploads" / "avatars"
+        avatar_dir.mkdir(parents=True)
+        patch.setattr("app.api.users.UPLOAD_DIR", avatar_dir)
+        yield
 
 
 @pytest.fixture

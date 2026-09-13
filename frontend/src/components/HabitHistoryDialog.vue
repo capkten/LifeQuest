@@ -342,16 +342,19 @@ function dayTitle(day) {
 
 watch(() => props.visible, (visible) => {
   if (visible) {
+    history.value = null
     resetForms()
     loadHistory()
   } else {
     historyRequestId += 1
+    history.value = null
   }
 })
 
 watch(() => props.habit?.id, (habitId, previousHabitId) => {
   if (habitId === previousHabitId) return
   historyRequestId += 1
+  history.value = null
   if (props.visible && habitId) {
     resetForms()
     loadHistory()

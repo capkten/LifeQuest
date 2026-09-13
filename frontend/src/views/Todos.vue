@@ -721,7 +721,7 @@
 </template>
 
 <script setup>
-import { formatDateTimeInput } from '../utils/dateTime'
+import { chinaDateTimeInputToUtcIso, formatChinaDate, formatDateTimeInput } from '../utils/dateTime'
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { todoService } from '../services/todo'
@@ -936,9 +936,7 @@ function formatPriority(priority) {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-CN', {
+  return formatChinaDate(dateStr, {
     month: 'short',
     day: 'numeric',
     year: 'numeric'
@@ -1337,7 +1335,7 @@ async function createItem() {
 
     // Add optional deadline for tasks/goals
     if (form.value.deadline) {
-      base.deadline = new Date(form.value.deadline).toISOString()
+      base.deadline = chinaDateTimeInputToUtcIso(form.value.deadline)
     }
 
     if (activeTab.value === 'habits') {
@@ -1368,6 +1366,10 @@ async function createItem() {
 function openEditDialog(item, type) {
   editingItem.value = item
   editingType.value = type
+  // Switch to the correct tab so the dialog shows the right fields
+  if (type !== activeTab.value) {
+    activeTab.value = type
+  }
   const deadlineValue = formatDateTimeInput(item.deadline)
   form.value = {
     title: item.title || '',
@@ -1381,10 +1383,6 @@ function openEditDialog(item, type) {
     exp_reward: item.exp_reward ?? 5,
     project_id: item.project_id || '',
     milestone_id: item.milestone_id || ''
-  }
-  // Switch to the correct tab so the dialog shows the right fields
-  if (type !== activeTab.value) {
-    activeTab.value = type
   }
   if (type === 'tasks' && form.value.project_id) {
     loadProjectMilestones(form.value.project_id)
@@ -1410,7 +1408,7 @@ async function saveItem() {
     }
 
     if (form.value.deadline) {
-      base.deadline = new Date(form.value.deadline).toISOString()
+      base.deadline = chinaDateTimeInputToUtcIso(form.value.deadline)
     } else if (editingType.value === 'tasks' || editingType.value === 'goals') {
       base.deadline = null
     }

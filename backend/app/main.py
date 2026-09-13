@@ -2,6 +2,7 @@ import logging
 import os
 from contextlib import contextmanager
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi import HTTPException
@@ -525,6 +526,48 @@ def _deduplicate_cultivation_logs(connection):
             seen.add(source_key)
 
 
+def _deduplicate_habit_completions(connection):
+    """Keep the latest fact while preserving metadata from duplicate rows."""
+    rows = connection.execute(text(
+        "SELECT id, habit_id, completed_on, note, is_makeup "
+        "FROM habit_completions "
+        "WHERE habit_id IS NOT NULL AND completed_on IS NOT NULL "
+        "ORDER BY habit_id, completed_on, "
+        "CASE WHEN completed_at IS NULL THEN 1 ELSE 0 END, "
+        "completed_at DESC, id DESC"
+    )).fetchall()
+    seen = {}
+    for completion_id, habit_id, completed_on, note, is_makeup in rows:
+        key = (habit_id, completed_on)
+        keeper = seen.get(key)
+        if keeper is not None:
+            merged_note = keeper["note"]
+            if not merged_note and note:
+                merged_note = note
+            merged_is_makeup = keeper["is_makeup"] or bool(is_makeup)
+            if merged_note != keeper["note"] or merged_is_makeup != keeper["is_makeup"]:
+                connection.execute(text(
+                    "UPDATE habit_completions "
+                    "SET note = :note, is_makeup = :is_makeup "
+                    "WHERE id = :id"
+                ), {
+                    "note": merged_note,
+                    "is_makeup": merged_is_makeup,
+                    "id": keeper["id"],
+                })
+                keeper["note"] = merged_note
+                keeper["is_makeup"] = merged_is_makeup
+            connection.execute(text(
+                "DELETE FROM habit_completions WHERE id = :id"
+            ), {"id": completion_id})
+        else:
+            seen[key] = {
+                "id": completion_id,
+                "note": note,
+                "is_makeup": bool(is_makeup),
+            }
+
+
 def _deduplicate_reward_key_rows(connection, table_name, key_columns):
     """Keep the lowest-id row for each exact non-null reward idempotency key."""
     key_sql = ", ".join(key_columns)
@@ -572,6 +615,40 @@ def _migrate_reward_idempotency_constraints(connection):
             # unique indexes continue to allow multiple NULL key values.
             _deduplicate_reward_key_rows(connection, table_name, key_columns)
         _ensure_unique_index(connection, table_name, index_name, key_columns)
+
+
+def _migrate_finance_daily_reward_claims(connection, uuid_type):
+    """Create daily finance reward claims and preserve legacy first-action days."""
+    connection.execute(text(
+        f"CREATE TABLE IF NOT EXISTS finance_daily_reward_claims ("
+        f"id {uuid_type} PRIMARY KEY, "
+        f"user_id {uuid_type} NOT NULL, "
+        "reward_date DATE NOT NULL, "
+        "claimed_at DATETIME NOT NULL, "
+        "CONSTRAINT uq_finance_daily_reward_user_day UNIQUE (user_id, reward_date)"
+        ")"
+    ))
+    existing_result = connection.execute(text(
+        "SELECT user_id, reward_date FROM finance_daily_reward_claims"
+    ))
+    existing = set(existing_result.fetchall()) if existing_result is not None else set()
+    legacy_result = connection.execute(text(
+        "SELECT DISTINCT user_id, date FROM finance_transactions WHERE date IS NOT NULL"
+    ))
+    legacy_rows = legacy_result.fetchall() if legacy_result is not None else ()
+    for user_id, reward_date in legacy_rows:
+        if (user_id, reward_date) in existing:
+            continue
+        connection.execute(text(
+            "INSERT INTO finance_daily_reward_claims "
+            "(id, user_id, reward_date, claimed_at) "
+            "VALUES (:id, :user_id, :reward_date, CURRENT_TIMESTAMP)"
+        ), {
+            "id": str(uuid4()),
+            "user_id": user_id,
+            "reward_date": reward_date,
+        })
+        existing.add((user_id, reward_date))
 
 
 def _attempted_date_expression(connection):
@@ -728,12 +805,55 @@ def _migrate_columns():
             "remaining_pills INTEGER NOT NULL, "
             "created_at DATETIME)"
         ))
+        _migrate_finance_daily_reward_claims(conn, uuid_type)
 
         # habits.last_completed_at
         habit_cols = {c["name"] for c in inspector.get_columns("habits")}
         if "last_completed_at" not in habit_cols:
             conn.execute(text("ALTER TABLE habits ADD COLUMN last_completed_at DATETIME"))
             logger.info("Migration: added habits.last_completed_at")
+        if "weekdays" not in habit_cols:
+            conn.execute(text("ALTER TABLE habits ADD COLUMN weekdays JSON"))
+        if "weekly_target" not in habit_cols:
+            conn.execute(text("ALTER TABLE habits ADD COLUMN weekly_target INTEGER"))
+        if "streak_reset_on" not in habit_cols:
+            conn.execute(text("ALTER TABLE habits ADD COLUMN streak_reset_on DATE"))
+
+        try:
+            completion_cols = {c["name"] for c in inspector.get_columns("habit_completions")}
+        except (KeyError, NoSuchTableError):
+            completion_cols = None
+        if completion_cols is not None:
+            if "completed_at" not in completion_cols:
+                conn.execute(text("ALTER TABLE habit_completions ADD COLUMN completed_at DATETIME"))
+                logger.info("Migration: added habit_completions.completed_at")
+            completed_at_fallback = (
+                "COALESCE(completed_at, created_at, completed_on)"
+                if "created_at" in completion_cols
+                else "COALESCE(completed_at, completed_on)"
+            )
+            conn.execute(text(
+                f"UPDATE habit_completions SET completed_at = {completed_at_fallback} "
+                "WHERE completed_at IS NULL"
+            ))
+            logger.info("Migration: backfilled null habit_completions.completed_at values")
+            if "note" not in completion_cols:
+                conn.execute(text("ALTER TABLE habit_completions ADD COLUMN note VARCHAR(500)"))
+            if "is_makeup" not in completion_cols:
+                conn.execute(text("ALTER TABLE habit_completions ADD COLUMN is_makeup BOOLEAN NOT NULL DEFAULT 0"))
+            live_inspector = inspect(conn)
+            if not _has_unique_definition(
+                live_inspector,
+                "habit_completions",
+                ["habit_id", "completed_on"],
+            ):
+                _deduplicate_habit_completions(conn)
+            _ensure_unique_index(
+                conn,
+                "habit_completions",
+                "uq_habit_completion_day",
+                ["habit_id", "completed_on"],
+            )
 
         # users.total_coins_earned
         user_cols = {c["name"] for c in inspector.get_columns("users")}
@@ -1025,6 +1145,8 @@ def startup_event():
         from app.services.content_localization import ContentLocalizationService
         CultivationService.seed_world(db)
         ContentLocalizationService.backfill_system_content(db)
+        from app.services.habit_history import backfill_latest_completions
+        backfill_latest_completions(db)
     except Exception:
         logger.exception("Seed data failed")
         raise

@@ -52,7 +52,12 @@ from app.services.habit_schedule import (
     week_has_active_schedule,
     week_start,
 )
-from app.services.habit_metrics import calculate_habit_metrics, weekly_target_progress
+from app.services.habit_metrics import (
+    calculate_habit_metrics,
+    count_valid_completions,
+    valid_completion_dates,
+    weekly_target_progress,
+)
 from app.models.habit_completion import HabitCompletion
 from app.models.habit_pause import HabitPauseInterval
 from app.models.habit_leave import HabitLeaveInterval
@@ -120,6 +125,7 @@ class TodoService:
             today,
             pause_intervals,
             leave_intervals,
+            as_of=today,
         )
 
     def _set_completed_today(self, habit: Habit) -> Habit:
@@ -143,26 +149,59 @@ class TodoService:
         habit.scheduled_count = metrics.scheduled_count
         habit.completed_count = metrics.completed_count
         habit.completion_rate = metrics.completion_rate
-        habit.completed_today = today in completion_dates
+        habit.completed_today = today in valid_completion_dates(
+            habit,
+            completion_dates,
+            pause_intervals,
+            leave_intervals,
+            as_of=today,
+        )
         return habit
 
     def _weekly_completion_count(self, habit_id: UUID, target_date: date) -> int:
         current_week = week_start(target_date)
-        return self._weekly_completion_count_for_week(habit_id, current_week)
+        return self._weekly_completion_count_for_week(habit_id, current_week, target_date)
 
-    def _weekly_completion_count_for_week(self, habit_id: UUID, current_week: date) -> int:
-        return self.db.query(HabitCompletion.id).filter(
-            HabitCompletion.habit_id == habit_id,
-            HabitCompletion.completed_on >= current_week,
-            HabitCompletion.completed_on < current_week + timedelta(days=7),
-        ).count()
+    def _weekly_completion_count_for_week(
+        self,
+        habit_id: UUID,
+        current_week: date,
+        target_date: date = None,
+    ) -> int:
+        habit = self.habit_repo.get_by_id(habit_id)
+        if habit is None:
+            return 0
+        period_end = min(current_week + timedelta(days=6), self._today())
+        return count_valid_completions(
+            habit,
+            self._completion_dates(habit),
+            current_week,
+            period_end,
+            self._habit_pause_intervals(habit),
+            self._habit_leave_intervals(habit),
+        )
 
     def _recalculate_habit_streak(self, habit: Habit, pause_intervals, leave_intervals) -> None:
         records = self.db.query(HabitCompletion).filter(
             HabitCompletion.habit_id == habit.id,
             HabitCompletion.user_id == habit.user_id,
         ).order_by(HabitCompletion.completed_on.asc()).all()
-        completion_dates = {record.completed_on for record in records}
+        reset_on = habit.streak_reset_on
+        recorded_dates = {
+            record.completed_on
+            for record in records
+        }
+        completion_dates = valid_completion_dates(
+            habit,
+            recorded_dates,
+            pause_intervals,
+            leave_intervals,
+            as_of=self._today(),
+        )
+        if reset_on is not None:
+            completion_dates = {
+                completed_on for completed_on in completion_dates if completed_on > reset_on
+            }
 
         if habit.frequency in {"daily", "weekdays"}:
             valid_dates = {
@@ -182,9 +221,8 @@ class TodoService:
         elif habit.frequency == "weekly_target" and habit.weekly_target:
             counts = {}
             for completed_on in completion_dates:
-                if not is_excluded_on(completed_on, pause_intervals, leave_intervals):
-                    period = week_start(completed_on)
-                    counts[period] = counts.get(period, 0) + 1
+                period = week_start(completed_on)
+                counts[period] = counts.get(period, 0) + 1
             completed_periods = {
                 period for period, count in counts.items()
                 if count >= habit.weekly_target
@@ -192,37 +230,46 @@ class TodoService:
             }
             current_streak = 0
             best_streak = 0
+            lower_period = min(completed_periods) if completed_periods else None
             for period in sorted(completed_periods):
                 previous = period - timedelta(days=7)
-                while not week_has_active_schedule(
+                while lower_period is not None and previous >= lower_period and not week_has_active_schedule(
                     habit, previous, pause_intervals, leave_intervals,
                 ):
                     previous -= timedelta(days=7)
-                current_streak = current_streak + 1 if previous in completed_periods else 1
+                current_streak = current_streak + 1 if (
+                    lower_period is not None
+                    and previous >= lower_period
+                    and previous in completed_periods
+                ) else 1
                 best_streak = max(best_streak, current_streak)
         else:
             period_for = week_start if habit.frequency == "weekly" else month_period
             periods = {
                 period_for(completed_on)
                 for completed_on in completion_dates
-                if not is_excluded_on(completed_on, pause_intervals, leave_intervals)
             }
             current_streak = 0
             best_streak = 0
+            lower_period = min(periods) if periods else None
             for period in sorted(periods):
                 if habit.frequency == "weekly":
                     previous = period - timedelta(days=7)
-                    while not week_has_active_schedule(
+                    while lower_period is not None and previous >= lower_period and not week_has_active_schedule(
                         habit, previous, pause_intervals, leave_intervals,
                     ):
                         previous -= timedelta(days=7)
                 else:
                     previous = period - 1
-                    while not month_has_active_schedule(
+                    while lower_period is not None and previous >= lower_period and not month_has_active_schedule(
                         habit, previous, pause_intervals, leave_intervals,
                     ):
                         previous -= 1
-                current_streak = current_streak + 1 if previous in periods else 1
+                current_streak = current_streak + 1 if (
+                    lower_period is not None
+                    and previous >= lower_period
+                    and previous in periods
+                ) else 1
                 best_streak = max(best_streak, current_streak)
 
         if completion_dates:
@@ -238,6 +285,8 @@ class TodoService:
                 or self._local_date(habit.last_completed_at) <= latest_date
             ):
                 habit.last_completed_at = latest_record.completed_at
+        else:
+            habit.streak = 0
         self.db.flush()
 
     def get_pause_intervals(self, habit_id: UUID, user_id: UUID):
@@ -376,7 +425,7 @@ class TodoService:
             HabitCompletion.completed_on == completed_on,
         ).first()
         if existing is not None:
-            if completion_in.note is not None:
+            if completion_in.note:
                 existing.note = completion_in.note
         else:
             if (
@@ -429,13 +478,20 @@ class TodoService:
             for record in records
             if start_on <= record.completed_on <= end_on
         }
+        valid_dates = valid_completion_dates(
+            habit,
+            completion_dates,
+            pause_intervals,
+            leave_intervals,
+            as_of=end_on,
+        )
         days = []
         cursor = start_on
         while cursor <= end_on:
             paused = is_paused_on(pause_intervals, cursor)
             excused = is_excused_on(leave_intervals, cursor)
             scheduled = cursor >= created_on and is_due(habit, cursor) and not paused and not excused
-            record = records_by_date.get(cursor)
+            record = records_by_date.get(cursor) if cursor in valid_dates else None
             days.append({
                 "date": cursor,
                 "scheduled": scheduled,
@@ -565,7 +621,16 @@ class TodoService:
             or weekdays != old_weekdays
             or weekly_target != old_weekly_target
         ):
+            today = self._today()
+            completed_today = self.db.query(HabitCompletion.id).filter(
+                HabitCompletion.habit_id == habit.id,
+                HabitCompletion.user_id == habit.user_id,
+                HabitCompletion.completed_on == today,
+            ).first() is not None
+            reset_on = today if completed_today else today - timedelta(days=1)
             update_data["streak"] = 0
+            update_data["streak_reset_on"] = reset_on
+            habit.streak_reset_on = reset_on
         if desired_active is False:
             self._pause_habit_locked(habit, self._today())
         elif desired_active is True:
@@ -604,7 +669,7 @@ class TodoService:
             HabitCompletion.completed_on == completed_on,
         ).first()
         if existing is not None:
-            if completion_in is not None:
+            if completion_in is not None and completion_in.note:
                 existing.note = completion_in.note
             self.db.commit()
             return self._set_completed_today(habit)
@@ -642,7 +707,7 @@ class TodoService:
         project_id = data.get("project_id")
         service = ProjectService(self.db)
         if project_id is not None:
-            service.get_project_for_user(project_id, user_id)
+            service.get_project_for_user_locked(project_id, user_id)
         for field, getter in (
             ("phase_id", service.get_phase_for_project),
             ("milestone_id", service.get_milestone_for_project),
@@ -653,7 +718,7 @@ class TodoService:
                 if field == "phase_id":
                     getter(data[field], project_id, for_update=True)
                 else:
-                    getter(data[field], project_id)
+                    service.get_milestone_for_project_locked(data[field], project_id)
 
     @rollback_on_error
     def create_task(self, user_id: UUID, task_in: TaskCreate) -> Task:
@@ -708,10 +773,16 @@ class TodoService:
         if task.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
         changed = self.db.execute(update(Task).where(
-            Task.id == task.id, Task.user_id == user_id, Task.status != TaskStatus.COMPLETED
+            Task.id == task.id,
+            Task.user_id == user_id,
+            Task.status.in_((TaskStatus.PENDING, TaskStatus.IN_PROGRESS)),
         ).values(status=TaskStatus.COMPLETED, completed_at=now)).rowcount
         if not changed:
             self.db.refresh(task)
+            if task.status == TaskStatus.CANCELLED:
+                raise HTTPException(status_code=409, detail="已取消的任务不能完成")
+            if task.status != TaskStatus.COMPLETED:
+                raise HTTPException(status_code=409, detail="当前任务状态不能完成")
             self.db.commit()
             return task
 
@@ -762,10 +833,16 @@ class TodoService:
         if goal.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
         changed = self.db.execute(update(Goal).where(
-            Goal.id == goal.id, Goal.user_id == user_id, Goal.status != TaskStatus.COMPLETED
+            Goal.id == goal.id,
+            Goal.user_id == user_id,
+            Goal.status.in_((TaskStatus.PENDING, TaskStatus.IN_PROGRESS)),
         ).values(status=TaskStatus.COMPLETED, progress=GOAL_COMPLETED_PROGRESS)).rowcount
         if not changed:
             self.db.refresh(goal)
+            if goal.status == TaskStatus.CANCELLED:
+                raise HTTPException(status_code=409, detail="已取消的目标不能完成")
+            if goal.status != TaskStatus.COMPLETED:
+                raise HTTPException(status_code=409, detail="当前目标状态不能完成")
             self.db.commit()
             return goal
 
