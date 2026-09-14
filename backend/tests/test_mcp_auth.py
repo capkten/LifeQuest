@@ -35,6 +35,14 @@ def test_mcp_documentation_describes_token_configuration():
     assert "proxy_buffering off;" in install_doc
     assert "proxy_set_header Authorization $http_authorization;" in install_doc
     assert "proxy_pass http://127.0.0.1:3001/;" in nginx_doc
+    for deployment_doc in (install_doc, nginx_doc):
+        mcp_location_start = deployment_doc.index("location /mcp/")
+        spa_fallback_start = deployment_doc.index("location / {", mcp_location_start)
+        mcp_location = deployment_doc[mcp_location_start:spa_fallback_start]
+        assert mcp_location_start < spa_fallback_start
+        assert "proxy_pass http://127.0.0.1:3001/;" in mcp_location
+        assert "proxy_buffering off;" in mcp_location
+        assert "proxy_set_header Authorization $http_authorization;" in mcp_location
 
 
 def _auth_headers(client, username="token-owner", email="token-owner@example.com"):
