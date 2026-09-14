@@ -15,6 +15,19 @@ from starlette.responses import JSONResponse
 from starlette.testclient import TestClient
 
 
+def test_mcp_documentation_describes_token_configuration():
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    api_doc = (repo_root / "docs/API.md").read_text(encoding="utf-8")
+    env_doc = (repo_root / ".env.example").read_text(encoding="utf-8")
+    assert "/api/auth/mcp-tokens" in api_doc
+    assert "Authorization: Bearer" in api_doc
+    assert "LIFEQUEST_MCP_TOKEN" in api_doc
+    assert "LIFEQUEST_MCP_TOKEN" in env_doc
+    assert "<lq_mcp_token>" in api_doc
+
+
 def _auth_headers(client, username="token-owner", email="token-owner@example.com"):
     client.post(
         "/api/auth/register",

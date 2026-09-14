@@ -92,6 +92,98 @@ username=用户名&password=密码
 
 ---
 
+## MCP 访问令牌与连接
+
+MCP 访问令牌用于连接 LifeQuest MCP 服务，不等同于登录接口返回的 Web JWT。请先登录 Web 端，进入 `Profile` 页面的个人设置区域，在“MCP 访问凭证”中填写名称和有效期（1–365 天，默认 90 天）并创建令牌。
+
+创建成功后，页面只在当前结果区域显示一次完整令牌，并提供复制按钮。请立即保存；关闭结果区域、离开 Profile 页面或刷新页面后，完整令牌都无法恢复。之后页面和 API 只显示令牌名称、前缀和生命周期元数据。
+
+### MCP Token API
+
+以下接口使用 Web JWT 认证，认证头为 `Authorization: Bearer {access_token}`。
+
+#### POST /api/auth/mcp-tokens
+
+创建 MCP 访问令牌。
+
+**请求体 (JSON):**
+```json
+{
+  "name": "Claude Desktop",
+  "expires_in_days": 90
+}
+```
+
+**创建响应:**
+```json
+{
+  "id": "uuid",
+  "name": "Claude Desktop",
+  "token_prefix": "lq_mcp_xxxxxxxxx",
+  "created_at": "2026-09-14T00:00:00+00:00",
+  "last_used_at": null,
+  "expires_at": "2026-12-13T00:00:00+00:00",
+  "revoked_at": null,
+  "status": "active",
+  "token": "<lq_mcp_token>"
+}
+```
+
+`token` 只在创建响应中返回一次。`token_prefix` 仅用于识别，完整令牌不会出现在列表、撤销响应或数据库 API 字段中；`token_hash` 也不会对外返回。`status` 为 `active`、`expired` 或 `revoked`，`last_used_at` 记录最近一次成功使用时间。
+
+#### GET /api/auth/mcp-tokens
+
+列出当前用户的 MCP 访问令牌。每项包含 `id`、`name`、`token_prefix`、`created_at`、`last_used_at`、`expires_at`、`revoked_at` 和 `status`，不包含 `token` 或 `token_hash`。
+
+#### DELETE /api/auth/mcp-tokens/{token_id}
+
+撤销当前用户的指定令牌。Profile 页面令牌列表中的“撤销”操作调用此接口；撤销后使用该令牌的连接立即失效。重复撤销保持幂等，撤销响应只返回元数据，不返回完整令牌。
+
+### SSE/HTTP 连接
+
+线上 SSE 地址为 `https://life.capkin.cn/mcp/sse`；本地通过 API 代理连接时使用 `http://127.0.0.1:8000/mcp/sse`。如果单独启动 MCP SSE 进程，则直接使用 `http://127.0.0.1:3001/sse`：
+
+```bash
+python backend/mcp_server.py --transport sse --host 127.0.0.1 --port 3001
+```
+
+SSE 请求必须携带 MCP 访问令牌，而不是 Web JWT：
+
+```text
+Authorization: Bearer <lq_mcp_token>
+```
+
+消息请求由客户端根据 SSE 响应中的会话地址发送到同一服务的消息路径。线上和本地 API 代理使用 `/mcp/messages`（线上地址为 `https://life.capkin.cn/mcp/messages`）；直接连接本地 MCP 进程时使用 `/messages`。
+
+### stdio 连接
+
+启动本地 stdio MCP 进程前，在进程环境中设置 `LIFEQUEST_MCP_TOKEN`，不要把令牌写入命令参数或提交到配置文件：
+
+```bash
+export LIFEQUEST_MCP_TOKEN="<lq_mcp_token>"
+python backend/mcp_server.py
+```
+
+支持环境变量配置的 MCP 客户端可以使用以下形式：
+
+```json
+{
+  "mcpServers": {
+    "lifequest": {
+      "command": "python",
+      "args": ["backend/mcp_server.py"],
+      "env": {
+        "LIFEQUEST_MCP_TOKEN": "<lq_mcp_token>"
+      }
+    }
+  }
+}
+```
+
+`LIFEQUEST_MCP_SERVICE_USER_ID` 不是单独的授权方式。若配置它，仍必须提供有效的 `LIFEQUEST_MCP_TOKEN`，并且 Token 所属用户 ID 必须与该值一致；只配置 service user ID 不会授予访问权限。
+
+---
+
 ## 用户 (Users)
 
 > 以下接口均需认证。
