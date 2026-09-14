@@ -31,19 +31,27 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.lowlevel.server import request_ctx
 
 from app.database import SessionLocal, engine, Base
+from app import timezone
 from app.schemas.user import UserResponse
 from app.models.account import AccountType
 from app.models.budget import Budget, BudgetPeriod
+from app.models.finance_category import FinanceCategory, CategoryType
 from app.models.debt import Debt, DebtStatus, DebtType
 from app.models.finance_transaction import FinanceTransaction, FinanceTransactionType
+from app.models.recurring_transaction import RecurringTransaction, RecurFrequency
 from app.models.project import ProjectPhase, ProjectMilestone
 from app.schemas.finance import (
     AccountCreate,
     AccountUpdate,
     TransactionCreate,
     TransactionUpdate,
+    CategoryCreate,
+    BudgetCreate,
     BudgetUpdate,
+    RecurringCreate,
+    DebtCreate,
     DebtUpdate,
+    DebtPaymentCreate,
 )
 from app.schemas.todo import (
     HabitCreate,
@@ -1013,6 +1021,97 @@ def list_accounts() -> Any:
 
 
 @mcp.tool()
+def create_account(
+    name: str,
+    type: str = "cash",
+    icon: str = "💰",
+    balance: float = 0.0,
+    credit_limit: Optional[float] = None,
+    billing_day: Optional[int] = None,
+    repayment_day: Optional[int] = None,
+    interest_rate: Optional[float] = None,
+    currency: str = "CNY",
+    sort_order: int = 0,
+) -> Any:
+    """创建账户。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        data = AccountCreate(
+            name=name, type=AccountType(type), icon=icon, balance=balance,
+            credit_limit=credit_limit, billing_day=billing_day,
+            repayment_day=repayment_day, interest_rate=interest_rate,
+            currency=currency, sort_order=sort_order,
+        )
+        return _serialize(FinanceService(db).create_account(uid, data))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def delete_account(account_id: str) -> Any:
+    """停用账户。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = FinanceService(db)
+        account = svc._get_account_for_user(UUID(account_id), uid)
+        svc.delete_account(account)
+        return {"status": "ok", "id": str(account.id), "message": "Account deleted"}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def list_categories() -> Any:
+    """列出系统分类和当前用户分类。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        return _serialize(FinanceService(db).get_categories(uid))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def create_category(
+    name: str,
+    type: str,
+    icon: str = "📦",
+    parent_id: Optional[str] = None,
+    sort_order: int = 0,
+) -> Any:
+    """创建收入或支出分类。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        data = CategoryCreate(
+            name=name, type=CategoryType(type), icon=icon,
+            parent_id=UUID(parent_id) if parent_id else None,
+            sort_order=sort_order,
+        )
+        return _serialize(FinanceService(db).create_category(uid, data))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def delete_category(category_id: str) -> Any:
+    """删除用户分类；系统分类不可删除。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = FinanceService(db)
+        category = svc.category_repo.get_by_id(UUID(category_id))
+        if category is None or (not category.is_system and category.user_id != uid):
+            raise ValueError("Category not found")
+        svc.delete_category(category, uid)
+        return {"status": "ok", "id": str(category.id), "message": "Category deleted"}
+    finally:
+        db.close()
+
+
+@mcp.tool()
 def update_account(
     account_id: str,
     name: Optional[str] = None,
@@ -1058,19 +1157,23 @@ def create_transaction(
     amount: float,
     description: str = "",
     date_str: Optional[str] = None,
+    category_id: Optional[str] = None,
+    to_account_id: Optional[str] = None,
 ) -> Any:
-    """记一笔账。type: income/expense。date_str 格式: YYYY-MM-DD，默认今天。"""
+    """记一笔账。日期使用 ISO 8601，省略时使用中国当天。"""
     db = SessionLocal()
     try:
         uid = _resolve_user_id(db)
         svc = FinanceService(db)
-        txn_date = date.fromisoformat(date_str) if date_str else date.today()
+        txn_date = date.fromisoformat(date_str) if date_str else timezone.today()
         data = TransactionCreate(
             account_id=UUID(account_id),
+            category_id=UUID(category_id) if category_id else None,
             type=FinanceTransactionType(type),
             amount=amount,
             description=description,
             date=txn_date,
+            to_account_id=UUID(to_account_id) if to_account_id else None,
         )
         txn = svc.create_transaction(uid, data)
         return _serialize(txn)
@@ -1100,17 +1203,24 @@ def transfer(
 
 @mcp.tool()
 def list_transactions(
-    limit: int = 20,
+    page: int = 1,
+    page_size: int = 50,
+    account_id: Optional[str] = None,
+    category_id: Optional[str] = None,
     type: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
 ) -> Any:
-    """查询交易记录。可按类型(income/expense/transfer)和日期范围筛选。"""
+    """查询交易记录，支持分页、账户、分类、类型和日期范围筛选。"""
     db = SessionLocal()
     try:
         uid = _resolve_user_id(db)
         svc = FinanceService(db)
-        filters = {"limit": limit}
+        filters = {"page": page, "page_size": page_size}
+        if account_id:
+            filters["account_id"] = UUID(account_id)
+        if category_id:
+            filters["category_id"] = UUID(category_id)
         if type:
             filters["type"] = type
         if start_date:
@@ -1170,6 +1280,71 @@ def update_transaction(
 
 
 @mcp.tool()
+def delete_transaction(transaction_id: str) -> Any:
+    """删除交易并由服务层反向结算账户余额。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = FinanceService(db)
+        transaction = svc.transaction_repo.get_by_id(UUID(transaction_id))
+        if transaction is None or transaction.user_id != uid:
+            raise ValueError("Transaction not found")
+        svc.delete_transaction(transaction)
+        return {"status": "ok", "id": str(transaction.id), "message": "Transaction deleted"}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def list_budgets() -> Any:
+    """列出当前用户预算及其使用情况。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        return _serialize(FinanceService(db).get_budgets(uid))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def create_budget(
+    amount: float,
+    category_id: Optional[str] = None,
+    period: str = "monthly",
+    start_date: Optional[str] = None,
+) -> Any:
+    """创建预算。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        data = BudgetCreate(
+            amount=amount,
+            category_id=UUID(category_id) if category_id else None,
+            period=BudgetPeriod(period),
+            start_date=date.fromisoformat(start_date) if start_date else None,
+        )
+        return _serialize(FinanceService(db).create_budget(uid, data))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def delete_budget(budget_id: str) -> Any:
+    """删除预算。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = FinanceService(db)
+        budget = svc.budget_repo.get_by_id(UUID(budget_id))
+        if budget is None or budget.user_id != uid:
+            raise ValueError("Budget not found")
+        svc.delete_budget(budget)
+        return {"status": "ok", "id": str(budget.id), "message": "Budget deleted"}
+    finally:
+        db.close()
+
+
+@mcp.tool()
 def update_budget(
     budget_id: str,
     category_id: Optional[str] = None,
@@ -1199,6 +1374,74 @@ def update_budget(
         if not update_data:
             return _serialize(budget)
         return _serialize(svc.update_budget(budget, BudgetUpdate(**update_data)))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def list_recurring_transactions() -> Any:
+    """列出当前用户的定期流水。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        return _serialize(FinanceService(db).get_recurring(uid))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def create_recurring_transaction(
+    account_id: str,
+    type: str,
+    amount: float,
+    frequency: str,
+    next_date: str,
+    category_id: Optional[str] = None,
+    description: str = "",
+) -> Any:
+    """创建定期流水。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        data = RecurringCreate(
+            account_id=UUID(account_id),
+            category_id=UUID(category_id) if category_id else None,
+            type=FinanceTransactionType(type), amount=amount,
+            description=description, frequency=RecurFrequency(frequency),
+            next_date=date.fromisoformat(next_date),
+        )
+        return _serialize(FinanceService(db).create_recurring(uid, data))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def trigger_recurring_transaction(recurring_id: str) -> Any:
+    """触发定期流水；重复触发同一日期由服务层幂等处理。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = FinanceService(db)
+        recurring = svc.recurring_repo.get_by_id(UUID(recurring_id))
+        if recurring is None or recurring.user_id != uid:
+            raise ValueError("Recurring transaction not found")
+        return _serialize(svc.trigger_recurring(recurring))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def delete_recurring_transaction(recurring_id: str) -> Any:
+    """删除定期流水。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = FinanceService(db)
+        recurring = svc.recurring_repo.get_by_id(UUID(recurring_id))
+        if recurring is None or recurring.user_id != uid:
+            raise ValueError("Recurring transaction not found")
+        svc.delete_recurring(recurring)
+        return {"status": "ok", "id": str(recurring.id), "message": "Recurring transaction deleted"}
     finally:
         db.close()
 
@@ -1241,6 +1484,79 @@ def update_debt(
         if not update_data:
             return _serialize(debt)
         return _serialize(svc.update_debt(debt, DebtUpdate(**update_data)))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def list_debts(status: Optional[str] = None) -> Any:
+    """列出当前用户债务，可按状态筛选。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        return _serialize(FinanceService(db).get_debts(uid, status=status))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def create_debt(
+    creditor: str,
+    type: str,
+    amount: float,
+    remaining: float,
+    interest_rate: float = 0.0,
+    description: str = "",
+    due_date: Optional[str] = None,
+) -> Any:
+    """创建债务。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        debt_type = "borrow" if type == "loan" else type
+        data = DebtCreate(
+            creditor=creditor, type=DebtType(debt_type), amount=amount,
+            remaining=remaining, interest_rate=interest_rate,
+            description=description,
+            due_date=date.fromisoformat(due_date) if due_date else None,
+        )
+        return _serialize(FinanceService(db).create_debt(uid, data))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def delete_debt(debt_id: str) -> Any:
+    """删除债务。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = FinanceService(db)
+        debt = svc.debt_repo.get_by_id(UUID(debt_id))
+        if debt is None or debt.user_id != uid:
+            raise ValueError("Debt not found")
+        svc.delete_debt(debt)
+        return {"status": "ok", "id": str(debt.id), "message": "Debt deleted"}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def add_debt_payment(
+    debt_id: str,
+    amount: float,
+    description: str = "",
+    date_str: Optional[str] = None,
+) -> Any:
+    """为债务添加还款；金额和剩余债务由服务层校验和更新。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        data = DebtPaymentCreate(
+            amount=amount, description=description,
+            date=date.fromisoformat(date_str) if date_str else timezone.today(),
+        )
+        return _serialize(FinanceService(db).add_payment(UUID(debt_id), uid, data))
     finally:
         db.close()
 
