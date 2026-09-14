@@ -738,3 +738,20 @@ test('header profile and logout actions stop propagation before closing the menu
   assert.ok(menuOpeningTag, 'dropdown menu must remain available for the propagation contract')
   assert.match(menuOpeningTag, /@click\.stop="dropdownOpen = false"/)
 })
+
+test('profile exposes one-time MCP token management', async () => {
+  const [profile, service] = await Promise.all([
+    readFile(new URL('./Profile.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('../services/mcpToken.js', import.meta.url), 'utf8'),
+  ])
+  assert.match(service, /get.*auth\/mcp-tokens/)
+  assert.match(service, /post.*auth\/mcp-tokens/)
+  assert.match(service, /delete/)
+  assert.match(service, /tokenId/)
+  assert.match(profile, /mcpTokenService/)
+  assert.match(profile, /newMcpToken/)
+  assert.match(profile, /navigator\.clipboard\.writeText/)
+  assert.match(profile, /LIFEQUEST_MCP_TOKEN/)
+  assert.match(profile, /revokeTarget/)
+  assert.doesNotMatch(profile, /localStorage\.(getItem|setItem).*mcp/i)
+})
