@@ -760,6 +760,11 @@ test('profile exposes one-time MCP token management', async () => {
   assert.match(profile, /if \(mcpTokensLoading\.value\) \{[\s\S]*!waitForActive/)
   assert.match(profile, /if \(mcpTokenCreating\.value && !waitForActive\) return/)
   assert.match(profile, /async function createMcpToken\(\) \{\s*if \(mcpTokenCreating\.value\) return/)
+  assert.match(profile, /<form class="mcp-token-form" @submit\.prevent="createMcpToken">/)
+  assert.match(profile, /<button type="button" class="primary-btn" :disabled="mcpTokenCopying \|\| mcpTokenRevoking" @click="copyMcpToken">复制凭证<\/button>/)
+  assert.match(profile, /v-if="isMcpTokenRevocable\(token\)"[\s\S]*?@click="openRevokeDialog\(token\)"/)
+  assert.match(profile, /<button type="button" class="primary-btn" :disabled="mcpTokenRevoking \|\| mcpTokenCopying" @click="revokeMcpToken">/)
+  assert.match(profile, /function openRevokeDialog\(token\) \{\s*if \(mcpTokenRevoking\.value\) return\s*applyMcpTokenAction/)
   assert.match(profile, /:disabled="mcpTokenRevoking \|\| mcpTokenCopying"/)
   assert.match(profile, /if \(!tokenId \|\| mcpTokenRevoking\.value \|\| mcpTokenCopying\.value\) return/)
   assert.match(profile, /fetchMcpTokens\(\{ waitForActive: true \}\)/)
@@ -834,6 +839,10 @@ test('MCP revoke state confirms, disables duplicate actions while pending, and c
   state = reduceMcpTokenState(state, { type: 'revoke-start' })
   assert.equal(state.mcpTokenRevoking, true)
   assert.strictEqual(reduceMcpTokenState(state, { type: 'revoke-start' }), state)
+  assert.strictEqual(
+    reduceMcpTokenState(state, { type: 'open-revoke', token: { id: 'token-3', status: 'active' } }),
+    state
+  )
 
   state = reduceMcpTokenState(state, { type: 'revoke-success' })
   assert.equal(state.revokeTarget, null)

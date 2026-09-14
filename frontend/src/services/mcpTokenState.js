@@ -71,7 +71,7 @@ export function reduceMcpTokenState(state, action) {
     case 'copy-finish':
       return { ...state, mcpTokenCopying: false }
     case 'open-revoke':
-      return !state.mcpTokenCopying && action.token?.status === 'active' && !action.token.revoked_at
+      return !state.mcpTokenCopying && !state.mcpTokenRevoking && action.token?.status === 'active' && !action.token.revoked_at
         ? { ...state, revokeTarget: action.token }
         : state
     case 'close-revoke':

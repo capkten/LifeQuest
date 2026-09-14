@@ -686,6 +686,7 @@ function isMcpTokenRevocable(token) {
 }
 
 function openRevokeDialog(token) {
+  if (mcpTokenRevoking.value) return
   applyMcpTokenAction({ type: 'open-revoke', token })
 }
 
