@@ -1,3 +1,4 @@
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
@@ -6,6 +7,7 @@ from fastapi import HTTPException
 import mcp_server
 from app.database import Base
 from app.models.user import User
+from app.timezone import today
 
 
 @pytest.fixture
@@ -125,3 +127,19 @@ def test_mcp_workbench_revision_and_quick_task_idempotency(mcp_crud_db):
         mcp_server.create_quick_task(
             "不同任务", schedule="unscheduled", request_id=request_id
         )
+
+
+def test_mcp_delete_habit_leave_returns_deletion_result(mcp_crud_db):
+    habit = mcp_server.create_habit("请假习惯")
+    leave_on = today() + timedelta(days=1)
+    return_on = leave_on + timedelta(days=2)
+    mcp_server.create_habit_leave(
+        habit["id"], leave_on.isoformat(), return_on.isoformat(), reason="出差"
+    )
+    leave = mcp_server.get_habit_leave_intervals(habit["id"])[0]
+
+    result = mcp_server.delete_habit_leave(habit["id"], leave["id"])
+
+    assert result["status"] == "ok"
+    assert result["id"] == leave["id"]
+    assert result["message"] == "Habit leave deleted"

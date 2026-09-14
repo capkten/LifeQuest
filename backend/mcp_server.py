@@ -833,7 +833,8 @@ def delete_habit_leave(habit_id: str, leave_id: str) -> Any:
     try:
         uid = _resolve_user_id(db)
         svc, habit = _get_habit_for_mcp(db, habit_id, uid)
-        return _serialize(svc.delete_habit_leave(habit, UUID(leave_id), uid))
+        svc.delete_habit_leave(habit, UUID(leave_id), uid)
+        return {"status": "ok", "id": leave_id, "message": "Habit leave deleted"}
     finally:
         db.close()
 
