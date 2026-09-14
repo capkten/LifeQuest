@@ -132,62 +132,124 @@
     </section>
 
     <section class="surface-card mcp-token-card">
-      <div class="section-heading">
-        <div>
-          <span class="section-kicker">{{ mcpLabel }}</span>
-          <h2>{{ mcpLabel }} 访问凭证</h2>
+      <div class="mcp-token-card__heading">
+        <div class="mcp-token-card__identity">
+          <span class="mcp-token-card__icon" aria-hidden="true">
+            <Key />
+          </span>
+          <div class="mcp-token-card__copy">
+            <span class="section-kicker">{{ mcpLabel }} 连接</span>
+            <h2>{{ mcpLabel }} 访问凭证</h2>
+            <p>为桌面客户端或自动化工具创建独立访问权限。</p>
+          </div>
         </div>
-        <span class="section-meta">用于连接 LifeQuest {{ mcpLabel }} 服务</span>
+        <div class="mcp-token-summary" aria-label="当前有效凭证">
+          <span class="mcp-token-summary__label">当前有效</span>
+          <strong>{{ mcpActiveTokenCount }}</strong>
+          <span>个凭证</span>
+        </div>
       </div>
 
-      <form class="mcp-token-form" @submit.prevent="createMcpToken">
-        <div class="mcp-token-field">
-          <label class="form-label" for="mcp-token-name">凭证名称</label>
-          <input
-            id="mcp-token-name"
-            v-model="mcpTokenForm.name"
-            class="form-input"
-            type="text"
-            maxlength="100"
-            placeholder="例如：桌面客户端"
-            required
-          />
+      <div class="mcp-token-create">
+        <div class="mcp-token-create__header">
+          <div>
+            <span class="section-kicker">新建连接</span>
+            <h3>创建访问凭证</h3>
+          </div>
+          <span class="mcp-token-create__range">有效期 1-365 天</span>
         </div>
-        <div class="mcp-token-field">
-          <label class="form-label" for="mcp-token-expires">有效期（天）</label>
-          <input
-            id="mcp-token-expires"
-            v-model.number="mcpTokenForm.expires_in_days"
-            class="form-input"
-            type="number"
-            min="1"
-            max="365"
-            step="1"
-            required
-          />
-        </div>
-        <button
-          type="submit"
-          class="primary-btn"
-          :disabled="mcpTokenCreating || mcpTokensLoading || !mcpTokenForm.name.trim() || mcpTokenForm.expires_in_days < 1 || mcpTokenForm.expires_in_days > 365"
-        >
-          {{ mcpTokenCreating ? '创建中...' : '创建凭证' }}
-        </button>
-      </form>
 
-      <div v-if="mcpTokensError" class="mcp-token-error" role="alert">
-        <span>{{ mcpTokensError }}</span>
+        <form class="mcp-token-form" @submit.prevent="createMcpToken">
+          <div class="mcp-token-field mcp-token-field--name">
+            <label class="form-label" for="mcp-token-name">凭证名称</label>
+            <input
+              id="mcp-token-name"
+              v-model="mcpTokenForm.name"
+              class="form-input"
+              type="text"
+              maxlength="100"
+              placeholder="例如：桌面客户端"
+              required
+            />
+          </div>
+          <div class="mcp-token-field mcp-token-field--duration">
+            <div class="mcp-token-label-row">
+              <label class="form-label" for="mcp-token-expires">有效期</label>
+              <span class="mcp-token-duration-value">{{ mcpTokenForm.expires_in_days }} 天</span>
+            </div>
+            <div class="mcp-token-duration-control">
+              <div class="mcp-duration-options" role="group" aria-label="快速选择有效期">
+                <button
+                  v-for="duration in mcpTokenDurationOptions"
+                  :key="duration"
+                  type="button"
+                  class="mcp-duration-option"
+                  :class="{ 'mcp-duration-option--active': mcpTokenForm.expires_in_days === duration }"
+                  :aria-pressed="mcpTokenForm.expires_in_days === duration"
+                  @click="setMcpTokenDuration(duration)"
+                >
+                  {{ duration }}天
+                </button>
+              </div>
+              <label class="mcp-token-custom-duration">
+                <span>自定义</span>
+                <input
+                  id="mcp-token-expires"
+                  v-model.number="mcpTokenForm.expires_in_days"
+                  class="mcp-token-duration-input"
+                  type="number"
+                  min="1"
+                  max="365"
+                  step="1"
+                  aria-label="自定义有效期（天）"
+                  required
+                />
+                <span>天</span>
+              </label>
+            </div>
+          </div>
+          <button
+            type="submit"
+            class="primary-btn mcp-token-submit"
+            :disabled="mcpTokenCreating || mcpTokensLoading || !mcpTokenForm.name.trim() || mcpTokenForm.expires_in_days < 1 || mcpTokenForm.expires_in_days > 365"
+          >
+            <Plus aria-hidden="true" />
+            <span>{{ mcpTokenCreating ? '创建中...' : '创建凭证' }}</span>
+          </button>
+        </form>
+      </div>
+
+      <div v-if="mcpTokensError" class="mcp-token-feedback mcp-token-error" role="alert">
+        <div class="mcp-token-feedback__message">
+          <Warning aria-hidden="true" />
+          <span>{{ mcpTokensError }}</span>
+        </div>
         <button type="button" class="retry-btn" :disabled="mcpTokensLoading || mcpTokenCreating" @click="fetchMcpTokens">重试</button>
       </div>
 
       <div v-if="mcpTokensLoading" class="state-copy">加载访问凭证列表中...</div>
-      <div v-else-if="mcpTokens.length === 0" class="state-copy">暂无 {{ mcpLabel }} 访问凭证</div>
+      <div v-else-if="mcpTokens.length === 0" class="mcp-token-empty">
+        <span class="mcp-token-empty__icon" aria-hidden="true"><Key /></span>
+        <div>
+          <strong>还没有访问凭证</strong>
+          <p>创建凭证后，就能把 LifeQuest 连接到你常用的智能客户端。</p>
+        </div>
+      </div>
       <div v-else class="mcp-token-list">
+        <div class="mcp-token-list__header">
+          <div>
+            <span class="section-kicker">已创建凭证</span>
+            <strong>{{ mcpTokens.length }} 个连接</strong>
+          </div>
+          <span>仅显示识别信息</span>
+        </div>
         <div v-for="token in mcpTokens" :key="token.id" class="mcp-token-row">
+          <div class="mcp-token-row__icon" aria-hidden="true"><Key /></div>
           <div class="mcp-token-info">
             <div class="mcp-token-name-row">
               <strong>{{ token.name }}</strong>
               <span class="mcp-token-status" :class="`mcp-token-status--${token.status}`">
+                <span class="mcp-token-status__dot" aria-hidden="true"></span>
                 {{ mcpTokenStatusLabel(token.status) }}
               </span>
             </div>
@@ -196,39 +258,53 @@
               创建于 {{ formatDate(token.created_at) }}，{{ token.status === 'revoked' ? `撤销于 ${formatDate(token.revoked_at)}` : `过期于 ${formatDate(token.expires_at)}` }}
             </span>
           </div>
-          <button
-            v-if="isMcpTokenRevocable(token)"
-            type="button"
-            class="secondary-btn mcp-token-revoke"
-            :disabled="mcpTokenRevoking || mcpTokenCopying"
-            @click="openRevokeDialog(token)"
-          >
-            撤销
-          </button>
+          <div class="mcp-token-row__actions">
+            <button
+              v-if="isMcpTokenRevocable(token)"
+              type="button"
+              class="secondary-btn mcp-token-revoke"
+              :disabled="mcpTokenRevoking || mcpTokenCopying"
+              :aria-label="`撤销 ${token.name} 凭证`"
+              title="撤销凭证"
+              @click="openRevokeDialog(token)"
+            >
+              <Delete aria-hidden="true" />
+              <span>撤销</span>
+            </button>
+          </div>
         </div>
       </div>
 
       <div v-if="newMcpToken" class="mcp-new-token" role="status">
         <div class="mcp-new-token-header">
-          <div>
-            <span class="section-kicker">仅显示一次</span>
-            <h3>访问凭证已创建</h3>
+          <div class="mcp-new-token-title">
+            <span class="mcp-new-token-icon" aria-hidden="true"><CircleCheck /></span>
+            <div>
+              <span class="section-kicker">仅显示一次</span>
+              <h3>访问凭证已创建</h3>
+            </div>
           </div>
           <button type="button" class="dialog-close" aria-label="关闭凭证结果" @click="closeNewMcpToken">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <Close aria-hidden="true" />
           </button>
         </div>
         <p class="mcp-token-warning">请立即复制并妥善保存，关闭后将无法再次查看完整凭证。</p>
-        <p class="mcp-token-expiry">过期时间：{{ formatDate(newMcpToken.expires_at) }}</p>
+        <p class="mcp-token-expiry"><span>有效期至</span><strong>{{ formatDate(newMcpToken.expires_at) }}</strong></p>
         <div class="mcp-token-value-wrap">
-          <code class="mcp-token-value">{{ newMcpToken.token }}</code>
-          <button type="button" class="primary-btn" :disabled="mcpTokenCopying || mcpTokenRevoking" @click="copyMcpToken">复制凭证</button>
+          <div class="mcp-token-value-shell">
+            <span class="mcp-token-value-label">访问凭证</span>
+            <code class="mcp-token-value">{{ newMcpToken.token }}</code>
+          </div>
+          <button type="button" class="primary-btn mcp-copy-btn" :disabled="mcpTokenCopying || mcpTokenRevoking" @click="copyMcpToken">
+            <CopyDocument aria-hidden="true" />
+            <span>复制凭证</span>
+          </button>
         </div>
         <div class="mcp-config-hint">
-          <strong>连接配置提示</strong>
+          <div class="mcp-config-hint__header">
+            <strong>连接配置</strong>
+            <span>复制凭证后填入客户端</span>
+          </div>
           <pre><code>{{ mcpSseConfig }}
 {{ mcpStdioConfig }}</code></pre>
         </div>
@@ -291,7 +367,7 @@
             </button>
           </div>
           <div class="dialog-body">
-            <p class="mcp-revoke-copy">确定要撤销「{{ revokeTarget.name }}」吗？撤销后使用该访问凭证的连接将立即失效。</p>
+            <p class="mcp-revoke-copy">确定要撤销「{{ revokeTarget.name }}」吗？新连接会被拒绝，已有会话请断开并重新连接。</p>
             <div class="dialog-actions">
               <button type="button" class="secondary-btn" :disabled="mcpTokenRevoking || mcpTokenCopying" @click="closeRevokeDialog">取消</button>
               <button type="button" class="primary-btn" :disabled="mcpTokenRevoking || mcpTokenCopying" @click="revokeMcpToken">
@@ -387,6 +463,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, toRef } from 'vue'
 import { useRouter } from 'vue-router'
+import { CircleCheck, Close, CopyDocument, Delete, Key, Plus, Warning } from '@element-plus/icons-vue'
 import { useUserStats } from '../composables/useUserStats'
 import { achievementService } from '../services/achievement'
 import { todoService } from '../services/todo'
@@ -537,6 +614,8 @@ const mcpTokens = toRef(mcpTokenState, 'mcpTokens')
 const mcpTokensLoading = toRef(mcpTokenState, 'mcpTokensLoading')
 const mcpTokensError = toRef(mcpTokenState, 'mcpTokensError')
 const mcpTokenForm = mcpTokenState.mcpTokenForm
+const mcpTokenDurationOptions = [30, 90, 180, 365]
+const mcpActiveTokenCount = computed(() => mcpTokens.value.filter(token => token.status === 'active' && !token.revoked_at).length)
 const mcpTokenCreating = toRef(mcpTokenState, 'mcpTokenCreating')
 const newMcpToken = toRef(mcpTokenState, 'newMcpToken')
 const revokeTarget = toRef(mcpTokenState, 'revokeTarget')
@@ -548,6 +627,10 @@ let mcpTokensRequest = null
 function applyMcpTokenAction(action) {
   const nextState = reduceMcpTokenState(mcpTokenState, action)
   if (nextState !== mcpTokenState) Object.assign(mcpTokenState, nextState)
+}
+
+function setMcpTokenDuration(duration) {
+  mcpTokenForm.expires_in_days = duration
 }
 
 onMounted(fetchProfile)
@@ -1073,20 +1156,260 @@ async function revokeMcpToken() {
 }
 
 .mcp-token-card {
+  gap: 20px;
+}
+
+.mcp-token-card__heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 18px;
+}
+
+.mcp-token-card__identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+}
+
+.mcp-token-card__icon,
+.mcp-token-row__icon,
+.mcp-token-empty__icon,
+.mcp-new-token-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--color-primary-dark);
+  background: var(--color-bg-tertiary);
+}
+
+.mcp-token-card__icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
+}
+
+.mcp-token-card__icon :deep(svg) {
+  width: 23px;
+  height: 23px;
+}
+
+.mcp-token-card__copy {
+  min-width: 0;
+}
+
+.mcp-token-card__copy h2 {
+  margin: 6px 0 0;
+  color: var(--color-text);
+  font-family: var(--font-family-display);
+}
+
+.mcp-token-card__copy p {
+  margin: 7px 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+.mcp-token-summary {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  column-gap: 7px;
+  row-gap: 2px;
+  min-width: 112px;
+  padding: 11px 14px;
+  border: 1px solid rgba(14, 165, 233, 0.15);
+  border-radius: 14px;
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+}
+
+.mcp-token-summary__label {
+  grid-column: 1 / -1;
+  color: var(--color-primary-dark);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+
+.mcp-token-summary strong {
+  color: var(--color-text);
+  font-family: var(--font-family-display);
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.mcp-token-create {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-bg-secondary);
+}
+
+.mcp-token-create__header,
+.mcp-token-label-row,
+.mcp-token-list__header,
+.mcp-config-hint__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mcp-token-create__header h3 {
+  margin: 6px 0 0;
+  color: var(--color-text);
+  font-family: var(--font-family-display);
+  font-size: 1.05rem;
+}
+
+.mcp-token-create__range {
+  flex: 0 0 auto;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
 }
 
 .mcp-token-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 180px auto;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 1.2fr) auto;
   align-items: end;
-  gap: 12px;
+  gap: 14px;
 }
 
 .mcp-token-field {
   display: grid;
   gap: 6px;
   min-width: 0;
+}
+
+.mcp-token-field--duration {
+  min-width: 0;
+}
+
+.mcp-token-duration-value {
+  color: var(--color-primary-dark);
+  font-size: var(--font-size-sm);
+  font-weight: 800;
+}
+
+.mcp-token-duration-control {
+  display: grid;
+  gap: 8px;
+}
+
+.mcp-duration-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.mcp-duration-option {
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-card);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.mcp-duration-option:hover:not(:disabled) {
+  border-color: var(--color-primary-light);
+  color: var(--color-primary-dark);
+  transform: translateY(-1px);
+}
+
+.mcp-duration-option:focus-visible {
+  outline: 2px solid rgba(14, 165, 233, 0.28);
+  outline-offset: 2px;
+}
+
+.mcp-duration-option--active,
+.mcp-duration-option--active:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+  transform: none;
+}
+
+.mcp-token-custom-duration {
+  display: inline-flex;
+  align-items: center;
+  align-self: end;
+  gap: 8px;
+  width: max-content;
+  max-width: 100%;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.mcp-token-duration-input {
+  box-sizing: border-box;
+  width: 76px;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-card);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 700;
+  text-align: center;
+}
+
+.mcp-token-duration-input:focus {
+  border-color: var(--color-primary);
+  outline: 2px solid rgba(14, 165, 233, 0.15);
+  outline-offset: 1px;
+}
+
+.mcp-token-submit,
+.mcp-copy-btn,
+.mcp-token-revoke {
+  gap: 7px;
+}
+
+.mcp-token-submit {
+  white-space: nowrap;
+}
+
+.mcp-token-submit :deep(svg),
+.mcp-copy-btn :deep(svg),
+.mcp-token-revoke :deep(svg) {
+  width: 17px;
+  height: 17px;
+}
+
+.mcp-token-feedback {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font-size: var(--font-size-sm);
+}
+
+.mcp-token-feedback__message {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mcp-token-feedback__message :deep(svg) {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
 }
 
 .mcp-token-list {
@@ -1096,13 +1419,37 @@ async function revokeMcpToken() {
   overflow: hidden;
 }
 
+.mcp-token-list__header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+}
+
+.mcp-token-list__header > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.mcp-token-list__header strong {
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+}
+
+.mcp-token-list__header > span {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
 .mcp-token-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   min-width: 0;
-  padding: 14px 16px;
+  padding: 15px 16px;
+  background: var(--color-card);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -1115,6 +1462,22 @@ async function revokeMcpToken() {
   display: grid;
   gap: 5px;
   min-width: 0;
+}
+
+.mcp-token-row__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+}
+
+.mcp-token-row__icon :deep(svg) {
+  width: 19px;
+  height: 19px;
+}
+
+.mcp-token-row__actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .mcp-token-name-row {
@@ -1149,11 +1512,19 @@ async function revokeMcpToken() {
 .mcp-token-status {
   display: inline-flex;
   align-items: center;
+  gap: 5px;
   min-height: 24px;
   padding: 0 8px;
   border-radius: 999px;
   font-size: var(--font-size-xs);
   font-weight: 700;
+}
+
+.mcp-token-status__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .mcp-token-status--active {
@@ -1170,24 +1541,56 @@ async function revokeMcpToken() {
 .mcp-token-revoke {
   min-height: 38px;
   padding: 0 12px;
+  border-radius: 10px;
+  font-size: var(--font-size-xs);
 }
 
 .mcp-token-error {
+  color: var(--color-error);
+  border-color: rgba(239, 68, 68, 0.18);
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.mcp-token-empty {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  color: var(--color-error);
+  padding: 18px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: 14px;
+  background: var(--color-bg-secondary);
+}
+
+.mcp-token-empty__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+}
+
+.mcp-token-empty__icon :deep(svg) {
+  width: 19px;
+  height: 19px;
+}
+
+.mcp-token-empty strong {
+  color: var(--color-text);
   font-size: var(--font-size-sm);
+}
+
+.mcp-token-empty p {
+  margin: 4px 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
 }
 
 .mcp-new-token {
   display: grid;
   gap: 12px;
   min-width: 0;
-  padding: 16px;
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  border-radius: 18px;
+  padding: 18px;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  border-radius: 16px;
   background: rgba(16, 185, 129, 0.07);
 }
 
@@ -1196,6 +1599,25 @@ async function revokeMcpToken() {
   align-items: start;
   justify-content: space-between;
   gap: 12px;
+}
+
+.mcp-new-token-title {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.mcp-new-token-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  color: var(--color-success-dark);
+  background: rgba(16, 185, 129, 0.15);
+}
+
+.mcp-new-token-icon :deep(svg) {
+  width: 19px;
+  height: 19px;
 }
 
 .mcp-new-token h3 {
@@ -1207,40 +1629,80 @@ async function revokeMcpToken() {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+.mcp-token-expiry {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.mcp-token-expiry strong {
+  color: var(--color-text);
 }
 
 .mcp-token-value-wrap {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 12px;
   min-width: 0;
 }
 
-.mcp-token-value {
-  flex: 1;
+.mcp-token-value-shell {
+  display: grid;
+  gap: 6px;
   min-width: 0;
-  padding: 12px;
-  border: 1px solid var(--color-border);
+  padding: 12px 14px;
+  border: 1px solid rgba(16, 185, 129, 0.2);
   border-radius: 12px;
   background: var(--color-card);
+}
+
+.mcp-token-value-label {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+
+.mcp-token-value {
+  min-width: 0;
   color: var(--color-text);
   overflow-wrap: anywhere;
   word-break: break-word;
   line-height: 1.5;
 }
 
+.mcp-copy-btn {
+  min-width: 116px;
+}
+
 .mcp-config-hint {
   display: grid;
   gap: 8px;
   min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid rgba(16, 185, 129, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.55);
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
+}
+
+.mcp-config-hint__header span {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
 }
 
 .mcp-config-hint pre {
   margin: 0;
   padding: 12px;
   border-radius: 12px;
+  border: 1px solid rgba(16, 185, 129, 0.14);
   background: var(--color-card);
   color: var(--color-text);
   white-space: pre-wrap;
@@ -1551,8 +2013,32 @@ async function revokeMcpToken() {
     grid-template-columns: 1fr;
   }
 
-  .mcp-token-row {
+  .mcp-token-card__heading {
     grid-template-columns: 1fr;
+  }
+
+  .mcp-token-summary {
+    width: max-content;
+    min-width: 0;
+  }
+
+  .mcp-duration-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mcp-token-row {
+    grid-template-columns: 40px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .mcp-token-row__actions {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+
+  .mcp-token-revoke,
+  .mcp-copy-btn {
+    width: 100%;
   }
 
   .mcp-token-error {

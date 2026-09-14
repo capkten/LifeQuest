@@ -760,8 +760,8 @@ test('profile exposes one-time MCP token management', async () => {
   assert.match(profile, /if \(mcpTokensLoading\.value\) \{[\s\S]*!waitForActive/)
   assert.match(profile, /if \(mcpTokenCreating\.value && !waitForActive\) return/)
   assert.match(profile, /async function createMcpToken\(\) \{\s*if \(mcpTokenCreating\.value\) return/)
-  assert.match(profile, /<form class="mcp-token-form" @submit\.prevent="createMcpToken">/)
-  assert.match(profile, /<button type="button" class="primary-btn" :disabled="mcpTokenCopying \|\| mcpTokenRevoking" @click="copyMcpToken">复制凭证<\/button>/)
+  assert.match(profile, /<form class="mcp-token-form"[^>]*@submit\.prevent="createMcpToken">/)
+  assert.match(profile, /<button type="button" class="[^\"]*mcp-copy-btn[^\"]*"[^>]*@click="copyMcpToken">[\s\S]*复制凭证[\s\S]*<\/button>/)
   const revokeButtonOpeningTag = profile.match(/<button\b[^>]*v-if="isMcpTokenRevocable\(token\)"[^>]*>/)?.[0]
   assert.ok(revokeButtonOpeningTag, 'MCP revoke control must remain a button opening tag')
   assert.match(revokeButtonOpeningTag, /v-if="isMcpTokenRevocable\(token\)"/)
@@ -773,6 +773,23 @@ test('profile exposes one-time MCP token management', async () => {
   assert.match(profile, /if \(!tokenId \|\| mcpTokenRevoking\.value \|\| mcpTokenCopying\.value\) return/)
   assert.match(profile, /fetchMcpTokens\(\{ waitForActive: true \}\)/)
   assert.doesNotMatch(profile, /localStorage\.(getItem|setItem).*mcp/i)
+})
+
+test('MCP credential panel presents modern duration and action controls', async () => {
+  const source = await readFile(new URL('./Profile.vue', viewsDirectory), 'utf8')
+
+  assert.match(source, /class="mcp-token-card__heading"/)
+  assert.match(source, /class="mcp-token-card__icon"/)
+  assert.match(source, /mcpActiveTokenCount/)
+  assert.match(source, /role="group" aria-label="快速选择有效期"/)
+  assert.match(source, /v-for="duration in mcpTokenDurationOptions"/)
+  assert.match(source, /class="mcp-duration-option"/)
+  assert.match(source, /@click="setMcpTokenDuration\(duration\)"/)
+  assert.match(source, /id="mcp-token-expires"[\s\S]*class="mcp-token-duration-input"/)
+  assert.match(source, /<Plus\b[^>]*\/>/)
+  assert.match(source, /<CopyDocument\b[^>]*\/>/)
+  assert.match(source, /<Delete\b[^>]*\/>/)
+  assert.match(source, /@media \(max-width: 767px\) \{[\s\S]*?\.mcp-token-card__heading[\s\S]*?grid-template-columns: 1fr/)
 })
 
 async function loadMcpTokenStateModule() {
