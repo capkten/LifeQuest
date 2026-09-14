@@ -4,6 +4,13 @@ from uuid import UUID
 
 from app.schemas.mcp_access_token import MCPAccessTokenCreate
 from app.services.mcp_access_token import MCPAccessTokenService
+import mcp_server
+from app.database import Base
+from app.models.user import User
+from mcp.server.lowlevel.server import request_ctx
+from types import SimpleNamespace
+from starlette.responses import JSONResponse
+from starlette.testclient import TestClient
 
 
 def _auth_headers(client, username="token-owner", email="token-owner@example.com"):
@@ -85,3 +92,54 @@ def test_mcp_token_service_rejects_invalid_raw_tokens(client, db_session):
     assert service.authenticate("") is None
     assert service.authenticate("lq_mcp_invalid") is None
     assert service.authenticate(None) is None
+
+
+def test_login_with_token_binds_session_without_echoing_token(db_session, monkeypatch):
+    Base.metadata.create_all(bind=db_session.bind)
+    user = User(username="mcp-token-login", email="mcp-token-login@example.com", password_hash="hashed")
+    db_session.add(user)
+    db_session.commit()
+    raw_token = MCPAccessTokenService(db_session).create_token(
+        user.id, MCPAccessTokenCreate(name="test")
+    )[1]
+    monkeypatch.setattr(mcp_server, "SessionLocal", lambda: db_session)
+    mcp_server._auth_user_id.set(None)
+    mcp_server._auth_token.set(None)
+    class Session:
+        pass
+
+    mcp_session = Session()
+    request_token = request_ctx.set(SimpleNamespace(session=mcp_session))
+    try:
+        result = mcp_server.login_with_token(raw_token)
+        assert raw_token not in str(result)
+        assert mcp_server._resolve_user_id(db_session) == user.id
+    finally:
+        request_ctx.reset(request_token)
+        mcp_server._auth_user_id.set(None)
+        mcp_server._auth_token.set(None)
+
+
+def test_mcp_token_middleware_handles_bearer_header_and_compatibility_mode(db_session, monkeypatch):
+    Base.metadata.create_all(bind=db_session.bind)
+    user = User(username="mcp-sse-user", email="mcp-sse-user@example.com", password_hash="hashed")
+    db_session.add(user)
+    db_session.commit()
+    raw_token = MCPAccessTokenService(db_session).create_token(
+        user.id, MCPAccessTokenCreate(name="sse")
+    )[1]
+    monkeypatch.setattr(mcp_server, "SessionLocal", lambda: db_session)
+
+    async def endpoint(scope, receive, send):
+        await JSONResponse({"user_id": str(mcp_server._auth_user_id.get())})(scope, receive, send)
+
+    # A plain ASGI app avoids coupling this test to FastMCP routing internals.
+    wrapped = mcp_server.MCPTokenAuthMiddleware(endpoint)
+    client = TestClient(wrapped)
+    assert client.get("/", headers={"aUtHoRiZaTiOn": f"Bearer {raw_token}"}).status_code == 200
+    invalid = client.get("/", headers={"Authorization": "Bearer lq_mcp_invalid"})
+    assert invalid.status_code == 401
+    assert invalid.headers["www-authenticate"] == "Bearer"
+    assert "lq_mcp_invalid" not in invalid.text
+    assert client.get("/").status_code == 200
+    client.close()

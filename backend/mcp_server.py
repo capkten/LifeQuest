@@ -9,14 +9,15 @@ Usage:
     python backend/mcp_server.py --transport sse --port 3001
 
 Authentication:
-    Call the `login` tool with username + password before using other tools.
-    A service account may be explicitly configured with LIFEQUEST_MCP_SERVICE_USER_ID.
+    Use Authorization: Bearer <token> for SSE, LIFEQUEST_MCP_TOKEN for stdio,
+    or call `login_with_token`; password `login` remains available for compatibility.
 """
 
 import argparse
 import contextvars
 import logging
 import os
+import re
 import sys
 import weakref
 from datetime import date, datetime
@@ -30,7 +31,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.lowlevel.server import request_ctx
 
 from app.database import SessionLocal, engine, Base
-from app.models.user import User
+from app.schemas.user import UserResponse
 from app.models.account import AccountType
 from app.models.budget import Budget, BudgetPeriod
 from app.models.debt import Debt, DebtStatus, DebtType
@@ -63,6 +64,7 @@ from app.services.project import ProjectService
 from app.services.stats import StatsService
 from app.services.todo import TodoService
 from app.services.user import UserService
+from app.services.mcp_access_token import MCPAccessTokenService
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +74,9 @@ logger = logging.getLogger(__name__)
 
 _auth_user_id: contextvars.ContextVar[Optional[UUID]] = contextvars.ContextVar(
     "_auth_user_id", default=None
+)
+_auth_token: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "_auth_token", default=None
 )
 _auth_users_by_session: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
@@ -86,11 +91,29 @@ def _current_mcp_session():
 
 def _set_authenticated_user(user_id: UUID) -> None:
     """Persist authentication for the whole MCP session, not one tool call."""
+    current_user_id = _auth_user_id.get()
+    if current_user_id is not None and current_user_id != user_id:
+        raise RuntimeError("MCP session user switch is not allowed")
     session = _current_mcp_session()
     if session is not None:
+        bound_user_id = _auth_users_by_session.get(session)
+        if bound_user_id is not None and bound_user_id != user_id:
+            raise RuntimeError("MCP session user switch is not allowed")
         _auth_users_by_session[session] = user_id
     # Keep the context-local value for stdio and direct unit-test calls.
     _auth_user_id.set(user_id)
+
+
+def _validate_service_user_id(user_id: UUID) -> None:
+    configured_id = os.environ.get("LIFEQUEST_MCP_SERVICE_USER_ID")
+    if not configured_id:
+        return
+    try:
+        service_user_id = UUID(configured_id)
+    except ValueError as exc:
+        raise RuntimeError("LIFEQUEST_MCP_SERVICE_USER_ID 无效") from exc
+    if service_user_id != user_id:
+        raise RuntimeError("MCP service account 与 Token 用户不一致")
 
 # ---------------------------------------------------------------------------
 # DB init — run migrations on first use
@@ -140,30 +163,34 @@ def _ensure_db():
 # ---------------------------------------------------------------------------
 
 def _resolve_user_id(db) -> UUID:
-    """Resolve user ID from the authenticated session or explicit service account."""
+    """Resolve user ID from session, context authentication, or MCP token."""
     _ensure_db()
     # 1. Check the authenticated MCP session.
     session = _current_mcp_session()
     if session is not None:
         uid = _auth_users_by_session.get(session)
         if uid:
+            _validate_service_user_id(uid)
             return uid
 
     # 2. Check the context-local value for stdio/direct calls.
     uid = _auth_user_id.get()
     if uid:
+        _validate_service_user_id(uid)
         return uid
 
-    # 3. Check explicitly configured service account.
-    env_id = os.environ.get("LIFEQUEST_MCP_SERVICE_USER_ID")
-    if env_id:
-        try:
-            service_user_id = UUID(env_id)
-        except ValueError as exc:
-            raise RuntimeError("LIFEQUEST_MCP_SERVICE_USER_ID 无效") from exc
-        if db.query(User).filter(User.id == service_user_id).first():
-            return service_user_id
-        raise RuntimeError("MCP service account 不存在")
+    # 3. Check the context-local or stdio environment token.
+    raw_token = _auth_token.get() or os.environ.get("LIFEQUEST_MCP_TOKEN")
+    if raw_token:
+        uid = MCPAccessTokenService(db).authenticate(raw_token)
+        if uid is None:
+            raise RuntimeError("MCP Token 无效或已过期")
+        _validate_service_user_id(uid)
+        _set_authenticated_user(uid)
+        return uid
+
+    if os.environ.get("LIFEQUEST_MCP_SERVICE_USER_ID"):
+        raise RuntimeError("LIFEQUEST_MCP_SERVICE_USER_ID 必须与有效 MCP Token 一起使用")
     raise RuntimeError("请先调用 login 工具登录")
 
 
@@ -182,7 +209,7 @@ def _require_node_write(svc: NoteService, node_id: UUID, user_id: UUID):
 
 
 def _serialize(obj):
-    """Convert SQLAlchemy model / date / UUID to JSON-safe dict."""
+    """Convert ORM, Pydantic, date, UUID, and nested values to JSON-safe data."""
     if obj is None:
         return None
     if isinstance(obj, (datetime, date)):
@@ -193,6 +220,8 @@ def _serialize(obj):
         return [_serialize(item) for item in obj]
     if isinstance(obj, dict):
         return {k: _serialize(v) for k, v in obj.items()}
+    if hasattr(obj, "model_dump"):
+        return _serialize(obj.model_dump(mode="json"))
     if hasattr(obj, "__table__"):
         # SQLAlchemy model
         return {
@@ -200,6 +229,65 @@ def _serialize(obj):
             for col in obj.__table__.columns
         }
     return obj
+
+
+def _serialize_public_user(user) -> dict:
+    return UserResponse.model_validate(user).model_dump(mode="json")
+
+
+class MCPTokenAuthMiddleware:
+    """Authenticate optional SSE Bearer headers while keeping login compatible."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        raw_header = next(
+            (value for name, value in scope.get("headers", []) if name.lower() == b"authorization"),
+            None,
+        )
+        if raw_header is None:
+            await self.app(scope, receive, send)
+            return
+
+        try:
+            authorization = raw_header.decode("ascii")
+        except UnicodeDecodeError:
+            authorization = ""
+        match = re.fullmatch(r"Bearer ([^\s]+)", authorization)
+        if not match:
+            await self._unauthorized(send)
+            return
+
+        db = SessionLocal()
+        user_token = _auth_token.set(match.group(1))
+        user_context = _auth_user_id.set(None)
+        try:
+            user_id = MCPAccessTokenService(db).authenticate(match.group(1))
+            if user_id is None:
+                await self._unauthorized(send)
+                return
+            _validate_service_user_id(user_id)
+            _set_authenticated_user(user_id)
+            await self.app(scope, receive, send)
+        finally:
+            _auth_user_id.reset(user_context)
+            _auth_token.reset(user_token)
+            db.close()
+
+    @staticmethod
+    async def _unauthorized(send):
+        body = b'{"detail":"MCP authentication required"}'
+        await send({
+            "type": "http.response.start",
+            "status": 401,
+            "headers": [(b"content-type", b"application/json"), (b"www-authenticate", b"Bearer")],
+        })
+        await send({"type": "http.response.body", "body": body})
 
 
 # ---------------------------------------------------------------------------
@@ -232,7 +320,31 @@ def login(username: str, password: str) -> Any:
         return {
             "status": "ok",
             "message": f"已登录为 {user.username}",
-            "user": _serialize(user),
+            "user": _serialize_public_user(user),
+        }
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def login_with_token(token: str) -> Any:
+    """使用 MCP 访问令牌登录当前会话。"""
+    db = SessionLocal()
+    try:
+        _ensure_db()
+        user_id = MCPAccessTokenService(db).authenticate(token)
+        if user_id is None:
+            return {"error": "MCP Token 无效或已过期"}
+        user = UserService(db).get_by_id(user_id)
+        if not user:
+            return {"error": "MCP Token 无效或已过期"}
+        _validate_service_user_id(user_id)
+        _set_authenticated_user(user_id)
+        _auth_token.set(token)
+        return {
+            "status": "ok",
+            "message": f"已登录为 {user.username}",
+            "user": _serialize_public_user(user),
         }
     finally:
         db.close()
@@ -1003,7 +1115,7 @@ def get_profile() -> Any:
         user = svc.get_by_id(uid)
         if not user:
             return {"error": "User not found"}
-        return _serialize(user)
+        return _serialize_public_user(user)
     finally:
         db.close()
 
@@ -1365,8 +1477,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.transport == "sse":
-        mcp.settings.host = args.host
-        mcp.settings.port = args.port
-        mcp.run(transport="sse")
+        import uvicorn
+
+        app = mcp.sse_app()
+        app.add_middleware(MCPTokenAuthMiddleware)
+        config = uvicorn.Config(app, host=args.host, port=args.port)
+        uvicorn.Server(config).run()
     else:
         mcp.run(transport="stdio")
