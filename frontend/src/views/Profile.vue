@@ -169,7 +169,7 @@
         <button
           type="submit"
           class="primary-btn"
-          :disabled="mcpTokenCreating || !mcpTokenForm.name.trim() || mcpTokenForm.expires_in_days < 1 || mcpTokenForm.expires_in_days > 365"
+          :disabled="mcpTokenCreating || mcpTokensLoading || !mcpTokenForm.name.trim() || mcpTokenForm.expires_in_days < 1 || mcpTokenForm.expires_in_days > 365"
         >
           {{ mcpTokenCreating ? '创建中...' : '创建凭证' }}
         </button>
@@ -177,7 +177,7 @@
 
       <div v-if="mcpTokensError" class="mcp-token-error" role="alert">
         <span>{{ mcpTokensError }}</span>
-        <button type="button" class="retry-btn" @click="fetchMcpTokens">重试</button>
+        <button type="button" class="retry-btn" :disabled="mcpTokensLoading" @click="fetchMcpTokens">重试</button>
       </div>
 
       <div v-if="mcpTokensLoading" class="state-copy">加载访问凭证列表中...</div>
@@ -225,7 +225,7 @@
         <p class="mcp-token-expiry">过期时间：{{ formatDate(newMcpToken.expires_at) }}</p>
         <div class="mcp-token-value-wrap">
           <code class="mcp-token-value">{{ newMcpToken.token }}</code>
-          <button type="button" class="primary-btn" @click="copyMcpToken">复制凭证</button>
+          <button type="button" class="primary-btn" :disabled="mcpTokenCopying" @click="copyMcpToken">复制凭证</button>
         </div>
         <div class="mcp-config-hint">
           <strong>连接配置提示</strong>
@@ -385,13 +385,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, toRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStats } from '../composables/useUserStats'
 import { achievementService } from '../services/achievement'
 import { todoService } from '../services/todo'
 import { titleService } from '../services/title'
 import { mcpTokenService } from '../services/mcpToken'
+import { createMcpTokenState, reduceMcpTokenState } from '../services/mcpTokenState'
 import { useToast } from '../composables/useToast'
 import { useAuthStore } from '../stores/auth'
 import { useResolvedImage } from '../composables/useResolvedImage'
@@ -531,18 +532,22 @@ async function fetchProfile() {
   achievementsLoading.value = false
 }
 
-const mcpTokens = ref([])
-const mcpTokensLoading = ref(true)
-const mcpTokensError = ref(null)
-const mcpTokenForm = reactive({
-  name: '',
-  expires_in_days: 90
-})
-const mcpTokenCreating = ref(false)
-const newMcpToken = ref(null)
-const revokeTarget = ref(null)
-const mcpTokenRevoking = ref(false)
+const mcpTokenState = reactive(createMcpTokenState())
+const mcpTokens = toRef(mcpTokenState, 'mcpTokens')
+const mcpTokensLoading = toRef(mcpTokenState, 'mcpTokensLoading')
+const mcpTokensError = toRef(mcpTokenState, 'mcpTokensError')
+const mcpTokenForm = mcpTokenState.mcpTokenForm
+const mcpTokenCreating = toRef(mcpTokenState, 'mcpTokenCreating')
+const newMcpToken = toRef(mcpTokenState, 'newMcpToken')
+const revokeTarget = toRef(mcpTokenState, 'revokeTarget')
+const mcpTokenRevoking = toRef(mcpTokenState, 'mcpTokenRevoking')
+const mcpTokenCopying = toRef(mcpTokenState, 'mcpTokenCopying')
 let mcpTokensRequestId = 0
+
+function applyMcpTokenAction(action) {
+  const nextState = reduceMcpTokenState(mcpTokenState, action)
+  if (nextState !== mcpTokenState) Object.assign(mcpTokenState, nextState)
+}
 
 onMounted(fetchProfile)
 onMounted(fetchMcpTokens)
@@ -598,17 +603,17 @@ function goToEditProfile() {
 }
 
 async function fetchMcpTokens() {
+  if (mcpTokensLoading.value) return
   const requestId = ++mcpTokensRequestId
-  mcpTokensLoading.value = true
-  mcpTokensError.value = null
+  applyMcpTokenAction({ type: 'list-start' })
   try {
     const tokens = await mcpTokenService.listTokens()
     if (requestId !== mcpTokensRequestId) return
-    mcpTokens.value = Array.isArray(tokens) ? tokens : []
+    applyMcpTokenAction({ type: 'list-success', tokens })
   } catch (e) {
-    if (requestId === mcpTokensRequestId) mcpTokensError.value = getErrorMessage(e, '加载 MCP Token 失败，请重试。')
-  } finally {
-    if (requestId === mcpTokensRequestId) mcpTokensLoading.value = false
+    if (requestId === mcpTokensRequestId) {
+      applyMcpTokenAction({ type: 'list-failure', error: getErrorMessage(e, '加载 MCP Token 失败，请重试。') })
+    }
   }
 }
 
@@ -620,35 +625,40 @@ async function createMcpToken() {
     return
   }
 
-  mcpTokenCreating.value = true
+  applyMcpTokenAction({ type: 'create-start' })
   try {
-    newMcpToken.value = await mcpTokenService.createToken({
+    const createdToken = await mcpTokenService.createToken({
       name,
       expires_in_days: expiresInDays
     })
+    applyMcpTokenAction({ type: 'create-success', token: createdToken })
     mcpTokenForm.name = ''
     showSuccess('MCP Token 创建成功，请立即复制。')
     await fetchMcpTokens()
   } catch (e) {
+    applyMcpTokenAction({ type: 'create-failure' })
     showError(getErrorMessage(e, '创建 MCP Token 失败，请重试。'))
-  } finally {
-    mcpTokenCreating.value = false
   }
 }
 
 async function copyMcpToken() {
   const token = newMcpToken.value?.token
-  if (!token) return
+  if (!token || mcpTokenCopying.value) return
+  applyMcpTokenAction({ type: 'copy-start' })
   try {
     await navigator.clipboard.writeText(token)
     showSuccess('MCP Token 已复制。')
+    applyMcpTokenAction({ type: 'copy-success' })
   } catch (e) {
+    applyMcpTokenAction({ type: 'copy-failure' })
     showError(getErrorMessage(e, '复制失败，请手动复制。'))
+  } finally {
+    applyMcpTokenAction({ type: 'copy-finish' })
   }
 }
 
 function closeNewMcpToken() {
-  newMcpToken.value = null
+  applyMcpTokenAction({ type: 'clear-new-token' })
 }
 
 function mcpTokenStatusLabel(status) {
@@ -660,27 +670,28 @@ function isMcpTokenRevocable(token) {
 }
 
 function openRevokeDialog(token) {
-  if (isMcpTokenRevocable(token)) revokeTarget.value = token
+  applyMcpTokenAction({ type: 'open-revoke', token })
 }
 
 function closeRevokeDialog() {
-  if (!mcpTokenRevoking.value) revokeTarget.value = null
+  applyMcpTokenAction({ type: 'close-revoke' })
 }
 
 async function revokeMcpToken() {
   const tokenId = revokeTarget.value?.id
   if (!tokenId || mcpTokenRevoking.value) return
 
-  mcpTokenRevoking.value = true
+  applyMcpTokenAction({ type: 'revoke-start' })
   try {
     await mcpTokenService.revokeToken(tokenId)
     showSuccess('MCP Token 已撤销。')
-    revokeTarget.value = null
+    applyMcpTokenAction({ type: 'revoke-success' })
     await fetchMcpTokens()
   } catch (e) {
+    applyMcpTokenAction({ type: 'revoke-failure' })
     showError(getErrorMessage(e, '撤销 MCP Token 失败，请重试。'))
   } finally {
-    mcpTokenRevoking.value = false
+    applyMcpTokenAction({ type: 'revoke-finish' })
   }
 }
 </script>
