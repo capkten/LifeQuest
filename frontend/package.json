@@ -6,7 +6,7 @@
   "scripts": {
     "sync:version": "node ../scripts/sync-version.mjs",
     "check:version": "node ../scripts/check-version.mjs",
-    "test": "node --test \"src/**/*.test.mjs\"",
+    "test": "node --test src/*/*.test.mjs",
     "prebuild": "node ../scripts/sync-version.mjs",
     "prebuild:android": "node ../scripts/sync-version.mjs",
     "dev": "vite",
