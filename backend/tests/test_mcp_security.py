@@ -34,6 +34,8 @@ def test_mcp_requires_login_or_explicit_service_account(db_session, monkeypatch)
     monkeypatch.setenv("LIFEQUEST_MCP_SERVICE_USER_ID", str(user_a.id))
     with pytest.raises(RuntimeError, match="Token"):
         mcp_server._resolve_user_id(db_session)
+    mcp_server._auth_user_id.set(None)
+    mcp_server._auth_token_authenticated.set(False)
 
 
 def test_service_user_id_without_token_is_rejected(db_session, monkeypatch):
@@ -68,6 +70,64 @@ def test_serialize_supports_pydantic_and_nested_json_values():
     json.dumps(result, ensure_ascii=False)
     assert result["model"]["id"] == "00000000-0000-0000-0000-000000000001"
     assert result["day"] == "2026-01-03"
+
+
+def test_serialize_converts_supported_non_string_dict_keys():
+    result = mcp_server._serialize({
+        UUID("00000000-0000-0000-0000-000000000002"): date(2026, 1, 4),
+        date(2026, 1, 5): UUID("00000000-0000-0000-0000-000000000003"),
+    })
+    json.dumps(result)
+    assert result["00000000-0000-0000-0000-000000000002"] == "2026-01-04"
+    assert result["2026-01-05"] == "00000000-0000-0000-0000-000000000003"
+
+
+def test_environment_mcp_token_resolves_and_service_id_must_match(db_session, monkeypatch):
+    from app.schemas.mcp_access_token import MCPAccessTokenCreate
+    from app.services.mcp_access_token import MCPAccessTokenService
+
+    Base.metadata.create_all(bind=db_session.bind)
+    user = User(username="mcp-env-user", email="mcp-env-user@example.com", password_hash="hashed")
+    other = User(username="mcp-env-other", email="mcp-env-other@example.com", password_hash="hashed")
+    db_session.add_all([user, other])
+    db_session.commit()
+    raw_token = MCPAccessTokenService(db_session).create_token(
+        user.id, MCPAccessTokenCreate(name="env")
+    )[1]
+    mcp_server._auth_user_id.set(None)
+    mcp_server._auth_token.set(None)
+    mcp_server._auth_token_authenticated.set(False)
+    monkeypatch.setenv("LIFEQUEST_MCP_TOKEN", raw_token)
+    monkeypatch.setenv("LIFEQUEST_MCP_SERVICE_USER_ID", str(user.id))
+    assert mcp_server._resolve_user_id(db_session) == user.id
+    mcp_server._auth_user_id.set(None)
+    monkeypatch.setenv("LIFEQUEST_MCP_SERVICE_USER_ID", str(other.id))
+    mcp_server._auth_token_authenticated.set(False)
+    with pytest.raises(RuntimeError, match="不一致"):
+        mcp_server._resolve_user_id(db_session)
+
+
+def test_password_context_cannot_bypass_configured_service_id(db_session, monkeypatch):
+    from app.services.auth import get_password_hash
+
+    Base.metadata.create_all(bind=db_session.bind)
+    user = User(
+        username="mcp-password-config",
+        email="mcp-password-config@example.com",
+        password_hash=get_password_hash("correct-password"),
+    )
+    db_session.add(user)
+    db_session.commit()
+    monkeypatch.setattr(mcp_server, "SessionLocal", lambda: db_session)
+    mcp_server._auth_user_id.set(None)
+    mcp_server._auth_token_authenticated.set(False)
+    mcp_server.login("mcp-password-config", "correct-password")
+    monkeypatch.setenv("LIFEQUEST_MCP_SERVICE_USER_ID", str(user.id))
+    with pytest.raises(RuntimeError, match="Token"):
+        mcp_server._resolve_user_id(db_session)
+    mcp_server._auth_user_id.set(None)
+    mcp_server._auth_token.set(None)
+    mcp_server._auth_token_authenticated.set(False)
 
 
 def test_mcp_context_does_not_switch_between_users(db_session):

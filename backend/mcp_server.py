@@ -78,7 +78,11 @@ _auth_user_id: contextvars.ContextVar[Optional[UUID]] = contextvars.ContextVar(
 _auth_token: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
     "_auth_token", default=None
 )
+_auth_token_authenticated: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "_auth_token_authenticated", default=False
+)
 _auth_users_by_session: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+_token_sessions: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
 
 def _current_mcp_session():
@@ -89,7 +93,7 @@ def _current_mcp_session():
         return None
 
 
-def _set_authenticated_user(user_id: UUID) -> None:
+def _set_authenticated_user(user_id: UUID, *, token_authenticated: bool = False) -> None:
     """Persist authentication for the whole MCP session, not one tool call."""
     current_user_id = _auth_user_id.get()
     if current_user_id is not None and current_user_id != user_id:
@@ -100,8 +104,12 @@ def _set_authenticated_user(user_id: UUID) -> None:
         if bound_user_id is not None and bound_user_id != user_id:
             raise RuntimeError("MCP session user switch is not allowed")
         _auth_users_by_session[session] = user_id
+        if token_authenticated or _token_sessions.get(session, False):
+            _token_sessions[session] = True
     # Keep the context-local value for stdio and direct unit-test calls.
     _auth_user_id.set(user_id)
+    if token_authenticated:
+        _auth_token_authenticated.set(True)
 
 
 def _validate_service_user_id(user_id: UUID) -> None:
@@ -170,12 +178,17 @@ def _resolve_user_id(db) -> UUID:
     if session is not None:
         uid = _auth_users_by_session.get(session)
         if uid:
+            if os.environ.get("LIFEQUEST_MCP_SERVICE_USER_ID") and not _token_sessions.get(session, False):
+                raise RuntimeError("LIFEQUEST_MCP_SERVICE_USER_ID 必须与有效 MCP Token 一起使用")
             _validate_service_user_id(uid)
             return uid
 
     # 2. Check the context-local value for stdio/direct calls.
     uid = _auth_user_id.get()
-    if uid:
+    if uid and (
+        not os.environ.get("LIFEQUEST_MCP_SERVICE_USER_ID")
+        or _auth_token_authenticated.get()
+    ):
         _validate_service_user_id(uid)
         return uid
 
@@ -186,7 +199,7 @@ def _resolve_user_id(db) -> UUID:
         if uid is None:
             raise RuntimeError("MCP Token 无效或已过期")
         _validate_service_user_id(uid)
-        _set_authenticated_user(uid)
+        _set_authenticated_user(uid, token_authenticated=True)
         return uid
 
     if os.environ.get("LIFEQUEST_MCP_SERVICE_USER_ID"):
@@ -219,7 +232,7 @@ def _serialize(obj):
     if isinstance(obj, (list, tuple)):
         return [_serialize(item) for item in obj]
     if isinstance(obj, dict):
-        return {k: _serialize(v) for k, v in obj.items()}
+        return {k if isinstance(k, str) else str(_serialize(k)): _serialize(v) for k, v in obj.items()}
     if hasattr(obj, "model_dump"):
         return _serialize(obj.model_dump(mode="json"))
     if hasattr(obj, "__table__"):
@@ -265,17 +278,19 @@ class MCPTokenAuthMiddleware:
 
         db = SessionLocal()
         user_token = _auth_token.set(match.group(1))
-        user_context = _auth_user_id.set(None)
+        user_context = _auth_user_id.set(_auth_user_id.get())
+        token_context = _auth_token_authenticated.set(True)
         try:
             user_id = MCPAccessTokenService(db).authenticate(match.group(1))
             if user_id is None:
                 await self._unauthorized(send)
                 return
             _validate_service_user_id(user_id)
-            _set_authenticated_user(user_id)
+            _set_authenticated_user(user_id, token_authenticated=True)
             await self.app(scope, receive, send)
         finally:
             _auth_user_id.reset(user_context)
+            _auth_token_authenticated.reset(token_context)
             _auth_token.reset(user_token)
             db.close()
 
@@ -339,7 +354,7 @@ def login_with_token(token: str) -> Any:
         if not user:
             return {"error": "MCP Token 无效或已过期"}
         _validate_service_user_id(user_id)
-        _set_authenticated_user(user_id)
+        _set_authenticated_user(user_id, token_authenticated=True)
         _auth_token.set(token)
         return {
             "status": "ok",

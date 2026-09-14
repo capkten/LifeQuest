@@ -1,3 +1,5 @@
+import asyncio
+import pytest
 from app.models.mcp_access_token import MCPAccessToken
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
@@ -105,6 +107,7 @@ def test_login_with_token_binds_session_without_echoing_token(db_session, monkey
     monkeypatch.setattr(mcp_server, "SessionLocal", lambda: db_session)
     mcp_server._auth_user_id.set(None)
     mcp_server._auth_token.set(None)
+    mcp_server._auth_token_authenticated.set(False)
     class Session:
         pass
 
@@ -142,4 +145,90 @@ def test_mcp_token_middleware_handles_bearer_header_and_compatibility_mode(db_se
     assert invalid.headers["www-authenticate"] == "Bearer"
     assert "lq_mcp_invalid" not in invalid.text
     assert client.get("/").status_code == 200
+    client.close()
+
+
+def test_middleware_rejects_inherited_context_user_switch(db_session, monkeypatch):
+    Base.metadata.create_all(bind=db_session.bind)
+    user_a = User(username="mcp-inherited-a", email="mcp-inherited-a@example.com", password_hash="hashed")
+    user_b = User(username="mcp-inherited-b", email="mcp-inherited-b@example.com", password_hash="hashed")
+    db_session.add_all([user_a, user_b])
+    db_session.commit()
+    user_a_id = user_a.id
+    raw_token = MCPAccessTokenService(db_session).create_token(
+        user_b.id, MCPAccessTokenCreate(name="switch")
+    )[1]
+    monkeypatch.setattr(mcp_server, "SessionLocal", lambda: db_session)
+
+    async def endpoint(scope, receive, send):
+        await JSONResponse({"user_id": str(mcp_server._auth_user_id.get())})(scope, receive, send)
+
+    mcp_server._auth_user_id.set(user_a_id)
+    wrapped = mcp_server.MCPTokenAuthMiddleware(endpoint)
+    scope = {"type": "http", "headers": [(b"authorization", f"Bearer {raw_token}".encode())]}
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+
+    with pytest.raises(RuntimeError, match="switch"):
+        asyncio.run(wrapped(scope, receive, send))
+    assert mcp_server._auth_user_id.get() == user_a_id
+    mcp_server._auth_user_id.set(None)
+
+
+@pytest.mark.parametrize("header", ["Basic abc", "Bearer", "bearer token", "Bearer token extra", "Bearer "])
+def test_middleware_rejects_malformed_authorization_headers(header):
+    async def endpoint(scope, receive, send):
+        await JSONResponse({"ok": True})(scope, receive, send)
+
+    client = TestClient(mcp_server.MCPTokenAuthMiddleware(endpoint))
+    response = client.get("/", headers={"Authorization": header})
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    client.close()
+
+
+def test_middleware_rejects_expired_and_revoked_tokens(db_session, monkeypatch):
+    Base.metadata.create_all(bind=db_session.bind)
+    user = User(username="mcp-expired", email="mcp-expired@example.com", password_hash="hashed")
+    db_session.add(user)
+    db_session.commit()
+    service = MCPAccessTokenService(db_session)
+    expired_token = service.create_token(user.id, MCPAccessTokenCreate(name="expired"))[1]
+    expired = db_session.query(MCPAccessToken).filter_by(token_prefix=expired_token[:16]).one()
+    expired.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    db_session.commit()
+    revoked_token = service.create_token(user.id, MCPAccessTokenCreate(name="revoked"))[1]
+    revoked = db_session.query(MCPAccessToken).filter_by(token_prefix=revoked_token[:16]).one()
+    revoked.revoked_at = datetime.now(timezone.utc)
+    db_session.commit()
+    monkeypatch.setattr(mcp_server, "SessionLocal", lambda: db_session)
+
+    async def endpoint(scope, receive, send):
+        await JSONResponse({"ok": True})(scope, receive, send)
+
+    client = TestClient(mcp_server.MCPTokenAuthMiddleware(endpoint))
+    for raw_token in (expired_token, revoked_token):
+        assert client.get("/", headers={"Authorization": f"Bearer {raw_token}"}).status_code == 401
+    client.close()
+
+
+def test_middleware_cleans_context_after_inner_app_exception(monkeypatch):
+    mcp_server._auth_user_id.set(None)
+    mcp_server._auth_token.set(None)
+    mcp_server._auth_token_authenticated.set(False)
+
+    async def endpoint(scope, receive, send):
+        raise ValueError("inner failure")
+
+    client = TestClient(mcp_server.MCPTokenAuthMiddleware(endpoint))
+    with pytest.raises(ValueError, match="inner failure"):
+        client.get("/")
+    assert mcp_server._auth_user_id.get() is None
+    assert mcp_server._auth_token.get() is None
     client.close()
