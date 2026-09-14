@@ -69,7 +69,14 @@ from app.schemas.todo import (
     Frequency,
 )
 from app.schemas.daily_workbench import DailyFocusUpdate, QuickTaskCreate
-from app.schemas.project import ProjectUpdate, PhaseUpdate, MilestoneUpdate
+from app.schemas.project import (
+    ProjectCreate,
+    ProjectUpdate,
+    PhaseCreate,
+    PhaseUpdate,
+    MilestoneCreate,
+    MilestoneUpdate,
+)
 from app.schemas.note import FolderCreate, NotebookCreate, NoteCreate, NoteUpdate
 from app.models.todo import TaskStatus
 from app.services.checkin import CheckinService
@@ -1568,6 +1575,53 @@ def add_debt_payment(
 # ===================== 项目 =====================
 
 
+def _serialize_project_stats(stats: dict) -> dict:
+    """Flatten project service stats into a stable MCP response."""
+    project = stats["project"]
+    return {
+        "id": _serialize(project.id),
+        "user_id": _serialize(project.user_id),
+        "name": project.name,
+        "description": project.description,
+        "color": project.color,
+        "icon": project.icon,
+        "status": _serialize(project.status),
+        "start_date": _serialize(project.start_date),
+        "end_date": _serialize(project.end_date),
+        "created_at": _serialize(project.created_at),
+        "updated_at": _serialize(project.updated_at),
+        "total_tasks": stats["total_tasks"],
+        "completed_tasks": stats["completed_tasks"],
+        "progress": stats["progress"],
+    }
+
+
+@mcp.tool()
+def create_project(
+    name: str,
+    description: str = "",
+    color: str = "#0EA5E9",
+    icon: str = "folder",
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> Any:
+    """创建项目。日期使用 YYYY-MM-DD。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        data = ProjectCreate(
+            name=name,
+            description=description or None,
+            color=color,
+            icon=icon,
+            start_date=date.fromisoformat(start_date) if start_date else None,
+            end_date=date.fromisoformat(end_date) if end_date else None,
+        )
+        return _serialize_project_stats(ProjectService(db).create_project(uid, data))
+    finally:
+        db.close()
+
+
 @mcp.tool()
 def list_projects() -> Any:
     """列出所有项目，含名称、状态、进度百分比、任务统计。"""
@@ -1590,6 +1644,34 @@ def list_projects() -> Any:
                 "progress": r["progress"],
             })
         return projects
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def delete_project(project_id: str) -> Any:
+    """删除项目并解除当前用户任务的项目层级关联。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = ProjectService(db)
+        project = svc.get_project_for_user(UUID(project_id), uid)
+        svc.delete_project(project)
+        return {"status": "ok", "id": str(project.id), "message": "Project deleted"}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def complete_project(project_id: str) -> Any:
+    """完成项目并返回更新后的统计信息。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = ProjectService(db)
+        project = svc.get_project_for_user(UUID(project_id), uid)
+        completed = svc.complete_project(project)
+        return _serialize_project_stats(svc._compute_project_stats(completed))
     finally:
         db.close()
 
@@ -1654,6 +1736,33 @@ def update_project(
 
 
 @mcp.tool()
+def create_project_phase(
+    project_id: str,
+    name: str,
+    description: str = "",
+    sort_order: int = 0,
+) -> Any:
+    """在项目下创建阶段。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = ProjectService(db)
+        project_uuid = UUID(project_id)
+        svc.get_project_for_user(project_uuid, uid)
+        phase = svc.create_phase(
+            project_uuid,
+            PhaseCreate(
+                name=name,
+                description=description or None,
+                sort_order=sort_order,
+            ),
+        )
+        return _serialize(phase)
+    finally:
+        db.close()
+
+
+@mcp.tool()
 def update_project_phase(
     phase_id: str,
     name: Optional[str] = None,
@@ -1680,6 +1789,23 @@ def update_project_phase(
         if not update_data:
             return _serialize(phase)
         return _serialize(svc.update_phase(phase, PhaseUpdate(**update_data)))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def delete_project_phase(phase_id: str) -> Any:
+    """删除项目阶段；阶段仍有任务时由服务层拒绝。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = ProjectService(db)
+        phase = svc.phase_repo.get_by_id(UUID(phase_id))
+        if phase is None:
+            raise ValueError("Phase not found")
+        svc.get_project_for_user(phase.project_id, uid)
+        svc.delete_phase(phase)
+        return {"status": "ok", "id": str(phase.id), "message": "Phase deleted"}
     finally:
         db.close()
 
@@ -1719,6 +1845,68 @@ def update_project_milestone(
 
 
 @mcp.tool()
+def create_project_milestone(
+    project_id: str,
+    name: str,
+    description: str = "",
+    due_date: Optional[str] = None,
+    sort_order: int = 0,
+) -> Any:
+    """在项目下创建里程碑；due_date 使用 YYYY-MM-DD。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = ProjectService(db)
+        project_uuid = UUID(project_id)
+        svc.get_project_for_user(project_uuid, uid)
+        milestone = svc.create_milestone(
+            project_uuid,
+            MilestoneCreate(
+                name=name,
+                description=description or None,
+                due_date=date.fromisoformat(due_date) if due_date else None,
+                sort_order=sort_order,
+            ),
+        )
+        return _serialize(milestone)
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def delete_project_milestone(milestone_id: str) -> Any:
+    """删除项目里程碑并解除当前用户任务的里程碑关联。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = ProjectService(db)
+        milestone = svc.milestone_repo.get_by_id(UUID(milestone_id))
+        if milestone is None:
+            raise ValueError("Milestone not found")
+        svc.get_project_for_user(milestone.project_id, uid)
+        svc.delete_milestone(milestone)
+        return {"status": "ok", "id": str(milestone.id), "message": "Milestone deleted"}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def reach_project_milestone(milestone_id: str) -> Any:
+    """达成项目里程碑。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = ProjectService(db)
+        milestone = svc.milestone_repo.get_by_id(UUID(milestone_id))
+        if milestone is None:
+            raise ValueError("Milestone not found")
+        svc.get_project_for_user(milestone.project_id, uid)
+        return _serialize(svc.reach_milestone(milestone))
+    finally:
+        db.close()
+
+
+@mcp.tool()
 def create_project_task(
     project_id: str,
     title: str,
@@ -1726,6 +1914,11 @@ def create_project_task(
     difficulty: str = "medium",
     coins_reward: int = 10,
     exp_reward: int = 5,
+    deadline: Optional[str] = None,
+    phase_id: Optional[str] = None,
+    milestone_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    priority: str = "medium",
 ) -> Any:
     """在指定项目下创建一个任务。"""
     db = SessionLocal()
@@ -1739,9 +1932,84 @@ def create_project_task(
             difficulty=Difficulty(difficulty),
             coins_reward=coins_reward,
             exp_reward=exp_reward,
+            deadline=datetime.fromisoformat(deadline) if deadline else None,
+            phase_id=UUID(phase_id) if phase_id else None,
+            milestone_id=UUID(milestone_id) if milestone_id else None,
+            start_date=datetime.fromisoformat(start_date) if start_date else None,
+            priority=priority,
         )
         task = svc.create_project_task(uid, UUID(project_id), data)
         return _serialize(task)
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def list_project_tasks(
+    project_id: str,
+    phase_id: Optional[str] = None,
+    milestone_id: Optional[str] = None,
+) -> Any:
+    """列出项目任务，可按阶段或里程碑筛选。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = ProjectService(db)
+        project_uuid = UUID(project_id)
+        svc.get_project_for_user(project_uuid, uid)
+        phase_uuid = UUID(phase_id) if phase_id else None
+        milestone_uuid = UUID(milestone_id) if milestone_id else None
+        if phase_uuid:
+            svc.get_phase_for_project(phase_uuid, project_uuid)
+        if milestone_uuid:
+            svc.get_milestone_for_project(milestone_uuid, project_uuid)
+        tasks = svc.get_project_tasks(project_uuid, uid, phase_uuid, milestone_uuid)
+        return [_serialize(task) for task in tasks]
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def move_project_task(
+    task_id: str,
+    project_id: Optional[str] = None,
+    phase_id: Optional[str] = None,
+    milestone_id: Optional[str] = None,
+    status: Optional[str] = None,
+    clear_project: bool = False,
+    clear_phase: bool = False,
+    clear_milestone: bool = False,
+) -> Any:
+    """移动项目任务；clear_* 用于显式清空关联，省略字段保持不变。"""
+    if clear_project and project_id is not None:
+        raise ValueError("project_id 与 clear_project 不能同时使用")
+    if clear_phase and phase_id is not None:
+        raise ValueError("phase_id 与 clear_phase 不能同时使用")
+    if clear_milestone and milestone_id is not None:
+        raise ValueError("milestone_id 与 clear_milestone 不能同时使用")
+
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        svc = ProjectService(db)
+        task = TodoService(db).get_task_for_user(UUID(task_id), uid)
+        changes = {}
+        if project_id is not None:
+            changes["project_id"] = UUID(project_id)
+        elif clear_project:
+            changes["project_id"] = None
+        if phase_id is not None:
+            changes["phase_id"] = UUID(phase_id)
+        elif clear_phase:
+            changes["phase_id"] = None
+        if milestone_id is not None:
+            changes["milestone_id"] = UUID(milestone_id)
+        elif clear_milestone:
+            changes["milestone_id"] = None
+        if status is not None:
+            changes["status"] = TaskStatus(status)
+        moved = svc.move_task(task, uid, **changes)
+        return _serialize(moved)
     finally:
         db.close()
 

@@ -130,6 +130,149 @@ def test_mcp_workbench_revision_and_quick_task_idempotency(mcp_crud_db):
         )
 
 
+def test_mcp_project_lifecycle_covers_nested_resources_and_completion(mcp_crud_db):
+    project = mcp_server.create_project(
+        "MCP 项目",
+        description="项目描述",
+        color="#123456",
+        icon="rocket",
+        start_date="2026-09-14",
+        end_date="2026-09-30",
+    )
+    assert project["name"] == "MCP 项目"
+    assert project["description"] == "项目描述"
+    assert project["color"] == "#123456"
+    assert project["icon"] == "rocket"
+    assert project["start_date"].startswith("2026-09-14")
+
+    phase = mcp_server.create_project_phase(
+        project["id"], "执行阶段", description="阶段描述", sort_order=2
+    )
+    milestone = mcp_server.create_project_milestone(
+        project["id"], "第一个里程碑", due_date="2026-09-20", sort_order=1
+    )
+    task = mcp_server.create_project_task(
+        project["id"],
+        "项目任务",
+        phase_id=phase["id"],
+        milestone_id=milestone["id"],
+        deadline="2026-09-20T18:00:00+08:00",
+        start_date="2026-09-15T09:00:00+08:00",
+        priority="high",
+    )
+    assert task["phase_id"] == phase["id"]
+    assert task["milestone_id"] == milestone["id"]
+    assert task["priority"] == "high"
+
+    listed = mcp_server.list_project_tasks(project["id"], phase_id=phase["id"])
+    assert [item["id"] for item in listed] == [task["id"]]
+
+    reached = mcp_server.reach_project_milestone(milestone["id"])
+    assert reached["status"] == "reached"
+    completed = mcp_server.complete_project(project["id"])
+    assert completed["status"] == "completed"
+
+
+def test_mcp_project_task_move_preserves_omitted_links_and_supports_explicit_clear(
+    mcp_crud_db,
+):
+    source = mcp_server.create_project("源项目")
+    target = mcp_server.create_project("目标项目")
+    source_phase = mcp_server.create_project_phase(source["id"], "源阶段")
+    source_milestone = mcp_server.create_project_milestone(source["id"], "源里程碑")
+    target_phase = mcp_server.create_project_phase(target["id"], "目标阶段")
+    target_milestone = mcp_server.create_project_milestone(target["id"], "目标里程碑")
+    task = mcp_server.create_project_task(
+        source["id"],
+        "移动任务",
+        phase_id=source_phase["id"],
+        milestone_id=source_milestone["id"],
+    )
+
+    moved = mcp_server.move_project_task(task["id"], project_id=target["id"])
+    assert moved["project_id"] == target["id"]
+    assert moved["phase_id"] is None
+    assert moved["milestone_id"] is None
+
+    moved = mcp_server.move_project_task(
+        task["id"],
+        phase_id=target_phase["id"],
+        milestone_id=target_milestone["id"],
+        status="in_progress",
+    )
+    assert moved["phase_id"] == target_phase["id"]
+    assert moved["milestone_id"] == target_milestone["id"]
+
+    cleared = mcp_server.move_project_task(task["id"], clear_milestone=True)
+    assert cleared["project_id"] == target["id"]
+    assert cleared["phase_id"] == target_phase["id"]
+    assert cleared["milestone_id"] is None
+
+    cleared_project = mcp_server.move_project_task(task["id"], clear_project=True)
+    assert cleared_project["project_id"] is None
+    assert cleared_project["phase_id"] is None
+    assert cleared_project["milestone_id"] is None
+
+
+def test_mcp_project_deletion_reuses_service_conflicts_and_detaches_tasks(mcp_crud_db):
+    project = mcp_server.create_project("待删除项目")
+    phase = mcp_server.create_project_phase(project["id"], "有任务阶段")
+    milestone = mcp_server.create_project_milestone(project["id"], "待删除里程碑")
+    task = mcp_server.create_project_task(
+        project["id"],
+        "保留任务",
+        phase_id=phase["id"],
+        milestone_id=milestone["id"],
+    )
+
+    with pytest.raises(HTTPException) as error:
+        mcp_server.delete_project_phase(phase["id"])
+    assert error.value.status_code == 409
+    assert error.value.detail["code"] == "PROJECT_PHASE_HAS_TASKS"
+
+    deleted_milestone = mcp_server.delete_project_milestone(milestone["id"])
+    assert deleted_milestone["status"] == "ok"
+    assert deleted_milestone["id"] == milestone["id"]
+
+    deleted_project = mcp_server.delete_project(project["id"])
+    assert deleted_project == {
+        "status": "ok",
+        "id": project["id"],
+        "message": "Project deleted",
+    }
+    remaining = mcp_server.list_tasks()
+    retained = next(item for item in remaining if item["id"] == task["id"])
+    assert retained["project_id"] is None
+    assert retained["phase_id"] is None
+    assert retained["milestone_id"] is None
+
+
+def test_mcp_project_tools_reject_cross_user_and_cross_project_links(mcp_crud_db):
+    db, owner = mcp_crud_db
+    owner_id = owner.id
+    project = mcp_server.create_project("私有项目")
+    other_user = User(
+        username=f"mcp-project-other-{uuid4().hex[:8]}",
+        email=f"{uuid4().hex[:8]}@example.com",
+        password_hash="hashed",
+    )
+    db.add(other_user)
+    db.commit()
+
+    mcp_server._auth_user_id.set(other_user.id)
+    with pytest.raises(HTTPException) as error:
+        mcp_server.list_project_tasks(project["id"])
+    assert error.value.status_code == 403
+
+    mcp_server._auth_user_id.set(owner_id)
+    other_project = mcp_server.create_project("另一个项目")
+    other_phase = mcp_server.create_project_phase(other_project["id"], "另一个阶段")
+    task = mcp_server.create_project_task(project["id"], "普通任务")
+    with pytest.raises(HTTPException) as error:
+        mcp_server.move_project_task(task["id"], phase_id=other_phase["id"])
+    assert error.value.status_code == 403
+
+
 def test_mcp_delete_habit_leave_returns_deletion_result(mcp_crud_db):
     habit = mcp_server.create_habit("请假习惯")
     leave_on = today() + timedelta(days=1)
