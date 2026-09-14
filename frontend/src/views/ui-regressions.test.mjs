@@ -152,12 +152,14 @@ test('android production builds use the canonical API domain without a secret ov
 })
 
 test('android update prompt downloads and launches APK installation natively', async () => {
-  const [prompt, updater, activity, manifest, filePaths] = await Promise.all([
+  const [prompt, updater, activity, manifest, filePaths, updaterComposable, workflow] = await Promise.all([
     readFile(new URL('../components/layout/UpdatePrompt.vue', import.meta.url), 'utf8'),
     readFile(new URL('../../android/app/src/main/java/com/lifequest/app/AppUpdaterPlugin.java', import.meta.url), 'utf8'),
     readFile(new URL('../../android/app/src/main/java/com/lifequest/app/MainActivity.java', import.meta.url), 'utf8'),
     readFile(new URL('../../android/app/src/main/AndroidManifest.xml', import.meta.url), 'utf8'),
     readFile(new URL('../../android/app/src/main/res/xml/file_paths.xml', import.meta.url), 'utf8'),
+    readFile(new URL('../composables/useAppUpdate.js', import.meta.url), 'utf8'),
+    readFile(new URL('../../../.github/workflows/android-release.yml', import.meta.url), 'utf8'),
   ])
 
   assert.match(prompt, /AppUpdater|startDownload/)
@@ -171,6 +173,15 @@ test('android update prompt downloads and launches APK installation natively', a
   assert.match(activity, /resumePendingInstall\(\)/)
   assert.match(manifest, /REQUEST_INSTALL_PACKAGES/)
   assert.match(filePaths, /external-files-path/)
+  assert.match(updaterComposable, /addListener\(['"]downloadProgress['"],/)
+  assert.match(updaterComposable, /openGithubDownload/)
+  assert.match(prompt, /role="progressbar"/)
+  assert.match(prompt, /下载进度|正在连接下载服务/)
+  assert.match(prompt, /打开 GitHub 下载/)
+  assert.match(updater, /notifyListeners\(['"]downloadProgress['"]/)
+  assert.match(updater, /COLUMN_BYTES_DOWNLOADED_SO_FAR/)
+  assert.match(updater, /STATUS_FAILED/)
+  assert.match(workflow, /releaseUrl/)
 })
 
 function compileRender(source) {

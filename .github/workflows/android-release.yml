@@ -122,6 +122,7 @@ jobs:
               'versionName': version_name,
               'versionCode': int(version_code),
               'downloadUrl': f'https://github.com/{repository}/releases/latest/download/app-release.apk',
+              'releaseUrl': f'https://github.com/{repository}/releases/tag/android-v{version_name}-{version_code}',
               'forceUpdate': False,
               'releaseNotes': f'LifeQuest {version_name} 更新。',
           }
