@@ -165,7 +165,7 @@
             <input
               id="mcp-token-name"
               v-model="mcpTokenForm.name"
-              class="form-input"
+              class="mcp-token-name-input"
               type="text"
               maxlength="100"
               placeholder="例如：桌面客户端"
@@ -1287,6 +1287,34 @@ async function revokeMcpToken() {
 
 .mcp-token-field--duration {
   min-width: 0;
+}
+
+.mcp-token-name-input {
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 0 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-card);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  outline: none;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.mcp-token-name-input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.mcp-token-name-input:hover:not(:focus) {
+  border-color: var(--color-border-strong);
+}
+
+.mcp-token-name-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.14);
 }
 
 .mcp-token-duration-value {

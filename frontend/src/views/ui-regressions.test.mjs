@@ -786,9 +786,13 @@ test('MCP credential panel presents modern duration and action controls', async 
   assert.match(source, /class="mcp-duration-option"/)
   assert.match(source, /@click="setMcpTokenDuration\(duration\)"/)
   assert.match(source, /id="mcp-token-expires"[\s\S]*class="mcp-token-duration-input"/)
+  assert.match(source, /id="mcp-token-name"[\s\S]*class="mcp-token-name-input"/)
+  assert.doesNotMatch(source, /id="mcp-token-name"[\s\S]*class="form-input"/)
   assert.match(source, /<Plus\b[^>]*\/>/)
   assert.match(source, /<CopyDocument\b[^>]*\/>/)
   assert.match(source, /<Delete\b[^>]*\/>/)
+  assert.match(source, /\.mcp-token-name-input\s*\{[\s\S]*min-height: 44px;[\s\S]*border-radius: 10px;[\s\S]*background: var\(--color-card\)/)
+  assert.match(source, /\.mcp-token-name-input:focus\s*\{[\s\S]*box-shadow: 0 0 0 3px/)
   assert.match(source, /@media \(max-width: 767px\) \{[\s\S]*?\.mcp-token-card__heading[\s\S]*?grid-template-columns: 1fr/)
 })
 
