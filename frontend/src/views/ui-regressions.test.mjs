@@ -132,10 +132,23 @@ test('android release workflow and in-app update contract are present', async ()
   assert.match(workflow, /bundleRelease/)
   assert.match(workflow, /latest\.json/)
   assert.match(workflow, /ANDROID_KEYSTORE_BASE64/)
-  assert.match(workflow, /ANDROID_API_BASE_URL/)
   assert.match(workflow, /node-version: 22/)
   assert.match(workflow, /npx cap sync android/)
   assert.match(app, /VITE_ANDROID_UPDATE_MANIFEST_URL|UpdatePrompt/)
+})
+
+test('android production builds use the canonical API domain without a secret override', async () => {
+  const [envAndroid, envExample, workflow] = await Promise.all([
+    readFile(new URL('../../.env.android', import.meta.url), 'utf8'),
+    readFile(new URL('../../.env.android.example', import.meta.url), 'utf8'),
+    readFile(new URL('../../../.github/workflows/android-release.yml', import.meta.url), 'utf8'),
+  ])
+
+  for (const source of [envAndroid, envExample, workflow]) {
+    assert.match(source, /VITE_API_BASE_URL=https:\/\/life\.capkin\.cn\/api/)
+  }
+  assert.doesNotMatch(workflow, /ANDROID_API_BASE_URL/)
+  assert.doesNotMatch(workflow, /secrets\.ANDROID_API_BASE_URL/)
 })
 
 test('android update prompt downloads and launches APK installation natively', async () => {
