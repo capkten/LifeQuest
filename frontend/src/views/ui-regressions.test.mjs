@@ -762,7 +762,11 @@ test('profile exposes one-time MCP token management', async () => {
   assert.match(profile, /async function createMcpToken\(\) \{\s*if \(mcpTokenCreating\.value\) return/)
   assert.match(profile, /<form class="mcp-token-form" @submit\.prevent="createMcpToken">/)
   assert.match(profile, /<button type="button" class="primary-btn" :disabled="mcpTokenCopying \|\| mcpTokenRevoking" @click="copyMcpToken">复制凭证<\/button>/)
-  assert.match(profile, /v-if="isMcpTokenRevocable\(token\)"[\s\S]*?@click="openRevokeDialog\(token\)"/)
+  const revokeButtonOpeningTag = profile.match(/<button\b[^>]*v-if="isMcpTokenRevocable\(token\)"[^>]*>/)?.[0]
+  assert.ok(revokeButtonOpeningTag, 'MCP revoke control must remain a button opening tag')
+  assert.match(revokeButtonOpeningTag, /v-if="isMcpTokenRevocable\(token\)"/)
+  assert.match(revokeButtonOpeningTag, /class="[^"]*\bmcp-token-revoke\b[^"]*"/)
+  assert.match(revokeButtonOpeningTag, /@click="openRevokeDialog\(token\)"/)
   assert.match(profile, /<button type="button" class="primary-btn" :disabled="mcpTokenRevoking \|\| mcpTokenCopying" @click="revokeMcpToken">/)
   assert.match(profile, /function openRevokeDialog\(token\) \{\s*if \(mcpTokenRevoking\.value\) return\s*applyMcpTokenAction/)
   assert.match(profile, /:disabled="mcpTokenRevoking \|\| mcpTokenCopying"/)
