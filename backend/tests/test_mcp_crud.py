@@ -173,6 +173,50 @@ def test_mcp_finance_delete_reverses_balance_and_pays_debt(mcp_crud_db):
     assert mcp_server.list_debts()[0]["remaining"] == 400
 
 
+def test_mcp_create_category_rejects_parent_owned_by_another_user(mcp_crud_db):
+    db, owner = mcp_crud_db
+    owner_id = owner.id
+    other_user = User(
+        username=f"mcp-parent-{uuid4().hex[:8]}",
+        email=f"{uuid4().hex[:8]}@example.com",
+        password_hash="hashed",
+    )
+    db.add(other_user)
+    db.commit()
+    parent = FinanceCategory(
+        user_id=other_user.id,
+        name="他人的父分类",
+        type=CategoryType.EXPENSE,
+        icon="📦",
+        is_system=False,
+        sort_order=0,
+    )
+    db.add(parent)
+    db.commit()
+
+    with pytest.raises(HTTPException, match="Category not found"):
+        mcp_server.create_category(
+            "不应创建的子分类",
+            type="expense",
+            parent_id=str(parent.id),
+        )
+
+    assert db.query(FinanceCategory).filter(
+        FinanceCategory.user_id == owner_id,
+        FinanceCategory.name == "不应创建的子分类",
+    ).first() is None
+
+
+def test_mcp_update_debt_accepts_loan_alias(mcp_crud_db):
+    debt = mcp_server.create_debt(
+        creditor="银行", type="loan", amount=500, remaining=500,
+    )
+
+    updated = mcp_server.update_debt(debt["id"], type="loan")
+
+    assert updated["type"] == "borrow"
+
+
 def test_mcp_finance_transaction_filters_and_pagination(mcp_crud_db):
     account = mcp_server.create_account("筛选账户", balance=100)
     other_account = mcp_server.create_account("另一个账户", balance=100)

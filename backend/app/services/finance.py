@@ -200,6 +200,7 @@ class FinanceService:
         )
 
     def create_category(self, user_id: UUID, data: CategoryCreate) -> FinanceCategory:
+        self._validate_category_for_user(data.parent_id, user_id)
         d = data.model_dump()
         d["user_id"] = user_id
         return self.category_repo.create(d)

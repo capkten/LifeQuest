@@ -995,6 +995,11 @@ def get_daily_summary() -> Any:
 # ===================== 财务 =====================
 
 
+def _mcp_debt_type(value: str) -> DebtType:
+    """Accept the MCP compatibility alias while preserving schema validation."""
+    return DebtType.BORROW if value == "loan" else DebtType(value)
+
+
 @mcp.tool()
 def finance_dashboard() -> Any:
     """获取财务概览：总余额、本月收支、预算使用情况、最近交易。"""
@@ -1476,7 +1481,7 @@ def update_debt(
             if value is not None:
                 update_data[key] = value
         if type is not None:
-            update_data["type"] = DebtType(type)
+            update_data["type"] = _mcp_debt_type(type)
         if due_date is not None:
             update_data["due_date"] = date.fromisoformat(due_date)
         if status is not None:
@@ -1513,9 +1518,8 @@ def create_debt(
     db = SessionLocal()
     try:
         uid = _resolve_user_id(db)
-        debt_type = "borrow" if type == "loan" else type
         data = DebtCreate(
-            creditor=creditor, type=DebtType(debt_type), amount=amount,
+            creditor=creditor, type=_mcp_debt_type(type), amount=amount,
             remaining=remaining, interest_rate=interest_rate,
             description=description,
             due_date=date.fromisoformat(due_date) if due_date else None,
