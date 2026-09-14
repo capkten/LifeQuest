@@ -59,7 +59,7 @@ export function reduceMcpTokenState(state, action) {
     case 'clear-new-token':
       return { ...state, newMcpToken: null }
     case 'copy-start':
-      return state.mcpTokenCopying ? state : {
+      return state.mcpTokenCopying || state.mcpTokenRevoking ? state : {
         ...state,
         mcpTokenCopying: true,
         mcpTokenCopyStatus: 'pending'
@@ -71,17 +71,21 @@ export function reduceMcpTokenState(state, action) {
     case 'copy-finish':
       return { ...state, mcpTokenCopying: false }
     case 'open-revoke':
-      return action.token?.status === 'active' && !action.token.revoked_at
+      return !state.mcpTokenCopying && action.token?.status === 'active' && !action.token.revoked_at
         ? { ...state, revokeTarget: action.token }
         : state
     case 'close-revoke':
       return state.mcpTokenRevoking ? state : { ...state, revokeTarget: null }
     case 'revoke-start':
-      return state.mcpTokenRevoking || !state.revokeTarget
+      return state.mcpTokenRevoking || state.mcpTokenCopying || !state.revokeTarget
         ? state
         : { ...state, mcpTokenRevoking: true }
     case 'revoke-success':
-      return { ...state, revokeTarget: null }
+      return {
+        ...state,
+        revokeTarget: null,
+        newMcpToken: state.newMcpToken?.id === action.tokenId ? null : state.newMcpToken
+      }
     case 'revoke-failure':
       return state
     case 'revoke-finish':

@@ -755,9 +755,14 @@ test('profile exposes one-time MCP token management', async () => {
   assert.match(profile, /navigator\.clipboard\.writeText/)
   assert.match(profile, /LIFEQUEST_MCP_TOKEN/)
   assert.match(profile, /revokeTarget/)
-  assert.match(profile, /:disabled="mcpTokensLoading"/)
-  assert.match(profile, /:disabled="mcpTokenCopying"/)
-  assert.match(profile, /if \(mcpTokensLoading\.value\) return/)
+  assert.match(profile, /:disabled="mcpTokensLoading \|\| mcpTokenCreating"/)
+  assert.match(profile, /:disabled="mcpTokenCopying \|\| mcpTokenRevoking"/)
+  assert.match(profile, /if \(mcpTokensLoading\.value\) \{[\s\S]*!waitForActive/)
+  assert.match(profile, /if \(mcpTokenCreating\.value && !waitForActive\) return/)
+  assert.match(profile, /async function createMcpToken\(\) \{\s*if \(mcpTokenCreating\.value\) return/)
+  assert.match(profile, /:disabled="mcpTokenRevoking \|\| mcpTokenCopying"/)
+  assert.match(profile, /if \(!tokenId \|\| mcpTokenRevoking\.value \|\| mcpTokenCopying\.value\) return/)
+  assert.match(profile, /fetchMcpTokens\(\{ waitForActive: true \}\)/)
   assert.doesNotMatch(profile, /localStorage\.(getItem|setItem).*mcp/i)
 })
 
@@ -834,4 +839,61 @@ test('MCP revoke state confirms, disables duplicate actions while pending, and c
   assert.equal(state.revokeTarget, null)
   state = reduceMcpTokenState(state, { type: 'revoke-finish' })
   assert.equal(state.mcpTokenRevoking, false)
+})
+
+test('MCP create failure preserves the one-time result and duplicate starts are ignored', async () => {
+  const { createMcpTokenState, reduceMcpTokenState } = await loadMcpTokenStateModule()
+  assert.equal(typeof createMcpTokenState, 'function')
+  assert.equal(typeof reduceMcpTokenState, 'function')
+
+  const created = { id: 'token-3', token: 'secret-value' }
+  let state = reduceMcpTokenState(createMcpTokenState(), { type: 'new-token', token: created })
+  state = reduceMcpTokenState(state, { type: 'create-start' })
+  assert.strictEqual(reduceMcpTokenState(state, { type: 'create-start' }), state)
+  state = reduceMcpTokenState(state, { type: 'create-failure' })
+
+  assert.equal(state.mcpTokenCreating, false)
+  assert.deepEqual(state.newMcpToken, created)
+})
+
+test('MCP revoke failure preserves confirmation and one-time result, while only matching success clears it', async () => {
+  const { createMcpTokenState, reduceMcpTokenState } = await loadMcpTokenStateModule()
+  assert.equal(typeof createMcpTokenState, 'function')
+  assert.equal(typeof reduceMcpTokenState, 'function')
+
+  const target = { id: 'token-4', name: 'CLI', status: 'active' }
+  const created = { id: target.id, token: 'secret-value' }
+  let state = reduceMcpTokenState(createMcpTokenState(), { type: 'new-token', token: created })
+  state = reduceMcpTokenState(state, { type: 'open-revoke', token: target })
+  state = reduceMcpTokenState(state, { type: 'revoke-start' })
+  state = reduceMcpTokenState(state, { type: 'revoke-failure' })
+  state = reduceMcpTokenState(state, { type: 'revoke-finish' })
+  assert.deepEqual(state.revokeTarget, target)
+  assert.deepEqual(state.newMcpToken, created)
+
+  state = reduceMcpTokenState(state, { type: 'revoke-start' })
+  state = reduceMcpTokenState(state, { type: 'revoke-success', tokenId: 'other-token' })
+  assert.deepEqual(state.newMcpToken, created)
+
+  state = reduceMcpTokenState(state, { type: 'new-token', token: created })
+  state = reduceMcpTokenState(state, { type: 'open-revoke', token: target })
+  state = reduceMcpTokenState(state, { type: 'revoke-start' })
+  state = reduceMcpTokenState(state, { type: 'revoke-success', tokenId: target.id })
+  assert.equal(state.newMcpToken, null)
+})
+
+test('MCP copy and revoke actions cannot start while the other action is pending', async () => {
+  const { createMcpTokenState, reduceMcpTokenState } = await loadMcpTokenStateModule()
+  assert.equal(typeof createMcpTokenState, 'function')
+  assert.equal(typeof reduceMcpTokenState, 'function')
+
+  const target = { id: 'token-5', name: 'Editor', status: 'active' }
+  let state = reduceMcpTokenState(createMcpTokenState(), { type: 'new-token', token: { id: target.id, token: 'secret-value' } })
+  state = reduceMcpTokenState(state, { type: 'copy-start' })
+  assert.strictEqual(reduceMcpTokenState(state, { type: 'open-revoke', token: target }), state)
+
+  state = reduceMcpTokenState(createMcpTokenState(), { type: 'open-revoke', token: target })
+  state = reduceMcpTokenState(state, { type: 'revoke-start' })
+  assert.strictEqual(reduceMcpTokenState(state, { type: 'copy-start' }), state)
+  assert.strictEqual(reduceMcpTokenState(state, { type: 'revoke-start' }), state)
 })
