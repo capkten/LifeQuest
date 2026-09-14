@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.schemas.user import UserCreate, UserResponse, Token
+from app.schemas.mcp_access_token import MCPAccessTokenCreate, MCPAccessTokenCreateResponse, MCPAccessTokenMetadata
 from app.services.auth import create_access_token, create_refresh_token, decode_access_token, decode_refresh_token
+from app.services.mcp_access_token import MCPAccessTokenService
 from app.services.user import UserService
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -103,3 +105,22 @@ def refresh_token(body: RefreshRequest, db: Session = Depends(get_db)):
         expires_delta=timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+
+
+@router.post("/mcp-tokens", response_model=MCPAccessTokenCreateResponse)
+def create_mcp_token(data: MCPAccessTokenCreate, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    token, raw_token = MCPAccessTokenService(db).create_token(current_user.id, data)
+    return {**MCPAccessTokenService._metadata(token), "token": raw_token}
+
+
+@router.get("/mcp-tokens", response_model=list[MCPAccessTokenMetadata])
+def list_mcp_tokens(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    return MCPAccessTokenService(db).list_tokens(current_user.id)
+
+
+@router.delete("/mcp-tokens/{token_id}", response_model=MCPAccessTokenMetadata)
+def revoke_mcp_token(token_id: UUID, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    try:
+        return MCPAccessTokenService(db).revoke(token_id, current_user.id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="MCP token not found")

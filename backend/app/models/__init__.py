@@ -28,6 +28,7 @@ from app.models.cultivation import CultivationProfile, CultivationLog, Tribulati
 from app.models.world import WorldNode, WorldNodeProgress, Sect, SectMembership, SectAccessProgress, Npc, NpcEvent
 from app.models.technique import Technique, TechniqueSlot, LearnedTechnique
 from app.models.immortal import ImmortalProfile, AscensionRecord, CrossRealmSettlement, ImmortalActivityRecord, ImmortalStageAdvance, ImmortalOfficialCommission
+from app.models.mcp_access_token import MCPAccessToken
 
 __all__ = [
     "User",
@@ -53,4 +54,5 @@ __all__ = [
     "WorldNode", "WorldNodeProgress", "Sect", "SectMembership", "SectAccessProgress", "Npc", "NpcEvent",
     "Technique", "TechniqueSlot", "LearnedTechnique",
     "ImmortalProfile", "AscensionRecord", "CrossRealmSettlement", "ImmortalActivityRecord", "ImmortalStageAdvance", "ImmortalOfficialCommission",
+    "MCPAccessToken",
 ]
