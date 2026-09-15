@@ -148,12 +148,12 @@
                 type="number"
                 class="form-input"
                 step="0.01"
-                :min="form.type === 'credit' ? -Number(form.credit_limit || 0) : 0"
                 required
               />
               <p class="form-help">
                 <template v-if="form.type === 'credit'">
                   信用卡可为负，余额最低为 {{ formatMoney(-Number(form.credit_limit || 0)) }}；当前欠款 {{ formatMoney(formCreditUsed) }}，可用额度 {{ formatMoney(formCreditAvailable) }}。
+                  <template v-if="formCreditUsed > Number(form.credit_limit || 0)">当前额度不足，请将信用额度设为至少 {{ formatMoney(formCreditUsed) }}。</template>
                 </template>
                 <template v-else>普通账户余额不能为负数。</template>
               </p>
@@ -414,11 +414,21 @@ async function saveAccount() {
   if (!form.value.name.trim()) return
   const balance = Number(form.value.balance)
   const creditLimit = Number(form.value.credit_limit || 0)
-  const minimumBalance = form.value.type === 'credit' ? -creditLimit : 0
-  if (!Number.isFinite(balance) || balance < minimumBalance) {
-    dialogError.value = form.value.type === 'credit'
-      ? '信用卡余额不能低于信用额度'
-      : '普通账户余额不能为负数'
+  if (!Number.isFinite(balance)) {
+    dialogError.value = '余额必须是有效数字'
+    return
+  }
+  if (form.value.type === 'credit') {
+    if (!Number.isFinite(creditLimit) || creditLimit < 0) {
+      dialogError.value = '信用额度不能为负数'
+      return
+    }
+    if (balance < 0 && creditLimit < Math.abs(balance)) {
+      dialogError.value = `信用额度至少需要 ${formatMoney(Math.abs(balance))}`
+      return
+    }
+  } else if (balance < 0) {
+    dialogError.value = '普通账户余额不能为负数'
     return
   }
   saving.value = true

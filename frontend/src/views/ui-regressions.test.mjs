@@ -289,7 +289,9 @@ test('todo subtasks use a compact right-side arrow toggle', async () => {
 test('finance account editor applies type-aware balance rules and credit guidance', async () => {
   const source = await readFile(new URL('./FinanceAccounts.vue', viewsDirectory), 'utf8')
 
-  assert.match(source, /:min="form\.type === 'credit'/)
+  assert.doesNotMatch(source, /:min="form\.type === 'credit'/)
+  assert.match(source, /信用额度至少需要/)
+  assert.match(source, /creditLimit < Math\.abs\(balance\)/)
   assert.match(source, /信用卡可为负|当前欠款/)
   assert.match(source, /已用额度/)
   assert.match(source, /可用额度/)
