@@ -1,7 +1,7 @@
 # LifeQuest Defect Closure Design
 
-**Date:** 2026-09-15  
-**Status:** Approved for implementation planning  
+**Date:** 2026-09-15
+**Status:** Approved for implementation planning
 **Scope:** The complete defect list in the 2026-09-15 audit attachment
 
 ## Goal
