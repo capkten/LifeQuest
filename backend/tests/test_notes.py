@@ -2,6 +2,7 @@
 import os
 import sqlite3
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -59,6 +60,105 @@ def _create_notebook(client, headers, name="My Notebook"):
         headers=headers,
     )
     return response.json()
+
+
+def _create_nested_note_tree(client, headers):
+    notebook = _create_notebook(client, headers, "Nested notebook")
+    root = client.post(
+        f"/api/notes/notebooks/{notebook['id']}/folders",
+        json={"name": "旧目录"},
+        headers=headers,
+    ).json()
+    child = client.post(
+        f"/api/notes/notebooks/{notebook['id']}/folders",
+        json={"name": "子目录", "parent_id": root["id"]},
+        headers=headers,
+    ).json()
+    first_note = client.post(
+        f"/api/notes/notebooks/{notebook['id']}/notes",
+        json={"title": "第一篇", "content": "first", "parent_id": child["id"]},
+        headers=headers,
+    ).json()
+    second_note = client.post(
+        f"/api/notes/notebooks/{notebook['id']}/notes",
+        json={"title": "第二篇", "content": "second", "parent_id": child["id"]},
+        headers=headers,
+    ).json()
+    destination = client.post(
+        f"/api/notes/notebooks/{notebook['id']}/folders",
+        json={"name": "目标目录"},
+        headers=headers,
+    ).json()
+    return {
+        "notebook": notebook,
+        "root": root,
+        "child": child,
+        "notes": [first_note, second_note],
+        "destination": destination,
+    }
+
+
+def _get_node(client, node_id, headers):
+    response = client.get(f"/api/notes/{node_id}", headers=headers)
+    assert response.status_code == 200
+    return response.json()
+
+
+def _snapshot_tree(client, tree, headers):
+    nodes = [tree["root"], tree["child"], *tree["notes"], tree["destination"]]
+    snapshot = []
+    for node in nodes:
+        if node["type"] == "note":
+            current = _get_node(client, node["id"], headers)
+            content = Path(current["content_path"]).read_text(encoding="utf-8")
+            snapshot.append((current["id"], current["parent_id"], current["path"], current["content_path"], content))
+        else:
+            snapshot.append((node["id"], node["parent_id"], node["path"], node.get("content_path")))
+    return snapshot
+
+
+def test_renaming_folder_updates_descendant_db_and_files(client):
+    headers = _register_and_login(client)
+    tree = _create_nested_note_tree(client, headers)
+    old_files = [Path(_get_node(client, note["id"], headers)["content_path"]) for note in tree["notes"]]
+
+    response = client.patch(
+        f"/api/notes/nodes/{tree['root']['id']}",
+        json={"name": "新目录"},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    for old_file, note in zip(old_files, tree["notes"]):
+        refreshed = _get_node(client, note["id"], headers)
+        assert refreshed["path"].startswith("/新目录/")
+        assert Path(refreshed["content_path"]).exists()
+        assert not old_file.exists()
+
+
+def test_note_tree_move_restores_db_and_files_when_rename_fails(client, monkeypatch):
+    headers = _register_and_login(client)
+    tree = _create_nested_note_tree(client, headers)
+    before = _snapshot_tree(client, tree, headers)
+    original_rename = Path.rename
+    rename_count = 0
+
+    def fail_on_second_rename(path, target):
+        nonlocal rename_count
+        rename_count += 1
+        if rename_count == 2:
+            raise OSError("disk failure")
+        return original_rename(path, target)
+
+    monkeypatch.setattr(Path, "rename", fail_on_second_rename)
+    response = client.patch(
+        f"/api/notes/nodes/{tree['root']['id']}",
+        json={"parent_id": tree["destination"]["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 500
+    assert _snapshot_tree(client, tree, headers) == before
 
 
 def test_create_notebook(client):

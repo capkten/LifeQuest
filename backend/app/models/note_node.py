@@ -89,3 +89,20 @@ class NoteNode(Base):
 
     notebook = relationship("Notebook", backref="note_nodes")
     parent = relationship("NoteNode", remote_side=[id], backref="children")
+
+    @property
+    def is_folder(self) -> bool:
+        return self.type == "folder"
+
+    @property
+    def is_note(self) -> bool:
+        return self.type == "note"
+
+    def remap_path(self, old_root: str, new_root: str) -> str:
+        """Return this node's path under a different subtree root."""
+        if self.path == old_root:
+            return new_root
+        prefix = old_root.rstrip("/") + "/"
+        if not self.path.startswith(prefix):
+            raise ValueError("Node is not a descendant of the moved subtree")
+        return new_root.rstrip("/") + "/" + self.path[len(prefix):]

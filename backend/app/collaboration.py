@@ -22,6 +22,15 @@ logger = logging.getLogger(__name__)
 MAX_UPDATE_BYTES = 2 * 1024 * 1024
 MAX_CONTENT_LENGTH = 5 * 1024 * 1024
 INITIALIZATION_LEASE = timedelta(seconds=15)
+COLLABORATION_SCOPE = "note_collab"
+
+
+def is_valid_collaboration_ticket(payload: Optional[dict], note_id: UUID) -> bool:
+    return bool(
+        payload
+        and payload.get("scope") == COLLABORATION_SCOPE
+        and payload.get("note_id") == str(note_id)
+    )
 
 
 @dataclass

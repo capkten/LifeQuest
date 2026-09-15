@@ -32,7 +32,7 @@ from app.schemas.note import (
 )
 from app.services.note import NoteService
 from app.services.note import NoteRevisionConflict
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, get_scoped_collaboration_access
 from app.services.auth import create_access_token, decode_access_token
 
 router = APIRouter(prefix="/api/notes", tags=["notes"])
@@ -301,16 +301,19 @@ def update_node(
         raise HTTPException(status_code=404, detail="Node not found")
     access = _require_notebook(service, node.notebook_id, current_user.id, write=True)
     try:
-        if node_in.name is not None:
-            service.rename_node(node_id, node_in.name)
+        next_parent_id = node.parent_id
         if "parent_id" in node_in.model_fields_set:
-            service.move_node(node_id, node_in.parent_id)
+            next_parent_id = node_in.parent_id
+        next_name = node_in.name if node_in.name is not None else node.name
+        service.apply_tree_move(service.plan_tree_move(node_id, next_parent_id, next_name))
         return node_to_response(service.node_repo.get_by_id(node_id), access["role"])
     except ValueError as e:
         detail = str(e)
         if "同名冲突" in detail:
             raise HTTPException(status_code=409, detail=detail)
         raise HTTPException(status_code=400, detail=detail)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Node move failed; no changes were applied")
 
 
 @router.delete("/nodes/{node_id}")
@@ -442,43 +445,25 @@ def create_collaboration_ticket(
 async def collaborate_on_note(
     websocket: WebSocket,
     note_id: UUID,
-    db: Session = Depends(get_db),
+    collaboration=Depends(get_scoped_collaboration_access),
 ):
     """Join a note collaboration room using a short-lived REST ticket."""
-    ticket = websocket.query_params.get("ticket")
-    payload = decode_access_token(ticket) if ticket else None
-    if not payload or payload.get("scope") != "note_collab" or payload.get("note_id") != str(note_id):
-        await websocket.close(code=4401)
-        return
-
+    user = collaboration["user"]
+    access = collaboration["access"]
     try:
-        user_id = UUID(payload["sub"])
-    except (KeyError, ValueError, TypeError):
-        await websocket.close(code=4401)
-        return
-
-    try:
-        service = NoteService(db)
-        access = service.require_node_access(note_id, user_id)
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            await websocket.close(code=4401)
-            return
         from app.collaboration import collaboration_manager
         await collaboration_manager.serve(
             websocket,
             note_id,
-            user_id,
+            user.id,
             user.username,
             access["role"],
-            sessionmaker(bind=db.get_bind(), autoflush=False, autocommit=False),
+            sessionmaker(bind=collaboration["db"].get_bind(), autoflush=False, autocommit=False),
         )
-    except (ValueError, PermissionError):
-        await websocket.close(code=4403)
     except WebSocketDisconnect:
         pass
-    finally:
-        db.close()
+    except Exception:
+        await websocket.close(code=4403)
 
 
 @router.get("/{note_id}", response_model=NoteDetailResponse)

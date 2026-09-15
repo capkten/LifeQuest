@@ -105,14 +105,20 @@ export const noteService = {
   },
 
   // --- Node operations ---
-  async renameNode(nodeId, name) {
-    const response = await api.patch(`/notes/nodes/${nodeId}`, { name })
+  async updateNode(nodeId, data = {}) {
+    const payload = {}
+    if (data.name !== undefined) payload.name = data.name
+    if (Object.prototype.hasOwnProperty.call(data, 'parent_id')) payload.parent_id = data.parent_id
+    const response = await api.patch(`/notes/nodes/${nodeId}`, payload)
     return response.data
   },
 
+  async renameNode(nodeId, name) {
+    return this.updateNode(nodeId, { name })
+  },
+
   async moveNode(nodeId, parentId) {
-    const response = await api.patch(`/notes/nodes/${nodeId}`, { parent_id: parentId })
-    return response.data
+    return this.updateNode(nodeId, { parent_id: parentId })
   },
 
   async deleteNode(nodeId) {

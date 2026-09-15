@@ -1,13 +1,14 @@
 from datetime import timedelta
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.models.user import User
 from app.schemas.user import UserCreate, UserResponse, Token
 from app.schemas.mcp_access_token import MCPAccessTokenCreate, MCPAccessTokenCreateResponse, MCPAccessTokenMetadata
 from app.services.auth import create_access_token, create_refresh_token, decode_access_token, decode_refresh_token
@@ -27,6 +28,8 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     payload = decode_access_token(token)
     if payload is None:
         raise credentials_exception
+    if payload.get("scope") == "note_collab":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Scoped token cannot access this endpoint")
     user_id: str = payload.get("sub")
     if user_id is None:
         raise credentials_exception
@@ -39,6 +42,31 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     if user is None:
         raise credentials_exception
     return user
+
+
+def get_scoped_collaboration_access(
+    websocket: WebSocket,
+    note_id: UUID,
+    db: Session = Depends(get_db),
+):
+    """Authenticate a short-lived note collaboration ticket for WebSocket routes."""
+    from app.collaboration import is_valid_collaboration_ticket
+    from app.services.note import NoteService
+
+    ticket = websocket.query_params.get("ticket")
+    payload = decode_access_token(ticket) if ticket else None
+    if not is_valid_collaboration_ticket(payload, note_id):
+        raise WebSocketException(code=4401)
+    try:
+        user_id = UUID(payload["sub"])
+        service = NoteService(db)
+        access = service.require_node_access(note_id, user_id)
+        user = db.query(User).filter(User.id == user_id).first()
+    except (KeyError, TypeError, ValueError, PermissionError):
+        raise WebSocketException(code=4403)
+    if user is None:
+        raise WebSocketException(code=4401)
+    return {"user": user, "access": access, "payload": payload, "db": db}
 
 
 @router.post("/register", response_model=UserResponse)

@@ -4,7 +4,9 @@ import pathlib
 import re
 import shutil
 import logging
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
+from threading import RLock
 from typing import List, Optional, Sequence, Tuple
 from uuid import UUID, uuid4
 
@@ -35,6 +37,41 @@ class NoteRevisionConflict(ValueError):
         super().__init__("NOTE_CONFLICT")
         self.node = node
         self.content = content
+
+
+@dataclass
+class TreeMoveChange:
+    node: NoteNode
+    old_path: str
+    new_path: str
+    old_content_path: Optional[str]
+    new_content_path: Optional[str]
+
+
+@dataclass
+class TreeMoveOperation:
+    old_path: pathlib.Path
+    new_path: pathlib.Path
+    staged_path: Optional[pathlib.Path] = None
+
+
+@dataclass
+class TreeMovePlan:
+    node_id: UUID
+    notebook_id: UUID
+    new_parent_id: Optional[UUID]
+    new_name: str
+    changes: List[TreeMoveChange]
+    operations: List[TreeMoveOperation]
+    stage_root: Optional[pathlib.Path] = field(default=None, repr=False)
+    filesystem_applied: bool = field(default=False, repr=False)
+
+    @property
+    def descendant_paths(self) -> List[TreeMoveChange]:
+        return self.changes
+
+
+_NOTE_TREE_MOVE_LOCK = RLock()
 
 
 def canonicalize_tags(tags: Optional[str]) -> Optional[str]:
@@ -390,130 +427,162 @@ class NoteService:
 
         return node
 
-    def rename_node(self, node_id: UUID, new_name: str, commit: bool = True) -> NoteNode:
+    def _storage_root(self, notebook: Notebook) -> pathlib.Path:
+        return (NOTES_DIR / str(notebook.user_id) / str(notebook.id)).resolve()
+
+    @staticmethod
+    def _confined_path(path: pathlib.Path, root: pathlib.Path) -> pathlib.Path:
+        resolved = path.resolve()
+        try:
+            resolved.relative_to(root)
+        except ValueError as exc:
+            raise ValueError("Note content path is outside the notebook storage root") from exc
+        return resolved
+
+    def plan_tree_move(
+        self,
+        node_id: UUID,
+        new_parent_id: Optional[UUID],
+        new_name: Optional[str] = None,
+    ) -> TreeMovePlan:
         node = self.node_repo.get_by_id(node_id)
         if not node:
             raise ValueError("Node not found")
 
-        norm = normalize_name(new_name)
-        if norm == node.normalized_name:
-            return node  # no change
-
-        if self.node_repo.check_name_conflict(node.notebook_id, node.parent_id, norm):
-            raise ValueError("同名冲突: 当前目录已存在同名条目")
-
-        old_path = node.path
-        is_note = node.type == "note"
-        display_name = new_name.strip()
-
-        # Compute new parent path from current node's parent
-        parent = self.node_repo.get_by_id(node.parent_id) if node.parent_id else None
-        parent_path = parent.path if parent else ""
-        new_path = _compute_path(parent_path, display_name, is_note)
-
-        node.name = display_name
-        node.normalized_name = norm
-        node.path = new_path
-
-        if is_note and node.content_path:
-            parts = pathlib.Path(node.content_path).parts
-            notes_data_idx = None
-            for i, p in enumerate(parts):
-                if p == "notes_data":
-                    notes_data_idx = i
-                    break
-            if notes_data_idx is not None:
-                user_id_str = parts[notes_data_idx + 1]
-                new_content_path = str(
-                    NOTES_DIR / user_id_str / str(node.notebook_id) / new_path.lstrip("/")
-                )
-            else:
-                new_content_path = node.content_path
-
-            if os.path.exists(node.content_path):
-                os.makedirs(os.path.dirname(new_content_path), exist_ok=True)
-                os.rename(node.content_path, new_content_path)
-            node.content_path = new_content_path
-
-        # Update descendants' paths
-        descendants = self.node_repo.get_descendants(node_id)
-        for desc in descendants:
-            desc.path = desc.path.replace(old_path + "/", new_path + "/", 1)
-            if desc.content_path:
-                desc.content_path = desc.content_path.replace(
-                    old_path.lstrip("/") + "/", new_path.lstrip("/") + "/", 1
-                )
-
-        if commit:
-            self.db.commit()
-            self.db.refresh(node)
-        return node
-
-    def move_node(self, node_id: UUID, new_parent_id: Optional[UUID]) -> NoteNode:
-        node = self.node_repo.get_by_id(node_id)
-        if not node:
-            raise ValueError("Node not found")
-
-        # Prevent moving to self or own descendant
+        notebook = self.notebook_repo.get_by_id(node.notebook_id)
+        if not notebook:
+            raise ValueError("Notebook not found")
         if new_parent_id == node_id:
             raise ValueError("Cannot move a node into itself")
+        descendants = self.node_repo.get_descendants(node_id)
         if new_parent_id:
-            descendants = self.node_repo.get_descendants(node_id)
             if any(d.id == new_parent_id for d in descendants):
                 raise ValueError("Cannot move a node into its own descendant")
 
-        norm = node.normalized_name
-        if self.node_repo.check_name_conflict(node.notebook_id, new_parent_id, norm):
-            raise ValueError("同名冲突: 目标目录已存在同名条目")
-
-        old_path = node.path
-        is_note = node.type == "note"
-
-        if new_parent_id:
             new_parent = self.node_repo.get_by_id(new_parent_id)
-            if (
-                not new_parent
-                or new_parent.notebook_id != node.notebook_id
-                or new_parent.type != "folder"
-            ):
+            if not new_parent or new_parent.notebook_id != node.notebook_id or not new_parent.is_folder:
                 raise ValueError("Target must be a folder")
             new_parent_path = new_parent.path
         else:
             new_parent_path = ""
 
-        new_path = _compute_path(new_parent_path, node.name, is_note)
-        node.parent_id = new_parent_id
-        node.path = new_path
+        display_name = node.name if new_name is None else new_name.strip()
+        norm = normalize_name(display_name)
+        if self.node_repo.check_name_conflict(
+            node.notebook_id, new_parent_id, norm, exclude_id=node.id
+        ):
+            raise ValueError("同名冲突: 目标目录已存在同名条目")
 
-        if is_note and node.content_path:
-            parts = pathlib.Path(node.content_path).parts
-            notes_data_idx = None
-            for i, p in enumerate(parts):
-                if p == "notes_data":
-                    notes_data_idx = i
-                    break
-            if notes_data_idx is not None:
-                user_id_str = parts[notes_data_idx + 1]
-                new_content_path = str(
-                    NOTES_DIR / user_id_str / str(node.notebook_id) / new_path.lstrip("/")
-                )
-                if os.path.exists(node.content_path):
-                    os.makedirs(os.path.dirname(new_content_path), exist_ok=True)
-                    shutil.move(node.content_path, new_content_path)
-                node.content_path = new_content_path
+        old_root = node.path
+        new_root = _compute_path(new_parent_path, display_name, node.is_note)
+        storage_root = self._storage_root(notebook)
+        changes = []
+        operations = []
+        for item in [node, *descendants]:
+            new_path = item.remap_path(old_root, new_root)
+            old_content_path = item.content_path
+            new_content_path = (
+                _compute_content_path(notebook.user_id, notebook.id, new_path)
+                if item.is_note
+                else None
+            )
+            changes.append(TreeMoveChange(
+                node=item,
+                old_path=item.path,
+                new_path=new_path,
+                old_content_path=old_content_path,
+                new_content_path=new_content_path,
+            ))
+            if not item.is_note or not old_content_path or old_content_path == new_content_path:
+                continue
+            old_file = self._confined_path(pathlib.Path(old_content_path), storage_root)
+            new_file = self._confined_path(pathlib.Path(new_content_path), storage_root)
+            if new_file.exists() and new_file != old_file:
+                raise ValueError("目标文件已存在")
+            if old_file.exists():
+                operations.append(TreeMoveOperation(old_file, new_file))
 
-        # Update descendants
-        descendants = self.node_repo.get_descendants(node_id)
-        for desc in descendants:
-            desc.path = desc.path.replace(old_path + "/", new_path + "/", 1)
-            if desc.content_path:
-                desc.content_path = desc.content_path.replace(
-                    old_path.lstrip("/") + "/", new_path.lstrip("/") + "/", 1
-                )
+        return TreeMovePlan(
+            node_id=node.id,
+            notebook_id=node.notebook_id,
+            new_parent_id=new_parent_id,
+            new_name=display_name,
+            changes=changes,
+            operations=operations,
+        )
 
-        self.db.commit()
-        self.db.refresh(node)
-        return node
+    @staticmethod
+    def _restore_tree_move_files(plan: TreeMovePlan) -> None:
+        for operation in reversed(plan.operations):
+            if operation.new_path.exists():
+                operation.new_path.parent.mkdir(parents=True, exist_ok=True)
+                operation.new_path.rename(operation.old_path)
+            elif operation.staged_path and operation.staged_path.exists():
+                operation.staged_path.parent.mkdir(parents=True, exist_ok=True)
+                operation.staged_path.rename(operation.old_path)
+        plan.filesystem_applied = False
+
+    def apply_tree_move(self, plan: TreeMovePlan, commit: bool = True) -> NoteNode:
+        if plan.notebook_id is None:
+            raise ValueError("Notebook not found")
+        with _NOTE_TREE_MOVE_LOCK:
+            notebook = self.notebook_repo.get_by_id(plan.notebook_id)
+            if not notebook:
+                raise ValueError("Notebook not found")
+            stage_root = self._storage_root(notebook) / f".tree-move-{uuid4().hex}"
+            plan.stage_root = stage_root
+            try:
+                stage_root.mkdir(parents=True, exist_ok=False)
+                for index, operation in enumerate(plan.operations):
+                    operation.staged_path = stage_root / str(index)
+                    operation.staged_path.parent.mkdir(parents=True, exist_ok=True)
+                    operation.old_path.rename(operation.staged_path)
+
+                for change in plan.changes:
+                    change.node.path = change.new_path
+                    if change.node.id == plan.node_id:
+                        change.node.parent_id = plan.new_parent_id
+                        change.node.name = plan.new_name
+                        change.node.normalized_name = normalize_name(plan.new_name)
+                    if change.node.is_note:
+                        change.node.content_path = change.new_content_path
+                self.db.flush()
+
+                for operation in plan.operations:
+                    operation.new_path.parent.mkdir(parents=True, exist_ok=True)
+                    operation.staged_path.rename(operation.new_path)
+                plan.filesystem_applied = True
+                if commit:
+                    self.db.commit()
+                    self.db.refresh(plan.changes[0].node)
+                return plan.changes[0].node
+            except Exception:
+                self.db.rollback()
+                try:
+                    self._restore_tree_move_files(plan)
+                except Exception:
+                    logger.exception("Failed to restore note tree files after move failure")
+                raise
+            finally:
+                if stage_root.exists():
+                    shutil.rmtree(stage_root, ignore_errors=True)
+                plan.stage_root = None
+
+    def rename_node(self, node_id: UUID, new_name: str, commit: bool = True) -> NoteNode:
+        node = self.node_repo.get_by_id(node_id)
+        if not node:
+            raise ValueError("Node not found")
+        if normalize_name(new_name) == node.normalized_name:
+            return node
+        plan = self.plan_tree_move(node_id, node.parent_id, new_name)
+        return self.apply_tree_move(plan, commit=commit)
+
+    def move_node(self, node_id: UUID, new_parent_id: Optional[UUID]) -> NoteNode:
+        node = self.node_repo.get_by_id(node_id)
+        if not node:
+            raise ValueError("Node not found")
+        plan = self.plan_tree_move(node_id, new_parent_id, node.name)
+        return self.apply_tree_move(plan)
 
     def update_note(self, node_id: UUID, note_in: NoteUpdate, user_id: Optional[UUID] = None) -> NoteNode:
         node = self.node_repo.get_by_id(node_id)
@@ -526,46 +595,52 @@ class NoteService:
         if note_in.base_revision is not None and note_in.base_revision != (node.content_revision or 1):
             raise NoteRevisionConflict(node, self.get_note_content(node_id))
 
-        if note_in.title is not None:
-            self.rename_node(node_id, note_in.title, commit=False)
-
-        if note_in.summary is not None:
-            node.summary = note_in.summary
-        if note_in.tags is not None:
-            node.tags = canonicalize_tags(note_in.tags)
-        else:
-            node.tags = canonicalize_tags(node.tags)
-        node.tags_normalized = True
-        if note_in.is_pinned is not None:
-            node.is_pinned = note_in.is_pinned
-
+        move_plan = None
         previous_content = None
-        content_path = node.content_path
-        if note_in.content is not None and content_path and os.path.exists(content_path):
-            with open(content_path, "r", encoding="utf-8") as content_file:
-                previous_content = content_file.read()
-
-        if note_in.content is not None:
-            node.word_count = len(note_in.content.split())
-            if content_path:
-                _write_content_atomically(content_path, note_in.content)
-
-        changed = any(
-            value is not None
-            for value in (note_in.title, note_in.summary, note_in.tags, note_in.is_pinned, note_in.content)
-        )
-        if changed:
-            node.content_revision = (node.content_revision or 1) + 1
-            if user_id is not None:
-                node.updated_by = user_id
-
+        content_path = None
         try:
+            if note_in.title is not None:
+                move_plan = self.plan_tree_move(node_id, node.parent_id, note_in.title)
+                self.apply_tree_move(move_plan, commit=False)
+
+            if note_in.summary is not None:
+                node.summary = note_in.summary
+            if note_in.tags is not None:
+                node.tags = canonicalize_tags(note_in.tags)
+            else:
+                node.tags = canonicalize_tags(node.tags)
+            node.tags_normalized = True
+            if note_in.is_pinned is not None:
+                node.is_pinned = note_in.is_pinned
+
+            content_path = node.content_path
+            if note_in.content is not None and content_path and os.path.exists(content_path):
+                with open(content_path, "r", encoding="utf-8") as content_file:
+                    previous_content = content_file.read()
+            if note_in.content is not None:
+                node.word_count = len(note_in.content.split())
+                if content_path:
+                    _write_content_atomically(content_path, note_in.content)
+
+            changed = any(
+                value is not None
+                for value in (note_in.title, note_in.summary, note_in.tags, note_in.is_pinned, note_in.content)
+            )
+            if changed:
+                node.content_revision = (node.content_revision or 1) + 1
+                if user_id is not None:
+                    node.updated_by = user_id
             self.db.commit()
             self.db.refresh(node)
         except Exception:
             self.db.rollback()
             if note_in.content is not None and content_path and previous_content is not None:
                 _write_content_atomically(content_path, previous_content)
+            if move_plan and move_plan.filesystem_applied:
+                try:
+                    self._restore_tree_move_files(move_plan)
+                except Exception:
+                    logger.exception("Failed to restore note tree files after note update failure")
             raise
         return node
 

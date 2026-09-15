@@ -197,3 +197,19 @@ def test_collaboration_websocket_syncs_two_editors(client):
             assert _receive_type(editor_socket, "ack")["revision"] == 2
 
     assert client.get(f"/api/notes/{note['id']}", headers=owner_headers).json()["content"] == "edited by editor"
+
+
+def test_collaboration_scope_cannot_call_ordinary_endpoints(client):
+    owner_headers = _register_and_login(client, "scope-owner", "scope-owner@example.com")
+    notebook, note = _create_note(client, owner_headers)
+    ticket = client.post(
+        f"/api/notes/{note['id']}/collaboration-ticket",
+        headers=owner_headers,
+    ).json()["ticket"]
+    scoped_headers = {"Authorization": f"Bearer {ticket}"}
+
+    with client.websocket_connect(f"/api/notes/{note['id']}/collab?ticket={ticket}") as websocket:
+        assert _receive_type(websocket, "init")["content"] == "initial"
+
+    assert client.get("/api/users/me", headers=scoped_headers).status_code == 403
+    assert client.get("/api/todos/daily", headers=scoped_headers).status_code == 403
