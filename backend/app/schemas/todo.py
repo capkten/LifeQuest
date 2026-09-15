@@ -146,6 +146,28 @@ class HabitUpdate(HabitScheduleSchema):
     is_active: Optional[bool] = None
 
 
+class HabitDailySummary(TodoSchema):
+    id: UUID
+    title: str
+    difficulty: str
+    completed_today: bool
+    streak: int
+    coins_reward: int
+    exp_reward: int
+    frequency: str
+    weekly_target: Optional[int] = None
+    weekly_completed: int = 0
+    weekly_remaining: int = 0
+    total_completed: int = 0
+    scheduled_count: int = 0
+    completed_count: int = 0
+    completion_rate: float = 0.0
+    is_active: bool
+    paused_today: bool
+    scheduled_today: bool
+    excused_today: bool
+
+
 class HabitResponse(TodoSchema):
     model_config = ConfigDict(from_attributes=True)
 
@@ -273,6 +295,13 @@ class GoalResponse(TodoSchema):
     created_at: datetime
     updated_at: datetime
     cultivation_reward: Optional[RewardSettlement] = None
+
+
+class DailySummaryResponse(TodoSchema):
+    habits: List[HabitDailySummary]
+    tasks: List[dict]
+    goals: List[dict]
+    summary: dict
 
 
 # Subtask schemas

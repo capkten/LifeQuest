@@ -20,8 +20,8 @@ export const todoService = {
    * @returns {Promise<Object>} Daily summary
    */
   async getDailySummary() {
-    const response = await api.get('/todos/daily')
-    return response.data
+    const { data } = await api.get('/todos/daily')
+    return data
   },
 
   /**

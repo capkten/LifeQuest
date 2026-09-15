@@ -17,6 +17,7 @@ from app.schemas.todo import (
     HabitCompletionCreate,
     HabitBackfillCreate,
     HabitHistoryResponse,
+    DailySummaryResponse,
     TaskCreate,
     TaskUpdate,
     TaskResponse,
@@ -52,7 +53,7 @@ def create_quick_task(data: QuickTaskCreate, current_user: User = Depends(get_cu
 
 # --- Daily summary endpoint ---
 
-@router.get("/daily", response_model=dict)
+@router.get("/daily", response_model=DailySummaryResponse)
 def get_daily_summary(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

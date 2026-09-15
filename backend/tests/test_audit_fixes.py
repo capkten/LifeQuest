@@ -1138,7 +1138,13 @@ def test_china_midnight_is_shared_by_habits_checkin_and_summary(database, clock)
     todo.complete_habit(habit, user.id)
     assert habit.streak == 2
     assert checkin.checkin(user.id)["checkin_date"] == date(2026, 9, 12)
-    assert todo.get_daily_summary(user.id)["summary"]["completed_habits"] == 1
+    daily_summary = todo.get_daily_summary(user.id)
+    assert daily_summary["summary"]["completed_habits"] == 1
+    summary_habit = next(item for item in daily_summary["habits"] if item["id"] == habit.id)
+    assert summary_habit["is_active"] is True
+    assert summary_habit["paused_today"] is False
+    assert summary_habit["scheduled_today"] is True
+    assert summary_habit["excused_today"] is False
     assert session.query(HabitCompletion).count() == 2
 
 

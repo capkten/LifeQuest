@@ -145,9 +145,9 @@
                     <span
                       v-if="habitBlockReason(habit)"
                       class="status-badge"
-                      :class="habit.paused_today || !habit.is_active ? 'status-badge--paused' : 'status-badge--excused'"
+                      :class="habit.paused_today === true || habit.is_active === false ? 'status-badge--paused' : 'status-badge--excused'"
                     >{{ habitBlockReason(habit) }}</span>
-                    <span v-if="habit.frequency === 'weekdays'" class="frequency-badge">{{ habit.weekdays.map(day => weekdayLabels[day]).join('、') }}{{ habit.scheduled_today ? '' : ' · 今日休息' }}</span>
+                    <span v-if="habit.frequency === 'weekdays'" class="frequency-badge">{{ habit.weekdays.map(day => weekdayLabels[day]).join('、') }}{{ habit.scheduled_today === false ? ' · 今日休息' : '' }}</span>
                     <span v-if="habit.frequency === 'weekly_target'" class="frequency-badge frequency-badge--weekly_target">本周 {{ habit.weekly_completed }}/{{ habit.weekly_target }}</span>
                   </div>
                 </div>
@@ -158,14 +158,14 @@
               <div class="action-buttons">
                 <button
                   class="action-btn"
-                  :class="habit.is_active ? 'action-btn--pause' : 'action-btn--resume'"
+                  :class="habit.is_active === false ? 'action-btn--resume' : 'action-btn--pause'"
                   :disabled="togglingHabitId === habit.id"
-                  :aria-label="habit.is_active ? '暂停习惯' : '恢复习惯'"
-                  :title="habit.is_active ? '暂停习惯' : '恢复习惯'"
+                  :aria-label="habit.is_active === false ? '恢复习惯' : '暂停习惯'"
+                  :title="habit.is_active === false ? '恢复习惯' : '暂停习惯'"
                   @click="toggleHabitPause(habit)"
                 >
                   <span v-if="togglingHabitId === habit.id" class="loading-spinner loading-spinner--sm"></span>
-                  <svg v-else-if="habit.is_active" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <svg v-else-if="habit.is_active !== false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                     <rect x="6" y="4" width="4" height="16" rx="1" />
                     <rect x="14" y="4" width="4" height="16" rx="1" />
                   </svg>
@@ -1133,9 +1133,9 @@ async function completeHabit(habit, completionData) {
 
 function habitBlockReason(habit) {
   if (habit.completed_today) return '该习惯今天已经完成，明天再来继续。'
-  if (habit.paused_today || !habit.is_active) return '该习惯已暂停。'
-  if (habit.excused_today) return '该习惯今天已请假。'
-  if (!habit.scheduled_today) return '今天不是该习惯的计划日。'
+  if (habit.paused_today === true || habit.is_active === false) return '该习惯已暂停。'
+  if (habit.excused_today === true) return '该习惯今天已请假。'
+  if (habit.scheduled_today === false) return '今天不是该习惯的计划日。'
   if (habit.frequency === 'weekly_target' && habit.weekly_remaining <= 0) return '本周已完成目标次数，下周再继续。'
   return ''
 }
@@ -1151,12 +1151,12 @@ async function toggleHabitPause(habit) {
   }
   togglingHabitId.value = habit.id
   try {
-    const updated = habit.is_active
-      ? await todoService.pauseHabit(habit.id)
-      : await todoService.resumeHabit(habit.id)
+    const updated = habit.is_active === false
+      ? await todoService.resumeHabit(habit.id)
+      : await todoService.pauseHabit(habit.id)
     const idx = habits.value.findIndex(item => item.id === habit.id)
     if (idx !== -1) habits.value[idx] = updated
-    showSuccess(updated.is_active ? '习惯已恢复。' : '习惯已暂停，暂停区间已记录。')
+    showSuccess(updated.is_active === true ? '习惯已恢复。' : '习惯已暂停，暂停区间已记录。')
   } catch (e) {
     showError(getErrorMessage(e))
   } finally {

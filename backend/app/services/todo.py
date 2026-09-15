@@ -938,6 +938,30 @@ class TodoService:
         self.title_service.check_and_unlock(uid, "level", user.level, commit=False)
 
     # --- Daily summary ---
+    @staticmethod
+    def _habit_daily_payload(habit: Habit) -> dict:
+        return {
+            "id": habit.id,
+            "title": habit.title,
+            "difficulty": habit.difficulty,
+            "completed_today": habit.completed_today,
+            "streak": habit.streak,
+            "coins_reward": habit.coins_reward,
+            "exp_reward": habit.exp_reward,
+            "frequency": habit.frequency,
+            "weekly_target": habit.weekly_target,
+            "weekly_completed": habit.weekly_completed,
+            "weekly_remaining": habit.weekly_remaining,
+            "total_completed": habit.total_completed,
+            "scheduled_count": habit.scheduled_count,
+            "completed_count": habit.completed_count,
+            "completion_rate": habit.completion_rate,
+            "is_active": habit.is_active,
+            "paused_today": habit.paused_today,
+            "scheduled_today": habit.scheduled_today,
+            "excused_today": habit.excused_today,
+        }
+
     def get_daily_summary(self, user_id: UUID) -> dict:
         """Get today's tasks overview: habits due today, tasks due today, active goals."""
         today = self._today()
@@ -948,7 +972,7 @@ class TodoService:
         for h in habits:
             self._set_completed_today(h)
             if h.scheduled_today:
-                daily_habits.append(h)
+                daily_habits.append(self._habit_daily_payload(h))
 
         # 2. Tasks with deadline today (or overdue and still pending)
         pending_tasks = self.task_repo.get_by_status(user_id, "pending")
@@ -963,27 +987,7 @@ class TodoService:
         active_goals = self.goal_repo.get_by_status(user_id, "in_progress")
 
         return {
-            "habits": [
-                {
-                    "id": h.id,
-                    "title": h.title,
-                    "difficulty": h.difficulty,
-                    "completed_today": h.completed_today,
-                    "streak": h.streak,
-                    "coins_reward": h.coins_reward,
-                    "exp_reward": h.exp_reward,
-                    "frequency": h.frequency,
-                    "weekly_target": h.weekly_target,
-                    "weekly_completed": h.weekly_completed,
-                    "weekly_remaining": h.weekly_remaining,
-                    "total_completed": h.total_completed,
-                    "scheduled_count": h.scheduled_count,
-                    "completed_count": h.completed_count,
-                    "completion_rate": h.completion_rate,
-                    "excused_today": h.excused_today,
-                }
-                for h in daily_habits
-            ],
+            "habits": daily_habits,
             "tasks": [
                 {
                     "id": t.id,
@@ -1013,7 +1017,7 @@ class TodoService:
                 "completed_habits": sum(
                     1
                     for h in daily_habits
-                    if h.completed_today
+                    if h["completed_today"]
                 ),
                 "due_tasks": len(due_tasks),
                 "active_goals": len(active_goals),

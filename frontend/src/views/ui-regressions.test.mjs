@@ -263,6 +263,25 @@ test('todo habit completion uses the server completed_today field for all lock s
   assert.match(source, /habit\.weekly_completed.*habit\.weekly_target/)
 })
 
+test('daily habit consumers compare optional server state fields explicitly', async () => {
+  const [service, home, todos] = await Promise.all([
+    readFile(new URL('../services/todo.js', viewsDirectory), 'utf8'),
+    readFile(new URL('./Home.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('./Todos.vue', viewsDirectory), 'utf8'),
+  ])
+
+  for (const [file, source] of [['Home.vue', home], ['Todos.vue', todos]]) {
+    assert.match(source, /habit\.paused_today === true/, `${file} must check paused_today explicitly`)
+    assert.match(source, /habit\.is_active === false/, `${file} must check is_active explicitly`)
+    assert.match(source, /habit\.excused_today === true/, `${file} must check excused_today explicitly`)
+    assert.match(source, /habit\.scheduled_today === false/, `${file} must check scheduled_today explicitly`)
+  }
+
+  const dailyMethod = service.match(/async getDailySummary\(\) \{[\s\S]*?\n  \},/)?.[0]
+  assert.ok(dailyMethod, 'daily summary service method must remain available')
+  assert.doesNotMatch(dailyMethod, /result\.data/)
+})
+
 test('todo task filters use project buttons and show unfinished tasks first', async () => {
   const source = await readFile(new URL('./Todos.vue', viewsDirectory), 'utf8')
 

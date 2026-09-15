@@ -440,9 +440,9 @@ async function completeDailyHabit(habit) {
 
 function dailyHabitBlockReason(habit) {
   if (habit.completed_today) return '该习惯今天已经完成，明天再来继续。'
-  if (habit.paused_today || !habit.is_active) return '该习惯已暂停。'
-  if (habit.excused_today) return '该习惯今天已请假。'
-  if (!habit.scheduled_today) return '今天不是该习惯的计划日。'
+  if (habit.paused_today === true || habit.is_active === false) return '该习惯已暂停。'
+  if (habit.excused_today === true) return '该习惯今天已请假。'
+  if (habit.scheduled_today === false) return '今天不是该习惯的计划日。'
   if (habit.frequency === 'weekly_target' && habit.weekly_remaining <= 0) return '本周已完成目标次数，下周再继续。'
   return ''
 }
