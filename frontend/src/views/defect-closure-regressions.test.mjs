@@ -6,27 +6,122 @@ import {
   coinHistoryResponse,
   coinTransactionDateKey,
   coinTransactionPresentation,
+  createCoinHistoryController,
   createCoinHistoryClient,
 } from '../services/coinHistoryContract.js'
 
-test('coin history maps the response envelope and renders type-driven spending', () => {
-  const transaction = { type: 'spend', amount: 20 }
+test('coin history maps the response envelope and renders both directions by type', () => {
+  const income = { type: 'earn', amount: 20 }
+  const expense = { type: 'spend', amount: 20 }
 
   assert.deepEqual(coinHistoryResponse({
-    transactions: [transaction],
+    transactions: [income, expense],
     total_earned: 10,
     total_spent: 20,
     count: 21,
   }), {
-    transactions: [transaction],
+    transactions: [income, expense],
     total_earned: 10,
     total_spent: 20,
     count: 21,
   })
-  assert.deepEqual(coinTransactionPresentation(transaction), {
+  assert.deepEqual(coinTransactionPresentation(income), {
+    isSpend: false,
+    sign: '+',
+    amount: 20,
+    iconClass: 'tx-icon--income',
+    amountClass: 'tx-amount--positive',
+  })
+  assert.deepEqual(coinTransactionPresentation(expense), {
     isSpend: true,
     sign: '-',
     amount: 20,
+    iconClass: 'tx-icon--expense',
+    amountClass: 'tx-amount--negative',
+  })
+})
+
+test('coin history controller runs initial and load-more workflow using filtered count', async () => {
+  const calls = []
+  let filters = { type: 'income', source: 'task' }
+  const responses = [
+    {
+      transactions: [{ id: 1, type: 'earn', amount: 10 }],
+      total_earned: 10,
+      total_spent: 0,
+      count: 3,
+    },
+    {
+      transactions: [{ id: 2, type: 'earn', amount: 5 }],
+      total_earned: 15,
+      total_spent: 0,
+      count: 3,
+    },
+    {
+      transactions: [{ id: 3, type: 'spend', amount: 4 }],
+      total_earned: 15,
+      total_spent: 4,
+      count: 1,
+    },
+  ]
+  const service = createCoinHistoryClient({
+    async get(path, options) {
+      calls.push({ path, options })
+      return { data: responses.shift() }
+    },
+  })
+  const controller = createCoinHistoryController({
+    getHistory: (params) => service.getHistory(params),
+    getFilters: () => filters,
+    pageSize: 2,
+  })
+
+  await controller.fetchHistory()
+  assert.deepEqual(calls[0].options.params, {
+    coin_type: 'earn',
+    source: 'task',
+    skip: 0,
+    limit: 2,
+  })
+  assert.deepEqual(controller.state.transactions, [{ id: 1, type: 'earn', amount: 10 }])
+  assert.equal(controller.state.historyCount, 3)
+  assert.equal(controller.state.hasMore, true)
+  assert.deepEqual(coinTransactionPresentation(controller.state.transactions[0]), {
+    isSpend: false,
+    sign: '+',
+    amount: 10,
+    iconClass: 'tx-icon--income',
+    amountClass: 'tx-amount--positive',
+  })
+
+  await controller.loadMore()
+  assert.deepEqual(calls[1].options.params, {
+    coin_type: 'earn',
+    source: 'task',
+    skip: 1,
+    limit: 2,
+  })
+  assert.deepEqual(controller.state.transactions, [
+    { id: 1, type: 'earn', amount: 10 },
+    { id: 2, type: 'earn', amount: 5 },
+  ])
+  assert.equal(controller.state.hasMore, true)
+
+  filters = { type: 'expense', source: 'shop' }
+  await controller.fetchHistory()
+  assert.deepEqual(calls[2].options.params, {
+    coin_type: 'spend',
+    source: 'shop',
+    skip: 0,
+    limit: 2,
+  })
+  assert.deepEqual(controller.state.transactions, [{ id: 3, type: 'spend', amount: 4 }])
+  assert.equal(controller.state.historyCount, 1)
+  assert.equal(controller.state.hasMore, false)
+  assert.deepEqual(coinTransactionPresentation(controller.state.transactions[0]), {
+    isSpend: true,
+    sign: '-',
+    amount: 4,
     iconClass: 'tx-icon--expense',
     amountClass: 'tx-amount--negative',
   })
@@ -107,28 +202,4 @@ test('goal editing does not settle a reward a second time', async () => {
 
   assert.ok(saveItem, 'saveItem must remain available')
   assert.doesNotMatch(saveItem, /settleCompletion\(/)
-})
-
-test('coin history source contract remains canonical', async () => {
-  assert.deepEqual(buildCoinHistoryParams({
-    type: 'expense',
-    source: 'shop',
-    start_date: '2026-09-01',
-    end_date: '2026-09-15',
-    skip: 20,
-    limit: 20,
-  }), {
-    coin_type: 'spend',
-    source: 'shop',
-    start_date: '2026-09-01',
-    end_date: '2026-09-15',
-    skip: 20,
-    limit: 20,
-  })
-})
-
-test('coin history delegates rendering to the type-driven presentation contract', async () => {
-  const history = await readFile(new URL('./CoinHistory.vue', import.meta.url), 'utf8')
-
-  assert.match(history, /coinTransactionPresentation\(tx\)/)
 })

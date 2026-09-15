@@ -57,3 +57,81 @@ export function createCoinHistoryClient(apiClient) {
     },
   }
 }
+
+export function createCoinHistoryController({
+  getHistory,
+  getFilters = () => ({}),
+  pageSize = 20,
+  formatError = (error, fallback) => error?.message || fallback,
+} = {}) {
+  const state = {
+    transactions: [],
+    loading: true,
+    error: null,
+    loadingMore: false,
+    loadMoreError: null,
+    historyCount: 0,
+    hasMore: false,
+  }
+  let requestSequence = 0
+  let filterGeneration = 0
+
+  function historyParams(skip) {
+    return buildCoinHistoryParams({
+      ...getFilters(),
+      skip,
+      limit: pageSize,
+    })
+  }
+
+  async function fetchHistory() {
+    const requestId = ++requestSequence
+    ++filterGeneration
+    state.loading = true
+    state.error = null
+    state.loadMoreError = null
+    state.loadingMore = false
+    state.hasMore = false
+    state.historyCount = 0
+    try {
+      const result = await getHistory(historyParams(0))
+      if (requestId !== requestSequence) return
+      state.transactions = result?.transactions || []
+      state.historyCount = result?.count || 0
+      state.hasMore = state.transactions.length < state.historyCount
+    } catch (error) {
+      if (requestId === requestSequence) {
+        state.error = formatError(error, '加载金币记录失败，请重试。')
+      }
+    } finally {
+      if (requestId === requestSequence) state.loading = false
+    }
+  }
+
+  async function loadMore() {
+    if (state.loadingMore || !state.hasMore) return
+    const requestId = ++requestSequence
+    const generation = filterGeneration
+    const nextSkip = state.transactions.length
+    state.loadingMore = true
+    state.loadMoreError = null
+    try {
+      const result = await getHistory(historyParams(nextSkip))
+      if (requestId !== requestSequence || generation !== filterGeneration) return
+      const items = result?.transactions || []
+      state.transactions.push(...items)
+      state.historyCount = result?.count || state.historyCount
+      state.hasMore = state.transactions.length < state.historyCount
+    } catch (error) {
+      if (requestId === requestSequence && generation === filterGeneration) {
+        state.loadMoreError = formatError(error, '加载更多金币记录失败，请重试。')
+      }
+    } finally {
+      if (requestId === requestSequence && generation === filterGeneration) {
+        state.loadingMore = false
+      }
+    }
+  }
+
+  return { state, fetchHistory, loadMore }
+}
