@@ -30,6 +30,7 @@ from app.services.auth import create_access_token
 from app.services.backpack import BackpackService
 from app.services.calendar import CalendarService
 from app.services.checkin import CheckinService
+from app.services.cultivation import CultivationService
 from app.services.finance import FinanceService
 from app.services.habit_history import backfill_latest_completions
 from app.services.project import ProjectService
@@ -368,6 +369,20 @@ def test_habit_stats_total_is_scheduled_slots_not_active_habits(database, clock)
 
     assert saturday["total"] == 1
     assert monday_stat["total"] == 2
+
+
+def test_experience_rewards_update_current_and_cumulative_totals(database):
+    session, factory = database
+    user = make_user(session)
+    repository = UserRepository(session)
+
+    repository._update_experience_no_commit(user, 125)
+    session.commit()
+    session.refresh(user)
+
+    assert user.level == 2
+    assert user.experience == 25
+    assert user.total_experience == 125
 
 
 def test_finance_first_transaction_bonus_survives_transaction_deletion(database):
@@ -1128,10 +1143,17 @@ def test_china_midnight_is_shared_by_habits_checkin_and_summary(database, clock)
     session.commit()
     todo = TodoService(session)
     checkin = CheckinService(session)
+    cultivation = CultivationService(session)
+    stats = StatsService(session)
     clock(datetime(2026, 9, 11, 15, 59, 59, tzinfo=timezone.utc))
+    assert cultivation._utc_today() == date(2026, 9, 11)
     todo.complete_habit(habit, user.id)
     assert checkin.checkin(user.id)["checkin_date"] == date(2026, 9, 11)
+    assert next(
+        row for row in stats.get_habit_stats(user.id) if row["date"] == "2026-09-11"
+    )["completed"] == 1
     clock(datetime(2026, 9, 11, 16, tzinfo=timezone.utc))
+    assert cultivation._utc_today() == date(2026, 9, 12)
     assert not checkin.get_status(user.id)["checked_in"]
     assert todo.get_daily_summary(user.id)["summary"]["completed_habits"] == 0
     todo.complete_habit(habit, user.id)

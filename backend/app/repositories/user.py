@@ -59,6 +59,7 @@ class UserRepository(BaseRepository[User]):
 
     def update_experience(self, user: User, exp: int) -> User:
         user.experience += exp
+        user.total_experience += exp
         # Check for level up
         while user.experience >= self._get_required_exp(user.level):
             user.experience -= self._get_required_exp(user.level)
@@ -92,7 +93,8 @@ class UserRepository(BaseRepository[User]):
         self.db.flush()
         self.db.execute(
             update(User).where(User.id == user.id).values(
-                experience=User.experience + exp
+                experience=User.experience + exp,
+                total_experience=User.total_experience + exp,
             )
         )
         self.db.refresh(user)

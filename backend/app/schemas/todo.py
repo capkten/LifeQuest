@@ -277,7 +277,7 @@ class GoalUpdate(TodoSchema):
     status: Optional[TaskStatus] = None
     coins_reward: Optional[int] = Field(default=None, ge=0)
     exp_reward: Optional[int] = Field(default=None, ge=0)
-    progress: Optional[float] = None
+    progress: Optional[float] = Field(default=None, ge=0, le=100)
     deadline: Optional[datetime] = None
 
 

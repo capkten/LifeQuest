@@ -51,6 +51,17 @@
             <span class="overview-label">累计金币</span>
           </div>
         </div>
+        <div class="overview-card overview-card--exp">
+          <div class="overview-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+          </div>
+          <div class="overview-info">
+            <span class="overview-value">{{ overview.total_exp }}</span>
+            <span class="overview-label">累计经验</span>
+          </div>
+        </div>
         <div class="overview-card overview-card--streak">
           <div class="overview-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -744,7 +755,7 @@ onMounted(fetchAll)
 /* Overview Grid */
 .overview-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: var(--spacing-lg);
   margin-bottom: var(--spacing-xl);
 }
@@ -786,6 +797,13 @@ onMounted(fetchAll)
 }
 .overview-card--coins .overview-icon svg {
   color: var(--color-warning);
+}
+
+.overview-card--exp .overview-icon {
+  background: rgba(168, 85, 247, 0.15);
+}
+.overview-card--exp .overview-icon svg {
+  color: #a855f7;
 }
 
 .overview-card--streak .overview-icon {

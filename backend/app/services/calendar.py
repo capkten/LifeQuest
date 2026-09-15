@@ -8,6 +8,8 @@ from app.models.todo import Habit, Task, Goal, Frequency, TaskStatus
 from app.models.habit_pause import HabitPauseInterval
 from app.models.habit_leave import HabitLeaveInterval
 from app.models.checkin import DailyCheckin
+from app.models.habit_completion import HabitCompletion
+from app.services.habit_metrics import valid_completion_dates
 from app.timezone import day_start_utc, day_bounds_utc, local_date
 from app.services.habit_schedule import is_excused_on, is_paused_on
 
@@ -57,13 +59,32 @@ class CalendarService:
                 "id": str(g.id),
             })
 
-        # 3. Active habits: for each day in range, check if habit is due
+        # 3. Habits: keep historical scheduled dates after deactivation.
         habits = self.db.query(Habit).filter(
             Habit.user_id == user_id,
-            Habit.is_active == True,
         ).all()
         pause_intervals = self._pause_intervals_by_habit(habits, user_id)
         leave_intervals = self._leave_intervals_by_habit(habits, user_id)
+        completion_dates = {habit.id: set() for habit in habits}
+        if completion_dates:
+            completion_rows = self.db.query(HabitCompletion).filter(
+                HabitCompletion.user_id == user_id,
+                HabitCompletion.habit_id.in_(completion_dates),
+                HabitCompletion.completed_on >= start_date,
+                HabitCompletion.completed_on <= end_date,
+            ).all()
+            for completion in completion_rows:
+                completion_dates[completion.habit_id].add(completion.completed_on)
+        valid_dates = {
+            habit.id: valid_completion_dates(
+                habit,
+                completion_dates[habit.id],
+                pause_intervals.get(habit.id),
+                leave_intervals.get(habit.id),
+                as_of=end_date,
+            )
+            for habit in habits
+        }
 
         current = start_date
         while current <= end_date:
@@ -77,7 +98,7 @@ class CalendarService:
                         "date": current.strftime("%Y-%m-%d"),
                         "type": "habit",
                         "title": h.title,
-                        "status": "due",
+                        "status": "completed" if current in valid_dates[h.id] else "due",
                         "id": str(h.id),
                     })
             current += timedelta(days=1)

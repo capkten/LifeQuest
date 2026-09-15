@@ -14,8 +14,13 @@ from app.models.habit_completion import HabitCompletion
 from app.models.habit_leave import HabitLeaveInterval
 from app.models.habit_pause import HabitPauseInterval
 from app.services.habit_metrics import valid_completion_dates
-from app.services.habit_schedule import is_due, is_excluded_on
-from app.timezone import local_date, day_start_utc
+from app.services.habit_schedule import (
+    is_due,
+    is_excluded_on,
+    week_has_active_schedule,
+    week_start,
+)
+from app.timezone import local_date, day_start_utc, today as china_today
 
 
 def _get_required_exp(level: int) -> int:
@@ -54,13 +59,13 @@ class StatsService:
             "total_habits": total_habits,
             "current_streak": max_streak,
             "total_coins_earned": user.total_coins_earned if user else 0,
-            "total_exp": user.experience if user else 0,
+            "total_exp": user.total_experience if user else 0,
             "current_level": user.level if user else 1,
             "days_active": days_active,
         }
 
     def _periods(self, period: str) -> list:
-        current = local_date(datetime.now(timezone.utc))
+        current = china_today()
         if period == "year":
             month_index = current.year * 12 + current.month - 1
             starts = [date(index // 12, index % 12 + 1, 1) for index in range(month_index - 11, month_index + 2)]
@@ -90,7 +95,7 @@ class StatsService:
         periods = self._periods("week" if period == "week" else "month")
         first_day = date.fromisoformat(periods[0][0])
         last_day = date.fromisoformat(periods[-1][0])
-        today = local_date(datetime.now(timezone.utc))
+        today = china_today()
         completion_rows = self.db.query(HabitCompletion.habit_id, HabitCompletion.completed_on).filter(
             HabitCompletion.user_id == user_id,
             HabitCompletion.completed_on >= first_day,
@@ -114,6 +119,7 @@ class StatsService:
             dates_by_habit[habit_id].add(completed_on)
 
         completed = Counter()
+        weekly_completed = defaultdict(Counter)
         for habit_id, completion_dates in dates_by_habit.items():
             habit = habits_by_id.get(habit_id)
             if habit is None:
@@ -130,14 +136,41 @@ class StatsService:
                     leave_by_habit[habit_id],
                     as_of=today,
                 )
-            for completed_on in valid_dates:
-                if first_day <= completed_on <= last_day:
-                    completed[completed_on.isoformat()] += 1
+            if habit is not None and habit.frequency == "weekly_target" and habit.weekly_target:
+                for completed_on in valid_dates:
+                    if first_day <= completed_on <= last_day:
+                        bucket = week_start(completed_on)
+                        if bucket >= first_day:
+                            weekly_completed[bucket.isoformat()][habit_id] += 1
+            else:
+                for completed_on in valid_dates:
+                    if first_day <= completed_on <= last_day:
+                        completed[completed_on.isoformat()] += 1
+
+        for bucket, habit_counts in weekly_completed.items():
+            for habit_id, count in habit_counts.items():
+                target = habits_by_id[habit_id].weekly_target
+                completed[bucket] += min(count, target)
 
         scheduled = Counter()
         period_end = min(last_day, today)
         for habit in habits:
             created_on = local_date(habit.created_at) if habit.created_at else first_day
+            if habit.frequency == "weekly_target" and habit.weekly_target:
+                current_week = week_start(first_day)
+                if current_week < first_day:
+                    current_week += timedelta(days=7)
+                while current_week <= period_end:
+                    bucket = current_week
+                    if week_has_active_schedule(
+                        habit,
+                        current_week,
+                        pause_by_habit[habit.id],
+                        leave_by_habit[habit.id],
+                    ) and bucket <= last_day:
+                        scheduled[bucket.isoformat()] += habit.weekly_target
+                    current_week += timedelta(days=7)
+                continue
             target = first_day
             while target <= period_end:
                 if (

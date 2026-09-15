@@ -1,9 +1,10 @@
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, String, Integer, Date, DateTime, ForeignKey, UniqueConstraint, Uuid
 from sqlalchemy.orm import relationship
 
 from app.database import Base
+from app.timezone import today
 
 
 class DailyCheckin(Base):
@@ -11,7 +12,7 @@ class DailyCheckin(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Uuid, ForeignKey("users.id"), nullable=False, index=True)
-    checkin_date = Column(Date, default=date.today)
+    checkin_date = Column(Date, default=today)
     streak = Column(Integer, default=1)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 

@@ -23,6 +23,7 @@ from app.models.user import User
 from app.models.world import Npc, NpcEvent, Sect, SectAccessProgress, SectMembership, WorldNode, WorldNodeProgress
 from app.repositories.cultivation import CultivationRepository
 from app.repositories.user import UserRepository
+from app.timezone import day_bounds_utc, day_start_utc, today as china_today
 from app.services.content_catalog import (
     CULTIVATION_RESOURCE_RULES,
     DIFFICULTY_FACTORS,
@@ -1093,7 +1094,7 @@ class CultivationService:
 
     @staticmethod
     def _utc_today() -> date:
-        return datetime.now(timezone.utc).date()
+        return china_today()
 
     def _ensure_fixed_core_npcs(self, user_id: UUID):
         roles = (("sect master", "玄衡宗主"), ("transmission elder", "传法长老"), ("trial envoy", "入门使者"))
@@ -1595,15 +1596,12 @@ class CultivationService:
         last_attempt = self.db.query(TribulationAttempt).filter_by(user_id=user_id, attempted_date=self._utc_today()).order_by(TribulationAttempt.attempted_at.desc()).first()
         if last_attempt is None:
             return None
-        attempted_at = last_attempt.attempted_at
-        if attempted_at.tzinfo is None:
-            attempted_at = attempted_at.replace(tzinfo=timezone.utc)
-        next_day = (attempted_at + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        next_day = day_start_utc(self._utc_today() + timedelta(days=1))
         return next_day if next_day > datetime.now(timezone.utc) else None
 
     @staticmethod
     def _utc_today():
-        return datetime.now(timezone.utc).date()
+        return china_today()
 
     @staticmethod
     def _is_daily_attempt_conflict(exc: IntegrityError) -> bool:
@@ -1735,10 +1733,11 @@ class CultivationService:
         return round(realm_base + technique_bonus + aptitude_efficiency + sect_bonus, 4)
 
     def _daily_reward_event_count(self, user_id: UUID) -> int:
-        start = datetime.combine(self._utc_today(), datetime.min.time(), tzinfo=timezone.utc)
+        start, end = day_bounds_utc(self._utc_today())
         return self.db.query(CultivationLog.id).filter(
             CultivationLog.user_id == user_id,
             CultivationLog.created_at >= start,
+            CultivationLog.created_at < end,
         ).count()
 
     @staticmethod

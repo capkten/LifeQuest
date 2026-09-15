@@ -16,7 +16,7 @@ def local_date(value: datetime) -> date:
 
 
 def today() -> date:
-    return local_date(datetime.now(timezone.utc))
+    return datetime.now(APP_TIMEZONE).date()
 
 
 def day_start_utc(value: date) -> datetime:

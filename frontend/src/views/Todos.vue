@@ -1432,6 +1432,7 @@ async function saveItem() {
     } else {
       const updated = await todoService.updateGoal(editingItem.value.id, base)
       const idx = goals.value.findIndex(g => g.id === editingItem.value.id)
+      // The explicit completion action owns reward feedback; edits only sync goal state.
       if (idx !== -1) goals.value[idx] = updated
     }
     cancelDialog()

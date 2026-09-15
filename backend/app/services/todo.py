@@ -39,7 +39,7 @@ from app.services.content_catalog import (
 )
 from app.services.title import TitleService
 from app.services.cultivation import CultivationService
-from app.timezone import local_date, day_start_utc, as_utc
+from app.timezone import local_date, day_start_utc, as_utc, today as china_today
 from app.services.transaction import rollback_on_error
 from app.services.habit_schedule import (
     is_due,
@@ -90,7 +90,7 @@ class TodoService:
 
     @classmethod
     def _today(cls) -> date:
-        return cls._local_date(datetime.now(timezone.utc))
+        return china_today()
 
     @classmethod
     def _today_start_utc(cls) -> datetime:
@@ -817,8 +817,11 @@ class TodoService:
     def get_goals(self, user_id: UUID) -> List[Goal]:
         return self.goal_repo.get_by_user(user_id)
 
+    @rollback_on_error
     def update_goal(self, goal: Goal, goal_in: GoalUpdate) -> Goal:
         update_data = goal_in.model_dump(exclude_unset=True)
+        if update_data.get("status") == TaskStatus.COMPLETED:
+            return self._complete_goal_and_settle(goal, goal.user_id, update_data)
         return self.goal_repo.update(goal, update_data)
 
     def delete_goal(self, goal_id: UUID) -> bool:
@@ -827,11 +830,24 @@ class TodoService:
     @rollback_on_error
     def complete_goal(self, goal: Goal, user_id: UUID) -> Goal:
         """Complete a goal and award coins and experience to the user."""
+        return self._complete_goal_and_settle(goal, user_id)
+
+    def _complete_goal_and_settle(
+        self,
+        goal: Goal,
+        user_id: UUID,
+        update_data: dict | None = None,
+    ) -> Goal:
         now = datetime.now(timezone.utc)
         self.user_repo.lock(user_id)
         self.db.refresh(goal)
         if goal.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
+        if update_data:
+            for key, value in update_data.items():
+                if key != "status":
+                    setattr(goal, key, value)
+            self.db.flush()
         changed = self.db.execute(update(Goal).where(
             Goal.id == goal.id,
             Goal.user_id == user_id,
@@ -846,6 +862,7 @@ class TodoService:
             self.db.commit()
             return goal
 
+        self.db.refresh(goal)
         user = self.user_repo.get_by_id(user_id)
         settlement = None
         if user:

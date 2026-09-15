@@ -1,5 +1,5 @@
 import math
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from uuid import UUID, uuid4
@@ -496,6 +496,24 @@ def test_npc_cultivation_uses_utc_day_across_midnight_and_is_idempotent(db_sessi
     assert after_crossing_utc_day > before
     assert npc.cultivation == after_crossing_utc_day
     assert npc.cultivation_updated_on == date(2026, 8, 18)
+
+
+def test_cultivation_daily_date_uses_china_midnight(db_session, user, monkeypatch):
+    from app.services.cultivation import CultivationService
+
+    class FrozenDatetime(datetime):
+        current = datetime(2026, 9, 15, 15, 59, 59, tzinfo=timezone.utc)
+
+        @classmethod
+        def now(cls, tz=None):
+            return cls.current.astimezone(tz) if tz else cls.current.replace(tzinfo=None)
+
+    monkeypatch.setattr("app.timezone.datetime", FrozenDatetime)
+    service = CultivationService(db_session)
+    assert service._utc_today() == date(2026, 9, 15)
+
+    FrozenDatetime.current = datetime(2026, 9, 15, 16, tzinfo=timezone.utc)
+    assert service._utc_today() == date(2026, 9, 16)
 
 
 def test_npc_population_is_stable_but_isolated_between_users(db_session, user):

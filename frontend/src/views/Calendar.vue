@@ -52,7 +52,7 @@
                 v-for="dot in cell.dots.slice(0, 3)"
                 :key="dot.type + dot.id"
                 class="event-dot"
-                :class="'event-dot--' + dot.type"
+                :class="['event-dot--' + dot.type, dot.status === 'completed' ? 'event-dot--completed' : '']"
                 :style="dot.type === 'task' && dot.project_color ? { background: dot.project_color } : undefined"
               ></span>
               <span v-if="cell.dots.length > 3" class="event-more">+{{ cell.dots.length - 3 }}</span>
@@ -711,6 +711,11 @@ onMounted(() => {
 
 .event-dot--checkin {
   background: #eab308;
+}
+
+.event-dot--completed {
+  outline: 2px solid var(--color-success);
+  outline-offset: 1px;
 }
 
 .event-more {
