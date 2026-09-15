@@ -98,8 +98,8 @@
         <div class="group-date">{{ group.date }}</div>
         <div class="group-items">
           <div v-for="tx in group.items" :key="tx.id" class="transaction-item">
-            <div class="tx-icon" :class="tx.type === 'spend' ? 'tx-icon--expense' : 'tx-icon--income'">
-              <svg v-if="tx.type !== 'spend'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <div class="tx-icon" :class="coinTransactionPresentation(tx).iconClass">
+              <svg v-if="!coinTransactionPresentation(tx).isSpend" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <line x1="12" y1="19" x2="12" y2="5" />
                 <polyline points="5 12 12 5 19 12" />
               </svg>
@@ -112,8 +112,8 @@
               <span class="tx-desc">{{ tx.description || sourceLabel(tx.source) }}</span>
               <span class="tx-source">{{ sourceLabel(tx.source) }}</span>
             </div>
-            <span class="tx-amount" :class="tx.type === 'spend' ? 'tx-amount--negative' : 'tx-amount--positive'">
-              {{ tx.type === 'spend' ? '-' : '+' }}{{ tx.amount }}
+            <span class="tx-amount" :class="coinTransactionPresentation(tx).amountClass">
+              {{ coinTransactionPresentation(tx).sign }}{{ coinTransactionPresentation(tx).amount }}
             </span>
           </div>
         </div>
@@ -137,6 +137,11 @@
 import { ref, computed, onMounted } from 'vue'
 import { useUserStats } from '../composables/useUserStats'
 import { coinService } from '../services/coin'
+import {
+  buildCoinHistoryParams,
+  coinTransactionDateKey,
+  coinTransactionPresentation,
+} from '../services/coinHistoryContract.js'
 import { labelSource } from '../utils/displayLabels'
 import { getErrorMessage } from '../utils/errorMessage'
 
@@ -170,23 +175,19 @@ function sourceLabel(source) {
   return labelSource(source)
 }
 
-function coinTypeParam(value) {
-  return { income: 'earn', expense: 'spend' }[value] || ''
-}
-
 function historyParams(skip) {
-  const params = { skip, limit: PAGE_SIZE }
-  const coinType = coinTypeParam(typeFilter.value)
-  if (coinType) params.coin_type = coinType
-  if (sourceFilter.value) params.source = sourceFilter.value
-  return params
+  return buildCoinHistoryParams({
+    type: typeFilter.value,
+    source: sourceFilter.value,
+    skip,
+    limit: PAGE_SIZE,
+  })
 }
 
 const groupedTransactions = computed(() => {
   const groups = {}
   for (const tx of transactions.value) {
-    const d = tx.created_at ? new Date(tx.created_at) : new Date()
-    const key = d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+    const key = coinTransactionDateKey(tx.created_at)
     if (!groups[key]) groups[key] = []
     groups[key].push(tx)
   }

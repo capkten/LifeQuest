@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from app.models.todo import Habit
 from app.models.coin_transaction import CoinSource, CoinTransaction, CoinType
 from tests.conftest import has_column, run_startup_migrations
@@ -114,3 +116,47 @@ def test_coin_history_rejects_unknown_direction(client, auth_headers):
     )
 
     assert response.status_code == 422
+
+
+def test_coin_history_applies_source_and_date_filters_together(
+    client, auth_headers, db_session, user,
+):
+    db_session.add_all([
+        CoinTransaction(
+            user_id=user.id,
+            amount=4,
+            type=CoinType.SPEND,
+            source=CoinSource.SHOP,
+            created_at=datetime(2026, 9, 14, 15, tzinfo=timezone.utc),
+        ),
+        CoinTransaction(
+            user_id=user.id,
+            amount=6,
+            type=CoinType.SPEND,
+            source=CoinSource.SHOP,
+            created_at=datetime(2026, 9, 15, 15, tzinfo=timezone.utc),
+        ),
+        CoinTransaction(
+            user_id=user.id,
+            amount=8,
+            type=CoinType.SPEND,
+            source=CoinSource.TASK,
+            created_at=datetime(2026, 9, 15, 15, tzinfo=timezone.utc),
+        ),
+    ])
+    db_session.commit()
+
+    response = client.get(
+        "/api/coins/history",
+        params={
+            "coin_type": "spend",
+            "source": "shop",
+            "start_date": "2026-09-15T00:00:00Z",
+            "end_date": "2026-09-15T23:59:59Z",
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["count"] == 1
+    assert [row["amount"] for row in response.json()["transactions"]] == [6]
