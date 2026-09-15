@@ -25,3 +25,23 @@ test('goal editing does not settle a reward a second time', async () => {
   assert.ok(saveItem, 'saveItem must remain available')
   assert.doesNotMatch(saveItem, /settleCompletion\(/)
 })
+
+test('coin history uses the canonical filtered pagination contract', async () => {
+  const service = await readFile(new URL('../services/coin.js', import.meta.url), 'utf8')
+  const history = await readFile(new URL('./CoinHistory.vue', import.meta.url), 'utf8')
+
+  assert.match(service, /coins\/history/)
+  assert.match(history, /coin_type/)
+  assert.match(history, /skip/)
+  assert.match(history, /result\.transactions/)
+  assert.doesNotMatch(history, /params\.type/)
+  assert.doesNotMatch(history, /result\?\.data/)
+})
+
+test('coin history derives spending direction from transaction type', async () => {
+  const history = await readFile(new URL('./CoinHistory.vue', import.meta.url), 'utf8')
+
+  assert.match(history, /tx\.type === ['"]spend['"]\s*\? ['"]-['"] : ['"]\+['"]/)
+  assert.match(history, /tx\.type === ['"]spend['"]\s*\? ['"]tx-icon--expense['"] : ['"]tx-icon--income['"]/)
+  assert.doesNotMatch(history, /tx\.amount > 0 \? ['"]\+['"] : ['"]["']/)
+})

@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.models.coin_transaction import CoinType
 from app.repositories.coin_transaction import CoinTransactionRepository
 from app.services.content_catalog import TODO_SOURCE_PREFIXES, source_label
 
@@ -24,6 +25,8 @@ class CoinService:
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
     ) -> dict:
+        if coin_type is not None:
+            coin_type = CoinType(coin_type)
         transactions = self.coin_repo.get_by_user(
             user_id,
             skip=skip,
@@ -61,6 +64,9 @@ class CoinService:
         source_id: Optional[str] = None,
         description: str = "",
     ):
+        if amount < 0:
+            raise ValueError("amount must be non-negative")
+        coin_type = CoinType(coin_type)
         if not description:
             description = self._default_description(source)
         return self.coin_repo.create_transaction(

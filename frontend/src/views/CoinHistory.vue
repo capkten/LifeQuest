@@ -98,8 +98,8 @@
         <div class="group-date">{{ group.date }}</div>
         <div class="group-items">
           <div v-for="tx in group.items" :key="tx.id" class="transaction-item">
-            <div class="tx-icon" :class="tx.amount > 0 ? 'tx-icon--income' : 'tx-icon--expense'">
-              <svg v-if="tx.amount > 0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <div class="tx-icon" :class="tx.type === 'spend' ? 'tx-icon--expense' : 'tx-icon--income'">
+              <svg v-if="tx.type !== 'spend'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <line x1="12" y1="19" x2="12" y2="5" />
                 <polyline points="5 12 12 5 19 12" />
               </svg>
@@ -112,8 +112,8 @@
               <span class="tx-desc">{{ tx.description || sourceLabel(tx.source) }}</span>
               <span class="tx-source">{{ sourceLabel(tx.source) }}</span>
             </div>
-            <span class="tx-amount" :class="tx.amount > 0 ? 'tx-amount--positive' : 'tx-amount--negative'">
-              {{ tx.amount > 0 ? '+' : '' }}{{ tx.amount }}
+            <span class="tx-amount" :class="tx.type === 'spend' ? 'tx-amount--negative' : 'tx-amount--positive'">
+              {{ tx.type === 'spend' ? '-' : '+' }}{{ tx.amount }}
             </span>
           </div>
         </div>
@@ -152,7 +152,7 @@ const totalsError = ref(null)
 const totalsLoading = ref(false)
 const typeFilter = ref('')
 const sourceFilter = ref('')
-const page = ref(1)
+const historyCount = ref(0)
 const hasMore = ref(false)
 let requestSequence = 0
 let filterGeneration = 0
@@ -164,8 +164,22 @@ const typeOptions = [
   { label: '支出', value: 'expense' }
 ]
 
+const PAGE_SIZE = 20
+
 function sourceLabel(source) {
   return labelSource(source)
+}
+
+function coinTypeParam(value) {
+  return { income: 'earn', expense: 'spend' }[value] || ''
+}
+
+function historyParams(skip) {
+  const params = { skip, limit: PAGE_SIZE }
+  const coinType = coinTypeParam(typeFilter.value)
+  if (coinType) params.coin_type = coinType
+  if (sourceFilter.value) params.source = sourceFilter.value
+  return params
 }
 
 const groupedTransactions = computed(() => {
@@ -187,15 +201,13 @@ async function fetchHistory() {
   loadMoreError.value = null
   loadingMore.value = false
   hasMore.value = false
-  page.value = 1
+  historyCount.value = 0
   try {
-    const params = { page: 1, limit: 20 }
-    if (typeFilter.value) params.type = typeFilter.value
-    if (sourceFilter.value) params.source = sourceFilter.value
-    const result = await coinService.getHistory(params)
+    const result = await coinService.getHistory(historyParams(0))
     if (requestId !== requestSequence) return
-    transactions.value = Array.isArray(result) ? result : (result?.data || [])
-    hasMore.value = transactions.value.length >= 20
+    transactions.value = result.transactions || []
+    historyCount.value = result?.count || 0
+    hasMore.value = transactions.value.length < historyCount.value
   } catch (e) {
     if (requestId === requestSequence) error.value = getErrorMessage(e, '加载金币记录失败，请重试。')
   } finally {
@@ -207,21 +219,17 @@ async function loadMore() {
   if (loadingMore.value || !hasMore.value) return
   const requestId = ++requestSequence
   const generation = filterGeneration
-  const nextPage = page.value + 1
-  const type = typeFilter.value
-  const source = sourceFilter.value
+  const nextSkip = transactions.value.length
   loadingMore.value = true
   loadMoreError.value = null
   try {
-    const params = { page: nextPage, limit: 20 }
-    if (type) params.type = type
-    if (source) params.source = source
+    const params = historyParams(nextSkip)
     const result = await coinService.getHistory(params)
     if (requestId !== requestSequence || generation !== filterGeneration) return
-    const items = Array.isArray(result) ? result : (result?.data || [])
+    const items = result.transactions || []
     transactions.value.push(...items)
-    page.value = nextPage
-    hasMore.value = items.length >= 20
+    historyCount.value = result?.count || historyCount.value
+    hasMore.value = transactions.value.length < historyCount.value
   } catch (e) {
     if (requestId === requestSequence && generation === filterGeneration) {
       loadMoreError.value = getErrorMessage(e, '加载更多金币记录失败，请重试。')

@@ -182,6 +182,38 @@ def test_purchase_success(client):
     assert item_detail["stock"] == 3  # 5 - 2
 
 
+def test_purchase_history_uses_positive_spend_magnitude(client):
+    headers = _register_and_login(client, "coin-buyer", "coin-buyer@example.com")
+    item_response = _create_item(client, headers, coin_price=10, stock=5)
+    item_id = item_response.json()["id"]
+
+    task_response = client.post(
+        "/api/todos/tasks",
+        json={"title": "Earn coins", "coins_reward": 100, "exp_reward": 0},
+        headers=headers,
+    )
+    task_id = task_response.json()["id"]
+    assert client.post(f"/api/todos/tasks/{task_id}/complete", headers=headers).status_code == 200
+
+    purchase_response = client.post(
+        "/api/shop/exchange",
+        json={"item_id": item_id, "quantity": 2},
+        headers=headers,
+    )
+    assert purchase_response.status_code == 200
+
+    history = client.get(
+        "/api/coins/history",
+        params={"coin_type": "spend", "source": "shop"},
+        headers=headers,
+    )
+    assert history.status_code == 200
+    transaction = history.json()["transactions"][0]
+    assert transaction["type"] == "spend"
+    assert transaction["amount"] == 20
+    assert transaction["amount"] > 0
+
+
 def test_update_item_authorization(client):
     """Only the creator can update a shop item."""
     headers_creator = _register_and_login(client, "creator", "creator@example.com")

@@ -138,11 +138,14 @@ class ShopService:
         if not item.is_active:
             raise HTTPException(status_code=400, detail="Item is not available")
 
+        total_cost = item.coin_price * exchange_in.quantity
+        if total_cost < 0:
+            raise HTTPException(status_code=400, detail="Item price must be non-negative")
+
         # Only decrement stock for finite-stock items (stock >= 0)
         if item.stock >= 0:
             if not self.item_repo.decrement_stock_atomic(exchange_in.item_id, exchange_in.quantity):
                 raise HTTPException(status_code=400, detail="Item is out of stock")
-        total_cost = item.coin_price * exchange_in.quantity
 
         user = self.user_repo.get_by_id(user_id)
         if user is None:

@@ -1,4 +1,5 @@
 from app.models.todo import Habit
+from app.models.coin_transaction import CoinSource, CoinTransaction, CoinType
 from tests.conftest import has_column, run_startup_migrations
 
 
@@ -59,3 +60,57 @@ def test_startup_migration_is_repeatable(migration_database):
     run_startup_migrations(migration_database)
     run_startup_migrations(migration_database)
     assert has_column(migration_database, "users", "total_experience")
+
+
+def test_coin_history_filters_and_returns_transactions_key(
+    client, auth_headers, db_session, coin_rows, user,
+):
+    db_session.add_all([
+        CoinTransaction(
+            user_id=user.id,
+            amount=10,
+            type=CoinType.EARN,
+            source=CoinSource.TASK,
+            description="earned",
+        ),
+        CoinTransaction(
+            user_id=user.id,
+            amount=3,
+            type=CoinType.SPEND,
+            source=CoinSource.SHOP,
+            description="first spend",
+        ),
+        CoinTransaction(
+            user_id=user.id,
+            amount=5,
+            type=CoinType.SPEND,
+            source=CoinSource.SHOP,
+            description="second spend",
+        ),
+    ])
+    db_session.commit()
+    assert len(coin_rows()) == 3
+
+    response = client.get(
+        "/api/coins/history",
+        params={"coin_type": "spend", "skip": 1, "limit": 1},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert set(response.json()) >= {"transactions", "total_earned", "total_spent", "count"}
+    assert len(response.json()["transactions"]) == 1
+    assert response.json()["transactions"][0]["type"] == "spend"
+    assert response.json()["total_earned"] == 10
+    assert response.json()["total_spent"] == 8
+    assert response.json()["count"] == 2
+
+
+def test_coin_history_rejects_unknown_direction(client, auth_headers):
+    response = client.get(
+        "/api/coins/history",
+        params={"coin_type": "invalid"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
