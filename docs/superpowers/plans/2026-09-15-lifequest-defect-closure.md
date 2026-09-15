@@ -566,6 +566,7 @@ git commit -m "fix(finance): return period-aware budget statistics"
 - Modify: `backend/app/api/finance.py`
 - Modify: `frontend/src/services/finance.js`
 - Modify: `frontend/src/views/FinanceDebts.vue`
+- Modify: `frontend/src/views/Finance.vue`
 - Modify: `backend/tests/test_debts_recurring.py`
 - Modify: `backend/tests/test_finance.py`
 - Modify: `backend/tests/test_defect_closure.py`
@@ -613,7 +614,7 @@ Build `payments` from `DebtPayment` rows ordered by payment date/id. Add `Financ
 
 - [ ] **Step 5: Fix the debt UI.**
 
-Change `FinanceDebts.vue` payload fields and tab filter mapping, send `remaining`, display `Number.isFinite(remaining) ? remaining : amount` only as a compatibility fallback, and render zero correctly. Render `payments` when present. Add `financeService.updateRecurring(id, data)` for the new recurring update endpoint; no new recurring page is introduced because the current repository has no recurring view. The service consumer must retain its form on failure.
+Change `FinanceDebts.vue` payload fields and tab filter mapping, send `remaining`, display `Number.isFinite(remaining) ? remaining : amount` only as a compatibility fallback, and render zero correctly. Render `payments` when present. Add `financeService.updateRecurring(id, data)` for the new recurring update endpoint; no new recurring page is introduced because the current repository has no recurring view. In `Finance.vue`, capture `const wasEditing = Boolean(editingTx.value)` before `cancelQuickAdd()`, then show “流水已更新” when true and “记账成功” otherwise. The service consumer must retain its form on failure.
 
 - [ ] **Step 6: Run and commit.**
 
