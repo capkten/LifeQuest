@@ -1255,8 +1255,9 @@ def update_transaction(
     description: Optional[str] = None,
     date_str: Optional[str] = None,
     to_account_id: Optional[str] = None,
+    clear_to_account_id: bool = False,
 ) -> Any:
-    """更新交易并同步账户余额。只传入需要修改的字段。"""
+    """更新交易并同步账户余额。只传入需要修改的字段；用 clear_to_account_id 清空转入账户。"""
     db = SessionLocal()
     try:
         uid = _resolve_user_id(db)
@@ -1280,7 +1281,11 @@ def update_transaction(
             update_data["description"] = description
         if date_str is not None:
             update_data["date"] = date.fromisoformat(date_str)
-        if to_account_id is not None:
+        if clear_to_account_id and to_account_id is not None:
+            raise ValueError("to_account_id and clear_to_account_id cannot be used together")
+        if clear_to_account_id:
+            update_data["to_account_id"] = None
+        elif to_account_id is not None:
             update_data["to_account_id"] = UUID(to_account_id)
         if not update_data:
             return _serialize(transaction)

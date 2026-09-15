@@ -20,6 +20,22 @@ def _round_money(v: float | Decimal | None) -> float | None:
     return float(Decimal(str(v)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
+def _validate_account_values(
+    account_type: AccountType,
+    balance: float,
+    credit_limit: Optional[float],
+) -> None:
+    balance_value = Decimal(str(balance))
+    limit_value = Decimal(str(credit_limit)) if credit_limit is not None else Decimal("0")
+    if limit_value < 0:
+        raise ValueError("credit_limit must be non-negative")
+    if account_type == AccountType.CREDIT:
+        if balance_value < -limit_value:
+            raise ValueError("Credit account balance cannot be below its credit limit")
+    elif balance_value < 0:
+        raise ValueError("Account balance cannot be negative")
+
+
 # Account schemas
 class AccountCreate(BaseModel):
     name: str
@@ -34,6 +50,11 @@ class AccountCreate(BaseModel):
     sort_order: int = 0
 
     _round_balance = field_validator("balance", "credit_limit", mode="before")(_round_money)
+
+    @model_validator(mode="after")
+    def _validate_account_balance(self):
+        _validate_account_values(self.type, self.balance, self.credit_limit)
+        return self
 
 
 class AccountUpdate(BaseModel):
@@ -50,6 +71,16 @@ class AccountUpdate(BaseModel):
     sort_order: Optional[int] = None
 
     _round_balance = field_validator("balance", "credit_limit", mode="before")(_round_money)
+
+    @model_validator(mode="after")
+    def _validate_explicit_account_values(self):
+        if self.type is None and "type" in self.model_fields_set:
+            raise ValueError("type must not be null")
+        if self.balance is None and "balance" in self.model_fields_set:
+            raise ValueError("balance must not be null")
+        if self.credit_limit is not None and self.credit_limit < 0:
+            raise ValueError("credit_limit must be non-negative")
+        return self
 
 
 class AccountResponse(BaseModel):

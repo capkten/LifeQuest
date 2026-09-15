@@ -316,6 +316,27 @@ def test_mcp_finance_delete_reverses_balance_and_pays_debt(mcp_crud_db):
     assert mcp_server.list_debts()[0]["remaining"] == 400
 
 
+def test_mcp_update_transaction_can_explicitly_clear_transfer_target(mcp_crud_db):
+    source = mcp_server.create_account("转出账户", type="cash", balance=100)
+    target = mcp_server.create_account("转入账户", type="cash", balance=0)
+    transfer = mcp_server.transfer(source["id"], target["id"], 50)["transaction"]
+    mcp_server.create_transaction(target["id"], "expense", 50)
+
+    updated = mcp_server.update_transaction(
+        transfer["id"],
+        account_id=target["id"],
+        type="income",
+        amount=50,
+        clear_to_account_id=True,
+    )
+
+    assert updated["type"] == "income"
+    assert updated["to_account_id"] is None
+    balances = {item["id"]: item["balance"] for item in mcp_server.list_accounts()}
+    assert balances[source["id"]] == 100
+    assert balances[target["id"]] == 0
+
+
 def test_mcp_create_category_rejects_parent_owned_by_another_user(mcp_crud_db):
     db, owner = mcp_crud_db
     owner_id = owner.id

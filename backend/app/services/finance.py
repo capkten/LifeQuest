@@ -5,10 +5,10 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import func, update
+from sqlalchemy import case, func, update
 from sqlalchemy.orm import Session
 
-from app.models.account import Account
+from app.models.account import Account, AccountType
 from app.models.budget import Budget
 from app.models.debt import Debt, DebtPayment, DebtStatus
 from app.models.finance_category import FinanceCategory, CategoryType
@@ -76,7 +76,14 @@ class FinanceService:
         amount = Decimal(str(amount))
         statement = update(Account).where(Account.id == account_id)
         if require_sufficient and amount < 0:
-            statement = statement.where(Account.balance >= -amount)
+            minimum_balance = case(
+                (
+                    Account.type == AccountType.CREDIT.value,
+                    -func.coalesce(Account.credit_limit, 0),
+                ),
+                else_=0,
+            )
+            statement = statement.where(Account.balance + amount >= minimum_balance)
         changed = self.db.execute(
             statement.values(balance=Account.balance + amount)
             .execution_options(synchronize_session=False)
@@ -121,14 +128,31 @@ class FinanceService:
     def create_account(self, user_id: UUID, data: AccountCreate) -> Account:
         d = data.model_dump()
         d["user_id"] = user_id
+        self._validate_account_values(
+            d["type"], d["balance"], d.get("credit_limit"),
+        )
         return self.account_repo.create(d)
 
     def get_accounts(self, user_id: UUID) -> List[Account]:
         return self.account_repo.get_by_user(user_id)
 
     def update_account(self, account: Account, data: AccountUpdate) -> Account:
+        self.user_repo.lock(account.user_id)
+        self.db.refresh(account)
         update_data = data.model_dump(exclude_unset=True)
-        return self.account_repo.update(account, update_data)
+        new_type = update_data.get("type", account.type)
+        new_balance = update_data.get("balance", account.balance)
+        new_credit_limit = update_data.get("credit_limit", account.credit_limit)
+        self._validate_account_values(new_type, new_balance, new_credit_limit)
+        if not self._is_credit_account(new_type):
+            update_data.setdefault("credit_limit", None)
+            update_data.setdefault("billing_day", None)
+            update_data.setdefault("repayment_day", None)
+        for key, value in update_data.items():
+            setattr(account, key, value)
+        self.db.commit()
+        self.db.refresh(account)
+        return account
 
     def delete_account(self, account: Account) -> bool:
         account.is_active = False
@@ -173,19 +197,40 @@ class FinanceService:
 
     def _apply_transaction_balance_effect(self, transaction: FinanceTransaction, reverse: bool = False) -> None:
         multiplier = -1 if reverse else 1
-        amount = Decimal(str(transaction.amount)) * multiplier
+        for account_id, effect in self._transaction_balance_effects(transaction, multiplier).items():
+            self._change_balance(account_id, effect, require_sufficient=effect < 0)
 
+    @staticmethod
+    def _transaction_balance_effects(
+        transaction: FinanceTransaction,
+        multiplier: int = 1,
+    ) -> dict[UUID, Decimal]:
+        amount = Decimal(str(transaction.amount)) * multiplier
         if transaction.type == FinanceTransactionType.INCOME:
-            self._change_balance(transaction.account_id, amount)
-        elif transaction.type == FinanceTransactionType.EXPENSE:
-            self._change_balance(
-                transaction.account_id, -amount, require_sufficient=not reverse,
-            )
-        elif transaction.type == FinanceTransactionType.TRANSFER:
-            self._change_balance(
-                transaction.account_id, -amount, require_sufficient=not reverse,
-            )
-            self._change_balance(transaction.to_account_id, amount)
+            return {transaction.account_id: amount}
+        if transaction.type == FinanceTransactionType.EXPENSE:
+            return {transaction.account_id: -amount}
+        if transaction.type == FinanceTransactionType.TRANSFER:
+            return {
+                transaction.account_id: -amount,
+                transaction.to_account_id: amount,
+            }
+        return {}
+
+    def _apply_transaction_update_balance_effect(
+        self,
+        old_effects: dict[UUID, Decimal],
+        new_effects: dict[UUID, Decimal],
+    ) -> None:
+        net_effects: dict[UUID, Decimal] = {}
+        for account_id, effect in old_effects.items():
+            net_effects[account_id] = net_effects.get(account_id, Decimal("0")) + effect
+        for account_id, effect in new_effects.items():
+            net_effects[account_id] = net_effects.get(account_id, Decimal("0")) + effect
+
+        for account_id, effect in net_effects.items():
+            if effect:
+                self._change_balance(account_id, effect, require_sufficient=effect < 0)
 
     # --- Category CRUD ---
 
@@ -309,11 +354,12 @@ class FinanceService:
         elif new_to_account_id:
             raise HTTPException(status_code=400, detail="Non-transfer transactions cannot have a target account")
 
-        self._apply_transaction_balance_effect(transaction, reverse=True)
+        old_effects = self._transaction_balance_effects(transaction, multiplier=-1)
         for key, value in update_data.items():
             setattr(transaction, key, value)
         self.db.flush()
-        self._apply_transaction_balance_effect(transaction, reverse=False)
+        new_effects = self._transaction_balance_effects(transaction)
+        self._apply_transaction_update_balance_effect(old_effects, new_effects)
 
         self.db.commit()
         self.db.refresh(transaction)
@@ -532,6 +578,26 @@ class FinanceService:
         }
 
     # --- Internal helpers ---
+
+    @staticmethod
+    def _is_credit_account(account_type) -> bool:
+        return getattr(account_type, "value", account_type) == AccountType.CREDIT.value
+
+    def _validate_account_values(
+        self,
+        account_type,
+        balance,
+        credit_limit,
+    ) -> None:
+        balance_value = Decimal(str(balance))
+        limit_value = Decimal(str(credit_limit)) if credit_limit is not None else Decimal("0")
+        if limit_value < 0:
+            raise HTTPException(status_code=422, detail="信用额度不能为负数")
+        minimum_balance = -limit_value if self._is_credit_account(account_type) else Decimal("0")
+        if balance_value < minimum_balance:
+            if self._is_credit_account(account_type):
+                raise HTTPException(status_code=422, detail="信用卡余额不能低于信用额度")
+            raise HTTPException(status_code=422, detail="普通账户余额不能为负数")
 
     def _award_transaction_exp(self, user_id: UUID, reward_date: date):
         user = self.user_repo.get_by_id(user_id)

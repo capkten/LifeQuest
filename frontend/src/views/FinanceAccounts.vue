@@ -29,10 +29,10 @@
       </div>
     </div>
 
-    <!-- Total Assets -->
+    <!-- Net Worth -->
     <div class="total-assets">
-      <span class="total-assets-label">总资产</span>
-      <span class="total-assets-value">{{ formatMoney(totalAssets) }}</span>
+      <span class="total-assets-label">净资产</span>
+      <span class="total-assets-value">{{ formatMoney(netAssets) }}</span>
     </div>
 
     <div v-if="loading" class="loading-state">
@@ -86,6 +86,9 @@
         <div class="account-row-info">
           <span class="account-row-name">{{ acct.name }}</span>
           <span class="account-row-type">{{ accountTypeLabel(acct.type) }}</span>
+          <span v-if="acct.type === 'credit'" class="account-row-credit">
+            已用额度 {{ formatMoney(creditUsed(acct)) }} · 可用额度 {{ formatMoney(creditAvailable(acct)) }}
+          </span>
         </div>
         <div class="account-row-balance">
           {{ formatMoney(acct.balance) }}
@@ -139,7 +142,21 @@
             </div>
             <div class="form-group">
               <label class="form-label" for="acct-balance">初始余额</label>
-              <input id="acct-balance" v-model.number="form.balance" type="number" class="form-input" step="0.01" required />
+              <input
+                id="acct-balance"
+                v-model.number="form.balance"
+                type="number"
+                class="form-input"
+                step="0.01"
+                :min="form.type === 'credit' ? -Number(form.credit_limit || 0) : 0"
+                required
+              />
+              <p class="form-help">
+                <template v-if="form.type === 'credit'">
+                  信用卡可为负，余额最低为 {{ formatMoney(-Number(form.credit_limit || 0)) }}；当前欠款 {{ formatMoney(formCreditUsed) }}，可用额度 {{ formatMoney(formCreditAvailable) }}。
+                </template>
+                <template v-else>普通账户余额不能为负数。</template>
+              </p>
             </div>
             <div v-if="form.type === 'credit'" class="form-row">
               <div class="form-group">
@@ -306,8 +323,18 @@ const transferForm = ref({
   from_account_id: '', to_account_id: '', amount: null, description: ''
 })
 
-const totalAssets = computed(() => {
+const netAssets = computed(() => {
   return accounts.value.reduce((sum, a) => sum + Number(a.balance || 0), 0)
+})
+
+const formCreditUsed = computed(() => {
+  if (form.value.type !== 'credit') return 0
+  return Math.max(0, -Number(form.value.balance || 0))
+})
+
+const formCreditAvailable = computed(() => {
+  if (form.value.type !== 'credit') return 0
+  return Math.max(0, Number(form.value.credit_limit || 0) - formCreditUsed.value)
 })
 
 function formatMoney(val) {
@@ -316,6 +343,14 @@ function formatMoney(val) {
 
 function accountTypeLabel(type) {
   return labelAccountType(type)
+}
+
+function creditUsed(account) {
+  return Math.max(0, -Number(account.balance || 0))
+}
+
+function creditAvailable(account) {
+  return Math.max(0, Number(account.credit_limit || 0) - creditUsed(account))
 }
 
 function openCreate() {
@@ -377,6 +412,15 @@ async function fetchAccounts() {
 
 async function saveAccount() {
   if (!form.value.name.trim()) return
+  const balance = Number(form.value.balance)
+  const creditLimit = Number(form.value.credit_limit || 0)
+  const minimumBalance = form.value.type === 'credit' ? -creditLimit : 0
+  if (!Number.isFinite(balance) || balance < minimumBalance) {
+    dialogError.value = form.value.type === 'credit'
+      ? '信用卡余额不能低于信用额度'
+      : '普通账户余额不能为负数'
+    return
+  }
   saving.value = true
   dialogError.value = null
   try {
@@ -807,9 +851,21 @@ select.form-input { appearance: auto; }
   font-size: var(--font-size-sm);
 }
 
+.account-row-credit {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
 .account-row-balance {
   font-size: var(--font-size-lg);
   min-width: 120px;
+}
+
+.form-help {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
 }
 
 .empty-state,

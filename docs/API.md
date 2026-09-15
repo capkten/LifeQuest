@@ -1099,7 +1099,7 @@ python backend/mcp_server.py
 ```json
 {
   "name": "账户名称",
-  "type": "cash|bank|credit|investment|other",
+  "type": "cash|bank|credit|alipay|wechat|debt|other",
   "icon": "图标",
   "balance": 0.0,
   "credit_limit": 0.0,
@@ -1110,6 +1110,8 @@ python backend/mcp_server.py
   "sort_order": 0
 }
 ```
+
+余额规则：现金、银行卡、支付宝、微信、借贷和其他账户的余额不能低于 0；信用卡账户允许负余额，但最低为 `-credit_limit`。支出、转账、流水修改、流水删除和定期流水执行都会遵守对应账户的下限；信用卡还款通过转入账户使余额向 0 回升。
 
 **响应:**
 ```json
@@ -1446,7 +1448,7 @@ python backend/mcp_server.py
 | ItemType（物品类型） | `consumable`（消耗品）、`equippable`（装备） |
 | ItemStatus（物品状态） | `active`（可用）、`used`（已使用）、`discarded`（已丢弃） |
 | UsageAction（使用动作） | `use`（使用）、`equip`（装备）、`discard`（丢弃） |
-| AccountType（账户类型） | `cash`（现金）、`bank`（银行）、`credit`（信用卡）、`investment`（投资）、`other`（其他） |
+| AccountType（账户类型） | `cash`（现金）、`bank`（银行卡）、`credit`（信用卡）、`alipay`（支付宝）、`wechat`（微信）、`debt`（借贷）、`other`（其他） |
 | CategoryType（分类类型） | `income`（收入）、`expense`（支出） |
 | FinanceTransactionType | `income`（收入）、`expense`（支出） |
 | BudgetPeriod（预算周期） | `weekly`（每周）、`monthly`（每月）、`yearly`（每年） |

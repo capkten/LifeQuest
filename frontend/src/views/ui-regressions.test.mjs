@@ -286,6 +286,16 @@ test('todo subtasks use a compact right-side arrow toggle', async () => {
   assert.match(source, /subtask-toggle-icon--expanded/)
 })
 
+test('finance account editor applies type-aware balance rules and credit guidance', async () => {
+  const source = await readFile(new URL('./FinanceAccounts.vue', viewsDirectory), 'utf8')
+
+  assert.match(source, /:min="form\.type === 'credit'/)
+  assert.match(source, /信用卡可为负|当前欠款/)
+  assert.match(source, /已用额度/)
+  assert.match(source, /可用额度/)
+  assert.match(source, /净资产/)
+})
+
 test('todo task creation supports optional project and milestone context', async () => {
   const source = await readFile(new URL('./Todos.vue', viewsDirectory), 'utf8')
   const projectDetail = await readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8')
