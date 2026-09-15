@@ -15,7 +15,7 @@ from app.schemas.finance import (
     CategoryCreate, CategoryResponse,
     TransactionCreate, TransactionUpdate, TransactionResponse,
     TransactionPageResponse,
-    RecurringCreate, RecurringResponse,
+    RecurringCreate, RecurringUpdate, RecurringResponse,
     DebtCreate, DebtUpdate, DebtResponse, DebtPaymentCreate, DebtPaymentResponse,
     FinanceDashboardResponse,
 )
@@ -294,6 +294,20 @@ def create_recurring(
     return service.create_recurring(current_user.id, data)
 
 
+@router.put("/recurring/{recurring_id}", response_model=RecurringResponse)
+def update_recurring(
+    recurring_id: UUID,
+    data: RecurringUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = FinanceService(db)
+    rec = service.recurring_repo.get_by_id(recurring_id)
+    if not rec or rec.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Recurring transaction not found")
+    return service.update_recurring(rec, data, current_user.id)
+
+
 @router.post("/recurring/{recurring_id}/trigger", response_model=TransactionResponse)
 def trigger_recurring(
     recurring_id: UUID,
@@ -327,11 +341,12 @@ def delete_recurring(
 @router.get("/debts", response_model=List[DebtResponse])
 def get_debts(
     status: Optional[str] = None,
+    type: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     service = FinanceService(db)
-    return service.get_debts(current_user.id, status=status)
+    return service.get_debts(current_user.id, status=status, type=type)
 
 
 @router.post("/debts", response_model=DebtResponse)

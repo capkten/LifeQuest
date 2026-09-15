@@ -20,10 +20,10 @@
 
     <!-- Tab Toggle -->
     <div class="tab-toggle">
-      <button class="tab-btn" :class="{ 'tab-btn--active': activeTab === 'borrowed' }" @click="activeTab = 'borrowed'; fetchDebts()">
+      <button class="tab-btn" :class="{ 'tab-btn--active': activeTab === 'borrow' }" @click="activeTab = 'borrow'; fetchDebts()">
         借入
       </button>
-      <button class="tab-btn" :class="{ 'tab-btn--active': activeTab === 'lent' }" @click="activeTab = 'lent'; fetchDebts()">
+      <button class="tab-btn" :class="{ 'tab-btn--active': activeTab === 'lend' }" @click="activeTab = 'lend'; fetchDebts()">
         借出
       </button>
     </div>
@@ -46,7 +46,7 @@
           <line x1="23" y1="11" x2="17" y2="11" />
         </svg>
       </div>
-      <h3 class="empty-title">暂无{{ activeTab === 'borrowed' ? '借入' : '借出' }}记录</h3>
+      <h3 class="empty-title">暂无{{ activeTab === 'borrow' ? '借入' : '借出' }}记录</h3>
       <p class="empty-text">添加借贷记录来追踪你的债务。</p>
       <button class="btn-create" @click="openCreate">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -61,7 +61,7 @@
       <div v-for="d in debts" :key="d.id" class="debt-card" :class="{ 'debt-card--settled': d.status === 'settled' }">
         <div class="debt-header">
           <div class="debt-info">
-            <h4 class="debt-name">{{ d.creditor_name }}</h4>
+            <h4 class="debt-name">{{ d.creditor }}</h4>
             <span class="debt-status" :class="'debt-status--' + d.status">
               {{ d.status === 'settled' ? '已结清' : '进行中' }}
             </span>
@@ -88,7 +88,7 @@
           </div>
           <div class="debt-detail">
             <span class="debt-detail-label">剩余</span>
-            <span class="debt-detail-value debt-detail-value--remaining">{{ formatMoney(d.remaining || d.amount) }}</span>
+            <span class="debt-detail-value debt-detail-value--remaining">{{ formatMoney(remainingAmount(d)) }}</span>
           </div>
           <div v-if="d.interest_rate" class="debt-detail">
             <span class="debt-detail-label">利率</span>
@@ -134,19 +134,23 @@
           </div>
           <form class="dialog-body" @submit.prevent="saveDebt">
             <div class="form-group">
-              <label class="form-label" for="debt-creditor">{{ activeTab === 'borrowed' ? '出借人' : '借款人' }}</label>
-              <input id="debt-creditor" v-model="form.creditor_name" type="text" class="form-input" required maxlength="100" />
+              <label class="form-label" for="debt-creditor">{{ activeTab === 'borrow' ? '出借人' : '借款人' }}</label>
+              <input id="debt-creditor" v-model="form.creditor" type="text" class="form-input" required maxlength="100" />
             </div>
             <div class="form-group">
               <label class="form-label">类型</label>
               <div class="type-toggle">
-                <button type="button" class="type-toggle-btn" :class="{ 'type-toggle-btn--active': form.type === 'borrowed' }" @click="form.type = 'borrowed'">借入</button>
-                <button type="button" class="type-toggle-btn" :class="{ 'type-toggle-btn--active': form.type === 'lent' }" @click="form.type = 'lent'">借出</button>
+                <button type="button" class="type-toggle-btn" :class="{ 'type-toggle-btn--active': form.type === 'borrow' }" @click="form.type = 'borrow'">借入</button>
+                <button type="button" class="type-toggle-btn" :class="{ 'type-toggle-btn--active': form.type === 'lend' }" @click="form.type = 'lend'">借出</button>
               </div>
             </div>
             <div class="form-group">
               <label class="form-label" for="debt-amount">金额</label>
               <input id="debt-amount" v-model.number="form.amount" type="number" class="form-input" min="0.01" step="0.01" required />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="debt-remaining">初始剩余金额</label>
+              <input id="debt-remaining" v-model.number="form.remaining" type="number" class="form-input" min="0" step="0.01" placeholder="默认等于总额" />
             </div>
             <div class="form-row">
               <div class="form-group">
@@ -165,7 +169,7 @@
             <div v-if="dialogError" class="dialog-error" role="alert">{{ dialogError }}</div>
             <div class="dialog-actions">
               <button type="button" class="btn-secondary" @click="cancelDialog">取消</button>
-              <button type="submit" class="btn-primary" :disabled="saving || !form.creditor_name.trim() || !form.amount">
+              <button type="submit" class="btn-primary" :disabled="saving || !form.creditor.trim() || !form.amount">
                 <span v-if="saving" class="loading-spinner loading-spinner--sm"></span>
                 {{ saving ? '保存中...' : '保存' }}
               </button>
@@ -186,7 +190,7 @@
             </button>
           </div>
           <form class="dialog-body" @submit.prevent="doPayment">
-            <p class="pay-summary">剩余待还: <strong>{{ formatMoney(payingDebt?.remaining || payingDebt?.amount || 0) }}</strong></p>
+            <p class="pay-summary">剩余待还: <strong>{{ formatMoney(remainingAmount(payingDebt)) }}</strong></p>
             <div class="form-group">
               <label class="form-label" for="pay-amount">还款金额</label>
               <input id="pay-amount" v-model.number="paymentForm.amount" type="number" class="form-input" min="0.01" step="0.01" required />
@@ -223,7 +227,7 @@
             </button>
           </div>
           <div class="dialog-body">
-            <p class="confirm-text">确定要删除与「<strong>{{ deletingDebt?.creditor_name }}</strong>」的借贷记录吗？</p>
+            <p class="confirm-text">确定要删除与「<strong>{{ deletingDebt?.creditor }}</strong>」的借贷记录吗？</p>
             <div class="dialog-actions">
               <button type="button" class="btn-secondary" @click="cancelDelete">取消</button>
               <button type="button" class="btn-danger" :disabled="deleting" @click="deleteDebt">
@@ -272,7 +276,7 @@ const { successToast, errorToast, showSuccess, showError } = useToast()
 const debts = ref([])
 const loading = ref(true)
 const error = ref(null)
-const activeTab = ref('borrowed')
+const activeTab = ref('borrow')
 const expandedPayments = ref({})
 
 const showDialog = ref(false)
@@ -290,13 +294,18 @@ const paying = ref(false)
 const paymentError = ref(null)
 
 const form = ref({
-  creditor_name: '', type: 'borrowed', amount: null,
+  creditor: '', type: 'borrow', amount: null, remaining: null,
   interest_rate: 0, due_date: '', description: ''
 })
 
 const paymentForm = ref({ amount: null, date: todayChinaDateKey(), description: '' })
 
 function formatMoney(val) { return Number(val || 0).toFixed(2) }
+
+function remainingAmount(debt) {
+  const remaining = Number(debt?.remaining)
+  return Number.isFinite(remaining) ? remaining : Number(debt?.amount || 0)
+}
 
 function formatDate(dateStr) {
   return formatChinaDate(dateStr, { year: 'numeric', month: 'short', day: 'numeric' })
@@ -314,7 +323,7 @@ function togglePayments(id) {
 function openCreate() {
   editingDebt.value = null
   form.value = {
-    creditor_name: '', type: activeTab.value, amount: null,
+    creditor: '', type: activeTab.value, amount: null, remaining: null,
     interest_rate: 0, due_date: '', description: ''
   }
   dialogError.value = null
@@ -324,8 +333,8 @@ function openCreate() {
 function openEdit(d) {
   editingDebt.value = d
   form.value = {
-    creditor_name: d.creditor_name, type: d.type || activeTab.value,
-    amount: d.amount, interest_rate: d.interest_rate || 0,
+    creditor: d.creditor, type: d.type || activeTab.value,
+    amount: d.amount, remaining: d.remaining, interest_rate: d.interest_rate || 0,
     due_date: chinaDateKey(d.due_date) || '',
     description: d.description || ''
   }
@@ -361,14 +370,17 @@ async function fetchDebts() {
 }
 
 async function saveDebt() {
-  if (!form.value.creditor_name.trim() || !form.value.amount) return
+  if (!form.value.creditor.trim() || !form.value.amount) return
   saving.value = true
   dialogError.value = null
   try {
     const payload = {
-      creditor_name: form.value.creditor_name.trim(),
+      creditor: form.value.creditor.trim(),
       type: form.value.type,
       amount: form.value.amount,
+      remaining: form.value.remaining === null || form.value.remaining === ''
+        ? form.value.amount
+        : form.value.remaining,
       interest_rate: form.value.interest_rate || 0,
       due_date: form.value.due_date || undefined,
       description: form.value.description || undefined

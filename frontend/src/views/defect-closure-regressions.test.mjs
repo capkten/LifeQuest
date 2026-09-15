@@ -256,3 +256,22 @@ test('budget mutation failure preserves the list and a retry applies the respons
   assert.equal(second.ok, true)
   assert.deepEqual(second.budgets, [existing, created])
 })
+
+test('debt and recurring finance views use canonical contracts', async () => {
+  const [debtsView, financeService, financeView] = await Promise.all([
+    readFile(new URL('./FinanceDebts.vue', import.meta.url), 'utf8'),
+    readFile(new URL('../services/finance.js', import.meta.url), 'utf8'),
+    readFile(new URL('./Finance.vue', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(debtsView, /form\.creditor/)
+  assert.match(debtsView, /form\.type = 'borrow'/)
+  assert.match(debtsView, /form\.type = 'lend'/)
+  assert.match(debtsView, /remaining/)
+  assert.match(debtsView, /status/)
+  assert.match(debtsView, /payments/)
+  assert.doesNotMatch(debtsView, /remaining \|\| amount/)
+  assert.match(financeService, /updateRecurring/)
+  assert.match(financeView, /流水已更新/)
+  assert.match(financeView, /记账成功/)
+})

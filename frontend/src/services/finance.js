@@ -31,6 +31,7 @@ export const financeService = {
   // Recurring
   async getRecurring() { const r = await api.get('/finance/recurring'); return r.data },
   async createRecurring(data) { const r = await api.post('/finance/recurring', data); return r.data },
+  async updateRecurring(id, data) { const r = await api.put(`/finance/recurring/${id}`, data); return r.data },
   async triggerRecurring(id) { const r = await api.post(`/finance/recurring/${id}/trigger`); return r.data },
   async deleteRecurring(id) { await api.delete(`/finance/recurring/${id}`) },
 

@@ -237,6 +237,14 @@ class RecurringUpdate(BaseModel):
 
     _round_amount = field_validator("amount", mode="before")(_round_money)
 
+    @model_validator(mode="after")
+    def _validate_explicit_recurring_values(self):
+        non_nullable_fields = ("account_id", "type", "amount", "frequency", "next_date", "is_active")
+        for field in non_nullable_fields:
+            if getattr(self, field) is None and field in self.model_fields_set:
+                raise ValueError(f"{field} must not be null")
+        return self
+
 
 class RecurringResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -247,7 +255,7 @@ class RecurringResponse(BaseModel):
     category_id: Optional[UUID] = None
     type: str
     amount: float
-    description: str
+    description: Optional[str] = None
     frequency: str
     next_date: Date
     is_active: bool
@@ -255,6 +263,23 @@ class RecurringResponse(BaseModel):
 
 
 # Debt schemas
+def _normalize_debt_payload(value):
+    if not isinstance(value, dict):
+        return value
+    payload = dict(value)
+    legacy_creditor = payload.pop("creditor_name", None)
+    if "creditor" not in payload:
+        if legacy_creditor is not None:
+            payload["creditor"] = legacy_creditor
+    elif legacy_creditor is not None and payload["creditor"] != legacy_creditor:
+        raise ValueError("creditor and creditor_name must match")
+
+    legacy_types = {"borrowed": "borrow", "lent": "lend"}
+    if payload.get("type") in legacy_types:
+        payload["type"] = legacy_types[payload["type"]]
+    return payload
+
+
 class DebtCreate(BaseModel):
     creditor: str
     type: DebtType
@@ -265,6 +290,8 @@ class DebtCreate(BaseModel):
     due_date: Optional[Date] = None
 
     _round_amounts = field_validator("amount", "remaining", mode="before")(_round_money)
+
+    _normalize_legacy_fields = model_validator(mode="before")(_normalize_debt_payload)
 
     @model_validator(mode="after")
     def validate_remaining(self):
@@ -285,6 +312,19 @@ class DebtUpdate(BaseModel):
 
     _round_amounts = field_validator("amount", "remaining", mode="before")(_round_money)
 
+    _normalize_legacy_fields = model_validator(mode="before")(_normalize_debt_payload)
+
+
+class DebtPaymentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    debt_id: UUID
+    amount: float
+    description: str
+    date: Date
+    created_at: datetime
+
 
 class DebtResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -301,6 +341,7 @@ class DebtResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+    payments: List[DebtPaymentResponse] = Field(default_factory=list)
 
 
 class DebtPaymentCreate(BaseModel):
@@ -309,17 +350,6 @@ class DebtPaymentCreate(BaseModel):
     date: Date
 
     _round_amount = field_validator("amount", mode="before")(_round_money)
-
-
-class DebtPaymentResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    debt_id: UUID
-    amount: float
-    description: str
-    date: Date
-    created_at: datetime
 
 
 # Dashboard schema

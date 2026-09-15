@@ -482,6 +482,7 @@ async function saveTransaction() {
   savingTx.value = true
   txError.value = null
   try {
+    const wasEditing = Boolean(editingTx.value)
     if (editingTx.value) {
       await financeService.updateTransaction(editingTx.value.id, {
         type: txForm.value.type,
@@ -511,7 +512,7 @@ async function saveTransaction() {
       })
     }
     cancelQuickAdd()
-    showSuccess(editingTx.value ? '流水已更新' : '记账成功！')
+    showSuccess(wasEditing ? '流水已更新' : '记账成功！')
     await fetchDashboard()
   } catch (e) {
     txError.value = getErrorMessage(e)

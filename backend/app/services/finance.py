@@ -27,7 +27,7 @@ from app.schemas.finance import (
     BudgetCreate, BudgetUpdate,
     CategoryCreate,
     TransactionCreate, TransactionUpdate,
-    RecurringCreate,
+    RecurringCreate, RecurringUpdate,
     DebtCreate, DebtUpdate, DebtPaymentCreate,
 )
 from app.services.achievement import AchievementService
@@ -529,6 +529,33 @@ class FinanceService:
             .all()
         )
 
+    @rollback_on_error
+    def update_recurring(
+        self,
+        recurring: RecurringTransaction,
+        data: RecurringUpdate,
+        user_id: UUID,
+    ) -> RecurringTransaction:
+        self.user_repo.lock(user_id)
+        self.db.refresh(recurring)
+        if recurring.user_id != user_id:
+            raise HTTPException(status_code=404, detail="Recurring transaction not found")
+
+        update_data = data.model_dump(exclude_unset=True)
+        new_account_id = update_data.get("account_id", recurring.account_id)
+        new_category_id = update_data.get("category_id", recurring.category_id)
+        new_type = update_data.get("type", recurring.type)
+        if new_type == FinanceTransactionType.TRANSFER:
+            raise HTTPException(status_code=400, detail="Recurring transfers are not supported")
+        self._require_active_account(self._get_account_for_user(new_account_id, user_id))
+        self._validate_category_for_user(new_category_id, user_id, new_type)
+
+        for key, value in update_data.items():
+            setattr(recurring, key, value)
+        self.db.commit()
+        self.db.refresh(recurring)
+        return recurring
+
     def delete_recurring(self, rec: RecurringTransaction) -> bool:
         return self.recurring_repo.delete(rec.id)
 
@@ -623,18 +650,52 @@ class FinanceService:
 
     # --- Debt CRUD ---
 
-    def create_debt(self, user_id: UUID, data: DebtCreate) -> Debt:
+    def _debt_payload(self, debt: Debt) -> dict:
+        payments = (
+            self.db.query(DebtPayment)
+            .filter(DebtPayment.debt_id == debt.id)
+            .order_by(DebtPayment.date, DebtPayment.id)
+            .all()
+        )
+        return {
+            "id": debt.id,
+            "user_id": debt.user_id,
+            "creditor": debt.creditor,
+            "type": debt.type,
+            "amount": debt.amount,
+            "remaining": debt.remaining,
+            "interest_rate": debt.interest_rate,
+            "description": debt.description,
+            "due_date": debt.due_date,
+            "status": debt.status,
+            "created_at": debt.created_at,
+            "updated_at": debt.updated_at,
+            "payments": payments,
+        }
+
+    def create_debt(self, user_id: UUID, data: DebtCreate) -> dict:
         d = data.model_dump()
         d["user_id"] = user_id
-        return self.debt_repo.create(d)
+        return self._debt_payload(self.debt_repo.create(d))
 
-    def get_debts(self, user_id: UUID, status: Optional[str] = None) -> List[Debt]:
+    def get_debts(
+        self,
+        user_id: UUID,
+        status: Optional[str] = None,
+        type: Optional[str] = None,
+    ) -> List[dict]:
         query = self.db.query(Debt).filter(Debt.user_id == user_id)
         if status:
             query = query.filter(Debt.status == status)
-        return query.order_by(Debt.created_at.desc()).all()
+        if type:
+            type = {"borrowed": "borrow", "lent": "lend"}.get(type, type)
+            query = query.filter(Debt.type == type)
+        return [
+            self._debt_payload(debt)
+            for debt in query.order_by(Debt.created_at.desc()).all()
+        ]
 
-    def update_debt(self, debt: Debt, data: DebtUpdate) -> Debt:
+    def update_debt(self, debt: Debt, data: DebtUpdate) -> dict:
         update_data = data.model_dump(exclude_unset=True)
         new_amount = update_data.get("amount", debt.amount)
         new_remaining = update_data.get("remaining", debt.remaining)
@@ -644,7 +705,7 @@ class FinanceService:
             setattr(debt, key, value)
         self.db.commit()
         self.db.refresh(debt)
-        return debt
+        return self._debt_payload(debt)
 
     def delete_debt(self, debt: Debt) -> bool:
         return self.debt_repo.delete(debt.id)
