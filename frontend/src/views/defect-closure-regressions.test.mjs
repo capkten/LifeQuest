@@ -203,3 +203,18 @@ test('goal editing does not settle a reward a second time', async () => {
   assert.ok(saveItem, 'saveItem must remain available')
   assert.doesNotMatch(saveItem, /settleCompletion\(/)
 })
+
+test('budget views consume server-computed budget statistics', async () => {
+  const [budgetsView, financeView] = await Promise.all([
+    readFile(new URL('./FinanceBudgets.vue', import.meta.url), 'utf8'),
+    readFile(new URL('./Finance.vue', import.meta.url), 'utf8'),
+  ])
+
+  for (const source of [budgetsView, financeView]) {
+    assert.match(source, /spent_amount/)
+    assert.match(source, /remaining_amount/)
+    assert.match(source, /progress/)
+    assert.match(source, /category_name/)
+    assert.doesNotMatch(source, /\bb\.spent\b/)
+  }
+})

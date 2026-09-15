@@ -226,7 +226,7 @@ def delete_transaction(
 
 # --- Budgets ---
 
-@router.get("/budgets")
+@router.get("/budgets", response_model=List[BudgetResponse])
 def get_budgets(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

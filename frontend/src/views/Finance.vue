@@ -125,7 +125,7 @@
           <div v-for="b in budgets" :key="b.id" class="budget-item">
             <div class="budget-item-header">
               <span class="budget-item-name">{{ b.category_name || '未分类' }}</span>
-              <span class="budget-item-amount">{{ formatMoney(b.spent || 0) }} / {{ formatMoney(b.amount) }}</span>
+              <span class="budget-item-amount">{{ formatMoney(b.spent_amount) }} / {{ formatMoney(b.amount) }}</span>
             </div>
             <div class="budget-progress-bar">
               <div
@@ -135,8 +135,8 @@
               ></div>
             </div>
             <span class="budget-item-remaining" :class="budgetProgressClass(b)">
-              <template v-if="budgetPercent(b) > 100">超支 {{ formatMoney((b.spent || 0) - b.amount) }}</template>
-              <template v-else>剩余 {{ formatMoney(b.amount - (b.spent || 0)) }}</template>
+              <template v-if="Number(b.spent_amount || 0) > Number(b.amount || 0)">超支 {{ formatMoney(Number(b.spent_amount) - Number(b.amount)) }}</template>
+              <template v-else>剩余 {{ formatMoney(b.remaining_amount) }}</template>
             </span>
           </div>
         </div>
@@ -409,13 +409,12 @@ function formatDate(dateStr) {
 }
 
 function budgetPercent(b) {
-  if (!b.amount) return 0
-  return Math.round(((b.spent || 0) / b.amount) * 100)
+  return Number(b.progress || 0)
 }
 
 function budgetProgressClass(b) {
   const pct = budgetPercent(b)
-  if (pct > 100) return 'budget--red'
+  if (pct >= 100 && Number(b.spent_amount || 0) > Number(b.amount || 0)) return 'budget--red'
   if (pct >= 80) return 'budget--yellow'
   return 'budget--green'
 }

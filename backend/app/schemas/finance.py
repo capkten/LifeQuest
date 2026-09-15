@@ -206,6 +206,10 @@ class BudgetResponse(BaseModel):
     start_date: Optional[Date] = None
     created_at: datetime
     updated_at: datetime
+    spent_amount: float
+    remaining_amount: float
+    progress: float
+    category_name: Optional[str] = None
 
 
 # RecurringTransaction schemas

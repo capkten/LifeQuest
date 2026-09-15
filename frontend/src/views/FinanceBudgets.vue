@@ -43,16 +43,21 @@
       <span class="overview-percent">{{ overviewPercent }}%</span>
     </div>
 
-    <div v-if="loading" class="loading-state">
+    <div v-if="loading && budgets.length === 0" class="loading-state">
       <span class="loading-spinner"></span>
     </div>
 
-    <div v-else-if="error" class="error-state">
+    <div v-else-if="error && budgets.length === 0" class="error-state">
       <p>{{ error }}</p>
       <button class="retry-btn" @click="fetchBudgets">重试</button>
     </div>
 
-    <div v-else-if="budgets.length === 0" class="empty-state">
+    <div v-if="error && budgets.length > 0" class="inline-error" role="alert">
+      <span>{{ error }}</span>
+      <button type="button" class="retry-btn" @click="fetchBudgets">重试</button>
+    </div>
+
+    <div v-if="!loading && !error && budgets.length === 0" class="empty-state">
       <div class="empty-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
           <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
@@ -70,7 +75,7 @@
       </button>
     </div>
 
-    <div v-else class="budgets-list">
+    <div v-if="budgets.length > 0" class="budgets-list">
       <div v-for="b in budgets" :key="b.id" class="budget-row">
         <div class="budget-row-header">
           <div class="budget-row-info">
@@ -87,15 +92,15 @@
           </div>
         </div>
         <div class="budget-row-amounts">
-          <span>{{ formatMoney(b.spent || 0) }} 已支出</span>
+          <span>{{ formatMoney(b.spent_amount) }} 已支出</span>
           <span>预算 {{ formatMoney(b.amount) }}</span>
         </div>
         <div class="budget-progress-bar">
           <div class="budget-progress-fill" :class="budgetProgressClass(b)" :style="{ width: Math.min(budgetPercent(b), 100) + '%' }"></div>
         </div>
         <div class="budget-row-remaining" :class="budgetProgressClass(b)">
-          <template v-if="budgetPercent(b) > 100">超支 {{ formatMoney((b.spent || 0) - b.amount) }}</template>
-          <template v-else>剩余 {{ formatMoney(b.amount - (b.spent || 0)) }}</template>
+          <template v-if="Number(b.spent_amount || 0) > Number(b.amount || 0)">超支 {{ formatMoney(Number(b.spent_amount) - Number(b.amount)) }}</template>
+          <template v-else>剩余 {{ formatMoney(b.remaining_amount) }}</template>
           <span class="budget-percent">({{ budgetPercent(b) }}%)</span>
         </div>
       </div>
@@ -221,8 +226,8 @@ const form = ref({ category_id: '', amount: null, period: 'monthly' })
 const expenseCategories = computed(() => categories.value.filter(c => c.type === 'expense'))
 
 const totalBudget = computed(() => budgets.value.reduce((s, b) => s + Number(b.amount || 0), 0))
-const totalSpent = computed(() => budgets.value.reduce((s, b) => s + Number(b.spent || 0), 0))
-const totalRemaining = computed(() => totalBudget.value - totalSpent.value)
+const totalSpent = computed(() => budgets.value.reduce((s, b) => s + Number(b.spent_amount || 0), 0))
+const totalRemaining = computed(() => budgets.value.reduce((s, b) => s + Number(b.remaining_amount || 0), 0))
 const overviewPercent = computed(() => {
   if (!totalBudget.value) return 0
   return Math.round((totalSpent.value / totalBudget.value) * 100)
@@ -242,13 +247,12 @@ function periodLabel(period) {
 }
 
 function budgetPercent(b) {
-  if (!b.amount) return 0
-  return Math.round(((b.spent || 0) / b.amount) * 100)
+  return Number(b.progress || 0)
 }
 
 function budgetProgressClass(b) {
   const pct = budgetPercent(b)
-  if (pct > 100) return 'budget--red'
+  if (pct >= 100 && Number(b.spent_amount || 0) > Number(b.amount || 0)) return 'budget--red'
   if (pct >= 80) return 'budget--yellow'
   return 'budget--green'
 }
@@ -277,8 +281,8 @@ async function fetchBudgets() {
   error.value = null
   try {
     const [bData, cData] = await Promise.all([
-      financeService.getBudgets().catch(() => []),
-      financeService.getCategories().catch(() => [])
+      financeService.getBudgets(),
+      financeService.getCategories()
     ])
     budgets.value = Array.isArray(bData) ? bData : (bData.items || bData.budgets || [])
     categories.value = Array.isArray(cData) ? cData : (cData.items || cData.categories || [])
@@ -408,6 +412,13 @@ onMounted(() => { fetchBudgets() })
   display: flex; flex-direction: column; align-items: center;
   justify-content: center; min-height: 300px; gap: var(--spacing-md);
   color: var(--color-error); font-size: var(--font-size-sm);
+}
+.inline-error {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--spacing-md); padding: var(--spacing-sm) var(--spacing-md);
+  color: var(--color-error); background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25); border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
 }
 .retry-btn {
   padding: var(--spacing-xs) var(--spacing-md); font-size: var(--font-size-sm);

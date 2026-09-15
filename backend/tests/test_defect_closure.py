@@ -1,10 +1,15 @@
 from datetime import date, datetime, timezone
+from decimal import Decimal
+from uuid import uuid4
 
+from app.models.account import Account, AccountType
+from app.models.budget import Budget, BudgetPeriod
 from app.models.finance_transaction import FinanceTransaction
 from app.models.todo import Habit
 from app.models.coin_transaction import CoinSource, CoinTransaction, CoinType
 from app.models.finance_category import CategoryType, FinanceCategory
 from app.models.recurring_transaction import RecurringTransaction
+from app.services.finance import FinanceService
 from app.models.user import User
 from tests.conftest import has_column, run_startup_migrations
 
@@ -216,6 +221,180 @@ def test_transaction_response_contains_account_and_category_names(
     row = response.json()["items"][0]
     assert row["account_name"] == "测试账户"
     assert row["category_name"] == "测试支出分类"
+
+
+def _add_budget_expense(db_session, user, category, expense_date, amount):
+    account = Account(
+        user_id=user.id,
+        name=f"预算账户-{expense_date}",
+        type=AccountType.CASH,
+        balance=0,
+    )
+    db_session.add(account)
+    db_session.flush()
+    db_session.add(FinanceTransaction(
+        user_id=user.id,
+        account_id=account.id,
+        category_id=category.id,
+        type="expense",
+        amount=Decimal(str(amount)),
+        date=expense_date,
+    ))
+
+
+def test_weekly_budget_uses_week_period_and_start_date(
+    client, db_session, user, monkeypatch,
+):
+    category = FinanceCategory(
+        user_id=user.id,
+        name="每周预算分类",
+        type=CategoryType.EXPENSE,
+        is_system=False,
+    )
+    budget = Budget(
+        user_id=user.id,
+        category=category,
+        amount=Decimal("100.00"),
+        period=BudgetPeriod.WEEKLY,
+        start_date=date(2026, 9, 8),
+    )
+    db_session.add(budget)
+    db_session.flush()
+    _add_budget_expense(db_session, user, category, date(2026, 9, 9), 20)
+    _add_budget_expense(db_session, user, category, date(2026, 9, 16), 30)
+    db_session.commit()
+    monkeypatch.setattr("app.services.finance.china_today", lambda: date(2026, 9, 10))
+
+    payload = FinanceService(db_session).get_budgets(user.id)[0]
+
+    assert payload["spent_amount"] == 20
+
+
+def test_budget_response_has_names_and_computed_values(
+    client, auth_headers, budget, db_session, user,
+):
+    category = FinanceCategory(
+        user_id=user.id,
+        name="预算响应分类",
+        type=CategoryType.EXPENSE,
+        is_system=False,
+    )
+    budget.category = category
+    db_session.add(category)
+    db_session.commit()
+
+    response = client.get("/api/finance/budgets", headers=auth_headers)
+
+    assert response.status_code == 200
+    row = response.json()[0]
+    assert row["category_name"]
+    assert row["spent_amount"] == 0
+    assert row["remaining_amount"] == row["amount"]
+    assert row["progress"] == 0
+
+
+def test_budget_mutations_return_computed_payload(
+    client, auth_headers, db_session, user,
+):
+    category = FinanceCategory(
+        user_id=user.id,
+        name="保存响应分类",
+        type=CategoryType.EXPENSE,
+        is_system=False,
+    )
+    db_session.add(category)
+    db_session.commit()
+
+    create_response = client.post(
+        "/api/finance/budgets",
+        headers=auth_headers,
+        json={"category_id": str(category.id), "amount": 100, "period": "monthly"},
+    )
+
+    assert create_response.status_code == 200
+    created = create_response.json()
+    assert created["category_name"] == "保存响应分类"
+    assert created["spent_amount"] == 0
+    assert created["remaining_amount"] == 100
+    assert created["progress"] == 0
+
+    update_response = client.put(
+        f"/api/finance/budgets/{created['id']}",
+        headers=auth_headers,
+        json={"amount": 50},
+    )
+
+    assert update_response.status_code == 200
+    updated = update_response.json()
+    assert updated["category_name"] == "保存响应分类"
+    assert updated["spent_amount"] == 0
+    assert updated["remaining_amount"] == 50
+    assert updated["progress"] == 0
+
+
+def test_budget_category_update_rejects_foreign_category_without_mutation(
+    client, auth_headers, budget, db_session, user,
+):
+    own_category = FinanceCategory(
+        user_id=user.id,
+        name="原预算分类",
+        type=CategoryType.EXPENSE,
+        is_system=False,
+    )
+    foreign_user = User(
+        username=f"foreign-{uuid4().hex}",
+        email=f"foreign-{uuid4().hex}@example.com",
+        password_hash="test-password-hash",
+    )
+    foreign_category = FinanceCategory(
+        user=foreign_user,
+        name="他人预算分类",
+        type=CategoryType.EXPENSE,
+        is_system=False,
+    )
+    budget.category = own_category
+    db_session.add_all([own_category, foreign_user, foreign_category])
+    db_session.commit()
+
+    response = client.put(
+        f"/api/finance/budgets/{budget.id}",
+        headers=auth_headers,
+        json={"category_id": str(foreign_category.id)},
+    )
+
+    assert response.status_code in (403, 404)
+    db_session.refresh(budget)
+    assert budget.category_id == own_category.id
+
+
+def test_budget_category_update_rejects_income_category_without_mutation(
+    client, auth_headers, budget, db_session, user,
+):
+    own_category = FinanceCategory(
+        user_id=user.id,
+        name="支出预算分类",
+        type=CategoryType.EXPENSE,
+        is_system=False,
+    )
+    income_category = FinanceCategory(
+        user_id=user.id,
+        name="收入分类",
+        type=CategoryType.INCOME,
+        is_system=False,
+    )
+    budget.category = own_category
+    db_session.add_all([own_category, income_category])
+    db_session.commit()
+
+    response = client.put(
+        f"/api/finance/budgets/{budget.id}",
+        headers=auth_headers,
+        json={"category_id": str(income_category.id)},
+    )
+
+    assert response.status_code == 422
+    db_session.refresh(budget)
+    assert budget.category_id == own_category.id
 
 
 def test_explicit_null_update_clears_optional_fields(

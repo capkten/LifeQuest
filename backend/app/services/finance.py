@@ -1,4 +1,4 @@
-from datetime import date, timezone
+from datetime import date, timedelta, timezone
 from decimal import Decimal
 import logging
 from typing import List, Optional
@@ -9,7 +9,7 @@ from sqlalchemy import case, func, update
 from sqlalchemy.orm import Session
 
 from app.models.account import Account, AccountType
-from app.models.budget import Budget
+from app.models.budget import Budget, BudgetPeriod
 from app.models.debt import Debt, DebtPayment, DebtStatus
 from app.models.finance_category import FinanceCategory, CategoryType
 from app.models.finance_transaction import FinanceTransaction, FinanceTransactionType
@@ -435,37 +435,74 @@ class FinanceService:
 
     # --- Budget CRUD ---
 
-    def create_budget(self, user_id: UUID, data: BudgetCreate) -> Budget:
-        self._validate_category_for_user(data.category_id, user_id)
+    def create_budget(self, user_id: UUID, data: BudgetCreate) -> dict:
+        self._validate_category_for_user(data.category_id, user_id, CategoryType.EXPENSE)
         d = data.model_dump()
         d["user_id"] = user_id
-        return self.budget_repo.create(d)
+        budget = self.budget_repo.create(d)
+        return self._budget_payload(budget, china_today())
+
+    @staticmethod
+    def _budget_period_bounds(period, as_of: date) -> tuple[date, date]:
+        period_value = getattr(period, "value", period)
+        if period_value == BudgetPeriod.WEEKLY.value:
+            period_start = as_of - timedelta(days=as_of.weekday())
+            return period_start, period_start + timedelta(days=7)
+
+        period_start = as_of.replace(day=1)
+        if period_start.month == 12:
+            period_end = date(period_start.year + 1, 1, 1)
+        else:
+            period_end = date(period_start.year, period_start.month + 1, 1)
+        return period_start, period_end
+
+    def _budget_payload(self, budget: Budget, as_of: date) -> dict:
+        period_start, period_end = self._budget_period_bounds(budget.period, as_of)
+        spent_amount = self.budget_repo.get_spent_amount(
+            budget, period_start, period_end,
+        )
+        budget_amount = float(budget.amount)
+        remaining_amount = max(budget_amount - spent_amount, 0.0)
+        progress = min(spent_amount / budget_amount * 100, 100.0) if budget_amount else 0.0
+        category = None
+        if budget.category_id is not None:
+            category = (
+                self.db.query(FinanceCategory)
+                .filter(
+                    FinanceCategory.id == budget.category_id,
+                    (FinanceCategory.is_system == True)
+                    | (FinanceCategory.user_id == budget.user_id),
+                )
+                .one_or_none()
+            )
+
+        return {
+            "id": budget.id,
+            "user_id": budget.user_id,
+            "category_id": budget.category_id,
+            "amount": budget_amount,
+            "period": budget.period,
+            "start_date": budget.start_date,
+            "created_at": budget.created_at,
+            "updated_at": budget.updated_at,
+            "spent_amount": spent_amount,
+            "remaining_amount": remaining_amount,
+            "progress": progress,
+            "category_name": category.name if category else None,
+        }
 
     def get_budgets(self, user_id: UUID) -> List[dict]:
         budgets = self.budget_repo.get_by_user(user_id)
-        today = china_today()
-        result = []
-        for b in budgets:
-            spent = self.budget_repo.get_spent_amount(b, today.year, today.month)
-            budget_amount = float(b.amount)
-            remaining = budget_amount - spent
-            result.append({
-                "id": b.id,
-                "user_id": b.user_id,
-                "category_id": b.category_id,
-                "amount": budget_amount,
-                "period": b.period,
-                "start_date": b.start_date,
-                "created_at": b.created_at,
-                "updated_at": b.updated_at,
-                "spent_amount": spent,
-                "remaining": remaining,
-            })
-        return result
+        return [self._budget_payload(budget, china_today()) for budget in budgets]
 
-    def update_budget(self, budget: Budget, data: BudgetUpdate) -> Budget:
+    def update_budget(self, budget: Budget, data: BudgetUpdate) -> dict:
         update_data = data.model_dump(exclude_unset=True)
-        return self.budget_repo.update(budget, update_data)
+        if "category_id" in update_data:
+            self._validate_category_for_user(
+                update_data["category_id"], budget.user_id, CategoryType.EXPENSE,
+            )
+        budget = self.budget_repo.update(budget, update_data)
+        return self._budget_payload(budget, china_today())
 
     def delete_budget(self, budget: Budget) -> bool:
         return self.budget_repo.delete(budget.id)
