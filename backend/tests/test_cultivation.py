@@ -498,22 +498,42 @@ def test_npc_cultivation_uses_utc_day_across_midnight_and_is_idempotent(db_sessi
     assert npc.cultivation_updated_on == date(2026, 8, 18)
 
 
-def test_cultivation_daily_date_uses_china_midnight(db_session, user, monkeypatch):
+def test_cultivation_daily_reward_cap_resets_at_china_midnight(db_session, user, clock):
+    from app.models.cultivation import CultivationLog
     from app.services.cultivation import CultivationService
 
-    class FrozenDatetime(datetime):
-        current = datetime(2026, 9, 15, 15, 59, 59, tzinfo=timezone.utc)
-
-        @classmethod
-        def now(cls, tz=None):
-            return cls.current.astimezone(tz) if tz else cls.current.replace(tzinfo=None)
-
-    monkeypatch.setattr("app.timezone.datetime", FrozenDatetime)
     service = CultivationService(db_session)
-    assert service._utc_today() == date(2026, 9, 15)
+    clock(datetime(2026, 9, 15, 15, 59, 59, tzinfo=timezone.utc))
+    db_session.add_all([
+        CultivationLog(
+            user_id=user.id,
+            source="daily-cap-seed",
+            source_key=f"daily-cap-seed-{index}",
+            created_at=datetime(2026, 9, 15, 15, 59, 0, tzinfo=timezone.utc),
+        )
+        for index in range(8)
+    ])
+    db_session.commit()
 
-    FrozenDatetime.current = datetime(2026, 9, 15, 16, tzinfo=timezone.utc)
-    assert service._utc_today() == date(2026, 9, 16)
+    before_midnight = service.settle_todo_reward(
+        user.id,
+        "task",
+        10,
+        "hard",
+        source_key="daily-cap-before-midnight",
+    )
+    assert before_midnight.aptitude_points == 0
+
+    clock(datetime(2026, 9, 15, 16, tzinfo=timezone.utc))
+    after_midnight = service.settle_todo_reward(
+        user.id,
+        "task",
+        10,
+        "hard",
+        source_key="daily-cap-after-midnight",
+    )
+
+    assert after_midnight.aptitude_points == 1
 
 
 def test_npc_population_is_stable_but_isolated_between_users(db_session, user):

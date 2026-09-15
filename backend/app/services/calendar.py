@@ -163,10 +163,9 @@ class CalendarService:
             for g in goals
         ]
 
-        # Active habits due on target_date
+        # Habits due on target_date, including historical inactive habits.
         habits = self.db.query(Habit).filter(
             Habit.user_id == user_id,
-            Habit.is_active == True,
         ).all()
         pause_intervals = self._pause_intervals_by_habit(habits, user_id)
         leave_intervals = self._leave_intervals_by_habit(habits, user_id)

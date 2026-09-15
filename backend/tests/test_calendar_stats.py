@@ -106,8 +106,73 @@ def test_weekly_target_stats_use_target_slots_not_daily_slots(
 
     rows = StatsService(database).get_habit_stats(user.id, "week")
 
-    assert sum(row["total"] for row in rows) == 3
+    assert sum(row["total"] for row in rows) == 6
     assert sum(row["completed"] for row in rows) == 2
+
+
+def test_weekly_target_stats_include_the_current_intersecting_china_week(
+    database,
+    clock,
+    create_weekly_target_habit,
+):
+    clock(datetime(2026, 9, 15, 8, tzinfo=timezone.utc))
+    user = User(
+        username=f"intersecting-{uuid4().hex}",
+        email=f"intersecting-{uuid4().hex}@example.com",
+        password_hash="unused",
+    )
+    database.add(user)
+    database.commit()
+    habit = create_weekly_target_habit(
+        database,
+        user.id,
+        weekly_target=3,
+        created_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+    )
+    from app.models.habit_completion import HabitCompletion
+
+    database.add_all([
+        HabitCompletion(
+            habit_id=habit.id,
+            user_id=user.id,
+            completed_on=completed_on,
+            completed_at=datetime.combine(completed_on, datetime.min.time()),
+        )
+        for completed_on in [date(2026, 9, 9), date(2026, 9, 10)]
+    ])
+    database.commit()
+
+    rows = StatsService(database).get_habit_stats(user.id, "week")
+
+    assert sum(row["total"] for row in rows) == 6
+    assert sum(row["completed"] for row in rows) == 2
+
+
+def test_calendar_day_detail_keeps_historical_inactive_habits(
+    client,
+    auth_headers,
+    db_session,
+    user,
+    create_habit_with_pause_interval,
+    complete_on,
+):
+    habit, _ = create_habit_with_pause_interval(
+        db_session,
+        user.id,
+        paused_on=date(2026, 9, 10),
+        created_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+    )
+    habit.is_active = False
+    db_session.commit()
+    complete_on(db_session, habit, date(2026, 9, 9))
+
+    response = client.get(
+        "/api/calendar/day/2026-09-09",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert any(item["id"] == str(habit.id) for item in response.json()["habits"])
 
 
 def test_stats_overview_returns_cumulative_total_experience(database):

@@ -139,9 +139,9 @@ class StatsService:
             if habit is not None and habit.frequency == "weekly_target" and habit.weekly_target:
                 for completed_on in valid_dates:
                     if first_day <= completed_on <= last_day:
-                        bucket = week_start(completed_on)
-                        if bucket >= first_day:
-                            weekly_completed[bucket.isoformat()][habit_id] += 1
+                        week_bucket = week_start(completed_on)
+                        bucket = max(week_bucket, first_day)
+                        weekly_completed[bucket.isoformat()][habit_id] += 1
             else:
                 for completed_on in valid_dates:
                     if first_day <= completed_on <= last_day:
@@ -158,10 +158,8 @@ class StatsService:
             created_on = local_date(habit.created_at) if habit.created_at else first_day
             if habit.frequency == "weekly_target" and habit.weekly_target:
                 current_week = week_start(first_day)
-                if current_week < first_day:
-                    current_week += timedelta(days=7)
                 while current_week <= period_end:
-                    bucket = current_week
+                    bucket = max(current_week, first_day)
                     if week_has_active_schedule(
                         habit,
                         current_week,
