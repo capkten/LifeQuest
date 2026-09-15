@@ -760,6 +760,31 @@ def _migrate_note_data():
             migrate_db.close()
 
 
+@contextmanager
+def _migration_transaction(db_engine):
+    """Run schema changes in a transaction, including SQLite DDL."""
+    dialect_name = (getattr(getattr(db_engine, "dialect", None), "name", "") or "").lower()
+    if dialect_name != "sqlite":
+        with db_engine.begin() as connection:
+            yield connection
+        return
+
+    connection = db_engine.connect()
+    try:
+        # SQLite's legacy transaction mode does not automatically begin a
+        # transaction for DDL. An explicit BEGIN makes schema changes
+        # rollback together with data changes when migration fails.
+        connection.exec_driver_sql("BEGIN")
+        yield connection
+    except Exception:
+        connection.rollback()
+        raise
+    else:
+        connection.commit()
+    finally:
+        connection.close()
+
+
 @app.get("/api/health")
 def health_check():
     try:
@@ -771,10 +796,11 @@ def health_check():
     return {"status": "ok"}
 
 
-def _migrate_columns():
+def _migrate_columns(database_engine=None):
     """Add missing columns to existing tables without a full migration tool."""
-    inspector = inspect(engine)
-    with engine.begin() as conn:
+    migration_engine = engine if database_engine is None else database_engine
+    inspector = inspect(migration_engine)
+    with _migration_transaction(migration_engine) as conn:
         uuid_type = _uuid_column_type(conn)
         # Mortal resource columns were introduced after the first cultivation
         # profile schema. Preserve existing values and initialize only missing

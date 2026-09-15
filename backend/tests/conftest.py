@@ -197,10 +197,10 @@ def shop_item(db_session, user):
     return item
 
 
-def run_startup_migrations(_database):
+def run_startup_migrations(database):
     from app.main import _migrate_columns
 
-    return _migrate_columns()
+    return _migrate_columns(database.get_bind())
 
 
 def has_column(database_session, table_name, column_name):
@@ -413,6 +413,7 @@ def create_daily_habit():
         from app.models.todo import Habit
 
         user_id = values.pop("user_id", None)
+        frequency = values.pop("frequency", "daily")
         if user_id is None and _auth_headers:
             from app.services.auth import decode_access_token
 
@@ -421,7 +422,7 @@ def create_daily_habit():
         habit = Habit(
             user_id=user_id,
             title=values.pop("title", "每日习惯"),
-            frequency="daily",
+            frequency=frequency,
             **values,
         )
         if habit.user_id is None:
