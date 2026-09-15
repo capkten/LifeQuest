@@ -31,7 +31,13 @@ class BackpackService:
     # --- Core operations ---
     def _lock_item(self, item: BackpackItem) -> BackpackItem:
         UserRepository(self.db).lock(item.user_id)
-        current = self.db.query(BackpackItem).filter_by(id=item.id).populate_existing().first()
+        current = (
+            self.db.query(BackpackItem)
+            .filter_by(id=item.id)
+            .with_for_update()
+            .populate_existing()
+            .first()
+        )
         if current is None:
             raise HTTPException(status_code=404, detail="Backpack item not found")
         return current

@@ -1,5 +1,7 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from threading import Event, get_ident
 from uuid import uuid4
 
 from app.models.account import Account, AccountType
@@ -13,6 +15,11 @@ from app.models.backpack import BackpackItem, UsageAction, UsageHistory
 from app.models.shop import ExchangeHistory, ShopItem
 from app.services.finance import FinanceService
 from app.models.user import User
+from app.database import Base
+from app.repositories.shop import ShopItemRepository
+from app.repositories.user import UserRepository
+from app.schemas.shop import ExchangeHistoryCreate
+from app.services.shop import ShopService
 from tests.conftest import has_column, run_startup_migrations
 
 
@@ -82,6 +89,117 @@ def test_purchase_idempotency_key_returns_one_exchange(client, auth_headers, sho
         source=CoinSource.SHOP.value,
         type=CoinType.SPEND,
     ).count() == 1
+
+
+def test_purchase_same_key_concurrently_reloads_the_unique_winner(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'purchase-idempotency-race.sqlite'}",
+        connect_args={"check_same_thread": False, "timeout": 30},
+    )
+    Base.metadata.create_all(bind=engine)
+    factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    session = factory()
+    user = User(
+        username=f"concurrent-{uuid4().hex}",
+        email=f"concurrent-{uuid4().hex}@example.com",
+        password_hash="unused",
+        coins=100,
+    )
+    item = ShopItem(
+        created_by=None,
+        name="并发商品",
+        coin_price=10,
+        stock=5,
+        is_active=True,
+    )
+    session.add_all([user, item])
+    session.commit()
+    session.refresh(user)
+    session.refresh(item)
+
+    loser_reached_item_read = Event()
+    allow_loser_to_continue = Event()
+    loser_thread_id = []
+    original_get_for_update = ShopItemRepository.get_for_update
+
+    def skip_sqlite_user_serialization(_repository, _user_id):
+        return None
+
+    def synchronize_item_read(repository, item_id):
+        locked_item = original_get_for_update(repository, item_id)
+        if loser_thread_id and loser_thread_id[0] == get_ident():
+            loser_reached_item_read.set()
+            assert allow_loser_to_continue.wait(timeout=10)
+        return locked_item
+
+    monkeypatch.setattr(UserRepository, "lock", skip_sqlite_user_serialization)
+    monkeypatch.setattr(ShopItemRepository, "get_for_update", synchronize_item_read)
+
+    exchange_in = ExchangeHistoryCreate(item_id=item.id, quantity=1)
+
+    def purchase_loser():
+        worker_session = factory()
+        try:
+            loser_thread_id.append(get_ident())
+            exchange = ShopService(worker_session).purchase_item(
+                user.id,
+                exchange_in,
+                idempotency_key="concurrent-same-key",
+            )
+            return exchange.id
+        finally:
+            worker_session.close()
+
+    def purchase_winner():
+        worker_session = factory()
+        try:
+            return ShopService(worker_session).purchase_item(
+                user.id,
+                exchange_in,
+                idempotency_key="concurrent-same-key",
+            ).id
+        finally:
+            worker_session.close()
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            try:
+                loser = executor.submit(purchase_loser)
+                assert loser_reached_item_read.wait(timeout=10)
+                winner = executor.submit(purchase_winner)
+                winner_id = winner.result(timeout=20)
+                allow_loser_to_continue.set()
+                loser_id = loser.result(timeout=20)
+            finally:
+                allow_loser_to_continue.set()
+
+        verify = factory()
+        try:
+            stored_user = verify.get(User, user.id)
+            stored_item = verify.get(ShopItem, item.id)
+            backpack_item = verify.query(BackpackItem).filter_by(
+                user_id=user.id,
+                shop_item_id=item.id,
+            ).one()
+
+            assert loser_id == winner_id
+            assert verify.query(ExchangeHistory).filter_by(user_id=user.id).count() == 1
+            assert stored_user.coins == 90
+            assert stored_item.stock == 4
+            assert backpack_item.quantity == 1
+            assert verify.query(CoinTransaction).filter_by(
+                user_id=user.id,
+                source=CoinSource.SHOP.value,
+                type=CoinType.SPEND,
+            ).count() == 1
+        finally:
+            verify.close()
+    finally:
+        session.close()
+        engine.dispose()
 
 
 def test_unequip_item_records_history(client, auth_headers, equipped_item, latest_history_action, db_session):

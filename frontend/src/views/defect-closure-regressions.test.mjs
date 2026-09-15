@@ -198,6 +198,89 @@ test('backpack history consumes canonical action types and covers every lifecycl
   }
 })
 
+test('exchange history prefers stored item snapshots and falls back to active shop items', async () => {
+  const source = await readFile(new URL('./ExchangeHistory.vue', import.meta.url), 'utf8')
+  const helperSource = source.match(/function exchangeItemPresentation\(record, shopItemsMap\) \{[\s\S]*?\n\}/)?.[0]
+
+  assert.ok(helperSource, 'exchangeItemPresentation must remain available')
+  assert.match(source, /item_name_snapshot/)
+  assert.match(source, /unit_price_snapshot/)
+  assert.match(source, /getItemPresentation\(record\)/)
+
+  const exchangeItemPresentation = new Function(
+    `${helperSource}; return exchangeItemPresentation`,
+  )()
+
+  assert.deepEqual(exchangeItemPresentation({
+    item_id: 'archived-item',
+    item_name_snapshot: '已归档奖励',
+    unit_price_snapshot: 37,
+  }, {}), {
+    name: '已归档奖励',
+    unitPrice: 37,
+  })
+  assert.deepEqual(exchangeItemPresentation({ item_id: 'legacy-item' }, {
+    'legacy-item': { name: '旧商品', coin_price: 12 },
+  }), {
+    name: '旧商品',
+    unitPrice: 12,
+  })
+})
+
+test('exchange history refund mutation preserves records and shows the server reason on failure', async () => {
+  const source = await readFile(new URL('./ExchangeHistory.vue', import.meta.url), 'utf8')
+  const helperSource = source.match(/async function submitRefundMutation\(\{[\s\S]*?\n\}/)?.[0]
+
+  assert.ok(helperSource, 'submitRefundMutation must remain available')
+  assert.match(source, /shopService\.refundExchange/)
+  assert.match(source, /@click="refundRecord\(record\)"/)
+  assert.match(source, /refundErrors/)
+
+  const submitRefundMutation = new Function(
+    `${helperSource}; return submitRefundMutation`,
+  )()
+  const records = [{ id: 'exchange-1', status: 'completed', item_name_snapshot: '奖励' }]
+  const originalRecords = structuredClone(records)
+
+  const result = await submitRefundMutation({
+    records,
+    record: records[0],
+    refundExchange: async () => {
+      throw new Error('server rejected refund')
+    },
+    getErrorMessage: () => '请先卸下装备后再退款',
+  })
+
+  assert.equal(result.ok, false)
+  assert.equal(result.error, '请先卸下装备后再退款')
+  assert.strictEqual(result.records, records)
+  assert.deepEqual(records, originalRecords)
+})
+
+test('exchange history refund mutation replaces the refunded record after success', async () => {
+  const source = await readFile(new URL('./ExchangeHistory.vue', import.meta.url), 'utf8')
+  const helperSource = source.match(/async function submitRefundMutation\(\{[\s\S]*?\n\}/)?.[0]
+  assert.ok(helperSource, 'submitRefundMutation must remain available')
+
+  const submitRefundMutation = new Function(
+    `${helperSource}; return submitRefundMutation`,
+  )()
+  const record = { id: 'exchange-1', status: 'completed' }
+  const updated = { id: 'exchange-1', status: 'refunded' }
+  const result = await submitRefundMutation({
+    records: [record],
+    record,
+    refundExchange: async (exchangeId) => {
+      assert.equal(exchangeId, record.id)
+      return updated
+    },
+    getErrorMessage: () => '退款失败，请重试。',
+  })
+
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.records, [updated])
+})
+
 test('calendar and stats render server-owned completion and cumulative experience', async () => {
   const calendar = await readFile(new URL('./Calendar.vue', import.meta.url), 'utf8')
   const stats = await readFile(new URL('./Stats.vue', import.meta.url), 'utf8')

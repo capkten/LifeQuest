@@ -202,6 +202,42 @@ def test_user_lock_uses_a_row_lock_instead_of_affected_rows():
     assert calls[0]._for_update_arg is not None
 
 
+def test_backpack_item_lock_uses_a_row_lock(monkeypatch):
+    calls = []
+    item = BackpackItem(user_id=uuid4())
+
+    monkeypatch.setattr(
+        UserRepository,
+        "lock",
+        lambda _repository, user_id: calls.append(("user", user_id)),
+    )
+
+    class Query:
+        def filter_by(self, **filters):
+            assert filters == {"id": item.id}
+            return self
+
+        def with_for_update(self):
+            calls.append("item")
+            return self
+
+        def populate_existing(self):
+            return self
+
+        def first(self):
+            return item
+
+    class Session:
+        def query(self, model):
+            assert model is BackpackItem
+            return Query()
+
+    locked = BackpackService(Session())._lock_item(item)
+
+    assert locked is item
+    assert calls == [("user", item.user_id), "item"]
+
+
 def test_debit_coins_rejects_negative_amount_without_crediting_user(database):
     session, factory = database
     user = make_user(session)

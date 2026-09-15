@@ -94,7 +94,7 @@
             <div class="history-card-body">
               <div class="history-card-header">
                 <div>
-                  <h3 class="history-card-name">{{ getItemName(record.item_id) }}</h3>
+                  <h3 class="history-card-name">{{ getItemPresentation(record).name }}</h3>
                   <p class="history-card-copy">奖励兑换已同步到原有商城记录系统。</p>
                 </div>
                 <span class="status-badge" :class="'status-badge--' + record.status">
@@ -121,6 +121,13 @@
                   </svg>
                   数量 {{ record.quantity }}
                 </span>
+                <span class="meta-item" v-if="getItemPresentation(record).unitPrice !== null">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 6v12M6 12h12" />
+                  </svg>
+                  单价 {{ getItemPresentation(record).unitPrice }} 金币
+                </span>
               </div>
             </div>
 
@@ -132,6 +139,19 @@
                 </svg>
                 -{{ record.total_cost }}
               </span>
+              <button
+                v-if="record.status === 'completed'"
+                type="button"
+                class="refund-button"
+                :disabled="refundingId === record.id"
+                @click="refundRecord(record)"
+              >
+                <span v-if="refundingId === record.id" class="loading-spinner loading-spinner--sm"></span>
+                <span v-else>退款</span>
+              </button>
+              <p v-if="refundErrors[record.id]" class="refund-error" role="alert">
+                {{ refundErrors[record.id] }}
+              </p>
             </div>
           </article>
         </div>
@@ -150,6 +170,8 @@ const records = ref([])
 const shopItemsMap = ref({})
 const loading = ref(true)
 const error = ref(null)
+const refundingId = ref(null)
+const refundErrors = ref({})
 
 const totalSpent = computed(() => records.value.reduce((sum, record) => sum + (record.total_cost || 0), 0))
 const pendingCount = computed(() => records.value.filter((record) => record.status === 'pending').length)
@@ -158,9 +180,45 @@ const latestRecordDate = computed(() => {
   return formatDate(records.value[0].created_at)
 })
 
-function getItemName(itemId) {
-  const shopItem = shopItemsMap.value[itemId]
-  return shopItem?.name || '未知商品'
+function exchangeItemPresentation(record, shopItemsMap) {
+  const shopItem = shopItemsMap?.[record.item_id]
+  return {
+    name: record.item_name_snapshot || shopItem?.name || '未知商品',
+    unitPrice: record.unit_price_snapshot ?? shopItem?.coin_price ?? null,
+  }
+}
+
+function getItemPresentation(record) {
+  return exchangeItemPresentation(record, shopItemsMap.value)
+}
+
+async function submitRefundMutation({ records, record, refundExchange, getErrorMessage }) {
+  try {
+    const updatedRecord = await refundExchange(record.id)
+    return { ok: true, records: records.map((current) => current.id === record.id ? updatedRecord : current) }
+  } catch (error) {
+    return { ok: false, records, error: getErrorMessage(error, '退款失败，请重试。') }
+  }
+}
+
+async function refundRecord(record) {
+  if (refundingId.value) return
+  refundingId.value = record.id
+  const result = await submitRefundMutation({
+    records: records.value,
+    record,
+    refundExchange: shopService.refundExchange,
+    getErrorMessage,
+  })
+  if (result.ok) {
+    records.value = result.records
+    const nextErrors = { ...refundErrors.value }
+    delete nextErrors[record.id]
+    refundErrors.value = nextErrors
+  } else {
+    refundErrors.value = { ...refundErrors.value, [record.id]: result.error }
+  }
+  refundingId.value = null
 }
 
 function formatDate(dateStr) {
@@ -440,12 +498,39 @@ onMounted(() => {
 }
 
 .history-card-right {
-  display: flex;
-  align-items: center;
+  display: grid;
+  justify-items: end;
+  align-content: center;
+  gap: 8px;
 }
 
 .cost-pill {
   color: var(--color-error);
+}
+
+.refund-button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-card);
+  color: var(--color-primary-dark);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.refund-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.refund-error {
+  max-width: 180px;
+  margin: 0;
+  color: var(--color-error);
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+  text-align: right;
 }
 
 .status-badge {
