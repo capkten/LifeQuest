@@ -18,6 +18,7 @@ class User(Base):
     avatar = Column(String(255))
     level = Column(Integer, default=1)
     experience = Column(Integer, default=0)
+    total_experience = Column(Integer, default=0)
     coins = Column(Integer, default=0)
     total_coins_earned = Column(Integer, default=0)
     title = Column(String(50), default="初学者")

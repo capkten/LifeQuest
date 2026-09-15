@@ -31,6 +31,10 @@ logger = logging.getLogger(__name__)
 _NOTE_MIGRATION_LOCK_TABLE = "note_migration_lock"
 
 
+def cumulative_experience(level: int, current_experience: int) -> int:
+    return sum(int(100 * (1.5 ** (rank - 1))) for rank in range(1, level)) + current_experience
+
+
 def _uuid_column_type(dialect_or_connection):
     """Compile the ORM UUID type for a migration connection's dialect."""
     dialect = getattr(dialect_or_connection, "dialect", dialect_or_connection)
@@ -807,6 +811,21 @@ def _migrate_columns():
         ))
         _migrate_finance_daily_reward_claims(conn, uuid_type)
 
+        conn.execute(text(
+            f"CREATE TABLE IF NOT EXISTS refresh_tokens ("
+            f"id {uuid_type} PRIMARY KEY, "
+            f"user_id {uuid_type} NOT NULL, "
+            "token_hash VARCHAR(128) NOT NULL UNIQUE, "
+            "jti VARCHAR(128) NOT NULL UNIQUE, "
+            "expires_at DATETIME NOT NULL, "
+            "revoked_at DATETIME, "
+            f"replaced_by_id {uuid_type}, "
+            "created_at DATETIME NOT NULL, "
+            "FOREIGN KEY (user_id) REFERENCES users(id), "
+            "FOREIGN KEY (replaced_by_id) REFERENCES refresh_tokens(id)"
+            ")"
+        ))
+
         # habits.last_completed_at
         habit_cols = {c["name"] for c in inspector.get_columns("habits")}
         if "last_completed_at" not in habit_cols:
@@ -867,6 +886,26 @@ def _migrate_columns():
             ))
             logger.info("Migration: added users.total_coins_earned")
 
+        if "total_experience" not in user_cols:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN total_experience INTEGER NOT NULL DEFAULT 0"
+            ))
+            legacy_users_result = conn.execute(text(
+                "SELECT id, level, experience FROM users"
+            ))
+            legacy_users = legacy_users_result.fetchall() if legacy_users_result is not None else ()
+            for user_id, level, experience in legacy_users:
+                conn.execute(
+                    text("UPDATE users SET total_experience = :total_experience WHERE id = :id"),
+                    {
+                        "id": user_id,
+                        "total_experience": cumulative_experience(
+                            int(level or 1), int(experience or 0)
+                        ),
+                    },
+                )
+            logger.info("Migration: added and backfilled users.total_experience")
+
         # project management columns on tasks table
         task_cols = {c["name"] for c in inspector.get_columns("tasks")}
         new_task_cols = {
@@ -905,6 +944,30 @@ def _migrate_columns():
                 "shop_items",
                 "uq_shop_items_item_key",
                 ["item_key"],
+            )
+
+        try:
+            exchange_history_cols = {
+                c["name"] for c in inspector.get_columns("exchange_history")
+            }
+        except (KeyError, NoSuchTableError):
+            exchange_history_cols = None
+        if exchange_history_cols is not None:
+            for column_name, column_definition in {
+                "idempotency_key": "VARCHAR(128)",
+                "item_name_snapshot": "VARCHAR(200)",
+                "unit_price_snapshot": "INTEGER",
+            }.items():
+                if column_name not in exchange_history_cols:
+                    conn.execute(text(
+                        f"ALTER TABLE exchange_history ADD COLUMN {column_name} {column_definition}"
+                    ))
+                    logger.info("Migration: added exchange_history.%s", column_name)
+            _ensure_unique_index(
+                conn,
+                "exchange_history",
+                "uq_exchange_history_user_idempotency_key",
+                ["user_id", "idempotency_key"],
             )
 
         # Task 2 reward idempotency. Deduplicate only exact non-null keys and
