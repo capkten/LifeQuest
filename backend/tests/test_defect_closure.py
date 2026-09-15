@@ -13,6 +13,8 @@ def test_daily_summary_preserves_active_and_schedule_state(
     assert row["paused_today"] is False
     assert row["scheduled_today"] is True
     assert row["excused_today"] is False
+    assert row["pause_intervals"] == []
+    assert row["leave_intervals"] == []
 
     paused = client.post(f"/api/todos/habits/{habit.id}/pause", headers=auth_headers)
     assert paused.status_code == 200
@@ -20,6 +22,9 @@ def test_daily_summary_preserves_active_and_schedule_state(
     assert paused.json()["paused_today"] is True
     assert paused.json()["scheduled_today"] is False
     assert paused.json()["excused_today"] is False
+    assert len(paused.json()["pause_intervals"]) == 1
+    assert paused.json()["pause_intervals"][0]["resumed_on"] is None
+    assert paused.json()["leave_intervals"] == []
 
     resumed = client.post(f"/api/todos/habits/{habit.id}/resume", headers=auth_headers)
     assert resumed.status_code == 200
@@ -27,6 +32,11 @@ def test_daily_summary_preserves_active_and_schedule_state(
     assert resumed.json()["paused_today"] is False
     assert resumed.json()["scheduled_today"] is True
     assert resumed.json()["excused_today"] is False
+    assert resumed.json()["pause_intervals"][0]["resumed_on"] is not None
+    resumed_daily = client.get("/api/todos/daily", headers=auth_headers).json()
+    resumed_row = next(item for item in resumed_daily["habits"] if item["id"] == str(habit.id))
+    assert resumed_row["pause_intervals"] == resumed.json()["pause_intervals"]
+    assert resumed_row["leave_intervals"] == []
 
 
 def test_purchase_idempotency_key_returns_one_exchange(client, auth_headers, shop_item):

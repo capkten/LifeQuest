@@ -164,8 +164,10 @@ class HabitDailySummary(TodoSchema):
     completion_rate: float = 0.0
     is_active: bool
     paused_today: bool
+    pause_intervals: List[HabitPauseIntervalResponse] = Field(default_factory=list)
     scheduled_today: bool
     excused_today: bool
+    leave_intervals: List[HabitLeaveIntervalResponse] = Field(default_factory=list)
 
 
 class HabitResponse(TodoSchema):

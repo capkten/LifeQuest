@@ -958,8 +958,10 @@ class TodoService:
             "completion_rate": habit.completion_rate,
             "is_active": habit.is_active,
             "paused_today": habit.paused_today,
+            "pause_intervals": habit.pause_intervals,
             "scheduled_today": habit.scheduled_today,
             "excused_today": habit.excused_today,
+            "leave_intervals": habit.leave_intervals,
         }
 
     def get_daily_summary(self, user_id: UUID) -> dict:
