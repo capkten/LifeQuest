@@ -461,9 +461,12 @@ class FinanceService:
         spent_amount = self.budget_repo.get_spent_amount(
             budget, period_start, period_end,
         )
-        budget_amount = float(budget.amount)
-        remaining_amount = max(budget_amount - spent_amount, 0.0)
-        progress = min(spent_amount / budget_amount * 100, 100.0) if budget_amount else 0.0
+        budget_amount = Decimal(str(budget.amount))
+        remaining_amount = max(budget_amount - spent_amount, Decimal("0"))
+        progress = (
+            min(spent_amount / budget_amount * Decimal("100"), Decimal("100"))
+            if budget_amount else Decimal("0")
+        )
         category = None
         if budget.category_id is not None:
             category = (

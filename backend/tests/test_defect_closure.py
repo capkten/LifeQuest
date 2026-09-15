@@ -242,6 +242,27 @@ def _add_budget_expense(db_session, user, category, expense_date, amount):
     ))
 
 
+def _add_budget_transaction(
+    db_session, user, category, transaction_date, amount, transaction_type="expense",
+):
+    account = Account(
+        user_id=user.id,
+        name=f"预算账户-{transaction_date}-{transaction_type}",
+        type=AccountType.CASH,
+        balance=0,
+    )
+    db_session.add(account)
+    db_session.flush()
+    db_session.add(FinanceTransaction(
+        user_id=user.id,
+        account_id=account.id,
+        category_id=category.id,
+        type=transaction_type,
+        amount=Decimal(str(amount)),
+        date=transaction_date,
+    ))
+
+
 def test_weekly_budget_uses_week_period_and_start_date(
     client, db_session, user, monkeypatch,
 ):
@@ -260,6 +281,7 @@ def test_weekly_budget_uses_week_period_and_start_date(
     )
     db_session.add(budget)
     db_session.flush()
+    _add_budget_expense(db_session, user, category, date(2026, 9, 7), 10)
     _add_budget_expense(db_session, user, category, date(2026, 9, 9), 20)
     _add_budget_expense(db_session, user, category, date(2026, 9, 16), 30)
     db_session.commit()
@@ -267,7 +289,156 @@ def test_weekly_budget_uses_week_period_and_start_date(
 
     payload = FinanceService(db_session).get_budgets(user.id)[0]
 
-    assert payload["spent_amount"] == 20
+    assert payload["spent_amount"] == Decimal("20.00")
+
+
+def test_budget_monthly_period_excludes_transactions_outside_current_month(
+    client, db_session, user, monkeypatch,
+):
+    category = FinanceCategory(
+        user_id=user.id,
+        name="月度预算分类",
+        type=CategoryType.EXPENSE,
+        is_system=False,
+    )
+    budget = Budget(
+        user_id=user.id,
+        category=category,
+        amount=Decimal("100.00"),
+        period=BudgetPeriod.MONTHLY,
+    )
+    db_session.add(budget)
+    db_session.flush()
+    _add_budget_expense(db_session, user, category, date(2026, 8, 31), 10)
+    _add_budget_expense(db_session, user, category, date(2026, 9, 1), 20)
+    _add_budget_expense(db_session, user, category, date(2026, 9, 30), 30)
+    _add_budget_expense(db_session, user, category, date(2026, 10, 1), 40)
+    db_session.commit()
+    monkeypatch.setattr("app.services.finance.china_today", lambda: date(2026, 9, 15))
+
+    payload = FinanceService(db_session).get_budgets(user.id)[0]
+
+    assert payload["spent_amount"] == Decimal("50.00")
+
+
+def test_budget_period_end_is_an_exclusive_upper_bound(
+    client, db_session, user, monkeypatch,
+):
+    category = FinanceCategory(
+        user_id=user.id,
+        name="边界预算分类",
+        type=CategoryType.EXPENSE,
+        is_system=False,
+    )
+    budget = Budget(
+        user_id=user.id,
+        category=category,
+        amount=Decimal("100.00"),
+        period=BudgetPeriod.WEEKLY,
+    )
+    db_session.add(budget)
+    db_session.flush()
+    _add_budget_expense(db_session, user, category, date(2026, 9, 13), 20)
+    _add_budget_expense(db_session, user, category, date(2026, 9, 14), 30)
+    db_session.commit()
+    monkeypatch.setattr("app.services.finance.china_today", lambda: date(2026, 9, 10))
+
+    payload = FinanceService(db_session).get_budgets(user.id)[0]
+
+    assert payload["spent_amount"] == Decimal("20.00")
+
+
+def test_budget_spending_excludes_transfers(
+    client, db_session, user, monkeypatch,
+):
+    category = FinanceCategory(
+        user_id=user.id,
+        name="转账预算分类",
+        type=CategoryType.EXPENSE,
+        is_system=False,
+    )
+    budget = Budget(
+        user_id=user.id,
+        category=category,
+        amount=Decimal("100.00"),
+        period=BudgetPeriod.MONTHLY,
+    )
+    db_session.add(budget)
+    db_session.flush()
+    _add_budget_transaction(db_session, user, category, date(2026, 9, 10), 20)
+    _add_budget_transaction(
+        db_session, user, category, date(2026, 9, 11), 30, transaction_type="transfer",
+    )
+    db_session.commit()
+    monkeypatch.setattr("app.services.finance.china_today", lambda: date(2026, 9, 15))
+
+    payload = FinanceService(db_session).get_budgets(user.id)[0]
+
+    assert payload["spent_amount"] == Decimal("20.00")
+
+
+def test_budget_spending_isolated_from_other_users(
+    client, db_session, user, monkeypatch,
+):
+    category = FinanceCategory(
+        user_id=user.id,
+        name="隔离预算分类",
+        type=CategoryType.EXPENSE,
+        is_system=False,
+    )
+    budget = Budget(
+        user_id=user.id,
+        category=category,
+        amount=Decimal("100.00"),
+        period=BudgetPeriod.MONTHLY,
+    )
+    foreign_user = User(
+        username=f"budget-foreign-{uuid4().hex}",
+        email=f"budget-foreign-{uuid4().hex}@example.com",
+        password_hash="test-password-hash",
+    )
+    db_session.add_all([budget, foreign_user])
+    db_session.flush()
+    _add_budget_expense(db_session, user, category, date(2026, 9, 10), 20)
+    _add_budget_expense(db_session, foreign_user, category, date(2026, 9, 11), 80)
+    db_session.commit()
+    monkeypatch.setattr("app.services.finance.china_today", lambda: date(2026, 9, 15))
+
+    payload = FinanceService(db_session).get_budgets(user.id)[0]
+
+    assert payload["spent_amount"] == Decimal("20.00")
+
+
+def test_budget_payload_keeps_decimal_calculations_until_response_boundary(
+    client, db_session, user, monkeypatch,
+):
+    category = FinanceCategory(
+        user_id=user.id,
+        name="精确预算分类",
+        type=CategoryType.EXPENSE,
+        is_system=False,
+    )
+    budget = Budget(
+        user_id=user.id,
+        category=category,
+        amount=Decimal("100.01"),
+        period=BudgetPeriod.MONTHLY,
+    )
+    db_session.add(budget)
+    db_session.flush()
+    _add_budget_expense(db_session, user, category, date(2026, 9, 10), "33.34")
+    db_session.commit()
+    monkeypatch.setattr("app.services.finance.china_today", lambda: date(2026, 9, 15))
+
+    payload = FinanceService(db_session)._budget_payload(
+        budget, date(2026, 9, 15),
+    )
+
+    assert isinstance(payload["amount"], Decimal)
+    assert isinstance(payload["spent_amount"], Decimal)
+    assert isinstance(payload["remaining_amount"], Decimal)
+    assert isinstance(payload["progress"], Decimal)
+    assert payload["remaining_amount"] == Decimal("66.67")
 
 
 def test_budget_response_has_names_and_computed_values(

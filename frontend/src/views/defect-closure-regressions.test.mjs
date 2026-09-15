@@ -9,6 +9,7 @@ import {
   createCoinHistoryController,
   createCoinHistoryClient,
 } from '../services/coinHistoryContract.js'
+import { saveBudgetMutation } from '../services/budgetMutations.js'
 
 test('coin history maps the response envelope and renders both directions by type', () => {
   const income = { type: 'earn', amount: 20 }
@@ -217,4 +218,41 @@ test('budget views consume server-computed budget statistics', async () => {
     assert.match(source, /category_name/)
     assert.doesNotMatch(source, /\bb\.spent\b/)
   }
+  assert.match(budgetsView, /saveBudgetMutation/)
+})
+
+test('budget mutation failure preserves the list and a retry applies the response', async () => {
+  const existing = { id: 'existing', amount: 100, spent_amount: 20 }
+  const created = { id: 'created', amount: 50, spent_amount: 0 }
+  const budgets = [existing]
+  let attempts = 0
+
+  const first = await saveBudgetMutation({
+    budgets,
+    form: { category_id: 'food', amount: 50, period: 'monthly' },
+    createBudget: async () => {
+      attempts += 1
+      throw new Error('temporary failure')
+    },
+    getErrorMessage: error => error.message,
+  })
+
+  assert.equal(first.ok, false)
+  assert.equal(first.error, 'temporary failure')
+  assert.deepEqual(first.budgets, [existing])
+  assert.deepEqual(budgets, [existing])
+
+  const second = await saveBudgetMutation({
+    budgets: first.budgets,
+    form: { category_id: 'food', amount: 50, period: 'monthly' },
+    createBudget: async () => {
+      attempts += 1
+      return created
+    },
+    getErrorMessage: error => error.message,
+  })
+
+  assert.equal(attempts, 2)
+  assert.equal(second.ok, true)
+  assert.deepEqual(second.budgets, [existing, created])
 })

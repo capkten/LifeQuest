@@ -204,6 +204,7 @@ import { financeService } from '../services/finance'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelPeriod } from '../utils/displayLabels'
+import { saveBudgetMutation } from '../services/budgetMutations'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -297,23 +298,22 @@ async function saveBudget() {
   if (!form.value.category_id || !form.value.amount) return
   saving.value = true
   dialogError.value = null
-  try {
-    if (editingBudget.value) {
-      const updated = await financeService.updateBudget(editingBudget.value.id, form.value)
-      const idx = budgets.value.findIndex(b => b.id === editingBudget.value.id)
-      if (idx !== -1) budgets.value[idx] = updated
-      showSuccess('预算已更新')
-    } else {
-      const created = await financeService.createBudget(form.value)
-      budgets.value.push(created)
-      showSuccess('预算已创建')
-    }
+  const result = await saveBudgetMutation({
+    budgets: budgets.value,
+    editingBudget: editingBudget.value,
+    form: form.value,
+    createBudget: data => financeService.createBudget(data),
+    updateBudget: (id, data) => financeService.updateBudget(id, data),
+    getErrorMessage,
+  })
+  if (!result.ok) {
+    dialogError.value = result.error
+  } else {
+    budgets.value = result.budgets
+    showSuccess(editingBudget.value ? '预算已更新' : '预算已创建')
     cancelDialog()
-  } catch (e) {
-    dialogError.value = getErrorMessage(e)
-  } finally {
-    saving.value = false
   }
+  saving.value = false
 }
 
 async function deleteBudget() {

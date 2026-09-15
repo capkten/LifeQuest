@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from typing import List
 from uuid import UUID
 
@@ -24,16 +25,16 @@ class BudgetRepository(BaseRepository[Budget]):
 
     def get_spent_amount(
         self, budget: Budget, period_start: date, period_end: date,
-    ) -> float:
+    ) -> Decimal:
         effective_start = max(
             period_start,
             budget.start_date if budget.start_date is not None else period_start,
         )
         if effective_start >= period_end:
-            return 0.0
+            return Decimal("0")
 
         query = self.db.query(
-            func.coalesce(func.sum(FinanceTransaction.amount), 0.0)
+            func.coalesce(func.sum(FinanceTransaction.amount), Decimal("0"))
         ).filter(
             FinanceTransaction.user_id == budget.user_id,
             FinanceTransaction.type == FinanceTransactionType.EXPENSE.value,
@@ -43,4 +44,5 @@ class BudgetRepository(BaseRepository[Budget]):
         if budget.category_id:
             query = query.filter(FinanceTransaction.category_id == budget.category_id)
 
-        return float(query.scalar() or 0.0)
+        spent_amount = query.scalar()
+        return spent_amount if isinstance(spent_amount, Decimal) else Decimal(str(spent_amount or 0))
