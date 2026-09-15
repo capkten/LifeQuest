@@ -47,6 +47,17 @@ def equip_item(
     return service.equip_item(item)
 
 
+@router.post("/items/{item_id}/unequip", response_model=BackpackItemResponse)
+def unequip_item(
+    item_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = BackpackService(db)
+    item = service.get_item_for_user(item_id, current_user.id)
+    return service.unequip_item(item)
+
+
 @router.post("/items/{item_id}/discard", response_model=BackpackItemResponse)
 def discard_item(
     item_id: UUID,
@@ -73,6 +84,7 @@ def get_usage_history(
             user_id=entry.user_id,
             item_id=entry.item_id,
             shop_item_id=entry.shop_item_id,
+            action_type=entry.action,
             action=entry.action,
             quantity=entry.quantity,
             created_at=entry.created_at,

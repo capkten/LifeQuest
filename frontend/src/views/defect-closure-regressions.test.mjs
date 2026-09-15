@@ -189,6 +189,15 @@ test('todo view consumes the server-owned habit state contract', async () => {
   assert.match(source, /habit\.scheduled_today/)
 })
 
+test('backpack history consumes canonical action types and covers every lifecycle action', async () => {
+  const source = await readFile(new URL('./BackpackHistory.vue', import.meta.url), 'utf8')
+
+  assert.match(source, /record\.action_type/)
+  for (const action of ['add', 'use', 'equip', 'unequip', 'discard', 'refund']) {
+    assert.match(source, new RegExp(action))
+  }
+})
+
 test('calendar and stats render server-owned completion and cumulative experience', async () => {
   const calendar = await readFile(new URL('./Calendar.vue', import.meta.url), 'utf8')
   const stats = await readFile(new URL('./Stats.vue', import.meta.url), 'utf8')

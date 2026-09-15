@@ -9,6 +9,8 @@ from app.models.todo import Habit
 from app.models.coin_transaction import CoinSource, CoinTransaction, CoinType
 from app.models.finance_category import CategoryType, FinanceCategory
 from app.models.recurring_transaction import RecurringTransaction
+from app.models.backpack import BackpackItem, UsageAction, UsageHistory
+from app.models.shop import ExchangeHistory, ShopItem
 from app.services.finance import FinanceService
 from app.models.user import User
 from tests.conftest import has_column, run_startup_migrations
@@ -51,7 +53,7 @@ def test_daily_summary_preserves_active_and_schedule_state(
     assert resumed_row["leave_intervals"] == []
 
 
-def test_purchase_idempotency_key_returns_one_exchange(client, auth_headers, shop_item):
+def test_purchase_idempotency_key_returns_one_exchange(client, auth_headers, shop_item, db_session):
     first = client.post(
         "/api/shop/exchange",
         headers={**auth_headers, "Idempotency-Key": "purchase-test-1"},
@@ -65,6 +67,80 @@ def test_purchase_idempotency_key_returns_one_exchange(client, auth_headers, sho
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.json()["id"] == first.json()["id"]
+    assert first.json()["item_name_snapshot"] == shop_item.name
+    assert first.json()["unit_price_snapshot"] == shop_item.coin_price
+
+    assert db_session.query(ExchangeHistory).filter_by(user_id=shop_item.created_by).count() == 1
+    backpack_item = db_session.query(BackpackItem).filter_by(
+        user_id=shop_item.created_by, shop_item_id=shop_item.id,
+    ).one()
+    assert backpack_item.quantity == 1
+    db_session.refresh(shop_item)
+    assert shop_item.stock == 9
+    assert db_session.query(CoinTransaction).filter_by(
+        user_id=shop_item.created_by,
+        source=CoinSource.SHOP.value,
+        type=CoinType.SPEND,
+    ).count() == 1
+
+
+def test_unequip_item_records_history(client, auth_headers, equipped_item, latest_history_action, db_session):
+    response = client.post(
+        f"/api/backpack/items/{equipped_item.id}/unequip",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "active"
+    db_session.refresh(equipped_item)
+    assert latest_history_action(equipped_item.user_id, equipped_item.id) == "unequip"
+
+
+def test_refund_equipped_item_is_rejected_without_mutation(
+    client, auth_headers, exchange, equipped_item, snapshot_shop_user_state,
+):
+    before = snapshot_shop_user_state(exchange.user_id)
+
+    response = client.post(
+        f"/api/shop/exchange/{exchange.id}/refund",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "ITEM_EQUIPPED"
+    assert snapshot_shop_user_state(exchange.user_id) == before
+
+
+def test_delete_referenced_item_archives_it(
+    client, auth_headers, referenced_item, exchange, db_session, exchange_history_name,
+):
+    response = client.delete(
+        f"/api/shop/items/{referenced_item.shop_item_id}",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    item = db_session.query(ShopItem).filter_by(id=referenced_item.shop_item_id).one()
+    assert item.is_active is False
+    assert exchange_history_name(exchange) == item.name
+    history = client.get("/api/shop/exchange/history", headers=auth_headers)
+    assert history.status_code == 200
+    assert history.json()[0]["item_name_snapshot"] == item.name
+    assert history.json()[0]["unit_price_snapshot"] == item.coin_price
+
+
+def test_backpack_history_returns_canonical_action_type(client, auth_headers, equipped_item, db_session):
+    db_session.add(UsageHistory(
+        user_id=equipped_item.user_id,
+        item_id=equipped_item.id,
+        shop_item_id=equipped_item.shop_item_id,
+        action=UsageAction.ADD,
+    ))
+    db_session.commit()
+    response = client.get("/api/backpack/history", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json()[0]["action_type"] == "add"
 
 
 def test_startup_migration_is_repeatable(migration_database):

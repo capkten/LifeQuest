@@ -11,7 +11,7 @@
         </router-link>
         <span class="history-kicker">背包记录</span>
         <h1 class="history-title">使用历史</h1>
-        <p class="history-subtitle">集中查看背包物品的使用、装备与丢弃记录，同时保留现有服务返回的动作轨迹。</p>
+        <p class="history-subtitle">集中查看背包物品的添加、使用、装备、卸下、丢弃与退款记录。</p>
       </div>
       <div class="history-hero-stats" v-if="!loading && !error && records.length">
         <div class="summary-chip">
@@ -90,6 +90,21 @@
               </svg>
               <svg v-else-if="record.action_type === 'equip'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+              <svg v-else-if="record.action_type === 'add'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              <svg v-else-if="record.action_type === 'unequip'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M9 7H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h4" />
+                <path d="M13 17l4-5-4-5M17 12H7" />
+              </svg>
+              <svg v-else-if="record.action_type === 'refund'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M3 12a9 9 0 1 0 3-6.7" />
+                <path d="M3 4v6h6" />
+              </svg>
+              <svg v-else-if="record.action_type === 'discard'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
               </svg>
               <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                 <polyline points="3 6 5 6 21 6" />

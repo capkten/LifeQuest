@@ -401,6 +401,8 @@ const items = ref([])
 const loading = ref(true)
 const error = ref(null)
 const purchasingId = ref(null)
+const purchaseActionKeys = new Map()
+const appliedPurchaseKeys = new Set()
 const activeCategory = ref('全部')
 const searchQuery = ref('')
 const sortOrder = ref('recommended')
@@ -543,17 +545,22 @@ async function purchaseItem(item) {
   if (purchasingId.value) { explainBlocked('已有其他商品正在兑换，请等待完成后再试。'); return }
   if (isPurchaseBlocked(item)) { explainBlocked(purchaseLockReason(item)); return }
   purchasingId.value = item.id
+  const idempotencyKey = purchaseActionKeys.get(item.id) || `purchase-${item.id}-${globalThis.crypto?.randomUUID?.() || Date.now()}`
+  purchaseActionKeys.set(item.id, idempotencyKey)
   try {
-    await shopService.purchaseItem(item.id)
+    await shopService.purchaseItem(item.id, 1, idempotencyKey)
     // Update item stock locally if not unlimited
-    if (item.stock !== -1) {
+    if (item.stock !== -1 && !appliedPurchaseKeys.has(idempotencyKey)) {
       const idx = items.value.findIndex(i => i.id === item.id)
       if (idx !== -1) {
         items.value[idx] = { ...items.value[idx], stock: items.value[idx].stock - 1 }
       }
+      appliedPurchaseKeys.add(idempotencyKey)
     }
     // Refresh user data to update coins
     await authStore.fetchUser()
+    purchaseActionKeys.delete(item.id)
+    appliedPurchaseKeys.delete(idempotencyKey)
     showSuccess(`成功购买 ${item.name}！`)
   } catch (e) {
     showError(getErrorMessage(e))

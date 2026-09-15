@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 from app.models.backpack import ItemType, ItemStatus, UsageAction
 
@@ -41,7 +41,10 @@ class UsageHistoryResponse(BaseModel):
     user_id: UUID
     item_id: UUID
     shop_item_id: UUID
-    action: UsageAction
+    action_type: UsageAction = Field(
+        validation_alias=AliasChoices("action_type", "action"),
+    )
+    action: Optional[UsageAction] = None
     quantity: int
     created_at: datetime
     item_name: Optional[str] = None

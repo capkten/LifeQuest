@@ -27,11 +27,24 @@ export const shopService = {
    * @param {number} quantity - Quantity to purchase (default 1)
    * @returns {Promise<Object>} Exchange history record
    */
-  async purchaseItem(itemId, quantity = 1) {
+  async purchaseItem(itemId, quantity = 1, idempotencyKey) {
+    const key = idempotencyKey || `purchase-${itemId}-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`
     const response = await api.post('/shop/exchange', {
       item_id: itemId,
       quantity
+    }, {
+      headers: { 'Idempotency-Key': key }
     })
+    return response.data
+  },
+
+  /**
+   * Refund an exchange
+   * @param {string} exchangeId - Exchange history ID
+   * @returns {Promise<Object>} Refunded exchange history record
+   */
+  async refundExchange(exchangeId) {
+    const response = await api.post(`/shop/exchange/${exchangeId}/refund`)
     return response.data
   },
 

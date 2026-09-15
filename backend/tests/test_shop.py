@@ -123,7 +123,7 @@ def test_purchase_insufficient_coins(client):
             "item_id": item_id,
             "quantity": 1,
         },
-        headers=headers,
+        headers={**headers, "Idempotency-Key": "purchase-insufficient-coins"},
     )
     assert purchase_response.status_code == 400
     assert "Insufficient coins" in purchase_response.json()["detail"]
@@ -165,7 +165,7 @@ def test_purchase_success(client):
             "item_id": item_id,
             "quantity": 2,
         },
-        headers=headers,
+        headers={**headers, "Idempotency-Key": "purchase-success"},
     )
     assert purchase_response.status_code == 200
     exchange = purchase_response.json()
@@ -198,7 +198,7 @@ def test_purchase_history_uses_positive_spend_magnitude(client):
     purchase_response = client.post(
         "/api/shop/exchange",
         json={"item_id": item_id, "quantity": 2},
-        headers=headers,
+        headers={**headers, "Idempotency-Key": "purchase-spend-history"},
     )
     assert purchase_response.status_code == 200
 
@@ -263,7 +263,7 @@ def test_refund_exchange(client):
     purchase_response = client.post(
         "/api/shop/exchange",
         json={"item_id": item_id, "quantity": 1},
-        headers=headers,
+        headers={**headers, "Idempotency-Key": "purchase-refund"},
     )
     exchange_id = purchase_response.json()["id"]
 
@@ -314,7 +314,7 @@ def test_purchase_unlimited_stock(client):
         purchase_response = client.post(
             "/api/shop/exchange",
             json={"item_id": item_id, "quantity": 1},
-            headers=headers,
+            headers={**headers, "Idempotency-Key": f"purchase-unlimited-{i}"},
         )
         assert purchase_response.status_code == 200
         assert purchase_response.json()["status"] == "completed"

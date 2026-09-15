@@ -162,6 +162,19 @@
               装备
             </button>
             <button
+              v-if="(item.item_type === 'gear' || item.item_type === 'collectible') && item.is_equipped"
+              class="btn-action btn-action--unequip"
+              :disabled="actionId === item.id"
+              @click="unequipItem(item)"
+            >
+              <span v-if="actionId === item.id" class="loading-spinner loading-spinner--sm"></span>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M9 7H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h4" />
+                <path d="M13 17l4-5-4-5M17 12H7" />
+              </svg>
+              卸下
+            </button>
+            <button
               class="btn-action btn-action--discard"
               :disabled="actionId === item.id"
               :aria-disabled="item.quantity <= 0"
@@ -375,6 +388,24 @@ async function equipItem(item) {
       return i
     })
     showSuccess('物品已装备！')
+  } catch (e) {
+    showError(getErrorMessage(e))
+  } finally {
+    actionId.value = null
+  }
+}
+
+async function unequipItem(item) {
+  if (actionId.value) { explainBlocked('已有其他物品操作正在进行，请等待完成后再试。'); return }
+  if (!item.is_equipped) { explainBlocked('该物品当前未装备。'); return }
+  actionId.value = item.id
+  try {
+    const updated = await backpackService.unequipItem(item.id)
+    const idx = items.value.findIndex(i => i.id === item.id)
+    if (idx !== -1) {
+      items.value[idx] = updated
+    }
+    showSuccess('物品已卸下！')
   } catch (e) {
     showError(getErrorMessage(e))
   } finally {
@@ -870,6 +901,15 @@ onMounted(() => {
 }
 
 .btn-action--equip:hover:not(:disabled) {
+  background: rgba(14, 165, 233, 0.1);
+}
+
+.btn-action--unequip {
+  color: var(--color-secondary);
+  border-color: rgba(14, 165, 233, 0.3);
+}
+
+.btn-action--unequip:hover:not(:disabled) {
   background: rgba(14, 165, 233, 0.1);
 }
 

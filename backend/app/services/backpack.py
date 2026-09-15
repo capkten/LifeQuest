@@ -128,6 +128,21 @@ class BackpackService:
         return item
 
     @rollback_on_error
+    def unequip_item(self, item: BackpackItem) -> BackpackItem:
+        """Unequip an item and record the lifecycle action."""
+        item = self._lock_item(item)
+        if item.status != ItemStatus.EQUIPPED:
+            raise HTTPException(status_code=400, detail="Item is not equipped")
+
+        item.status = ItemStatus.ACTIVE
+        self._log_history_no_commit(
+            item.user_id, item.id, item.shop_item_id, UsageAction.UNEQUIP
+        )
+        self.db.commit()
+        self.db.refresh(item)
+        return item
+
+    @rollback_on_error
     def discard_item(self, item: BackpackItem, quantity: int = 1) -> BackpackItem:
         """Discard items. Deletes entry when quantity reaches 0.
         If the item is equipped, unequips it first."""
