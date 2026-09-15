@@ -109,7 +109,7 @@ def transfer(
     db: Session = Depends(get_db),
 ):
     service = FinanceService(db)
-    return service.transfer(
+    result = service.transfer(
         current_user.id,
         body.from_id,
         body.to_id,
@@ -117,6 +117,10 @@ def transfer(
         body.description,
         body.date,
     )
+    result["transaction"] = service.build_transaction_response(
+        result["transaction"], current_user.id
+    )
+    return result
 
 
 # --- Categories ---
@@ -186,7 +190,8 @@ def create_transaction(
     db: Session = Depends(get_db),
 ):
     service = FinanceService(db)
-    return service.create_transaction(current_user.id, data)
+    transaction = service.create_transaction(current_user.id, data)
+    return service.build_transaction_response(transaction, current_user.id)
 
 
 @router.put("/transactions/{transaction_id}", response_model=TransactionResponse)
@@ -200,7 +205,8 @@ def update_transaction(
     txn = service.transaction_repo.get_by_id(transaction_id)
     if not txn or txn.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Transaction not found")
-    return service.update_transaction(txn, data, current_user.id)
+    transaction = service.update_transaction(txn, data, current_user.id)
+    return service.build_transaction_response(transaction, current_user.id)
 
 
 @router.delete("/transactions/{transaction_id}")
@@ -297,7 +303,8 @@ def trigger_recurring(
     rec = service.recurring_repo.get_by_id(recurring_id)
     if not rec or rec.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Recurring transaction not found")
-    return service.trigger_recurring(rec)
+    transaction = service.trigger_recurring(rec)
+    return service.build_transaction_response(transaction, current_user.id)
 
 
 @router.delete("/recurring/{recurring_id}")

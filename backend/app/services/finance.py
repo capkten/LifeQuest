@@ -65,12 +65,38 @@ class FinanceService:
             raise HTTPException(status_code=404, detail="Account not found")
         return account
 
-    def _validate_category_for_user(self, category_id: UUID | None, user_id: UUID) -> None:
+    @staticmethod
+    def _require_active_account(account: Account) -> Account:
+        if not account.is_active:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ACCOUNT_INACTIVE",
+                    "message": "账户已停用，无法创建新的财务操作。",
+                },
+            )
+        return account
+
+    def _validate_category_for_user(
+        self,
+        category_id: UUID | None,
+        user_id: UUID,
+        transaction_type: FinanceTransactionType | None = None,
+    ) -> None:
         if category_id is None:
             return
         category = self.category_repo.get_by_id(category_id)
         if not category or (not category.is_system and category.user_id != user_id):
             raise HTTPException(status_code=404, detail="Category not found")
+        expected_type = getattr(transaction_type, "value", transaction_type)
+        if expected_type in {
+            FinanceTransactionType.INCOME.value,
+            FinanceTransactionType.EXPENSE.value,
+        } and category.type != expected_type:
+            raise HTTPException(
+                status_code=422,
+                detail="Category type must match transaction type",
+            )
 
     def _change_balance(self, account_id: UUID, amount: Decimal, require_sufficient: bool = False) -> None:
         amount = Decimal(str(amount))
@@ -140,6 +166,8 @@ class FinanceService:
         self.user_repo.lock(account.user_id)
         self.db.refresh(account)
         update_data = data.model_dump(exclude_unset=True)
+        if not account.is_active and update_data != {"is_active": True}:
+            self._require_active_account(account)
         new_type = update_data.get("type", account.type)
         new_balance = update_data.get("balance", account.balance)
         new_credit_limit = update_data.get("credit_limit", account.credit_limit)
@@ -175,6 +203,8 @@ class FinanceService:
             raise HTTPException(status_code=404, detail="Source account not found")
         if not to_acc or to_acc.user_id != user_id:
             raise HTTPException(status_code=404, detail="Target account not found")
+        self._require_active_account(from_acc)
+        self._require_active_account(to_acc)
         if from_id == to_id:
             raise HTTPException(status_code=400, detail="Source and target accounts must differ")
 
@@ -273,8 +303,10 @@ class FinanceService:
                 status_code=400, detail="Non-transfer transactions cannot have a target account"
             )
 
-        account = self._get_account_for_user(data.account_id, user_id)
-        self._validate_category_for_user(data.category_id, user_id)
+        account = self._require_active_account(
+            self._get_account_for_user(data.account_id, user_id)
+        )
+        self._validate_category_for_user(data.category_id, user_id, data.type)
 
         d = data.model_dump()
         d["user_id"] = user_id
@@ -323,7 +355,7 @@ class FinanceService:
         )
         total = self.transaction_repo.count_by_user(user_id, **filters)
         return {
-            "items": txns,
+            "items": [self.build_transaction_response(txn, user_id) for txn in txns],
             "total": total,
             "page": page,
             "page_size": page_size,
@@ -341,14 +373,32 @@ class FinanceService:
         new_type = update_data.get("type", transaction.type)
         new_amount = Decimal(str(update_data.get("amount", transaction.amount)))
         new_to_account_id = update_data.get("to_account_id", transaction.to_account_id)
-        self._get_account_for_user(new_account_id, user_id)
-        self._validate_category_for_user(new_category_id, user_id)
+        self._require_active_account(
+            self._get_account_for_user(new_account_id, user_id)
+        )
+        self._require_active_account(
+            self._get_account_for_user(transaction.account_id, user_id)
+        )
+        if transaction.to_account_id is not None:
+            self._require_active_account(
+                self._get_account_for_user(transaction.to_account_id, user_id)
+            )
+        if new_type == FinanceTransactionType.TRANSFER:
+            if new_category_id is not None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Transfers cannot have a category",
+                )
+        else:
+            self._validate_category_for_user(new_category_id, user_id, new_type)
         if new_amount <= 0:
             raise HTTPException(status_code=422, detail="Amount must be greater than zero")
         if new_type == FinanceTransactionType.TRANSFER and not new_to_account_id:
             raise HTTPException(status_code=400, detail="Transfer requires target account")
         if new_type == FinanceTransactionType.TRANSFER:
-            self._get_account_for_user(new_to_account_id, user_id)
+            self._require_active_account(
+                self._get_account_for_user(new_to_account_id, user_id)
+            )
             if new_account_id == new_to_account_id:
                 raise HTTPException(status_code=400, detail="Source and target accounts must differ")
         elif new_to_account_id:
@@ -368,6 +418,13 @@ class FinanceService:
     @rollback_on_error
     def delete_transaction(self, transaction: FinanceTransaction) -> bool:
         transaction = self._lock_transaction(transaction.id, transaction.user_id)
+        self._require_active_account(
+            self._get_account_for_user(transaction.account_id, transaction.user_id)
+        )
+        if transaction.to_account_id is not None:
+            self._require_active_account(
+                self._get_account_for_user(transaction.to_account_id, transaction.user_id)
+            )
         # Reverse the balance change
         self._apply_transaction_balance_effect(transaction, reverse=True)
         self.db.delete(transaction)
@@ -416,8 +473,8 @@ class FinanceService:
     def create_recurring(self, user_id: UUID, data: RecurringCreate) -> RecurringTransaction:
         if data.type == FinanceTransactionType.TRANSFER:
             raise HTTPException(status_code=400, detail="Recurring transfers are not supported")
-        self._get_account_for_user(data.account_id, user_id)
-        self._validate_category_for_user(data.category_id, user_id)
+        self._require_active_account(self._get_account_for_user(data.account_id, user_id))
+        self._validate_category_for_user(data.category_id, user_id, data.type)
         d = data.model_dump()
         d["user_id"] = user_id
         return self.recurring_repo.create(d)
@@ -438,6 +495,9 @@ class FinanceService:
         requested_date = recurring.next_date
         self.user_repo.lock(recurring.user_id)
         self.db.refresh(recurring)
+        self._require_active_account(
+            self._get_account_for_user(recurring.account_id, recurring.user_id)
+        )
         # Idempotency: check if already triggered for this date
         existing = (
             self.db.query(FinanceTransaction)
@@ -493,6 +553,28 @@ class FinanceService:
         self.db.commit()
         self.db.refresh(txn)
         return txn
+
+    def build_transaction_response(
+        self, transaction: FinanceTransaction, user_id: UUID
+    ) -> dict:
+        enriched = self.transaction_repo.get_with_names(transaction.id, user_id)
+        if enriched is None:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        txn, account_name, category_name = enriched
+        return {
+            "id": txn.id,
+            "user_id": txn.user_id,
+            "account_id": txn.account_id,
+            "category_id": txn.category_id,
+            "type": txn.type,
+            "amount": txn.amount,
+            "description": txn.description,
+            "date": txn.date,
+            "to_account_id": txn.to_account_id,
+            "created_at": txn.created_at,
+            "account_name": account_name,
+            "category_name": category_name,
+        }
 
     # --- Debt CRUD ---
 
@@ -562,7 +644,10 @@ class FinanceService:
             user_id, today.year, today.month
         )
         budgets = self.get_budgets(user_id)
-        recent_txns = self.transaction_repo.get_by_user(user_id, limit=5)
+        recent_txns = [
+            self.build_transaction_response(txn, user_id)
+            for txn in self.transaction_repo.get_by_user(user_id, limit=5)
+        ]
 
         return {
             "total_balance": total_balance,

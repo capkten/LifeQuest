@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from app.models.todo import Habit
 from app.models.coin_transaction import CoinSource, CoinTransaction, CoinType
+from app.models.finance_category import CategoryType, FinanceCategory
 from tests.conftest import has_column, run_startup_migrations
 
 
@@ -160,3 +161,98 @@ def test_coin_history_applies_source_and_date_filters_together(
     assert response.status_code == 200
     assert response.json()["count"] == 1
     assert [row["amount"] for row in response.json()["transactions"]] == [6]
+
+
+def test_inactive_account_rejects_transaction_and_transfer(
+    client, auth_headers, inactive_account, active_account,
+):
+    transaction = client.post(
+        "/api/finance/transactions",
+        headers=auth_headers,
+        json={
+            "account_id": str(inactive_account.id),
+            "type": "expense",
+            "amount": 1,
+            "date": "2026-09-15",
+        },
+    )
+    transfer = client.post(
+        "/api/finance/accounts/transfer",
+        headers=auth_headers,
+        json={
+            "from_account_id": str(inactive_account.id),
+            "to_account_id": str(active_account.id),
+            "amount": 1,
+            "date": "2026-09-15",
+        },
+    )
+
+    assert transaction.status_code == 409
+    assert transaction.json()["detail"]["code"] == "ACCOUNT_INACTIVE"
+    assert transfer.status_code == 409
+    assert transfer.json()["detail"]["code"] == "ACCOUNT_INACTIVE"
+
+
+def test_transaction_response_contains_account_and_category_names(
+    client, auth_headers, transaction, db_session,
+):
+    category = FinanceCategory(
+        user_id=transaction.user_id,
+        name="测试支出分类",
+        type=CategoryType.EXPENSE,
+        is_system=False,
+    )
+    db_session.add(category)
+    db_session.flush()
+    transaction.category_id = category.id
+    db_session.commit()
+
+    response = client.get("/api/finance/transactions", headers=auth_headers)
+
+    assert response.status_code == 200
+    row = response.json()["items"][0]
+    assert row["account_name"] == "测试账户"
+    assert row["category_name"] == "测试支出分类"
+
+
+def test_explicit_null_update_clears_optional_fields(
+    client, auth_headers, goal, budget, db_session, user,
+):
+    category = FinanceCategory(
+        user_id=user.id,
+        name="预算分类",
+        type=CategoryType.EXPENSE,
+        is_system=False,
+    )
+    goal.description = "保留前的说明"
+    goal.deadline = datetime(2026, 9, 20, 12, 0)
+    budget.category_id = category.id
+    budget.start_date = datetime(2026, 9, 1).date()
+    user.avatar = "/uploads/avatars/old.png"
+    db_session.add(category)
+    db_session.commit()
+
+    goal_response = client.put(
+        f"/api/todos/goals/{goal.id}",
+        headers=auth_headers,
+        json={"description": None, "deadline": None},
+    )
+    budget_response = client.put(
+        f"/api/finance/budgets/{budget.id}",
+        headers=auth_headers,
+        json={"category_id": None, "start_date": None},
+    )
+    user_response = client.put(
+        "/api/users/me",
+        headers=auth_headers,
+        json={"avatar": None},
+    )
+
+    assert goal_response.status_code == 200
+    assert goal_response.json()["description"] is None
+    assert goal_response.json()["deadline"] is None
+    assert budget_response.status_code == 200
+    assert budget_response.json()["category_id"] is None
+    assert budget_response.json()["start_date"] is None
+    assert user_response.status_code == 200
+    assert user_response.json()["avatar"] is None

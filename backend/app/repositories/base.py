@@ -28,8 +28,7 @@ class BaseRepository(Generic[ModelType]):
 
     def update(self, db_obj: ModelType, obj_in: dict) -> ModelType:
         for key, value in obj_in.items():
-            if value is not None:
-                setattr(db_obj, key, value)
+            setattr(db_obj, key, value)
         self.db.commit()
         self.db.refresh(db_obj)
         return db_obj

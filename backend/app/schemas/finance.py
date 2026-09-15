@@ -164,6 +164,8 @@ class TransactionResponse(BaseModel):
     date: Date
     to_account_id: Optional[UUID] = None
     created_at: datetime
+    account_name: Optional[str] = None
+    category_name: Optional[str] = None
 
 
 class TransactionPageResponse(BaseModel):

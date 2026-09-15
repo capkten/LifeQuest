@@ -111,3 +111,37 @@ def test_finance_resources_cannot_cross_user_boundaries(client):
     accounts_b = client.get("/api/finance/accounts", headers=headers_b).json()
     assert accounts_a[0]["balance"] == 900
     assert accounts_b[0]["balance"] == 500
+
+
+def test_transaction_response_contains_account_and_category_names(client):
+    headers = _register_and_login(
+        client, "finance-names", "finance-names@example.com"
+    )
+    account = client.post(
+        "/api/finance/accounts",
+        json={"name": "命名账户", "balance": 100},
+        headers=headers,
+    ).json()
+    category = client.post(
+        "/api/finance/categories",
+        json={"name": "命名分类", "type": "expense"},
+        headers=headers,
+    ).json()
+    created = client.post(
+        "/api/finance/transactions",
+        json={
+            "account_id": account["id"],
+            "category_id": category["id"],
+            "type": "expense",
+            "amount": 1,
+            "date": "2026-09-15",
+        },
+        headers=headers,
+    )
+
+    assert created.status_code == 200
+    response = client.get("/api/finance/transactions", headers=headers)
+    assert response.status_code == 200
+    row = response.json()["items"][0]
+    assert row["account_name"] == "命名账户"
+    assert row["category_name"] == "命名分类"

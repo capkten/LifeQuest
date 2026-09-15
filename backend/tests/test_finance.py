@@ -119,6 +119,100 @@ def test_account_update_rejects_explicit_null_type_and_balance(client):
     assert stored["balance"] == 100
 
 
+def test_inactive_account_rejects_transaction_and_transfer(client):
+    headers = _register_and_login(client)
+    inactive = _create_account(client, headers, "停用账户", 100)
+    active = _create_account(client, headers, "启用账户", 100)
+
+    assert client.delete(
+        f"/api/finance/accounts/{inactive['id']}", headers=headers
+    ).status_code == 200
+
+    transaction = client.post(
+        "/api/finance/transactions",
+        json={
+            "account_id": inactive["id"],
+            "type": "expense",
+            "amount": 1,
+            "date": "2026-09-15",
+        },
+        headers=headers,
+    )
+    transfer = client.post(
+        "/api/finance/accounts/transfer",
+        json={
+            "from_account_id": inactive["id"],
+            "to_account_id": active["id"],
+            "amount": 1,
+            "date": "2026-09-15",
+        },
+        headers=headers,
+    )
+
+    assert transaction.status_code == 409
+    assert transaction.json()["detail"]["code"] == "ACCOUNT_INACTIVE"
+    assert transfer.status_code == 409
+    assert transfer.json()["detail"]["code"] == "ACCOUNT_INACTIVE"
+    assert client.get("/api/finance/accounts", headers=headers).json() == [active]
+
+
+def test_transaction_rejects_category_with_wrong_type_on_create_and_update(client):
+    headers = _register_and_login(client)
+    account = _create_account(client, headers, "分类账户", 100)
+    income_category = client.post(
+        "/api/finance/categories",
+        json={"name": "工资分类", "type": "income"},
+        headers=headers,
+    ).json()
+
+    created = client.post(
+        "/api/finance/transactions",
+        json={
+            "account_id": account["id"],
+            "type": "expense",
+            "category_id": income_category["id"],
+            "amount": 1,
+            "date": "2026-09-15",
+        },
+        headers=headers,
+    )
+    transaction = client.post(
+        "/api/finance/transactions",
+        json={
+            "account_id": account["id"],
+            "type": "expense",
+            "amount": 1,
+            "date": "2026-09-15",
+        },
+        headers=headers,
+    ).json()
+    updated = client.put(
+        f"/api/finance/transactions/{transaction['id']}",
+        json={"category_id": income_category["id"]},
+        headers=headers,
+    )
+
+    assert created.status_code == 422
+    assert updated.status_code == 422
+
+
+def test_reactivating_an_inactive_account_remains_allowed(client):
+    headers = _register_and_login(client)
+    account = _create_account(client, headers, "可恢复账户", 100)
+    assert client.delete(
+        f"/api/finance/accounts/{account['id']}", headers=headers
+    ).status_code == 200
+
+    response = client.put(
+        f"/api/finance/accounts/{account['id']}",
+        json={"is_active": True},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["is_active"] is True
+
+
 def test_transfer_update_can_replace_target_credit_with_income_after_target_spending(client):
     headers = _register_and_login(client)
     source = _create_account(client, headers, "转出账户", 100)
