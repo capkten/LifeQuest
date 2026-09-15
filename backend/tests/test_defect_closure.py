@@ -760,3 +760,104 @@ def test_trigger_recurring_rejects_legacy_foreign_category_without_mutation(
     db_session.refresh(active_account)
     assert active_account.balance == 100
     assert db_session.query(FinanceTransaction).count() == 0
+
+
+def test_recurring_update_rejects_invalid_targets_without_mutation(
+    client, auth_headers, active_account, inactive_account, db_session, user,
+):
+    from app.models.finance_category import CategoryType
+
+    active_account.balance = 100
+    inactive_account.balance = 60
+    own_income = FinanceCategory(
+        user_id=user.id,
+        name="更新收入分类",
+        type=CategoryType.INCOME,
+        is_system=False,
+    )
+    foreign_user = User(
+        username="recurring-update-foreign",
+        email="recurring-update-foreign@example.com",
+        password_hash="not-used",
+    )
+    db_session.add(foreign_user)
+    db_session.flush()
+    foreign_account = Account(
+        user_id=foreign_user.id,
+        name="他人账户",
+        type=AccountType.CASH,
+        balance=20,
+    )
+    foreign_category = FinanceCategory(
+        user_id=foreign_user.id,
+        name="他人支出分类",
+        type=CategoryType.EXPENSE,
+        is_system=False,
+    )
+    foreign_recurring = RecurringTransaction(
+        user=foreign_user,
+        account=foreign_account,
+        category=foreign_category,
+        type="expense",
+        amount=10,
+        description="他人周期流水",
+        frequency="monthly",
+        next_date=date(2026, 9, 15),
+    )
+    db_session.add_all([own_income, foreign_account, foreign_category, foreign_recurring])
+    db_session.flush()
+    recurring = RecurringTransaction(
+        user_id=user.id,
+        account_id=active_account.id,
+        type="expense",
+        amount=10,
+        description="原始周期流水",
+        frequency="monthly",
+        next_date=date(2026, 9, 15),
+        is_active=True,
+    )
+    db_session.add(recurring)
+    db_session.commit()
+    db_session.refresh(recurring)
+    original = {
+        "account_id": recurring.account_id,
+        "category_id": recurring.category_id,
+        "type": recurring.type,
+        "amount": recurring.amount,
+        "description": recurring.description,
+        "frequency": recurring.frequency,
+        "next_date": recurring.next_date,
+        "is_active": recurring.is_active,
+    }
+
+    rejected_updates = [
+        (f"/api/finance/recurring/{foreign_recurring.id}", {"description": "越权"}, 404),
+        (f"/api/finance/recurring/{recurring.id}", {"account_id": str(inactive_account.id)}, 409),
+        (f"/api/finance/recurring/{recurring.id}", {"category_id": str(foreign_category.id)}, 404),
+        (f"/api/finance/recurring/{recurring.id}", {"category_id": str(own_income.id)}, 422),
+        (f"/api/finance/recurring/{recurring.id}", {"type": "transfer"}, 400),
+        (f"/api/finance/recurring/{recurring.id}", {"amount": 0}, 422),
+        (f"/api/finance/recurring/{recurring.id}", {"frequency": "quarterly"}, 422),
+        (f"/api/finance/recurring/{recurring.id}", {"account_id": None}, 422),
+    ]
+    for url, payload, expected_status in rejected_updates:
+        response = client.put(url, headers=auth_headers, json=payload)
+        assert response.status_code == expected_status, (payload, response.text)
+        db_session.refresh(recurring)
+        assert {
+            "account_id": recurring.account_id,
+            "category_id": recurring.category_id,
+            "type": recurring.type,
+            "amount": recurring.amount,
+            "description": recurring.description,
+            "frequency": recurring.frequency,
+            "next_date": recurring.next_date,
+            "is_active": recurring.is_active,
+        } == original
+        db_session.refresh(active_account)
+        db_session.refresh(inactive_account)
+        assert active_account.balance == 100
+        assert inactive_account.balance == 60
+
+    db_session.refresh(foreign_recurring)
+    assert foreign_recurring.description == "他人周期流水"

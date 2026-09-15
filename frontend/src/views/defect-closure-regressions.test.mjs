@@ -275,3 +275,61 @@ test('debt and recurring finance views use canonical contracts', async () => {
   assert.match(financeView, /流水已更新/)
   assert.match(financeView, /记账成功/)
 })
+
+test('transaction mutation keeps failed edit data and distinguishes edit from create feedback', async () => {
+  const source = await readFile(new URL('./Finance.vue', import.meta.url), 'utf8')
+  const helperSource = source.match(/async function submitTransactionMutation\(\{[\s\S]*?\n\}\n/)?.[0]
+  assert.ok(helperSource, 'submitTransactionMutation must remain available')
+  assert.match(source, /const wasEditing = Boolean\(editingTx\.value\)/)
+  assert.match(source, /submitTransactionMutation\(/)
+  assert.match(source, /return \{ feedback: wasEditing \? '流水已更新' : '记账成功！' \}/)
+  assert.match(source, /const result = await submitTransactionMutation\([\s\S]*?\n\s*\}\)\n\s*cancelQuickAdd\(\)\n\s*showSuccess\(result\.feedback\)/)
+
+  const submitTransactionMutation = new Function(
+    `${helperSource}; return submitTransactionMutation`,
+  )()
+  const form = {
+    type: 'expense', amount: 42, account_id: 'account-1', to_account_id: '',
+    category_id: 'category-1', description: '保留编辑内容', date: '2026-09-15',
+  }
+  const originalForm = structuredClone(form)
+  const editCalls = []
+  const editFailure = await submitTransactionMutation({
+    wasEditing: true,
+    transactionId: 'transaction-1',
+    form,
+    service: {
+      async updateTransaction(id, data) {
+        editCalls.push({ id, data })
+        throw new Error('保存失败')
+      },
+    },
+  }).then(
+    () => null,
+    error => error,
+  )
+  assert.equal(editFailure.message, '保存失败')
+  assert.deepEqual(editCalls, [{
+    id: 'transaction-1',
+    data: {
+      type: 'expense', amount: 42, account_id: 'account-1', to_account_id: null,
+      category_id: 'category-1', description: '保留编辑内容', date: '2026-09-15',
+    },
+  }])
+  assert.deepEqual(form, originalForm)
+
+  const edited = await submitTransactionMutation({
+    wasEditing: true,
+    transactionId: 'transaction-1',
+    form,
+    service: { async updateTransaction() {} },
+  })
+  const created = await submitTransactionMutation({
+    wasEditing: false,
+    transactionId: null,
+    form,
+    service: { async createTransaction() {} },
+  })
+  assert.equal(edited.feedback, '流水已更新')
+  assert.equal(created.feedback, '记账成功！')
+})

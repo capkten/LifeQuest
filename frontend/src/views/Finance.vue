@@ -475,6 +475,38 @@ function explainBlocked(message) {
   showError(message)
 }
 
+async function submitTransactionMutation({ wasEditing, transactionId, form, service }) {
+  if (wasEditing) {
+    await service.updateTransaction(transactionId, {
+      type: form.type,
+      amount: form.amount,
+      account_id: form.account_id,
+      to_account_id: form.type === 'transfer' ? form.to_account_id : null,
+      category_id: form.type === 'transfer' ? null : (form.category_id || null),
+      description: form.description || undefined,
+      date: form.date
+    })
+  } else if (form.type === 'transfer') {
+    await service.transfer({
+      from_account_id: form.account_id,
+      to_account_id: form.to_account_id,
+      amount: form.amount,
+      description: form.description || undefined,
+      date: form.date
+    })
+  } else {
+    await service.createTransaction({
+      type: form.type,
+      amount: form.amount,
+      account_id: form.account_id,
+      category_id: form.category_id || undefined,
+      description: form.description || undefined,
+      date: form.date
+    })
+  }
+  return { feedback: wasEditing ? '流水已更新' : '记账成功！' }
+}
+
 async function saveTransaction() {
   if (!txForm.value.amount) { explainBlocked('请输入金额后再保存。'); return }
   if (!txForm.value.account_id) { explainBlocked('请先选择账户。'); return }
@@ -483,36 +515,14 @@ async function saveTransaction() {
   txError.value = null
   try {
     const wasEditing = Boolean(editingTx.value)
-    if (editingTx.value) {
-      await financeService.updateTransaction(editingTx.value.id, {
-        type: txForm.value.type,
-        amount: txForm.value.amount,
-        account_id: txForm.value.account_id,
-        to_account_id: txForm.value.type === 'transfer' ? txForm.value.to_account_id : null,
-        category_id: txForm.value.type === 'transfer' ? null : (txForm.value.category_id || null),
-        description: txForm.value.description || undefined,
-        date: txForm.value.date
-      })
-    } else if (txForm.value.type === 'transfer') {
-      await financeService.transfer({
-        from_account_id: txForm.value.account_id,
-        to_account_id: txForm.value.to_account_id,
-        amount: txForm.value.amount,
-        description: txForm.value.description || undefined,
-        date: txForm.value.date
-      })
-    } else {
-      await financeService.createTransaction({
-        type: txForm.value.type,
-        amount: txForm.value.amount,
-        account_id: txForm.value.account_id,
-        category_id: txForm.value.category_id || undefined,
-        description: txForm.value.description || undefined,
-        date: txForm.value.date
-      })
-    }
+    const result = await submitTransactionMutation({
+      wasEditing,
+      transactionId: editingTx.value?.id,
+      form: txForm.value,
+      service: financeService
+    })
     cancelQuickAdd()
-    showSuccess(wasEditing ? '流水已更新' : '记账成功！')
+    showSuccess(result.feedback)
     await fetchDashboard()
   } catch (e) {
     txError.value = getErrorMessage(e)

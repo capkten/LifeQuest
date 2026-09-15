@@ -18,39 +18,112 @@ def test_create_debt_accepts_canonical_payload(client, auth_headers):
     assert response.json()["creditor"] == "测试对象"
 
 
-def test_debt_response_contains_payments_and_zero_remaining(client, auth_headers, debt):
-    payment = client.post(
-        f"/api/finance/debts/{debt.id}/payments",
-        headers=auth_headers,
-        json={"amount": 100, "date": "2026-08-04"},
-    )
-    assert payment.status_code == 200
+def test_debt_response_contains_ordered_payments_and_zero_remaining(
+    client, auth_headers, debt,
+):
+    payment_responses = [
+        client.post(
+            f"/api/finance/debts/{debt.id}/payments",
+            headers=auth_headers,
+            json={"amount": 20, "date": "2026-08-05", "description": "较晚"},
+        ),
+        client.post(
+            f"/api/finance/debts/{debt.id}/payments",
+            headers=auth_headers,
+            json={"amount": 30, "date": "2026-08-04", "description": "较早"},
+        ),
+        client.post(
+            f"/api/finance/debts/{debt.id}/payments",
+            headers=auth_headers,
+            json={"amount": 10, "date": "2026-08-05", "description": "同日一"},
+        ),
+        client.post(
+            f"/api/finance/debts/{debt.id}/payments",
+            headers=auth_headers,
+            json={"amount": 40, "date": "2026-08-05", "description": "同日二"},
+        ),
+    ]
+    assert all(response.status_code == 200 for response in payment_responses)
+    payments = [response.json() for response in payment_responses]
 
     response = client.get("/api/finance/debts", headers=auth_headers)
     row = response.json()[0]
     assert "payments" in row
     assert row["remaining"] == 0
-    assert row["payments"][0]["amount"] == 100
+    assert row["status"] == "settled"
+    assert [payment["id"] for payment in row["payments"]] == [
+        payment["id"] for payment in sorted(payments, key=lambda item: (item["date"], item["id"]))
+    ]
+    assert [payment["description"] for payment in row["payments"]] == [
+        payment["description"] for payment in sorted(payments, key=lambda item: (item["date"], item["id"]))
+    ]
 
 
 def test_debt_type_filter_and_recurring_update_are_scoped_and_canonical(
-    client, auth_headers,
+    client, auth_headers, db_session, user,
 ):
     borrowed = client.post(
         "/api/finance/debts",
         headers=auth_headers,
         json={"creditor": "借入方", "type": "borrow", "amount": 100, "remaining": 100},
     ).json()
-    client.post(
+    lent = client.post(
         "/api/finance/debts",
         headers=auth_headers,
         json={"creditor": "借出方", "type": "lend", "amount": 100, "remaining": 100},
+    ).json()
+    from app.models.debt import Debt, DebtStatus, DebtType
+    from app.models.user import User
+
+    settled = client.post(
+        "/api/finance/debts",
+        headers=auth_headers,
+        json={"creditor": "已结清", "type": "borrow", "amount": 100, "remaining": 100},
+    ).json()
+    settled_payment = client.post(
+        f"/api/finance/debts/{settled['id']}/payments",
+        headers=auth_headers,
+        json={"amount": 100, "date": "2026-08-04"},
     )
+    assert settled_payment.status_code == 200
+    foreign_user = User(
+        username="foreign-debt-filter",
+        email="foreign-debt-filter@example.com",
+        password_hash="not-used",
+    )
+    foreign_debt = Debt(
+        user=foreign_user,
+        creditor="他人借入",
+        type=DebtType.BORROW,
+        amount=100,
+        remaining=100,
+        status=DebtStatus.ACTIVE,
+    )
+    db_session.add(foreign_debt)
+    db_session.commit()
+
     filtered = client.get(
         "/api/finance/debts", headers=auth_headers, params={"status": "active", "type": "borrow"},
     )
     assert filtered.status_code == 200
-    assert [row["id"] for row in filtered.json()] == [borrowed["id"]]
+    active_borrow_rows = filtered.json()
+    assert [row["id"] for row in active_borrow_rows] == [borrowed["id"]]
+    assert [row["user_id"] for row in active_borrow_rows] == [str(user.id)]
+    settled_filtered = client.get(
+        "/api/finance/debts", headers=auth_headers, params={"status": "settled", "type": "borrow"},
+    )
+    assert settled_filtered.status_code == 200
+    settled_rows = settled_filtered.json()
+    assert [row["id"] for row in settled_rows] == [settled["id"]]
+    assert [row["user_id"] for row in settled_rows] == [str(user.id)]
+    lend_filtered = client.get(
+        "/api/finance/debts", headers=auth_headers, params={"type": "lend"},
+    )
+    assert lend_filtered.status_code == 200
+    lend_rows = lend_filtered.json()
+    assert [row["id"] for row in lend_rows] == [lent["id"]]
+    assert [row["user_id"] for row in lend_rows] == [str(user.id)]
+    assert str(foreign_debt.id) not in {row["id"] for row in active_borrow_rows}
 
     account = client.post(
         "/api/finance/accounts", headers=auth_headers, json={"name": "Recurring", "balance": 100},
