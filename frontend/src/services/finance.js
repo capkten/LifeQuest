@@ -5,7 +5,7 @@ export const financeService = {
   async getDashboard() { const r = await api.get('/finance/dashboard'); return r.data },
 
   // Accounts
-  async getAccounts() { const r = await api.get('/finance/accounts'); return r.data },
+  async getAccounts(params) { const r = await api.get('/finance/accounts', { params }); return r.data },
   async createAccount(data) { const r = await api.post('/finance/accounts', data); return r.data },
   async updateAccount(id, data) { const r = await api.put(`/finance/accounts/${id}`, data); return r.data },
   async deleteAccount(id) { await api.delete(`/finance/accounts/${id}`) },

@@ -159,8 +159,10 @@ class FinanceService:
         )
         return self.account_repo.create(d)
 
-    def get_accounts(self, user_id: UUID) -> List[Account]:
-        return self.account_repo.get_by_user(user_id)
+    def get_accounts(self, user_id: UUID, include_inactive: bool = False) -> List[Account]:
+        return self.account_repo.get_by_user(
+            user_id, active_only=not include_inactive,
+        )
 
     def update_account(self, account: Account, data: AccountUpdate) -> Account:
         self.user_repo.lock(account.user_id)
@@ -497,6 +499,9 @@ class FinanceService:
         self.db.refresh(recurring)
         self._require_active_account(
             self._get_account_for_user(recurring.account_id, recurring.user_id)
+        )
+        self._validate_category_for_user(
+            recurring.category_id, recurring.user_id, recurring.type,
         )
         # Idempotency: check if already triggered for this date
         existing = (

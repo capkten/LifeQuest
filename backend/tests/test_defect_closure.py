@@ -1,8 +1,11 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
+from app.models.finance_transaction import FinanceTransaction
 from app.models.todo import Habit
 from app.models.coin_transaction import CoinSource, CoinTransaction, CoinType
 from app.models.finance_category import CategoryType, FinanceCategory
+from app.models.recurring_transaction import RecurringTransaction
+from app.models.user import User
 from tests.conftest import has_column, run_startup_migrations
 
 
@@ -256,3 +259,154 @@ def test_explicit_null_update_clears_optional_fields(
     assert budget_response.json()["start_date"] is None
     assert user_response.status_code == 200
     assert user_response.json()["avatar"] is None
+
+
+def test_inactive_account_rejects_recurring_creation_without_mutation(
+    client, auth_headers, inactive_account, db_session,
+):
+    inactive_account.balance = 100
+    db_session.commit()
+
+    response = client.post(
+        "/api/finance/recurring",
+        headers=auth_headers,
+        json={
+            "account_id": str(inactive_account.id),
+            "type": "expense",
+            "amount": 10,
+            "frequency": "daily",
+            "next_date": "2026-09-15",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "ACCOUNT_INACTIVE"
+    db_session.refresh(inactive_account)
+    assert inactive_account.balance == 100
+    assert db_session.query(RecurringTransaction).count() == 0
+    assert db_session.query(FinanceTransaction).count() == 0
+
+
+def test_owner_can_list_inactive_accounts_for_reactivation(
+    client, auth_headers, inactive_account, active_account,
+):
+    default_response = client.get("/api/finance/accounts", headers=auth_headers)
+    managed_response = client.get(
+        "/api/finance/accounts",
+        params={"include_inactive": "true"},
+        headers=auth_headers,
+    )
+
+    assert default_response.status_code == 200
+    assert managed_response.status_code == 200
+    assert str(inactive_account.id) not in {item["id"] for item in default_response.json()}
+    assert {str(inactive_account.id), str(active_account.id)} <= {
+        item["id"] for item in managed_response.json()
+    }
+
+
+def test_trigger_recurring_rejects_legacy_inactive_account_without_mutation(
+    client, auth_headers, inactive_account, db_session,
+):
+    inactive_account.balance = 100
+    recurring = RecurringTransaction(
+        user_id=inactive_account.user_id,
+        account_id=inactive_account.id,
+        type="expense",
+        amount=10,
+        frequency="daily",
+        next_date=date(2026, 9, 15),
+    )
+    db_session.add(recurring)
+    db_session.commit()
+
+    response = client.post(
+        f"/api/finance/recurring/{recurring.id}/trigger",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "ACCOUNT_INACTIVE"
+    db_session.refresh(inactive_account)
+    db_session.refresh(recurring)
+    assert inactive_account.balance == 100
+    assert recurring.next_date == date(2026, 9, 15)
+    assert db_session.query(FinanceTransaction).count() == 0
+
+
+def test_trigger_recurring_rejects_legacy_category_type_mismatch_without_mutation(
+    client, auth_headers, active_account, db_session,
+):
+    active_account.balance = 100
+    category = FinanceCategory(
+        user_id=active_account.user_id,
+        name="收入分类",
+        type=CategoryType.INCOME,
+        is_system=False,
+    )
+    db_session.add(category)
+    db_session.flush()
+    recurring = RecurringTransaction(
+        user_id=active_account.user_id,
+        account_id=active_account.id,
+        category_id=category.id,
+        type="expense",
+        amount=10,
+        frequency="daily",
+        next_date=date(2026, 9, 15),
+    )
+    db_session.add(recurring)
+    db_session.commit()
+
+    response = client.post(
+        f"/api/finance/recurring/{recurring.id}/trigger",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
+    db_session.refresh(active_account)
+    assert active_account.balance == 100
+    assert db_session.query(FinanceTransaction).count() == 0
+
+
+def test_trigger_recurring_rejects_legacy_foreign_category_without_mutation(
+    client, auth_headers, active_account, db_session, user,
+):
+    active_account.balance = 100
+    foreign_user = User(
+        username="foreign-recurring-user",
+        email="foreign-recurring@example.com",
+        password_hash="not-used",
+    )
+    db_session.add(foreign_user)
+    db_session.flush()
+    category = FinanceCategory(
+        user_id=foreign_user.id,
+        name="他人分类",
+        type=CategoryType.EXPENSE,
+        is_system=False,
+    )
+    recurring = RecurringTransaction(
+        user_id=user.id,
+        account_id=active_account.id,
+        category_id=category.id,
+        type="expense",
+        amount=10,
+        frequency="daily",
+        next_date=date(2026, 9, 15),
+    )
+    db_session.add(category)
+    db_session.flush()
+    recurring.category_id = category.id
+    db_session.add(recurring)
+    db_session.commit()
+
+    response = client.post(
+        f"/api/finance/recurring/{recurring.id}/trigger",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 404
+    db_session.refresh(active_account)
+    assert active_account.balance == 100
+    assert db_session.query(FinanceTransaction).count() == 0

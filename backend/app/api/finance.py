@@ -57,11 +57,12 @@ def get_dashboard(
 
 @router.get("/accounts", response_model=List[AccountResponse])
 def get_accounts(
+    include_inactive: bool = Query(False),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     service = FinanceService(db)
-    return service.get_accounts(current_user.id)
+    return service.get_accounts(current_user.id, include_inactive=include_inactive)
 
 
 @router.post("/accounts", response_model=AccountResponse)

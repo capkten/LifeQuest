@@ -63,7 +63,7 @@
     </div>
 
     <div v-else class="accounts-list">
-      <div v-for="acct in accounts" :key="acct.id" class="account-row">
+      <div v-for="acct in accounts" :key="acct.id" class="account-row" :class="{ 'account-row--inactive': !acct.is_active }">
         <div class="account-row-icon">
           <svg v-if="acct.type === 'cash'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <rect x="2" y="4" width="20" height="16" rx="2" />
@@ -86,6 +86,7 @@
         <div class="account-row-info">
           <span class="account-row-name">{{ acct.name }}</span>
           <span class="account-row-type">{{ accountTypeLabel(acct.type) }}</span>
+          <span v-if="!acct.is_active" class="account-row-status">已停用</span>
           <span v-if="acct.type === 'credit'" class="account-row-credit">
             已用额度 {{ formatMoney(creditUsed(acct)) }} · 可用额度 {{ formatMoney(creditAvailable(acct)) }}
           </span>
@@ -94,17 +95,29 @@
           {{ formatMoney(acct.balance) }}
         </div>
         <div class="account-row-actions">
-          <button class="btn-icon btn-icon--edit" @click="openEdit(acct)" aria-label="编辑" title="编辑">
+          <button v-if="acct.is_active" class="btn-icon btn-icon--edit" @click="openEdit(acct)" aria-label="编辑" title="编辑">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
             </svg>
           </button>
-          <button class="btn-icon btn-icon--delete" @click="openDelete(acct)" aria-label="删除" title="删除">
+          <button v-if="acct.is_active" class="btn-icon btn-icon--delete" @click="openDelete(acct)" aria-label="删除" title="删除">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="3 6 5 6 21 6" />
               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
             </svg>
+          </button>
+          <button
+            v-else
+            class="btn-reactivate"
+            :disabled="reactivatingAccountId === acct.id"
+            @click="reactivateAccount(acct)"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M3 12a9 9 0 1 0 3-6.7" />
+              <polyline points="3 4 3 9 8 9" />
+            </svg>
+            {{ reactivatingAccountId === acct.id ? '恢复中...' : '恢复账户' }}
           </button>
         </div>
       </div>
@@ -203,14 +216,14 @@
               <label class="form-label" for="transfer-from">转出账户</label>
               <select id="transfer-from" v-model="transferForm.from_account_id" class="form-input" required>
                 <option value="" disabled>选择账户</option>
-                <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }} ({{ formatMoney(a.balance) }})</option>
+                <option v-for="a in activeAccounts" :key="a.id" :value="a.id">{{ a.name }} ({{ formatMoney(a.balance) }})</option>
               </select>
             </div>
             <div class="form-group">
               <label class="form-label" for="transfer-to">转入账户</label>
               <select id="transfer-to" v-model="transferForm.to_account_id" class="form-input" required>
                 <option value="" disabled>选择账户</option>
-                <option v-for="a in accounts" :key="a.id" :value="a.id" :disabled="a.id === transferForm.from_account_id">{{ a.name }} ({{ formatMoney(a.balance) }})</option>
+                <option v-for="a in activeAccounts" :key="a.id" :value="a.id" :disabled="a.id === transferForm.from_account_id">{{ a.name }} ({{ formatMoney(a.balance) }})</option>
               </select>
             </div>
             <div class="form-group">
@@ -295,6 +308,7 @@ import { labelAccountType } from '../utils/displayLabels'
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
 const accounts = ref([])
+const activeAccounts = computed(() => accounts.value.filter(account => account.is_active))
 const loading = ref(true)
 const error = ref(null)
 
@@ -303,6 +317,7 @@ const dialogMode = ref('create')
 const editingAccount = ref(null)
 const saving = ref(false)
 const dialogError = ref(null)
+const reactivatingAccountId = ref(null)
 
 const showDeleteDialog = ref(false)
 const deletingAccount = ref(null)
@@ -324,7 +339,7 @@ const transferForm = ref({
 })
 
 const netAssets = computed(() => {
-  return accounts.value.reduce((sum, a) => sum + Number(a.balance || 0), 0)
+  return activeAccounts.value.reduce((sum, a) => sum + Number(a.balance || 0), 0)
 })
 
 const formCreditUsed = computed(() => {
@@ -401,7 +416,7 @@ async function fetchAccounts() {
   loading.value = true
   error.value = null
   try {
-    const data = await financeService.getAccounts()
+    const data = await financeService.getAccounts({ include_inactive: true })
     accounts.value = Array.isArray(data) ? data : (data.items || data.accounts || [])
   } catch (e) {
     error.value = getErrorMessage(e)
@@ -475,6 +490,21 @@ async function deleteAccount() {
     cancelDelete()
   } finally {
     deleting.value = false
+  }
+}
+
+async function reactivateAccount(account) {
+  if (reactivatingAccountId.value) return
+  reactivatingAccountId.value = account.id
+  try {
+    const updated = await financeService.updateAccount(account.id, { is_active: true })
+    const index = accounts.value.findIndex(item => item.id === account.id)
+    if (index !== -1) accounts.value[index] = updated
+    showSuccess('账户已恢复')
+  } catch (e) {
+    showError(getErrorMessage(e))
+  } finally {
+    reactivatingAccountId.value = null
   }
 }
 
@@ -624,6 +654,7 @@ onMounted(() => { fetchAccounts() })
 .account-row-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .account-row-name { font-size: var(--font-size-sm); font-weight: 600; color: var(--color-text); }
 .account-row-type { font-size: var(--font-size-xs); color: var(--color-text-tertiary); }
+.account-row-status { font-size: var(--font-size-xs); color: var(--color-error); font-weight: 600; }
 
 .account-row-balance {
   font-size: var(--font-size-base); font-weight: 700;
@@ -642,6 +673,19 @@ onMounted(() => { fetchAccounts() })
 .btn-icon svg { width: 14px; height: 14px; }
 .btn-icon--edit:hover { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
 .btn-icon--delete:hover { background: var(--color-error); border-color: var(--color-error); color: #fff; }
+
+.account-row--inactive { opacity: 0.78; }
+.btn-reactivate {
+  display: inline-flex; align-items: center; gap: var(--spacing-xs);
+  min-height: var(--touch-target-min); padding: var(--spacing-xs) var(--spacing-sm);
+  color: var(--color-primary); background: transparent;
+  border: 1px solid var(--color-primary); border-radius: var(--radius-md);
+  cursor: pointer; font-family: var(--font-family); font-size: var(--font-size-xs);
+  font-weight: 600; white-space: nowrap;
+}
+.btn-reactivate:hover { color: #fff; background: var(--color-primary); }
+.btn-reactivate:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-reactivate svg { width: 15px; height: 15px; }
 
 /* Dialog */
 .dialog-overlay {

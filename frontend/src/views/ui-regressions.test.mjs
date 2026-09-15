@@ -317,6 +317,16 @@ test('finance account editor applies type-aware balance rules and credit guidanc
   assert.match(source, /净资产/)
 })
 
+test('finance accounts expose inactive accounts and a reactivation flow', async () => {
+  const source = await readFile(new URL('./FinanceAccounts.vue', viewsDirectory), 'utf8')
+
+  assert.match(source, /getAccounts\(\{ include_inactive: true \}\)/)
+  assert.match(source, /activeAccounts/)
+  assert.match(source, /!acct\.is_active/)
+  assert.match(source, /reactivateAccount\(acct\)/)
+  assert.match(source, /updateAccount\(.*is_active: true/s)
+})
+
 test('todo task creation supports optional project and milestone context', async () => {
   const source = await readFile(new URL('./Todos.vue', viewsDirectory), 'utf8')
   const projectDetail = await readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8')
