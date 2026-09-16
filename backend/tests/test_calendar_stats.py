@@ -226,3 +226,46 @@ def test_goal_status_update_settles_reward_once(
         user_id=goal.user_id,
         source="goal",
     ).count() == 1
+
+
+def test_goal_update_then_explicit_complete_keeps_all_settlements_once(
+    client, auth_headers, db_session, goal,
+):
+    from app.models.cultivation import CultivationLog
+    from app.models.coin_transaction import CoinTransaction
+    from app.models.user import User
+
+    user = db_session.query(User).filter_by(id=goal.user_id).one()
+    initial_coins = user.coins
+    initial_total_experience = user.total_experience
+    updated = client.put(
+        f"/api/todos/goals/{goal.id}",
+        headers=auth_headers,
+        json={"status": "completed", "progress": 100},
+    )
+    assert updated.status_code == 200
+    db_session.expire_all()
+    after_update = db_session.query(User).filter_by(id=goal.user_id).one()
+    updated_coins = after_update.coins
+    updated_experience = after_update.total_experience
+
+    completed = client.post(
+        f"/api/todos/goals/{goal.id}/complete",
+        headers=auth_headers,
+    )
+
+    assert completed.status_code == 200
+    db_session.expire_all()
+    after_explicit_complete = db_session.query(User).filter_by(id=goal.user_id).one()
+    assert updated_coins >= initial_coins + goal.coins_reward
+    assert updated_experience >= initial_total_experience + goal.exp_reward
+    assert after_explicit_complete.coins == updated_coins
+    assert after_explicit_complete.total_experience == updated_experience
+    assert db_session.query(CoinTransaction).filter_by(
+        user_id=goal.user_id,
+        source="goal",
+    ).count() == 1
+    assert db_session.query(CultivationLog).filter_by(
+        user_id=goal.user_id,
+        source_key=f"todo:goal:{goal.id}",
+    ).count() == 1

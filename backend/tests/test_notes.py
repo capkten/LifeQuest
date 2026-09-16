@@ -1,9 +1,10 @@
 # backend/tests/test_notes.py
 import os
 import sqlite3
+import multiprocessing
 from datetime import datetime, timezone
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import event, text
@@ -13,6 +14,65 @@ from sqlalchemy.orm import sessionmaker
 from app.models.note_node import NoteNode
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing-only")
+
+
+def _run_independent_tree_rename(
+    database_url,
+    notes_root,
+    node_id,
+    new_name,
+    started,
+    planned,
+    result_queue,
+    staged=None,
+    resume=None,
+):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.services import note as note_module
+    from app.services.note import NoteService
+
+    engine = create_engine(database_url, connect_args={"timeout": 30})
+    session = sessionmaker(bind=engine, autoflush=False)()
+    note_module.NOTES_DIR = Path(notes_root)
+    service = NoteService(session)
+
+    if planned is not None:
+        original_plan = service._plan_tree_move
+
+        def signal_after_plan(*args, **kwargs):
+            result = original_plan(*args, **kwargs)
+            planned.set()
+            return result
+
+        service._plan_tree_move = signal_after_plan
+
+    if staged is not None:
+        original_rename = Path.rename
+        paused = False
+
+        def pause_after_staging(path, target):
+            nonlocal paused
+            result = original_rename(path, target)
+            if not paused:
+                paused = True
+                staged.set()
+                if not resume.wait(15):
+                    raise TimeoutError("tree move pause was not released")
+            return result
+
+        Path.rename = pause_after_staging
+
+    started.set()
+    try:
+        node = service.rename_node(UUID(node_id), new_name)
+        result_queue.put((new_name, "ok", node.path))
+    except Exception as exc:
+        result_queue.put((new_name, "error", repr(exc)))
+    finally:
+        session.close()
+        engine.dispose()
 
 
 @pytest.fixture
@@ -178,6 +238,134 @@ def test_note_tree_move_cleans_old_and_creates_new_directories(client):
     assert response.status_code == 200
     assert not old_root_directory.exists()
     assert new_root_directory.is_dir()
+
+
+def test_note_tree_renames_serialize_across_processes_with_sqlite(tmp_path):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.database import Base
+    from app.models.note import Notebook
+    from app.models.user import User
+
+    database_path = tmp_path / "shared-notes.sqlite"
+    database_url = f"sqlite:///{database_path}"
+    engine = create_engine(database_url, connect_args={"timeout": 30})
+    Base.metadata.create_all(bind=engine)
+    session = sessionmaker(bind=engine)()
+
+    user_id = uuid4()
+    notebook_id = uuid4()
+    folder_id = uuid4()
+    note_id = uuid4()
+    user = User(
+        id=user_id,
+        username=f"note-race-{uuid4().hex}",
+        email=f"note-race-{uuid4().hex}@example.com",
+        password_hash="unused",
+    )
+    notebook = Notebook(id=notebook_id, user_id=user.id, name="Concurrent notebook")
+    folder = NoteNode(
+        id=folder_id,
+        notebook_id=notebook.id,
+        type="folder",
+        name="Original",
+        normalized_name="original",
+        path="/Original",
+    )
+    note = NoteNode(
+        id=note_id,
+        notebook_id=notebook.id,
+        parent_id=folder.id,
+        type="note",
+        name="Document",
+        normalized_name="document",
+        path="/Original/Document.md",
+        content_path=str(
+            tmp_path / "notes" / str(user.id) / str(notebook.id) / "Original" / "Document.md"
+        ),
+    )
+    session.add_all([user, notebook, folder, note])
+    session.commit()
+    initial_content_path = Path(note.content_path)
+    initial_content_path.parent.mkdir(parents=True)
+    initial_content_path.write_text("stable content", encoding="utf-8")
+    session.close()
+    engine.dispose()
+
+    context = multiprocessing.get_context("fork")
+    staged = context.Event()
+    resume = context.Event()
+    first_started = context.Event()
+    second_started = context.Event()
+    second_planned = context.Event()
+    result_queue = context.Queue()
+    first = context.Process(
+        target=_run_independent_tree_rename,
+        args=(
+            database_url,
+            str(tmp_path / "notes"),
+            str(folder_id),
+            "First rename",
+            first_started,
+            None,
+            result_queue,
+            staged,
+            resume,
+        ),
+    )
+    second = context.Process(
+        target=_run_independent_tree_rename,
+        args=(
+            database_url,
+            str(tmp_path / "notes"),
+            str(folder_id),
+            "Second rename",
+            second_started,
+            second_planned,
+            result_queue,
+        ),
+    )
+
+    first.start()
+    try:
+        assert first_started.wait(5), "first process did not enter the move service"
+        if not staged.wait(10):
+            first.join(1)
+            detail = result_queue.get(timeout=2) if not first.is_alive() else "worker still running"
+            pytest.fail(f"first process did not stage the note file: {detail}")
+        second.start()
+        assert second_started.wait(5)
+        assert not second_planned.wait(0.5), "second process planned before acquiring the notebook lock"
+    finally:
+        resume.set()
+        first.join(15)
+        if second.pid is not None:
+            second.join(15)
+        for process in (first, second):
+            if process.is_alive():
+                process.terminate()
+                process.join(5)
+
+    results = [result_queue.get(timeout=2), result_queue.get(timeout=2)]
+    results_by_process = {result[0]: result[1:] for result in results}
+    assert first.exitcode == second.exitcode == 0
+    assert results_by_process["First rename"] == ("ok", "/First rename")
+    assert results_by_process["Second rename"] == ("ok", "/Second rename")
+
+    verify_engine = create_engine(database_url)
+    verify = sessionmaker(bind=verify_engine)()
+    try:
+        moved_folder = verify.query(NoteNode).filter_by(id=folder_id).one()
+        moved_note = verify.query(NoteNode).filter_by(id=note_id).one()
+        expected_file = tmp_path / "notes" / str(user_id) / str(notebook_id) / "Second rename" / "Document.md"
+        assert moved_folder.path == "/Second rename"
+        assert moved_note.path == "/Second rename/Document.md"
+        assert Path(moved_note.content_path) == expected_file
+        assert expected_file.read_text(encoding="utf-8") == "stable content"
+    finally:
+        verify.close()
+        verify_engine.dispose()
 
 
 def test_note_tree_move_restores_db_and_files_when_rename_fails(client, monkeypatch):
@@ -816,7 +1004,7 @@ class _TribulationMigrationConnection:
     def __init__(self):
         self.rows = [
             ("keep-latest", "user-1", "2026-08-17", "2026-08-17 18:00:00"),
-            ("delete-older", "user-1", "2026-08-17", "2026-08-17 09:00:00"),
+            ("delete-older", "user-1", "2026-08-17", "2026-08-17 17:00:00"),
             ("keep-other-day", "user-1", "2026-08-16", "2026-08-16 09:00:00"),
         ]
         self.deleted = []

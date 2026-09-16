@@ -1609,6 +1609,40 @@ def test_tribulation_attempts_have_database_unique_user_day_constraint():
     assert {"user_id", "attempted_date"} in constraints
 
 
+def test_tribulation_attempt_default_uses_shared_china_business_date(
+    db_session, user, monkeypatch,
+):
+    from app import models
+    from app.models.cultivation import TribulationAttempt
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            value = datetime(2026, 9, 15, 16, tzinfo=timezone.utc)
+            return value if tz is None else value.astimezone(tz)
+
+    monkeypatch.setattr(models.cultivation, "datetime", FixedDateTime)
+    monkeypatch.setattr(
+        models.cultivation,
+        "china_today",
+        lambda: date(2026, 9, 16),
+        raising=False,
+    )
+    attempt = TribulationAttempt(
+        user_id=user.id,
+        target_realm="foundation",
+        base_probability=50,
+        readiness_score=50,
+        final_probability=50,
+        roll=1,
+        success=False,
+    )
+    db_session.add(attempt)
+    db_session.flush()
+
+    assert attempt.attempted_date == date(2026, 9, 16)
+
+
 def test_calculate_preparation_score_uses_authoritative_breakdown_weights():
     from app.services.cultivation import CultivationService
 

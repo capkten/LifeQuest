@@ -4,6 +4,111 @@ from sqlalchemy.exc import IntegrityError
 from tests.conftest import run_startup_migrations
 
 
+def _replace_tribulation_attempt_table(connection, *, unique_index=False):
+    connection.exec_driver_sql("DROP TABLE tribulation_attempts")
+    connection.exec_driver_sql(
+        "CREATE TABLE tribulation_attempts ("
+        "id VARCHAR(36) PRIMARY KEY, user_id VARCHAR(36) NOT NULL, "
+        "attempted_date DATE, attempted_at DATETIME)"
+    )
+    if unique_index:
+        connection.exec_driver_sql(
+            "CREATE UNIQUE INDEX uq_tribulation_attempt_user_day "
+            "ON tribulation_attempts (user_id, attempted_date)"
+        )
+
+
+def test_tribulation_date_repair_keeps_recoverable_collision_survivor(
+    migration_database,
+):
+    from app.main import _deduplicate_tribulation_attempts
+
+    connection = migration_database.connection()
+    _replace_tribulation_attempt_table(connection)
+    connection.execute(
+        text(
+            "INSERT INTO tribulation_attempts "
+            "(id, user_id, attempted_date, attempted_at) VALUES "
+            "('unknown-time', 'legacy-user', '2026-09-16', NULL), "
+            "('known-time', 'legacy-user', '2026-09-15', '2026-09-15 16:00:00')"
+        )
+    )
+
+    _deduplicate_tribulation_attempts(connection)
+
+    rows = connection.execute(
+        text(
+            "SELECT id, attempted_date FROM tribulation_attempts ORDER BY id"
+        )
+    ).all()
+    assert rows == [("known-time", "2026-09-16")]
+
+
+def test_startup_migration_preserves_existing_unique_guard_on_unknown_collision(
+    migration_database,
+):
+    connection = migration_database.connection()
+    _replace_tribulation_attempt_table(connection, unique_index=True)
+    connection.execute(
+        text(
+            "INSERT INTO tribulation_attempts "
+            "(id, user_id, attempted_date, attempted_at) VALUES "
+            "('unknown-time', 'legacy-user', '2026-09-16', NULL), "
+            "('known-time', 'legacy-user', '2026-09-15', '2026-09-15 16:00:00')"
+        )
+    )
+    migration_database.commit()
+
+    run_startup_migrations(migration_database)
+    run_startup_migrations(migration_database)
+
+    rows = migration_database.execute(
+        text(
+            "SELECT id, attempted_date FROM tribulation_attempts ORDER BY id"
+        )
+    ).all()
+    indexes = inspect(migration_database.get_bind()).get_indexes(
+        "tribulation_attempts"
+    )
+    assert rows == [("known-time", "2026-09-16")]
+    assert any(
+        index["name"] == "uq_tribulation_attempt_user_day" and index["unique"]
+        for index in indexes
+    )
+
+
+def test_startup_migration_preserves_duplicate_unrepairable_attempts(
+    migration_database,
+):
+    connection = migration_database.connection()
+    _replace_tribulation_attempt_table(connection)
+    connection.execute(
+        text(
+            "INSERT INTO tribulation_attempts "
+            "(id, user_id, attempted_date, attempted_at) VALUES "
+            "('unknown-a', 'legacy-user', '2026-09-16', NULL), "
+            "('unknown-b', 'legacy-user', '2026-09-16', NULL)"
+        )
+    )
+    migration_database.commit()
+
+    run_startup_migrations(migration_database)
+
+    rows = migration_database.execute(
+        text(
+            "SELECT id, attempted_date FROM tribulation_attempts ORDER BY id"
+        )
+    ).all()
+    indexes = inspect(migration_database.get_bind()).get_indexes(
+        "tribulation_attempts"
+    )
+    assert rows == [("unknown-b", "2026-09-16")]
+    assert any(
+        index["name"] == "uq_tribulation_attempt_user_day" and index["unique"]
+        for index in indexes
+    )
+
+
 def test_startup_migration_backfills_cumulative_experience(
     migration_database,
 ):
@@ -125,6 +230,130 @@ def test_startup_migration_uses_the_supplied_database(database):
         column["name"]
         for column in inspect(database.get_bind()).get_columns("users")
     }
+
+
+def test_tribulation_dates_are_repaired_to_china_days_before_unique_guard(
+    migration_database,
+):
+    attempts = [
+        ("older", "2026-09-14", "2026-09-14 16:00:00"),
+        ("latest", "2026-09-15", "2026-09-15 15:59:59"),
+        ("after-boundary", "2026-09-17", "2026-09-15 16:00:00"),
+    ]
+    for attempt_id, stored_date, attempted_at in attempts:
+        migration_database.execute(
+            text(
+                "INSERT INTO tribulation_attempts "
+                "(id, user_id, target_realm, base_probability, readiness_score, "
+                "pill_bonus, final_probability, roll, success, cultivation_loss, "
+                "attempted_date, attempted_at) "
+                "VALUES (:id, 'legacy-user', 'foundation', 50, 50, 0, 50, 1, 0, 0, "
+                ":attempted_date, :attempted_at)"
+            ),
+            {
+                "id": attempt_id,
+                "attempted_date": stored_date,
+                "attempted_at": attempted_at,
+            },
+        )
+    migration_database.commit()
+
+    run_startup_migrations(migration_database)
+    run_startup_migrations(migration_database)
+
+    rows = migration_database.execute(
+        text(
+            "SELECT id, attempted_date FROM tribulation_attempts "
+            "ORDER BY attempted_date, id"
+        )
+    ).all()
+    assert rows == [("latest", "2026-09-15"), ("after-boundary", "2026-09-16")]
+    assert any(
+        constraint.get("column_names") == ["user_id", "attempted_date"]
+        for constraint in inspect(migration_database.get_bind()).get_unique_constraints(
+            "tribulation_attempts"
+        )
+    )
+
+
+def test_exchange_history_migration_backfills_only_provable_snapshots(
+    migration_database,
+):
+    migration_database.execute(
+        text(
+            "INSERT INTO shop_items (id, name, coin_price, is_active) "
+            "VALUES ('legacy-item', 'Original item', 40, 1)"
+        )
+    )
+    for exchange_id, item_id, quantity, total_cost in (
+        ("known", "legacy-item", 2, 80),
+        ("non-integral", "legacy-item", 2, 41),
+        ("missing", "unavailable-item", 3, 10),
+    ):
+        migration_database.execute(
+            text(
+                "INSERT INTO exchange_history "
+                "(id, user_id, item_id, quantity, total_cost, status) "
+                "VALUES (:id, 'legacy-user', :item_id, :quantity, :total_cost, 'completed')"
+            ),
+            {
+                "id": exchange_id,
+                "item_id": item_id,
+                "quantity": quantity,
+                "total_cost": total_cost,
+            },
+        )
+    migration_database.commit()
+
+    run_startup_migrations(migration_database)
+    migration_database.execute(
+        text("UPDATE shop_items SET name = 'Renamed item', coin_price = 99, is_active = 0")
+    )
+    migration_database.commit()
+    run_startup_migrations(migration_database)
+
+    rows = migration_database.execute(
+        text(
+            "SELECT id, item_name_snapshot, unit_price_snapshot "
+            "FROM exchange_history ORDER BY id"
+        )
+    ).all()
+    assert rows == [
+        ("known", "Original item", 40),
+        ("missing", "未知商品", None),
+        ("non-integral", "Original item", None),
+    ]
+
+
+def test_missing_exchange_item_stays_unknown_after_catalog_item_appears(
+    migration_database,
+):
+    migration_database.execute(
+        text(
+            "INSERT INTO exchange_history "
+            "(id, user_id, item_id, quantity, total_cost, status) "
+            "VALUES ('missing-item', 'legacy-user', 'later-item', 2, 40, 'completed')"
+        )
+    )
+    migration_database.commit()
+
+    run_startup_migrations(migration_database)
+    migration_database.execute(
+        text(
+            "INSERT INTO shop_items (id, name, coin_price, is_active) "
+            "VALUES ('later-item', 'Added later', 25, 1)"
+        )
+    )
+    migration_database.commit()
+    run_startup_migrations(migration_database)
+
+    snapshot = migration_database.execute(
+        text(
+            "SELECT item_name_snapshot, unit_price_snapshot "
+            "FROM exchange_history WHERE id = 'missing-item'"
+        )
+    ).one()
+    assert snapshot == ("未知商品", 20)
 
 
 def test_startup_migration_rolls_back_foundation_changes_on_failure(

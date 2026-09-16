@@ -1,6 +1,7 @@
 import logging
 import os
 from contextlib import contextmanager
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -16,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import engine, Base, SessionLocal
 from app import models  # noqa: F401  # Register all ORM models before create_all.
+from app.timezone import local_date
 from app.services.note import NoteService
 from app.api import auth, users, notes, todos, shop, backpack, achievements, checkin, titles, coins, calendar, stats, finance, projects, cultivation, immortal
 
@@ -61,23 +63,118 @@ def _generic_note_migration_lock(connection):
 
 
 def _deduplicate_tribulation_attempts(connection):
-    """Keep the latest attempt for each user/day before adding the unique index."""
+    """Repair China dates and retain the latest recoverable attempt per user/day."""
     rows = connection.execute(text(
         "SELECT id, user_id, attempted_date, attempted_at "
-        "FROM tribulation_attempts "
-        "WHERE attempted_date IS NOT NULL "
-        "ORDER BY user_id, attempted_date, attempted_at DESC, id DESC"
+        "FROM tribulation_attempts"
     )).fetchall()
-    seen = set()
-    for attempt_id, user_id, attempted_date, _attempted_at in rows:
-        key = (user_id, attempted_date)
-        if key in seen:
+
+    latest_by_day = {}
+    unrepairable = []
+    for attempt_id, user_id, stored_date, attempted_at in rows:
+        if attempted_at is None:
+            if isinstance(stored_date, str):
+                stored_date = date.fromisoformat(stored_date)
+            elif isinstance(stored_date, datetime):
+                stored_date = stored_date.date()
+            unrepairable.append((attempt_id, user_id, stored_date))
+            continue
+        if isinstance(attempted_at, str):
+            attempted_at = datetime.fromisoformat(
+                attempted_at.replace("Z", "+00:00")
+            )
+        if attempted_at.tzinfo is None:
+            attempted_at = attempted_at.replace(tzinfo=timezone.utc)
+        else:
+            attempted_at = attempted_at.astimezone(timezone.utc)
+        business_day = local_date(attempted_at)
+        if isinstance(stored_date, str):
+            stored_date = date.fromisoformat(stored_date)
+        elif isinstance(stored_date, datetime):
+            stored_date = stored_date.date()
+        key = (user_id, business_day)
+        previous = latest_by_day.get(key)
+        candidate = (attempted_at, str(attempt_id), attempt_id, stored_date)
+        if previous is None or candidate[:2] > previous[:2]:
+            if previous is not None:
+                connection.execute(
+                    text("DELETE FROM tribulation_attempts WHERE id = :id"),
+                    {"id": previous[2]},
+                )
+            latest_by_day[key] = candidate
+        else:
             connection.execute(
                 text("DELETE FROM tribulation_attempts WHERE id = :id"),
                 {"id": attempt_id},
             )
+
+    unknown_by_day = {}
+    unknown_without_date = []
+    for attempt_id, user_id, stored_date in unrepairable:
+        if stored_date is None:
+            unknown_without_date.append((attempt_id, user_id, stored_date))
+            continue
+        key = (user_id, stored_date)
+        if key in latest_by_day:
+            # A timestamp-backed row is authoritative for its business day.
+            connection.execute(
+                text("DELETE FROM tribulation_attempts WHERE id = :id"),
+                {"id": attempt_id},
+            )
+            continue
+        previous = unknown_by_day.get(key)
+        if previous is None or str(attempt_id) > str(previous[0]):
+            if previous is not None:
+                connection.execute(
+                    text("DELETE FROM tribulation_attempts WHERE id = :id"),
+                    {"id": previous[0]},
+                )
+            unknown_by_day[key] = (attempt_id, user_id, stored_date)
         else:
-            seen.add(key)
+            connection.execute(
+                text("DELETE FROM tribulation_attempts WHERE id = :id"),
+                {"id": attempt_id},
+            )
+
+    updates = [
+        (attempt_id, user_id, stored_date, business_day)
+        for (user_id, business_day), (_, _, attempt_id, stored_date)
+        in latest_by_day.items()
+    ]
+    reserved = {}
+    surviving_unrepairable = [*unknown_by_day.values(), *unknown_without_date]
+    for attempt_id, user_id, stored_date in surviving_unrepairable:
+        reserved.setdefault(user_id, set()).add(stored_date)
+    for _, user_id, stored_date, business_day in updates:
+        dates = reserved.setdefault(user_id, set())
+        dates.add(stored_date)
+        dates.add(business_day)
+
+    temporary_dates = {}
+    for attempt_id, user_id, _stored_date, _business_day in updates:
+        dates = reserved[user_id]
+        candidate = date.min
+        while candidate in dates:
+            candidate += timedelta(days=1)
+        dates.add(candidate)
+        temporary_dates[attempt_id] = candidate
+
+    for attempt_id, temporary_date in temporary_dates.items():
+        connection.execute(
+            text(
+                "UPDATE tribulation_attempts SET attempted_date = :attempted_date "
+                "WHERE id = :id"
+            ),
+            {"attempted_date": temporary_date, "id": attempt_id},
+        )
+    for attempt_id, _user_id, _stored_date, business_day in updates:
+        connection.execute(
+            text(
+                "UPDATE tribulation_attempts SET attempted_date = :attempted_date "
+                "WHERE id = :id"
+            ),
+            {"attempted_date": business_day, "id": attempt_id},
+        )
 
 
 def _deduplicate_learned_techniques(connection):
@@ -655,14 +752,6 @@ def _migrate_finance_daily_reward_claims(connection, uuid_type):
         existing.add((user_id, reward_date))
 
 
-def _attempted_date_expression(connection):
-    dialect = getattr(connection, "dialect", None)
-    dialect_name = (getattr(dialect, "name", "") or "").lower()
-    if dialect_name in {"sqlite", "mysql", "mariadb"}:
-        return "DATE(attempted_at)"
-    return "CAST(attempted_at AS DATE)"
-
-
 @contextmanager
 def _note_migration_lock(db_engine):
     """Hold a database-backed mutex across the complete note migration."""
@@ -989,6 +1078,32 @@ def _migrate_columns(database_engine=None):
                         f"ALTER TABLE exchange_history ADD COLUMN {column_name} {column_definition}"
                     ))
                     logger.info("Migration: added exchange_history.%s", column_name)
+            if shop_item_cols is None:
+                conn.execute(text(
+                    "UPDATE exchange_history SET item_name_snapshot = '未知商品' "
+                    "WHERE item_name_snapshot IS NULL"
+                ))
+            else:
+                conn.execute(text(
+                    "UPDATE exchange_history SET item_name_snapshot = '未知商品' "
+                    "WHERE item_name_snapshot IS NULL AND NOT EXISTS ("
+                    "SELECT 1 FROM shop_items "
+                    "WHERE shop_items.id = exchange_history.item_id)"
+                ))
+                conn.execute(text(
+                    "UPDATE exchange_history SET item_name_snapshot = ("
+                    "SELECT name FROM shop_items "
+                    "WHERE shop_items.id = exchange_history.item_id) "
+                    "WHERE item_name_snapshot IS NULL AND EXISTS ("
+                    "SELECT 1 FROM shop_items "
+                    "WHERE shop_items.id = exchange_history.item_id)"
+                ))
+            conn.execute(text(
+                "UPDATE exchange_history SET unit_price_snapshot = "
+                "CAST(total_cost / quantity AS INTEGER) "
+                "WHERE unit_price_snapshot IS NULL AND quantity > 0 "
+                "AND total_cost % quantity = 0"
+            ))
             _ensure_unique_index(
                 conn,
                 "exchange_history",
@@ -1009,10 +1124,6 @@ def _migrate_columns(database_engine=None):
         if tribulation_cols is not None:
             if "attempted_date" not in tribulation_cols:
                 conn.execute(text("ALTER TABLE tribulation_attempts ADD COLUMN attempted_date DATE"))
-                conn.execute(text(
-                    "UPDATE tribulation_attempts SET attempted_date = "
-                    f"{_attempted_date_expression(conn)} WHERE attempted_date IS NULL"
-                ))
                 logger.info("Migration: added tribulation_attempts.attempted_date")
             _deduplicate_tribulation_attempts(conn)
             _ensure_unique_index(

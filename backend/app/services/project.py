@@ -148,6 +148,17 @@ class ProjectService:
                 current_status = normalize_project_status(project.status)
                 if current_status != target_status:
                     self._validate_project_transition(current_status, target_status)
+                    if target_status == ProjectStatus.COMPLETED.value:
+                        project = self.project_repo.get_for_update(project.id)
+                        if project is None:
+                            raise HTTPException(status_code=404, detail="Project not found")
+                        current_status = normalize_project_status(project.status)
+                        if current_status != target_status:
+                            self._validate_project_transition(current_status, target_status)
+                            for field, value in update_data.items():
+                                if field != "status":
+                                    setattr(project, field, value)
+                            return self.complete_project(project)
                 update_data["status"] = target_status
             return self.project_repo.update(project, update_data)
         except Exception:

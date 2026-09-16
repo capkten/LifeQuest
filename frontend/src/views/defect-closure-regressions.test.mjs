@@ -222,9 +222,9 @@ test('backpack history consumes canonical action types and covers every lifecycl
   }
 })
 
-test('exchange history prefers stored item snapshots and falls back to active shop items', async () => {
+test('exchange history prefers stored snapshots and uses stable unknown values when absent', async () => {
   const source = await readFile(new URL('./ExchangeHistory.vue', import.meta.url), 'utf8')
-  const helperSource = source.match(/function exchangeItemPresentation\(record, shopItemsMap\) \{[\s\S]*?\n\}/)?.[0]
+  const helperSource = source.match(/function exchangeItemPresentation\(record\) \{[\s\S]*?\n\}/)?.[0]
 
   assert.ok(helperSource, 'exchangeItemPresentation must remain available')
   assert.match(source, /item_name_snapshot/)
@@ -246,8 +246,24 @@ test('exchange history prefers stored item snapshots and falls back to active sh
   assert.deepEqual(exchangeItemPresentation({ item_id: 'legacy-item' }, {
     'legacy-item': { name: '旧商品', coin_price: 12 },
   }), {
-    name: '旧商品',
-    unitPrice: 12,
+    name: '未知商品',
+    unitPrice: null,
+  })
+})
+
+test('unrecoverable exchange history does not present mutable catalog values as a snapshot', async () => {
+  const source = await readFile(new URL('./ExchangeHistory.vue', import.meta.url), 'utf8')
+  const helperSource = source.match(/function exchangeItemPresentation\(record\) \{[\s\S]*?\n\}/)?.[0]
+  assert.ok(helperSource, 'exchangeItemPresentation must remain available')
+
+  const exchangeItemPresentation = new Function(
+    `${helperSource}; return exchangeItemPresentation`,
+  )()
+  assert.deepEqual(exchangeItemPresentation({ item_id: 'legacy-item' }, {
+    'legacy-item': { name: 'Catalog value changed later', coin_price: 99 },
+  }), {
+    name: '未知商品',
+    unitPrice: null,
   })
 })
 

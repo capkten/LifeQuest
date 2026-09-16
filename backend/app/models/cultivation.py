@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, Uuid, UniqueConstraint
 
 from app.database import Base
+from app.timezone import today as china_today
 
 
 def utc_now():
@@ -60,5 +61,5 @@ class TribulationAttempt(Base):
     roll = Column(Float, nullable=False)
     success = Column(Boolean, nullable=False)
     cultivation_loss = Column(Integer, nullable=False, default=0)
-    attempted_date = Column(Date, nullable=False, default=lambda: datetime.now(timezone.utc).date())
+    attempted_date = Column(Date, nullable=False, default=china_today)
     attempted_at = Column(DateTime, nullable=False, default=utc_now)

@@ -1,11 +1,12 @@
 import pytest
 from fastapi import HTTPException
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from app.models.achievement import Achievement, UserAchievement
 from app.models.coin_transaction import CoinTransaction
 from app.models.project import Project, ProjectPhase
 from app.models.todo import Task
+from app.models.user import User
 from app.schemas.project import PhaseCreate, ProjectUpdate
 from app.services.project import ProjectService
 
@@ -123,6 +124,68 @@ def test_reaching_milestone_is_idempotent(client, auth_headers, project):
     assert first.status_code == second.status_code == 200
     assert first.json()["status"] == second.json()["status"] == "reached"
     assert first.json()["reached_at"] == second.json()["reached_at"]
+
+
+def test_project_put_completion_settles_achievement_once_and_keeps_fields(
+    client, auth_headers, project, db_session,
+):
+    achievement = Achievement(
+        name=f"PUT completion {uuid4().hex}",
+        description="Completion through project update",
+        icon="test",
+        condition_type="project_completed",
+        condition_value=1,
+        coin_reward=7,
+        exp_reward=11,
+    )
+    db_session.add(achievement)
+    db_session.commit()
+    user = db_session.query(User).filter_by(id=project.user_id).one()
+    initial_coins = user.coins
+    initial_experience = user.experience
+
+    started = client.post(f"/api/projects/{project.id}/start", headers=auth_headers)
+    completed = client.put(
+        f"/api/projects/{project.id}",
+        headers=auth_headers,
+        json={
+            "status": "completed",
+            "name": "Settled by PUT",
+            "description": "Fields stay editable with completion",
+        },
+    )
+    repeated = client.put(
+        f"/api/projects/{project.id}",
+        headers=auth_headers,
+        json={"status": "completed"},
+    )
+    explicit = client.post(
+        f"/api/projects/{project.id}/complete",
+        headers=auth_headers,
+    )
+
+    assert started.status_code == 200
+    assert completed.status_code == repeated.status_code == explicit.status_code == 200
+    assert completed.json()["name"] == "Settled by PUT"
+    assert completed.json()["description"] == "Fields stay editable with completion"
+    db_session.expire_all()
+    persisted = db_session.query(Project).filter_by(id=project.id).one()
+    persisted_user = db_session.query(User).filter_by(id=project.user_id).one()
+    assert persisted.status == "completed"
+    assert persisted.name == "Settled by PUT"
+    assert persisted.description == "Fields stay editable with completion"
+    assert db_session.query(UserAchievement).filter_by(
+        user_id=project.user_id,
+        achievement_id=achievement.id,
+    ).count() == 1
+    reward_rows = db_session.query(CoinTransaction).filter_by(
+        user_id=project.user_id,
+        source_id=f"a:{achievement.id.hex}",
+    ).all()
+    assert len(reward_rows) == 1
+    assert reward_rows[0].amount == 7
+    assert persisted_user.coins == initial_coins + 7
+    assert persisted_user.experience == initial_experience + 11
 
 
 def test_project_completion_rolls_back_status_and_rewards_when_reward_write_fails(

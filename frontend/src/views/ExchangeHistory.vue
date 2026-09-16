@@ -167,7 +167,6 @@ import { labelExchangeStatus } from '../utils/displayLabels'
 import { getErrorMessage } from '../utils/errorMessage'
 
 const records = ref([])
-const shopItemsMap = ref({})
 const loading = ref(true)
 const error = ref(null)
 const refundingId = ref(null)
@@ -180,16 +179,15 @@ const latestRecordDate = computed(() => {
   return formatDate(records.value[0].created_at)
 })
 
-function exchangeItemPresentation(record, shopItemsMap) {
-  const shopItem = shopItemsMap?.[record.item_id]
+function exchangeItemPresentation(record) {
   return {
-    name: record.item_name_snapshot || shopItem?.name || '未知商品',
-    unitPrice: record.unit_price_snapshot ?? shopItem?.coin_price ?? null,
+    name: record.item_name_snapshot || '未知商品',
+    unitPrice: record.unit_price_snapshot ?? null,
   }
 }
 
 function getItemPresentation(record) {
-  return exchangeItemPresentation(record, shopItemsMap.value)
+  return exchangeItemPresentation(record)
 }
 
 async function submitRefundMutation({ records, record, refundExchange, getErrorMessage }) {
@@ -237,19 +235,6 @@ function formatStatus(status) {
   return labelExchangeStatus(status)
 }
 
-async function fetchShopItems() {
-  try {
-    const shopItems = await shopService.getItems()
-    const map = {}
-    for (const si of shopItems) {
-      map[si.id] = si
-    }
-    shopItemsMap.value = map
-  } catch (e) {
-    console.error('Failed to fetch shop items for name lookup:', e)
-  }
-}
-
 async function fetchHistory() {
   records.value = await shopService.getExchangeHistory()
 }
@@ -258,7 +243,7 @@ async function fetchAll() {
   loading.value = true
   error.value = null
   try {
-    await Promise.all([fetchShopItems(), fetchHistory()])
+    await fetchHistory()
   } catch (e) {
     error.value = getErrorMessage(e, '加载兑换历史失败，请重试。')
   } finally {

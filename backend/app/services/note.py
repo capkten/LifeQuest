@@ -137,6 +137,18 @@ class NoteService:
         self.attachment_repo = AttachmentRepository(db)
         self.achievement_service = AchievementService(db)
 
+    def _lock_notebook_tree(self, notebook_id: UUID) -> None:
+        self.db.rollback()
+        locked = self.db.query(Notebook).filter(
+            Notebook.id == notebook_id
+        ).update(
+            {Notebook.id: Notebook.id},
+            synchronize_session=False,
+        )
+        if locked != 1:
+            raise ValueError("Notebook not found")
+        self.db.expire_all()
+
     # --- Ownership verification ---
 
     def get_notebook_access(self, notebook_id: UUID, user_id: UUID) -> Optional[dict]:
@@ -756,9 +768,18 @@ class NoteService:
         new_name=_UNSET,
         commit: bool = True,
     ) -> NoteNode:
-        """Plan and apply one tree mutation while holding the tree lock."""
+        """Plan and apply one tree mutation while holding the notebook DB lock."""
         with _NOTE_TREE_MOVE_LOCK:
             node = self.node_repo.get_by_id(node_id)
+            if not node:
+                raise ValueError("Node not found")
+            self._lock_notebook_tree(node.notebook_id)
+            node = (
+                self.db.query(NoteNode)
+                .filter(NoteNode.id == node_id)
+                .populate_existing()
+                .first()
+            )
             if not node:
                 raise ValueError("Node not found")
             target_parent = node.parent_id if new_parent_id is _UNSET else new_parent_id
@@ -767,19 +788,23 @@ class NoteService:
             return self._apply_tree_move(plan, commit=commit)
 
     def rename_node(self, node_id: UUID, new_name: str, commit: bool = True) -> NoteNode:
-        with _NOTE_TREE_MOVE_LOCK:
-            node = self.node_repo.get_by_id(node_id)
-            if not node:
-                raise ValueError("Node not found")
-            if normalize_name(new_name) == node.normalized_name:
-                return node
-            return self.move_tree(node_id, new_name=new_name, commit=commit)
+        return self.move_tree(node_id, new_name=new_name, commit=commit)
 
     def move_node(self, node_id: UUID, new_parent_id: Optional[UUID]) -> NoteNode:
         return self.move_tree(node_id, new_parent_id=new_parent_id)
 
     def update_note(self, node_id: UUID, note_in: NoteUpdate, user_id: Optional[UUID] = None) -> NoteNode:
         with _NOTE_TREE_MOVE_LOCK:
+            node = (
+                self.db.query(NoteNode)
+                .filter(NoteNode.id == node_id)
+                .populate_existing()
+                .first()
+            )
+            if not node or node.type != "note":
+                raise ValueError("Note not found")
+
+            self._lock_notebook_tree(node.notebook_id)
             node = (
                 self.db.query(NoteNode)
                 .filter(NoteNode.id == node_id)
