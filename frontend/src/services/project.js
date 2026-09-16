@@ -25,6 +25,10 @@ export const projectService = {
     const r = await api.post(`/projects/${id}/complete`)
     return r.data
   },
+  async startProject(id) {
+    const r = await api.post(`/projects/${id}/start`)
+    return r.data
+  },
 
   // Phases
   async createPhase(projectId, data) {

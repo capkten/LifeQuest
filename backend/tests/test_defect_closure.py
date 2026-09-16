@@ -16,6 +16,7 @@ from app.models.coin_transaction import CoinSource, CoinTransaction, CoinType
 from app.models.finance_category import CategoryType, FinanceCategory
 from app.models.recurring_transaction import RecurringTransaction
 from app.models.backpack import BackpackItem, UsageAction, UsageHistory
+from app.models.project import ProjectPhase
 from app.models.shop import ExchangeHistory, ShopItem
 from app.services.finance import FinanceService
 from app.models.user import User
@@ -65,6 +66,22 @@ def test_daily_summary_preserves_active_and_schedule_state(
     resumed_row = next(item for item in resumed_daily["habits"] if item["id"] == str(habit.id))
     assert resumed_row["pause_intervals"] == resumed.json()["pause_intervals"]
     assert resumed_row["leave_intervals"] == []
+
+
+def test_project_status_reads_normalize_legacy_values_and_unknowns(
+    client, auth_headers, project, db_session,
+):
+    project.status = "legacy_status"
+    phase = ProjectPhase(project_id=project.id, name="历史阶段", status="in_progress")
+    db_session.add(phase)
+    db_session.commit()
+
+    response = client.get(f"/api/projects/{project.id}", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "unknown"
+    assert response.json()["phases"][0]["status"] == "active"
+    assert response.json()["status"] not in {"planning", "active", "completed", "archived"}
 
 
 def test_mcp_tree_move_restores_files_when_combined_move_fails(client, auth_headers, user, db_session, monkeypatch):

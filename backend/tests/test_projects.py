@@ -64,6 +64,65 @@ def test_move_task_persists_status(client):
     assert move_response.json()["status"] == "completed"
 
 
+def test_project_start_is_idempotent(client, auth_headers, project):
+    first = client.post(f"/api/projects/{project.id}/start", headers=auth_headers)
+    second = client.post(f"/api/projects/{project.id}/start", headers=auth_headers)
+    assert first.status_code == second.status_code == 200
+    assert first.json()["status"] == second.json()["status"] == "active"
+
+
+def test_project_rejects_unknown_status(client, auth_headers, project):
+    response = client.put(
+        f"/api/projects/{project.id}",
+        headers=auth_headers,
+        json={"status": "unknown"},
+    )
+    assert response.status_code == 422
+
+
+def test_project_status_lifecycle_rejects_skipped_transitions(client, auth_headers, project):
+    skipped = client.put(
+        f"/api/projects/{project.id}",
+        headers=auth_headers,
+        json={"status": "completed"},
+    )
+    assert skipped.status_code == 409
+
+    started = client.post(f"/api/projects/{project.id}/start", headers=auth_headers)
+    assert started.status_code == 200
+    completed = client.put(
+        f"/api/projects/{project.id}",
+        headers=auth_headers,
+        json={"status": "completed"},
+    )
+    assert completed.status_code == 200
+    archived = client.put(
+        f"/api/projects/{project.id}",
+        headers=auth_headers,
+        json={"status": "archived"},
+    )
+    assert archived.status_code == 200
+
+
+def test_reaching_milestone_is_idempotent(client, auth_headers, project):
+    milestone = client.post(
+        f"/api/projects/{project.id}/milestones",
+        headers=auth_headers,
+        json={"name": "完成首个版本"},
+    ).json()
+    first = client.post(
+        f"/api/projects/milestones/{milestone['id']}/reach",
+        headers=auth_headers,
+    )
+    second = client.post(
+        f"/api/projects/milestones/{milestone['id']}/reach",
+        headers=auth_headers,
+    )
+    assert first.status_code == second.status_code == 200
+    assert first.json()["status"] == second.json()["status"] == "reached"
+    assert first.json()["reached_at"] == second.json()["reached_at"]
+
+
 def test_project_task_rejects_cross_project_references(client):
     headers_a = _register_and_login(client)
     client.post(

@@ -92,6 +92,16 @@
             <span class="status-badge" :class="'status-badge--' + project.status">
               {{ formatStatus(project.status) }}
             </span>
+            <button
+              v-if="project.status === 'planning'"
+              class="btn-sm project-start-action"
+              type="button"
+              :disabled="startPendingIds.has(project.id)"
+              :aria-disabled="startPendingIds.has(project.id)"
+              @click.stop="startProject(project)"
+            >
+              {{ startPendingIds.has(project.id) ? '启动中...' : '开始项目' }}
+            </button>
           </div>
 
           <div class="project-progress">
@@ -217,18 +227,23 @@
           </div>
         </div>
       </Transition>
+      <Transition name="toast">
+        <div v-if="successToast" class="success-toast" role="status" aria-live="polite">
+          <span>{{ successToast }}</span>
+        </div>
+      </Transition>
     </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, nextTick, watch, reactive } from 'vue'
 import { projectService } from '../services/project'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelProjectStatus } from '../utils/displayLabels'
 
-const { errorToast, showError } = useToast()
+const { errorToast, successToast, showError, showSuccess } = useToast()
 
 const projects = ref([])
 const loading = ref(true)
@@ -238,6 +253,7 @@ const showDialog = ref(false)
 const creating = ref(false)
 const dialogError = ref(null)
 const dialogNameInput = ref(null)
+const startPendingIds = reactive(new Set())
 
 const presetColors = [
   '#0ea5e9', '#38bdf8', '#51cf66', '#ff6b6b',
@@ -246,6 +262,7 @@ const presetColors = [
 
 const filterTabs = [
   { value: 'all', label: '全部' },
+  { value: 'planning', label: '规划中' },
   { value: 'active', label: '进行中' },
   { value: 'completed', label: '已完成' },
   { value: 'archived', label: '已归档' }
@@ -366,6 +383,28 @@ async function saveProject() {
     dialogError.value = getErrorMessage(e)
   } finally {
     creating.value = false
+  }
+}
+
+async function startProject(project) {
+  if (!project || project.status !== 'planning') {
+    showError('项目已开始或已结束，无需重复提交。')
+    return
+  }
+  if (startPendingIds.has(project.id)) {
+    showError('项目正在启动，请等待完成后再试。')
+    return
+  }
+  startPendingIds.add(project.id)
+  try {
+    const updated = await projectService.startProject(project.id)
+    const index = projects.value.findIndex(item => item.id === project.id)
+    if (index !== -1) projects.value[index] = updated
+    showSuccess('项目已开始')
+  } catch (e) {
+    showError(getErrorMessage(e))
+  } finally {
+    startPendingIds.delete(project.id)
   }
 }
 
@@ -722,6 +761,11 @@ onMounted(() => {
   color: var(--color-text-tertiary);
 }
 
+.project-start-action {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 /* Progress */
 .project-progress {
   margin-bottom: var(--spacing-md);
@@ -993,6 +1037,20 @@ onMounted(() => {
   background: var(--color-error);
   color: #fff;
   border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  box-shadow: var(--shadow-lg);
+}
+
+.success-toast {
+  position: fixed;
+  top: var(--spacing-lg);
+  right: var(--spacing-lg);
+  z-index: 1100;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-radius: var(--radius-md);
+  background: var(--color-success);
+  color: #fff;
   font-size: var(--font-size-sm);
   font-weight: 600;
   box-shadow: var(--shadow-lg);

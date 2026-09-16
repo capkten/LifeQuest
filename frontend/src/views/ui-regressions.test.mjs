@@ -579,6 +579,28 @@ test('project mutations use independent locks and phase deletion preserves task 
   assert.match(service, /params: options/)
 })
 
+test('project lifecycle exposes start, milestone reach, and centralized phase labels', async () => {
+  const [projects, detail, service, labels] = await Promise.all([
+    readFile(new URL('./Projects.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('../services/project.js', import.meta.url), 'utf8'),
+    readFile(new URL('../utils/displayLabels.js', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(service, /startProject\(id\)/)
+  assert.match(service, /\/projects\/\$\{id\}\/start/)
+  assert.match(service, /reachMilestone\(msId\)/)
+  assert.match(projects, /projectService\.startProject\(/)
+  assert.match(projects, /startPending/)
+  assert.match(detail, /projectService\.reachMilestone\(/)
+  assert.match(detail, /milestoneReachPending/)
+  assert.match(detail, /里程碑已达成/)
+  assert.match(labels, /PHASE_STATUS_LABELS/)
+  assert.match(labels, /labelPhaseStatus\(/)
+  assert.match(detail, /labelPhaseStatus\(/)
+  assert.doesNotMatch(detail, /const map = \{ planning: '规划中'/)
+})
+
 test('ProjectDetail inline task creation locks duplicate submissions and keeps failed input retryable', async () => {
   const source = await readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8')
   const phaseHandler = source.match(/function addTaskToPhase\(phaseId, event\) \{([\s\S]*?)\n\}/)?.[1]

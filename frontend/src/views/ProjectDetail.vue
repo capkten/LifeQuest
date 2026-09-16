@@ -54,7 +54,13 @@
               </svg>
               编辑
             </button>
-            <button v-if="project.status !== 'completed'" class="btn-outline btn-outline--success" @click="completeProject" :disabled="finishing" :aria-disabled="finishing">
+            <button v-if="project.status === 'planning'" class="btn-outline btn-outline--success" @click="startProject" :disabled="starting" :aria-disabled="starting">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <polygon points="5 3 19 12 5 21 5 3" />
+              </svg>
+              {{ starting ? '启动中...' : '开始项目' }}
+            </button>
+            <button v-if="project.status === 'active'" class="btn-outline btn-outline--success" @click="completeProject" :disabled="finishing" :aria-disabled="finishing">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <path d="M20 6L9 17l-5-5" />
               </svg>
@@ -148,7 +154,7 @@
               v-for="ms in milestones"
               :key="ms.id"
               class="milestone-node"
-              :class="{ 'milestone-node--reached': ms.reached_at }"
+              :class="{ 'milestone-node--reached': ms.status === 'reached' || ms.reached_at }"
               @click="openMilestoneDialog(ms)"
             >
               <div class="milestone-diamond">
@@ -156,6 +162,16 @@
               </div>
               <span class="milestone-label">{{ ms.name }}</span>
               <span v-if="ms.due_date" class="milestone-date">{{ formatDateShort(ms.due_date) }}</span>
+              <button
+                v-if="ms.status !== 'reached' && !ms.reached_at"
+                class="milestone-reach-action"
+                type="button"
+                :disabled="milestoneReachPendingIds.has(ms.id)"
+                :aria-disabled="milestoneReachPendingIds.has(ms.id)"
+                @click.stop="reachMilestone(ms)"
+              >
+                {{ milestoneReachPendingIds.has(ms.id) ? '提交中...' : '达成' }}
+              </button>
             </div>
           </div>
           <p v-else class="section-empty">暂无里程碑</p>
@@ -168,7 +184,7 @@
               <polyline points="6 9 12 15 18 9" />
             </svg>
             <span class="phase-name">{{ phase.name }}</span>
-            <span class="status-badge status-badge--sm" :class="'status-badge--' + (phase.status || 'active')">{{ formatStatus(phase.status || 'active') }}</span>
+            <span class="status-badge status-badge--sm" :class="'status-badge--' + (phase.status || 'planning')">{{ formatPhaseStatus(phase.status || 'planning') }}</span>
             <span class="phase-count">{{ getPhaseTasks(phase.id).length }}</span>
             <div class="phase-actions" @click.stop>
               <button class="btn-icon" @click="openPhaseDialog(phase)" :disabled="phasePending || phaseDeleteState.pending" :aria-disabled="phasePending || phaseDeleteState.pending" :aria-label="phaseDeleteState.pending ? '编辑（阶段删除中）' : '编辑'" :title="phaseDeleteState.pending ? '阶段正在删除，请等待完成后再试。' : '编辑阶段'">
@@ -626,6 +642,7 @@ import {
 } from '../utils/dateTime'
 import { useAuthStore } from '../stores/auth'
 import { useCultivationStore } from '../stores/cultivation'
+import { labelPhaseStatus, labelProjectStatus } from '../utils/displayLabels'
 
 const route = useRoute()
 const router = useRouter()
@@ -645,6 +662,7 @@ const error = ref(null)
 const savePending = ref(false)
 const phasePending = ref(false)
 const deletePending = ref(false)
+const starting = ref(false)
 const finishing = ref(false)
 const completingTaskId = ref(null)
 const descCollapsed = ref(true)
@@ -652,14 +670,17 @@ const taskPendingIds = reactive(new Set())
 const taskMutationTokens = new Map()
 const taskCreationPending = ref(false)
 const milestonePending = ref(false)
+const milestoneReachPendingIds = reactive(new Set())
 let routeRevision = 0
 let milestoneRequestId = 0
+let milestoneReachRequestId = 0
 let fetchRequestId = 0
 let taskCreationRequestId = 0
 let phaseRequestId = 0
 let phaseDeleteRequestId = 0
 let projectSaveRequestId = 0
 let projectCompletionRequestId = 0
+let projectStartRequestId = 0
 let projectDeleteRequestId = 0
 let rewardRequestId = 0
 let dataRevision = 0
@@ -736,8 +757,11 @@ function getProgress(p) {
 }
 
 function formatStatus(status) {
-  const map = { planning: '规划中', active: '进行中', completed: '已完成', archived: '已归档' }
-  return map[status] || status
+  return labelProjectStatus(status)
+}
+
+function formatPhaseStatus(status) {
+  return labelPhaseStatus(status)
 }
 
 function formatTaskStatus(status) {
@@ -1213,7 +1237,51 @@ async function saveMilestone() {
   }
 }
 
+async function reachMilestone(milestone) {
+  if (!milestone) return
+  if (milestone.status === 'reached' || milestone.reached_at) {
+    showError('里程碑已经达成，无需重复提交。')
+    return
+  }
+  if (milestoneReachPendingIds.has(milestone.id)) {
+    showError('里程碑正在提交，请等待完成后再试。')
+    return
+  }
+  const targetId = String(projectId.value)
+  const requestId = ++milestoneReachRequestId
+  milestoneReachPendingIds.add(milestone.id)
+  try {
+    const updated = await projectService.reachMilestone(milestone.id)
+    if (requestId !== milestoneReachRequestId || String(route.params.id) !== targetId) return
+    const index = milestones.value.findIndex(item => item.id === milestone.id)
+    if (index !== -1) milestones.value[index] = updated
+    showSuccess('里程碑已达成')
+  } catch (e) {
+    if (requestId === milestoneReachRequestId && String(route.params.id) === targetId) showError(getErrorMessage(e))
+  } finally {
+    milestoneReachPendingIds.delete(milestone.id)
+  }
+}
+
 // --- Project edit/complete/delete ---
+async function startProject() {
+  if (project.value?.status !== 'planning') { showError('项目已开始或已结束，无需重复提交。'); return }
+  if (starting.value) { showError('项目正在启动，请等待完成后再试。'); return }
+  const targetId = String(projectId.value)
+  const token = createProjectRequestToken(++projectStartRequestId, targetId)
+  starting.value = true
+  try {
+    const updated = await projectService.startProject(targetId)
+    if (!isCurrentProjectRequest(token, projectStartRequestId)) return
+    project.value = updated
+    showSuccess('项目已开始')
+  } catch (e) {
+    if (isCurrentProjectRequest(token, projectStartRequestId)) showError(getErrorMessage(e))
+  } finally {
+    if (isCurrentProjectRequest(token, projectStartRequestId)) starting.value = false
+  }
+}
+
 function openEditProject() {
   editForm.value = {
     name: project.value.name || '',
@@ -1442,11 +1510,13 @@ function invalidateRequests() {
   fetchRequestId += 1
   dataRevision += 1
   milestoneRequestId += 1
+  milestoneReachRequestId += 1
   taskCreationRequestId += 1
   phaseRequestId += 1
   phaseDeleteRequestId += 1
   projectSaveRequestId += 1
   projectCompletionRequestId += 1
+  projectStartRequestId += 1
   projectDeleteRequestId += 1
   rewardRequestId += 1
   taskMutationTokens.clear()
@@ -1458,6 +1528,8 @@ function invalidateRequests() {
   finishing.value = false
   completingTaskId.value = null
   milestonePending.value = false
+  milestoneReachPendingIds.clear()
+  starting.value = false
   draggedTask = null
   cancelTaskDialog({ force: true })
   cancelPhaseDialog({ force: true })
@@ -1833,6 +1905,27 @@ onBeforeUnmount(() => {
 .milestone-date {
   font-size: var(--font-size-xs);
   color: var(--color-text-tertiary);
+}
+
+.milestone-reach-action {
+  padding: 2px var(--spacing-sm);
+  border: 1px solid var(--color-success);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-success);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+}
+
+.milestone-reach-action:hover:not(:disabled) {
+  background: var(--color-success);
+  color: #fff;
+}
+
+.milestone-reach-action:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 /* Phase Groups */

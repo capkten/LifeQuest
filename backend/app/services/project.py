@@ -13,6 +13,7 @@ from app.models.project import (
     ProjectMilestone,
     ProjectStatus,
     MilestoneStatus,
+    normalize_project_status,
 )
 from app.models.todo import Task, TaskStatus
 from app.repositories.project import ProjectRepository, PhaseRepository, MilestoneRepository
@@ -38,6 +39,15 @@ _UNSET = object()
 
 class ProjectService:
     logger = logging.getLogger(__name__)
+    _PROJECT_TRANSITIONS = {
+        ProjectStatus.PLANNING.value: {ProjectStatus.ACTIVE.value},
+        ProjectStatus.ACTIVE.value: {
+            ProjectStatus.COMPLETED.value,
+            ProjectStatus.ARCHIVED.value,
+        },
+        ProjectStatus.COMPLETED.value: {ProjectStatus.ARCHIVED.value},
+        ProjectStatus.ARCHIVED.value: set(),
+    }
     def __init__(self, db: Session):
         self.db = db
         self.project_repo = ProjectRepository(db)
@@ -135,6 +145,12 @@ class ProjectService:
     def update_project(self, project: Project, data: ProjectUpdate) -> Project:
         try:
             update_data = data.model_dump(exclude_unset=True)
+            if "status" in update_data:
+                target_status = update_data["status"].value
+                current_status = normalize_project_status(project.status)
+                if current_status != target_status:
+                    self._validate_project_transition(current_status, target_status)
+                update_data["status"] = target_status
             return self.project_repo.update(project, update_data)
         except Exception:
             self.db.rollback()
@@ -188,13 +204,32 @@ class ProjectService:
             self.db.rollback()
             raise
 
-    def complete_project(self, project: Project) -> Project:
-        if project.status == ProjectStatus.COMPLETED:
+    @classmethod
+    def _validate_project_transition(cls, current_status: str, target_status: str) -> None:
+        if target_status not in cls._PROJECT_TRANSITIONS.get(current_status, set()):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cannot transition project from {current_status} to {target_status}",
+            )
+
+    def _transition_project(self, project: Project, target_status: str) -> Project:
+        current_status = normalize_project_status(project.status)
+        if current_status == target_status:
             return project
-        project.status = ProjectStatus.COMPLETED
+        self._validate_project_transition(current_status, target_status)
+        project.status = target_status
         project.updated_at = datetime.now(timezone.utc)
         self.db.commit()
         self.db.refresh(project)
+        return project
+
+    def start_project(self, project: Project) -> Project:
+        return self._transition_project(project, ProjectStatus.ACTIVE.value)
+
+    def complete_project(self, project: Project) -> Project:
+        if normalize_project_status(project.status) == ProjectStatus.COMPLETED.value:
+            return project
+        project = self._transition_project(project, ProjectStatus.COMPLETED.value)
 
         # Check project achievements
         try:
@@ -303,6 +338,8 @@ class ProjectService:
             raise
 
     def reach_milestone(self, milestone: ProjectMilestone) -> ProjectMilestone:
+        if milestone.status == MilestoneStatus.REACHED or milestone.reached_at is not None:
+            return milestone
         milestone.status = MilestoneStatus.REACHED
         milestone.reached_at = datetime.now(timezone.utc)
         self.db.commit()

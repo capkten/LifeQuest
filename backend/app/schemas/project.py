@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
+from app.models.project import ProjectStatus
+
 
 # Project schemas
 class ProjectCreate(BaseModel):
@@ -20,7 +22,7 @@ class ProjectUpdate(BaseModel):
     description: Optional[str] = None
     color: Optional[str] = None
     icon: Optional[str] = None
-    status: Optional[str] = None
+    status: Optional[ProjectStatus] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
 
@@ -55,7 +57,7 @@ class PhaseCreate(BaseModel):
 class PhaseUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    status: Optional[str] = None
+    status: Optional[ProjectStatus] = None
     sort_order: Optional[int] = None
 
 
