@@ -20,7 +20,9 @@
     "/finance/debts",
     "/backpack/history",
     "/notes",
-    "/projects"
+    "/projects",
+    "/calendar",
+    "/stats"
   ],
   "onlineEvidence": {
     "health": "GET /api/health",

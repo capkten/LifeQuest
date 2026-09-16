@@ -98,7 +98,7 @@ Artifact: `.harness/iterations/2026-09-16-task-12/strict-results.json`
 The runner contract declares all required viewports and routes:
 `375x812`, `768x1024`, `1024x900`, and `1440x1000`; `/`, `/todos`,
 `/coins/history`, `/finance`, `/finance/budgets`, `/finance/debts`,
-`/backpack/history`, `/notes`, and `/projects`. It checks console/page errors,
+`/backpack/history`, `/notes`, `/projects`, `/calendar`, and `/stats`. It checks console/page errors,
 unexpected origins, failed requests, stale-response signals, horizontal
 overflow, and visible retryable error states when a page renders an error.
 

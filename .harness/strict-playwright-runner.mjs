@@ -13,6 +13,8 @@ const DEFAULT_ROUTES = [
   '/backpack/history',
   '/notes',
   '/projects',
+  '/calendar',
+  '/stats',
 ]
 
 function parseArgs(argv) {

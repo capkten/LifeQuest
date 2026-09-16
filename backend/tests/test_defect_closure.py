@@ -521,6 +521,88 @@ def test_coin_history_filters_and_returns_transactions_key(
     assert response.json()["count"] == 2
 
 
+def test_coin_history_totals_use_magnitude_for_signed_legacy_amounts(
+    client, auth_headers, db_session, user,
+):
+    legacy_rows = [
+        CoinTransaction(
+            user_id=user.id,
+            amount=-5,
+            type=CoinType.EARN,
+            source=CoinSource.OTHER,
+            description="legacy earn debit",
+            created_at=datetime(2026, 9, 12, tzinfo=timezone.utc),
+        ),
+        CoinTransaction(
+            user_id=user.id,
+            amount=-3,
+            type=CoinType.SPEND,
+            source=CoinSource.OTHER,
+            description="legacy spend debit",
+            created_at=datetime(2026, 9, 13, tzinfo=timezone.utc),
+        ),
+        CoinTransaction(
+            user_id=user.id,
+            amount=17,
+            type=CoinType.EARN,
+            source=CoinSource.OTHER,
+            description="current earn",
+            created_at=datetime(2026, 9, 14, tzinfo=timezone.utc),
+        ),
+        CoinTransaction(
+            user_id=user.id,
+            amount=11,
+            type=CoinType.SPEND,
+            source=CoinSource.OTHER,
+            description="current spend",
+            created_at=datetime(2026, 9, 15, tzinfo=timezone.utc),
+        ),
+    ]
+    db_session.add_all(legacy_rows)
+    db_session.commit()
+
+    latest_page = client.get(
+        "/api/coins/history",
+        params={"limit": 2},
+        headers=auth_headers,
+    )
+
+    assert latest_page.status_code == 200
+    assert {
+        "total_earned": latest_page.json()["total_earned"],
+        "total_spent": latest_page.json()["total_spent"],
+    } == {"total_earned": 22, "total_spent": 14}
+    assert {
+        row["description"]: (row["type"], row["amount"])
+        for row in latest_page.json()["transactions"]
+    } == {"current earn": ("earn", 17), "current spend": ("spend", 11)}
+
+    all_history = client.get(
+        "/api/coins/history", params={"limit": 200}, headers=auth_headers
+    )
+    assert all_history.status_code == 200
+    assert {
+        row["description"]: (row["type"], row["amount"])
+        for row in all_history.json()["transactions"]
+    } == {
+        "legacy earn debit": ("earn", 5),
+        "legacy spend debit": ("spend", 3),
+        "current earn": ("earn", 17),
+        "current spend": ("spend", 11),
+    }
+
+    db_session.expire_all()
+    assert {
+        row.description: row.amount
+        for row in db_session.query(CoinTransaction).filter_by(user_id=user.id).all()
+    } == {
+        "legacy earn debit": -5,
+        "legacy spend debit": -3,
+        "current earn": 17,
+        "current spend": 11,
+    }
+
+
 def test_coin_history_rejects_unknown_direction(client, auth_headers):
     response = client.get(
         "/api/coins/history",
