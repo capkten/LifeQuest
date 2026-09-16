@@ -1,4 +1,20 @@
+import axios from 'axios'
 import api from './api'
+
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+let refreshPromise = null
+
+export function refreshAuthToken(refreshToken) {
+  if (refreshPromise) return refreshPromise
+
+  refreshPromise = axios.post(`${apiBaseUrl}/auth/refresh`, { refresh_token: refreshToken })
+    .then((response) => response.data)
+    .finally(() => {
+      refreshPromise = null
+    })
+
+  return refreshPromise
+}
 
 export const authService = {
   /**
@@ -25,8 +41,16 @@ export const authService = {
    * @param {string} refreshToken
    * @returns {Promise<Object>} Response with new access_token and refresh_token
    */
-  async refreshToken(refreshToken) {
-    const response = await api.post('/auth/refresh', { refresh_token: refreshToken })
+  refreshToken(refreshToken) {
+    return refreshAuthToken(refreshToken)
+  },
+
+  async logout(refreshToken) {
+    const response = await api.post(
+      '/auth/logout',
+      { refresh_token: refreshToken },
+      { skipAuthRefresh: true },
+    )
     return response.data
   },
 

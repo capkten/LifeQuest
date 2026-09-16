@@ -1,18 +1,24 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.models.refresh_token import RefreshToken
 from app.models.user import User
-from app.schemas.user import UserCreate, UserResponse, Token
+from app.schemas.user import RefreshRequest, UserCreate, UserResponse, Token
 from app.schemas.mcp_access_token import MCPAccessTokenCreate, MCPAccessTokenCreateResponse, MCPAccessTokenMetadata
-from app.services.auth import create_access_token, create_refresh_token, decode_access_token, decode_refresh_token
+from app.services.auth import (
+    create_access_token,
+    decode_access_token,
+    decode_refresh_token,
+    hash_refresh_token,
+    issue_persisted_refresh_token,
+)
 from app.services.mcp_access_token import MCPAccessTokenService
 from app.services.user import UserService
 
@@ -108,15 +114,38 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         data={"sub": str(user.id)},
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
-    refresh_token = create_refresh_token(
-        data={"sub": str(user.id)},
+    refresh_token, _ = issue_persisted_refresh_token(
+        db,
+        user.id,
         expires_delta=timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
+    db.commit()
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
 
-class RefreshRequest(BaseModel):
-    refresh_token: str
+def _utc_datetime(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _revoke_replacement_chain(db: Session, token: RefreshToken, now: datetime):
+    next_id = token.replaced_by_id
+    visited = set()
+    while next_id and next_id not in visited:
+        visited.add(next_id)
+        replacement = (
+            db.query(RefreshToken)
+            .filter(
+                RefreshToken.id == next_id,
+                RefreshToken.user_id == token.user_id,
+            )
+            .with_for_update()
+            .first()
+        )
+        if replacement is None:
+            break
+        if replacement.revoked_at is None:
+            replacement.revoked_at = now
+        next_id = replacement.replaced_by_id
 
 
 @router.post("/refresh", response_model=Token)
@@ -128,12 +157,45 @@ def refresh_token(body: RefreshRequest, db: Session = Depends(get_db)):
             detail="Invalid or expired refresh token",
         )
     user_id = payload.get("sub")
-    if user_id is None:
+    jti = payload.get("jti")
+    if user_id is None or jti is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    try:
+        parsed_user_id = UUID(user_id)
+    except (ValueError, AttributeError, TypeError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    now = datetime.now(timezone.utc)
+    token_record = (
+        db.query(RefreshToken)
+        .filter(RefreshToken.token_hash == hash_refresh_token(body.refresh_token))
+        .with_for_update()
+        .first()
+    )
+    if (
+        token_record is None
+        or token_record.jti != jti
+        or token_record.user_id != parsed_user_id
+    ):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    if token_record.revoked_at is not None:
+        _revoke_replacement_chain(db, token_record, now)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token has already been used",
+        )
+    if _utc_datetime(token_record.expires_at) <= now:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
 
     service = UserService(db)
     try:
-        user = service.get_by_id(UUID(user_id))
+        user = service.get_by_id(parsed_user_id)
     except (ValueError, AttributeError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     if user is None:
@@ -143,11 +205,38 @@ def refresh_token(body: RefreshRequest, db: Session = Depends(get_db)):
         data={"sub": str(user.id)},
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
-    refresh_token = create_refresh_token(
-        data={"sub": str(user.id)},
+    new_refresh_token, replacement = issue_persisted_refresh_token(
+        db,
+        user.id,
         expires_delta=timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
-    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+    token_record.revoked_at = now
+    db.flush()
+    token_record.replaced_by_id = replacement.id
+    db.commit()
+    return {
+        "access_token": access_token,
+        "refresh_token": new_refresh_token,
+        "token_type": "bearer",
+    }
+
+
+@router.post("/logout")
+def logout(body: RefreshRequest, db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    token_record = (
+        db.query(RefreshToken)
+        .filter(RefreshToken.token_hash == hash_refresh_token(body.refresh_token))
+        .with_for_update()
+        .first()
+    )
+    if token_record is not None:
+        if token_record.revoked_at is None:
+            token_record.revoked_at = now
+        else:
+            _revoke_replacement_chain(db, token_record, now)
+    db.commit()
+    return {"message": "Logged out"}
 
 
 @router.post("/mcp-tokens", response_model=MCPAccessTokenCreateResponse)

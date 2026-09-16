@@ -61,6 +61,22 @@ test('cultivation interaction feedback uses body-level floating toast popups', a
   }
 })
 
+test('auth refreshes share one Promise and the interceptor awaits it once', async () => {
+  const [auth, api] = await Promise.all([
+    readFile(new URL('../services/auth.js', import.meta.url), 'utf8'),
+    readFile(new URL('../services/api.js', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(auth, /let refreshPromise\s*=\s*null/)
+  assert.match(auth, /if\s*\(refreshPromise\)\s*return refreshPromise/)
+  assert.match(auth, /refreshPromise\s*=\s*[\s\S]*?finally\(/)
+  assert.match(auth, /refreshPromise\s*=\s*null/)
+  assert.match(api, /refreshAuthToken\(/)
+  assert.match(api, /await\s+refreshAuthToken\(/)
+  assert.match(api, /_retry/)
+  assert.match(api, /skipAuthRefresh|_skipAuthRefresh/)
+})
+
 test('sect business locks remain clickable so blocked reasons can be shown', async () => {
   const source = await readFile(new URL('./Sects.vue', viewsDirectory), 'utf8')
 

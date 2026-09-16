@@ -1004,6 +1004,16 @@ def test_explicit_null_update_clears_optional_fields(
     assert user_response.json()["avatar"] is None
 
 
+def test_avatar_rejects_fake_image_content(client, auth_headers):
+    response = client.post(
+        "/api/users/me/avatar",
+        headers=auth_headers,
+        files={"file": ("avatar.png", b"not-an-image", "image/png")},
+    )
+
+    assert response.status_code == 400
+
+
 def test_inactive_account_rejects_recurring_creation_without_mutation(
     client, auth_headers, inactive_account, db_session,
 ):

@@ -5,6 +5,9 @@ import router from '../router'
 import { useCultivationStore } from './cultivation'
 import { registerAuthCleanup } from '../services/authSession'
 
+let refreshPromise = null
+let logoutPromise = null
+
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('token') || null)
   const refreshTokenValue = ref(localStorage.getItem('refreshToken') || null)
@@ -36,16 +39,27 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('refreshToken')
   }
 
-  async function refreshAccessToken() {
-    if (!refreshTokenValue.value) return false
-    try {
-      const response = await authService.refreshToken(refreshTokenValue.value)
-      setTokens(response.access_token, response.refresh_token)
-      return true
-    } catch {
-      logout()
-      return false
-    }
+  function refreshAccessToken() {
+    if (refreshPromise) return refreshPromise
+    if (!refreshTokenValue.value) return Promise.resolve(false)
+
+    const refreshTokenAtStart = refreshTokenValue.value
+    refreshPromise = authService.refreshToken(refreshTokenAtStart)
+      .then((response) => {
+        if (refreshTokenValue.value === refreshTokenAtStart) {
+          setTokens(response.access_token, response.refresh_token)
+        }
+        return true
+      })
+      .catch(() => {
+        logout()
+        return false
+      })
+      .finally(() => {
+        refreshPromise = null
+      })
+
+    return refreshPromise
   }
 
   async function login(credentials) {
@@ -86,8 +100,18 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function logout() {
+    if (logoutPromise) return logoutPromise
+    const refreshTokenAtLogout = refreshTokenValue.value
     clearAuthState()
     router.push({ name: 'Login' })
+
+    if (!refreshTokenAtLogout) return Promise.resolve()
+    logoutPromise = authService.logout(refreshTokenAtLogout)
+      .catch(() => undefined)
+      .finally(() => {
+        logoutPromise = null
+      })
+    return logoutPromise
   }
 
   return {

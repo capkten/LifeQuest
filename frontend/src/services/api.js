@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { invalidateAuthSession } from './authSession'
+import { refreshAuthToken } from './auth'
 import { getErrorMessage } from '../utils/errorMessage'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
@@ -47,27 +48,18 @@ api.interceptors.request.use(
   }
 )
 
-// Flag to prevent multiple refresh attempts
-let isRefreshing = false
-let refreshSubscribers = []
-
-function onRefreshed(newToken) {
-  refreshSubscribers.forEach(({ resolve }) => resolve(newToken))
-  refreshSubscribers = []
-}
-
-function onRefreshFailed(error) {
-  refreshSubscribers.forEach(({ reject }) => reject(error))
-  refreshSubscribers = []
-}
-
 // Response interceptor to handle 401 errors with refresh token
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (
+      error.response?.status === 401 &&
+      !originalRequest?._retry &&
+      !originalRequest?._skipAuthRefresh &&
+      !originalRequest?.skipAuthRefresh
+    ) {
       const refreshToken = localStorage.getItem('refreshToken')
 
       if (!refreshToken) {
@@ -75,35 +67,21 @@ api.interceptors.response.use(
         return Promise.reject(error)
       }
 
-      if (isRefreshing) {
-        // Queue this request until refresh completes
-        originalRequest._retry = true
-        return new Promise((resolve, reject) => {
-          refreshSubscribers.push({ resolve: (newToken) => {
-            originalRequest.headers.Authorization = `Bearer ${newToken}`
-            resolve(api(originalRequest))
-          }, reject })
-        })
-      }
-
       originalRequest._retry = true
-      isRefreshing = true
 
       try {
-        const response = await axios.post(`${apiBaseUrl}/auth/refresh`, { refresh_token: refreshToken })
-        const { access_token, refresh_token: newRefreshToken } = response.data
+        const response = await refreshAuthToken(refreshToken)
+        const { access_token, refresh_token: newRefreshToken } = response
 
-        localStorage.setItem('token', access_token)
-        localStorage.setItem('refreshToken', newRefreshToken)
+        if (localStorage.getItem('refreshToken') === refreshToken) {
+          localStorage.setItem('token', access_token)
+          localStorage.setItem('refreshToken', newRefreshToken)
+        }
 
-        onRefreshed(access_token)
-        isRefreshing = false
-
+        originalRequest.headers = originalRequest.headers || {}
         originalRequest.headers.Authorization = `Bearer ${access_token}`
         return api(originalRequest)
       } catch (refreshError) {
-        isRefreshing = false
-        onRefreshFailed(refreshError)
         invalidateAuthSession()
         return Promise.reject(refreshError)
       }

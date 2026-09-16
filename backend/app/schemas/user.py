@@ -40,5 +40,9 @@ class Token(BaseModel):
     token_type: str
 
 
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
 class TokenData(BaseModel):
     username: Optional[str] = None

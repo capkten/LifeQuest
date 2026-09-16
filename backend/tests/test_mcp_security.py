@@ -53,6 +53,17 @@ def test_service_user_id_without_token_is_rejected(db_session, monkeypatch):
         mcp_server._resolve_user_id(db_session)
 
 
+def test_note_collab_access_token_remains_rejected_by_ordinary_auth(client, user):
+    from app.services.auth import create_access_token
+
+    token = create_access_token({"sub": str(user.id), "scope": "note_collab"})
+    response = client.get(
+        "/api/users/me", headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 403
+
+
 def test_serialize_supports_pydantic_and_nested_json_values():
     model = UserResponse(
         id=UUID("00000000-0000-0000-0000-000000000001"),
