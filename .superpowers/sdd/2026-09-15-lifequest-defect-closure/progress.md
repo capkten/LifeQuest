@@ -402,3 +402,39 @@ Ruling: Treat the attachment-upload lock gap as a real Important residual and st
 Ruling: Park the `592` versus `598` final-fix-report sentence as a nonblocking documentation defect and use the fresh full-suite result of `598 passed` as final verification evidence — no implementation behavior is affected — cost if wrong: the committed report remains internally inconsistent.
 
 Ruling: 按用户确认，将附件上传与删除竞态作为 Task 13 重新纳入同一修复计划；修复限定于现有笔记本锁、附件文件写入和附件记录事务，不新增数据库结构 — 最终复核已确认该问题会造成孤立数据，且用户原始目标要求修完全部问题 — 若判断错误，代价是最终复核后增加一项任务及相应并发回归维护成本。
+
+Task 13 implementer：`01a0a947-792b-7d03-b83f-a57f607acc1d`，模型 `gpt-5.6-luna`，base `fb59e7e`；实现提交 `ab929fa`。
+
+Task 13 TDD：删除先取得锁的竞态测试和上传先取得锁的竞态测试均在旧实现上按预期失败；修复后分别通过。文件写入受阻及数据库提交失败清理测试通过。
+
+Task 13 验证：`tests/test_notes.py tests/test_note_sharing.py` 共 `64 passed, 646 warnings`；控制器在最终代码上独立重跑完整后端套件，结果 `602 passed, 1460 warnings`。使用 Python 3.14 临时测试环境，将临时虚拟环境中的 SQLAlchemy 升级至 2.0.54，因为仓库锁定的 2.0.23 在该 Python 版本导入失败；未改仓库依赖文件。
+
+Task 13 任务复核：reviewer `01a0a95c-1361-7d92-9643-55e86ab27b9a`，模型 `gpt-5.6-luna`，review package `review-fb59e7e..ab929fa.diff`；规格符合、质量 Approved，无 Critical/Important。Minor：测试输出含既有弃用警告（聚焦 646、全量 1460），实施报告已注明警告来源和数量；不扩展为本任务的警告清理。
+
+Task 13: complete (commits `fb59e7e..ab929fa`, review clean).
+
+## 最终全分支复核
+
+复核者：`01a0a96e-5979-76b2-b898-b80900f276bc`，模型 `gpt-5.6-luna`，范围 `590920d..ab929fa`。
+
+Critical：无。
+
+Important 发现：FIN-01/FIN-02 金币历史汇总按类型直接累加有符号的 `amount`，保留的负数历史行会抵消同类流水。单条记录已按类型和绝对值显示，汇总路径缺少 magnitude 规则。需要增加真实 API 回归测试，验证负数历史行按 magnitude 汇总且不改写存储记录。
+
+验收缺口：尽管计划要求浏览器覆盖 Calendar/Stats，严格浏览器 runner 和 Task 12 路由合同仍漏掉现存的 `/calendar`、`/stats` 路由。需将两者加入 runner 默认路线及 JSON 合同，并修正验证报告的路线清单。当前缺少 Chromium、认证 fixture 和生产凭证，因此外部执行门禁仍受阻。
+
+延后 Minor 复核：目标互操作/日期 fallback 与 Task 9 目录恢复测试问题均已解决。缺少金币数据库非负约束、财务/债务 N+1 查询、背包动作样式、宽泛源码匹配和移动端对齐问题仍按记录暂缓且非阻塞。浏览器/已认证线上验收是发布门禁，不能记为通过。
+
+最终复核修复实施者：`01a0a97c-983a-7411-8064-3c84153219d4`，模型 `gpt-5.6-luna`，基线 `ab929fa`；任务 brief：`final-review-fix-brief.md`；报告：`final-review-fix-report.md`。
+
+最终复核修复实施结果：`DONE_WITH_CONCERNS`，原因是浏览器/线上外部门禁仍受阻。实现提交 `a1c9003`；报告提交 `abae88d`。
+
+最终复核修复 RED/GREEN：旧实现下，signed legacy amount API 测试因原始求和失败（`total_earned=12`、`total_spent=8`，预期为 22/14）；修正聚合后又暴露出响应校验拒绝负数历史行的问题。Service 现在只规范化返回副本，保留交易类型且不改数据库记录；最终回归通过。金币聚焦测试 `8 passed, 71 deselected`；浏览器 runner 语法及 11 条路线的 JSON/default 一致性检查通过。
+
+控制器在 `abae88d` 上新鲜运行后端全量套件：`603 passed, 1462 warnings in 180.86s`；Python 编译和 `git diff --check` 通过。Python 3.14.4 环境下仓库锁定的 SQLAlchemy 2.0.23 导入失败，因此仅在临时环境使用 2.0.54；仓库依赖未改动。
+
+Scoped re-reviewer：`01a0a98c-5621-7040-abb5-cb9caf0a6d4e`，模型 `gpt-5.6-luna`，范围 `ab929fa..abae88d`。FIN-01/FIN-02 signed-amount 汇总和 Calendar/Stats 浏览器路线两项发现均为 `ADDRESSED`。新增 Critical/Important/Minor：无。浏览器/已认证线上门禁仍受阻，因此按计划的发布标准，分支尚未达到可合并状态。
+
+对历史 `592` 与 `598` 文档差异裁决的更正：final-fix-report 已记录最终复核后的测试结果（`603 passed`），此前的数字差异已消除。
+
+最终复核修复波次完成（`ab929fa..abae88d`，两个 finding 均已解决，scoped re-review clean）。本次控制器收尾仅提交中文最终报告和本 ledger；浏览器/已认证线上发布门禁保持 blocked，不执行合并、部署或 push。
