@@ -51,6 +51,7 @@ class ProjectResponse(BaseModel):
 class PhaseCreate(BaseModel):
     name: str
     description: Optional[str] = None
+    status: ProjectStatus = ProjectStatus.PLANNING
     sort_order: int = 0
 
 

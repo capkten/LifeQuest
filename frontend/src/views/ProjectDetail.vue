@@ -643,6 +643,7 @@ import {
 import { useAuthStore } from '../stores/auth'
 import { useCultivationStore } from '../stores/cultivation'
 import { labelPhaseStatus, labelProjectStatus } from '../utils/displayLabels'
+import { createMilestoneReachRequestState } from '../utils/milestoneReachState'
 
 const route = useRoute()
 const router = useRouter()
@@ -671,9 +672,9 @@ const taskMutationTokens = new Map()
 const taskCreationPending = ref(false)
 const milestonePending = ref(false)
 const milestoneReachPendingIds = reactive(new Set())
+const milestoneReachRequestState = createMilestoneReachRequestState()
 let routeRevision = 0
 let milestoneRequestId = 0
-let milestoneReachRequestId = 0
 let fetchRequestId = 0
 let taskCreationRequestId = 0
 let phaseRequestId = 0
@@ -1248,18 +1249,21 @@ async function reachMilestone(milestone) {
     return
   }
   const targetId = String(projectId.value)
-  const requestId = ++milestoneReachRequestId
+  const token = milestoneReachRequestState.begin(milestone.id, targetId, routeRevision)
   milestoneReachPendingIds.add(milestone.id)
   try {
     const updated = await projectService.reachMilestone(milestone.id)
-    if (requestId !== milestoneReachRequestId || String(route.params.id) !== targetId) return
+    if (!milestoneReachRequestState.isCurrent(token, route.params.id, routeRevision)) return
     const index = milestones.value.findIndex(item => item.id === milestone.id)
     if (index !== -1) milestones.value[index] = updated
     showSuccess('里程碑已达成')
   } catch (e) {
-    if (requestId === milestoneReachRequestId && String(route.params.id) === targetId) showError(getErrorMessage(e))
+    if (milestoneReachRequestState.isCurrent(token, route.params.id, routeRevision)) showError(getErrorMessage(e))
   } finally {
-    milestoneReachPendingIds.delete(milestone.id)
+    if (milestoneReachRequestState.isCurrent(token, route.params.id, routeRevision)) {
+      milestoneReachPendingIds.delete(milestone.id)
+      milestoneReachRequestState.finish(token)
+    }
   }
 }
 
@@ -1510,7 +1514,7 @@ function invalidateRequests() {
   fetchRequestId += 1
   dataRevision += 1
   milestoneRequestId += 1
-  milestoneReachRequestId += 1
+  milestoneReachRequestState.invalidate()
   taskCreationRequestId += 1
   phaseRequestId += 1
   phaseDeleteRequestId += 1

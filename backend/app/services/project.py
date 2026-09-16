@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-import logging
 from typing import List, Optional
 from uuid import UUID
 
@@ -38,7 +37,6 @@ _UNSET = object()
 
 
 class ProjectService:
-    logger = logging.getLogger(__name__)
     _PROJECT_TRANSITIONS = {
         ProjectStatus.PLANNING.value: {ProjectStatus.ACTIVE.value},
         ProjectStatus.ACTIVE.value: {
@@ -212,15 +210,18 @@ class ProjectService:
                 detail=f"Cannot transition project from {current_status} to {target_status}",
             )
 
-    def _transition_project(self, project: Project, target_status: str) -> Project:
+    def _transition_project(
+        self, project: Project, target_status: str, *, commit: bool = True
+    ) -> Project:
         current_status = normalize_project_status(project.status)
         if current_status == target_status:
             return project
         self._validate_project_transition(current_status, target_status)
         project.status = target_status
         project.updated_at = datetime.now(timezone.utc)
-        self.db.commit()
-        self.db.refresh(project)
+        if commit:
+            self.db.commit()
+            self.db.refresh(project)
         return project
 
     def start_project(self, project: Project) -> Project:
@@ -229,19 +230,27 @@ class ProjectService:
     def complete_project(self, project: Project) -> Project:
         if normalize_project_status(project.status) == ProjectStatus.COMPLETED.value:
             return project
-        project = self._transition_project(project, ProjectStatus.COMPLETED.value)
-
-        # Check project achievements
         try:
+            project = self._transition_project(
+                project, ProjectStatus.COMPLETED.value, commit=False
+            )
+            self.db.flush()
             completed_count = self.db.query(Project).filter(
                 Project.user_id == project.user_id,
                 Project.status == ProjectStatus.COMPLETED,
             ).count()
-            self.achievement_service.check_and_unlock(project.user_id, "project_completed", completed_count)
+            self.achievement_service.check_and_unlock(
+                project.user_id,
+                "project_completed",
+                completed_count,
+                commit=False,
+            )
+            self.db.commit()
+            self.db.refresh(project)
+            return project
         except Exception:
-            self.logger.exception("Project achievement processing failed for project %s", project.id)
-
-        return project
+            self.db.rollback()
+            raise
 
     # --- Phase CRUD ---
     def create_phase(self, project_id: UUID, data: PhaseCreate) -> ProjectPhase:

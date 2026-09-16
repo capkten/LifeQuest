@@ -2,6 +2,8 @@ import pytest
 from fastapi import HTTPException
 from uuid import UUID
 
+from app.models.achievement import Achievement, UserAchievement
+from app.models.coin_transaction import CoinTransaction
 from app.models.project import Project, ProjectPhase
 from app.models.todo import Task
 from app.schemas.project import PhaseCreate, ProjectUpdate
@@ -121,6 +123,107 @@ def test_reaching_milestone_is_idempotent(client, auth_headers, project):
     assert first.status_code == second.status_code == 200
     assert first.json()["status"] == second.json()["status"] == "reached"
     assert first.json()["reached_at"] == second.json()["reached_at"]
+
+
+def test_project_completion_rolls_back_status_and_rewards_when_reward_write_fails(
+    client, auth_headers, project, db_session, monkeypatch,
+):
+    project.status = "active"
+    achievement = Achievement(
+        name="项目奖励回滚测试",
+        description="测试项目完成奖励的一致性",
+        icon="test",
+        condition_type="project_completed",
+        condition_value=1,
+        coin_reward=7,
+        exp_reward=11,
+    )
+    db_session.add(achievement)
+    db_session.commit()
+    initial_coins = project.user.coins
+    initial_experience = project.user.experience
+    service = ProjectService(db_session)
+    db_project = db_session.query(Project).filter(Project.id == project.id).one()
+    original_create_reward = service.achievement_service.coin_repo._create_no_commit
+
+    def fail_reward_write(data):
+        original_create_reward(data)
+        raise RuntimeError("reward write failed")
+
+    monkeypatch.setattr(
+        service.achievement_service.coin_repo,
+        "_create_no_commit",
+        fail_reward_write,
+    )
+
+    with pytest.raises(RuntimeError, match="reward write failed"):
+        service.complete_project(db_project)
+
+    db_session.rollback()
+    persisted_project = db_session.query(Project).filter(Project.id == project.id).one()
+    persisted_user = persisted_project.user
+    assert persisted_project.status == "active"
+    assert persisted_user.coins == initial_coins
+    assert persisted_user.experience == initial_experience
+    assert db_session.query(UserAchievement).filter_by(
+        user_id=project.user_id,
+        achievement_id=achievement.id,
+    ).count() == 0
+    assert db_session.query(CoinTransaction).filter_by(
+        user_id=project.user_id,
+        source="achievement",
+    ).count() == 0
+
+
+def test_phase_status_create_update_boundaries_normalize_legacy_reads_and_reject_unknown_writes(
+    client, auth_headers, project, db_session,
+):
+    unknown_create = client.post(
+        f"/api/projects/{project.id}/phases",
+        headers=auth_headers,
+        json={"name": "未知状态阶段", "status": "unknown"},
+    )
+    assert unknown_create.status_code == 422
+
+    created = client.post(
+        f"/api/projects/{project.id}/phases",
+        headers=auth_headers,
+        json={"name": "阶段边界", "status": "active"},
+    )
+    assert created.status_code == 200
+    assert created.json()["status"] == "active"
+    phase_id = UUID(created.json()["id"])
+
+    phase = db_session.query(ProjectPhase).filter(ProjectPhase.id == phase_id).one()
+    for stored_status, response_status in (
+        ("pending", "planning"),
+        ("in_progress", "active"),
+        ("completed", "completed"),
+        ("old_phase_state", "unknown"),
+    ):
+        phase.status = stored_status
+        db_session.commit()
+        detail = client.get(f"/api/projects/{project.id}", headers=auth_headers)
+        assert detail.status_code == 200
+        phase_response = next(
+            item for item in detail.json()["phases"] if item["id"] == str(phase_id)
+        )
+        assert phase_response["status"] == response_status
+
+    updated = client.put(
+        f"/api/projects/phases/{phase_id}",
+        headers=auth_headers,
+        json={"status": "active"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "active"
+
+    unknown_update = client.put(
+        f"/api/projects/phases/{phase_id}",
+        headers=auth_headers,
+        json={"status": "unknown"},
+    )
+    assert unknown_update.status_code == 422
 
 
 def test_project_task_rejects_cross_project_references(client):

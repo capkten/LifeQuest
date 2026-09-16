@@ -601,6 +601,61 @@ test('project lifecycle exposes start, milestone reach, and centralized phase la
   assert.doesNotMatch(detail, /const map = \{ planning: '规划中'/)
 })
 
+test('project milestone reach requests keep independent runtime results', async () => {
+  const [source, module] = await Promise.all([
+    readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8'),
+    import('../utils/milestoneReachState.js'),
+  ])
+
+  assert.equal(typeof module.createMilestoneReachRequestState, 'function')
+  assert.match(source, /createMilestoneReachRequestState\(\)/)
+  assert.match(source, /milestoneReachRequestState\.begin\(milestone\.id/)
+  assert.match(source, /milestoneReachRequestState\.isCurrent\(/)
+  assert.doesNotMatch(source, /milestoneReachRequestId/)
+
+  const requestState = module.createMilestoneReachRequestState()
+  const reached = new Map()
+  const deferred = () => {
+    let resolve
+    const promise = new Promise((next) => { resolve = next })
+    return { promise, resolve }
+  }
+  const first = deferred()
+  const second = deferred()
+
+  const reach = async (milestoneId, response) => {
+    const token = requestState.begin(milestoneId, 'project-1', 0)
+    try {
+      const updated = await response
+      if (!requestState.isCurrent(token, 'project-1', 0)) return
+      reached.set(milestoneId, updated)
+    } finally {
+      requestState.finish(token)
+    }
+  }
+
+  const firstRequest = reach('milestone-1', first.promise)
+  const secondRequest = reach('milestone-2', second.promise)
+  second.resolve({ id: 'milestone-2', status: 'reached' })
+  first.resolve({ id: 'milestone-1', status: 'reached' })
+  await Promise.all([firstRequest, secondRequest])
+
+  assert.deepEqual([...reached.entries()], [
+    ['milestone-2', { id: 'milestone-2', status: 'reached' }],
+    ['milestone-1', { id: 'milestone-1', status: 'reached' }],
+  ])
+})
+
+test('project start button stops keyboard events before card navigation', async () => {
+  const source = await readFile(new URL('./Projects.vue', viewsDirectory), 'utf8')
+  const startButton = source.match(/<button\s+v-if="project\.status === 'planning'"[\s\S]*?<\/button>/)?.[0]
+
+  assert.ok(startButton, 'project start button must remain inside the project card')
+  assert.match(startButton, /type="button"/)
+  assert.match(startButton, /@click\.stop="startProject\(project\)"/)
+  assert.match(startButton, /@keydown\.stop/)
+})
+
 test('ProjectDetail inline task creation locks duplicate submissions and keeps failed input retryable', async () => {
   const source = await readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8')
   const phaseHandler = source.match(/function addTaskToPhase\(phaseId, event\) \{([\s\S]*?)\n\}/)?.[1]

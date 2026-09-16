@@ -99,6 +99,7 @@
               :disabled="startPendingIds.has(project.id)"
               :aria-disabled="startPendingIds.has(project.id)"
               @click.stop="startProject(project)"
+              @keydown.stop
             >
               {{ startPendingIds.has(project.id) ? '启动中...' : '开始项目' }}
             </button>
