@@ -2,7 +2,7 @@
 
 状态：`DONE_WITH_CONCERNS`
 修复基线：`ab929fa47a61eb9800fa6930d540171d76b4efd6`
-实现提交：将在报告收尾提交中补录准确 SHA。
+修复提交：`a1c9003a7375556fa108b5ea5102319fa6854953` (`fix: close final LifeQuest review findings`)
 
 ## Finding 1：金币历史使用金额 magnitude
 
