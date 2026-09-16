@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import axios from 'axios'
+import { ref, toValue } from 'vue'
 import {
   buildCoinHistoryParams,
   coinHistoryResponse,
@@ -10,6 +12,28 @@ import {
   createCoinHistoryClient,
 } from '../services/coinHistoryContract.js'
 import { saveBudgetMutation } from '../services/budgetMutations.js'
+import { createMilestoneReachRequestState } from '../utils/milestoneReachState.js'
+
+const contractApi = {}
+
+function replaceApiMethod(method, implementation) {
+  const original = contractApi[method]
+  contractApi[method] = implementation
+  return () => { contractApi[method] = original }
+}
+
+async function loadNamedSource(relativePath, name, dependencies = {}) {
+  const source = await readFile(new URL(relativePath, import.meta.url), 'utf8')
+  const executable = source
+    .replace(/^import[^\n]*\n/gm, '')
+    .replace(/^export default[^\n]*\n/gm, '')
+    .replace(/\bexport\s+(?=(?:const|function|class)\b)/g, '')
+    .replace(/import\.meta\.env\.VITE_API_BASE_URL/g, "'/api'")
+  const dependencyNames = Object.keys(dependencies)
+  return new Function(...dependencyNames, `${executable}; return ${name}`)(
+    ...dependencyNames.map(key => dependencies[key]),
+  )
+}
 
 test('coin history maps the response envelope and renders both directions by type', () => {
   const income = { type: 'earn', amount: 20 }
@@ -424,4 +448,265 @@ test('transaction mutation keeps failed edit data and distinguishes edit from cr
   })
   assert.equal(edited.feedback, '流水已更新')
   assert.equal(created.feedback, '记账成功！')
+})
+
+test('home habit flow consumes server state, completes, pauses, and resumes', async () => {
+  const todoService = await loadNamedSource('../services/todo.js', 'todoService', { api: contractApi })
+  const [source, todosSource] = await Promise.all([
+    readFile(new URL('./Home.vue', import.meta.url), 'utf8'),
+    readFile(new URL('./Todos.vue', import.meta.url), 'utf8'),
+  ])
+  const blockReasonSource = source.match(/function dailyHabitBlockReason\(habit\) \{[\s\S]*?\n\}/)?.[0]
+  assert.ok(blockReasonSource, 'Home must keep its server-state lock helper available')
+  const dailyHabitBlockReason = new Function(`${blockReasonSource}; return dailyHabitBlockReason`)()
+  assert.match(source, /todoService\.getDailySummary\(\)/)
+  assert.match(source, /todoService\.completeHabit\(habit\.id\)/)
+  assert.match(todosSource, /todoService\.pauseHabit\(habit\.id\)/)
+  assert.match(todosSource, /todoService\.resumeHabit\(habit\.id\)/)
+
+  let habit = {
+    id: 'habit-1', title: '晨间计划', is_active: true, paused_today: false,
+    scheduled_today: true, completed_today: false,
+  }
+  const calls = []
+  const restoreGet = replaceApiMethod('get', async (path) => {
+    calls.push({ method: 'GET', path })
+    return { data: { habits: [habit], summary: { total_habits: 1, completed_habits: habit.completed_today ? 1 : 0 } } }
+  })
+  const restorePost = replaceApiMethod('post', async (path) => {
+    calls.push({ method: 'POST', path })
+    if (path.endsWith('/complete')) habit = { ...habit, completed_today: true }
+    if (path.endsWith('/pause')) habit = { ...habit, is_active: false, paused_today: true }
+    if (path.endsWith('/resume')) habit = { ...habit, is_active: true, paused_today: false }
+    return { data: habit }
+  })
+  try {
+    const initial = await todoService.getDailySummary()
+    assert.equal(initial.habits[0].is_active, true)
+    assert.equal(initial.habits[0].paused_today, false)
+    assert.equal(initial.habits[0].scheduled_today, true)
+    assert.equal(dailyHabitBlockReason(initial.habits[0]), '')
+
+    const completed = await todoService.completeHabit(habit.id)
+    assert.equal(completed.completed_today, true)
+    assert.match(dailyHabitBlockReason(completed), /已经完成/)
+
+    habit = { ...habit, completed_today: false }
+    const paused = await todoService.pauseHabit(habit.id)
+    assert.equal(paused.is_active, false)
+    assert.equal(paused.paused_today, true)
+    assert.match(dailyHabitBlockReason(paused), /暂停/)
+
+    const resumed = await todoService.resumeHabit(habit.id)
+    assert.equal(resumed.is_active, true)
+    assert.equal(resumed.paused_today, false)
+    assert.equal(dailyHabitBlockReason(resumed), '')
+    assert.deepEqual(calls.map(call => call.path), [
+      '/todos/daily',
+      '/todos/habits/habit-1/complete',
+      '/todos/habits/habit-1/pause',
+      '/todos/habits/habit-1/resume',
+    ])
+  } finally {
+    restoreGet()
+    restorePost()
+  }
+})
+
+test('budget and debt forms send canonical DTOs and preserve failed input', async () => {
+  const financeService = await loadNamedSource('../services/finance.js', 'financeService', { api: contractApi })
+  const budgetForm = { category_id: 'food', amount: 50, period: 'monthly' }
+  let budgetRequest
+  const budgetFailure = await saveBudgetMutation({
+    budgets: [{ id: 'existing', amount: 100 }],
+    form: budgetForm,
+    createBudget: async (data) => {
+      budgetRequest = structuredClone(data)
+      throw new Error('temporary budget failure')
+    },
+    getErrorMessage: error => error.message,
+  })
+  assert.deepEqual(budgetRequest, budgetForm)
+  assert.deepEqual(budgetFailure.budgets, [{ id: 'existing', amount: 100 }])
+  assert.deepEqual(budgetForm, { category_id: 'food', amount: 50, period: 'monthly' })
+
+  const debtForm = {
+    creditor: '供应商', type: 'borrow', amount: 300, remaining: 300,
+    interest_rate: 0, due_date: '', description: '保留表单',
+  }
+  const calls = []
+  const restorePost = replaceApiMethod('post', async (path, data) => {
+    calls.push({ path, data })
+    return { data: { id: 'debt-1', ...data } }
+  })
+  try {
+    const created = await financeService.createDebt(debtForm)
+    assert.deepEqual(created, { id: 'debt-1', ...debtForm })
+    assert.deepEqual(calls, [{ path: '/finance/debts', data: debtForm }])
+  } finally {
+    restorePost()
+  }
+})
+
+test('finance edit feedback and inactive-account errors remain actionable', async () => {
+  const getErrorMessage = await loadNamedSource('../utils/errorMessage.js', 'getErrorMessage', {
+    ERROR_MESSAGES: {},
+    labelRealm: value => value,
+  })
+  const source = await readFile(new URL('./Finance.vue', import.meta.url), 'utf8')
+  assert.match(source, /流水已更新/)
+  assert.match(source, /txError\.value = getErrorMessage\(e\)/)
+  assert.equal(getErrorMessage({
+    response: {
+      status: 409,
+      data: {
+        detail: { code: 'ACCOUNT_INACTIVE', message: '账户已停用，无法创建新的财务操作。' },
+      },
+    },
+  }), '账户已停用，无法创建新的财务操作。')
+})
+
+test('backpack history and unequip use canonical action and lifecycle responses', async () => {
+  const backpackService = await loadNamedSource('../services/backpack.js', 'backpackService', { api: contractApi })
+  const calls = []
+  const restoreGet = replaceApiMethod('get', async (path) => {
+    calls.push({ method: 'GET', path })
+    return { data: [{ id: 'history-1', action_type: 'unequip', item_id: 'gear-1' }] }
+  })
+  const restorePost = replaceApiMethod('post', async (path) => {
+    calls.push({ method: 'POST', path })
+    return { data: { id: 'gear-1', is_equipped: false, status: 'active' } }
+  })
+  try {
+    const history = await backpackService.getHistory()
+    const updated = await backpackService.unequipItem('gear-1')
+    assert.equal(history[0].action_type, 'unequip')
+    assert.deepEqual(updated, { id: 'gear-1', is_equipped: false, status: 'active' })
+    assert.deepEqual(calls, [
+      { method: 'GET', path: '/backpack/history' },
+      { method: 'POST', path: '/backpack/items/gear-1/unequip' },
+    ])
+  } finally {
+    restoreGet()
+    restorePost()
+  }
+})
+
+test('note folder rename and move preserve selection on success and failure', async () => {
+  const noteService = await loadNamedSource('../services/note.js', 'noteService', { api: contractApi })
+  const useNoteWorkspace = await loadNamedSource('../composables/useNoteWorkspace.js', 'useNoteWorkspace', {
+    ref,
+    toValue,
+    noteService,
+  })
+  const initialTree = [
+    { id: 'folder-1', type: 'folder', name: '旧目录', parent_id: null, children: [
+      { id: 'note-1', type: 'note', name: '笔记', parent_id: 'folder-1', children: [] },
+    ] },
+    { id: 'folder-2', type: 'folder', name: '目标目录', parent_id: null, children: [] },
+  ]
+  let tree = structuredClone(initialTree)
+  let failNextPatch = false
+  const restoreGet = replaceApiMethod('get', async (path) => {
+    assert.equal(path, '/notes/notebooks/book-1/tree')
+    return { data: structuredClone(tree) }
+  })
+  const restorePatch = replaceApiMethod('patch', async (path, payload) => {
+    if (failNextPatch) {
+      failNextPatch = false
+      throw new Error('note mutation failed')
+    }
+    if (path === '/notes/nodes/folder-1') tree[0].name = payload.name
+    if (path === '/notes/nodes/note-1') {
+      tree[0].children = []
+      tree[1].children = [{ id: 'note-1', type: 'note', name: '笔记', parent_id: 'folder-2', children: [] }]
+    }
+    return { data: { id: path.split('/').pop(), ...payload } }
+  })
+  const workspace = useNoteWorkspace('book-1')
+  try {
+    await workspace.loadTree()
+    workspace.selectNote('note-1')
+    await workspace.renameNode('folder-1', '新目录')
+    assert.equal(workspace.selectedNoteId.value, 'note-1')
+    assert.equal(workspace.tree.value[0].name, '新目录')
+
+    await workspace.moveNode('note-1', 'folder-2')
+    assert.equal(workspace.selectedNoteId.value, 'note-1')
+    assert.equal(workspace.currentFolderId.value, 'folder-2')
+    assert.equal(workspace.tree.value[1].children[0].id, 'note-1')
+
+    const treeBeforeFailure = JSON.parse(JSON.stringify(workspace.tree.value))
+    failNextPatch = true
+    await assert.rejects(() => workspace.renameNode('folder-1', '失败名称'), /note mutation failed/)
+    assert.equal(workspace.selectedNoteId.value, 'note-1')
+    assert.deepEqual(workspace.tree.value, treeBeforeFailure)
+    assert.match(workspace.error.value.message, /note mutation failed/)
+  } finally {
+    restoreGet()
+    restorePatch()
+  }
+})
+
+test('project start and milestone reach use service routes, locks, and retry state', async () => {
+  const projectService = await loadNamedSource('../services/project.js', 'projectService', { api: contractApi })
+  const calls = []
+  const restorePost = replaceApiMethod('post', async (path) => {
+    calls.push(path)
+    if (path === '/projects/project-1/start') return { data: { id: 'project-1', status: 'active' } }
+    return { data: { id: 'milestone-1', status: 'reached', reached_at: '2026-09-16T00:00:00Z' } }
+  })
+  const requestState = createMilestoneReachRequestState()
+  try {
+    const started = await projectService.startProject('project-1')
+    const token = requestState.begin('milestone-1', 'project-1', 4)
+    const reached = await projectService.reachMilestone('milestone-1')
+    assert.deepEqual(started, { id: 'project-1', status: 'active' })
+    assert.equal(reached.status, 'reached')
+    assert.equal(requestState.isCurrent(token, 'project-1', 4), true)
+    requestState.finish(token)
+    assert.equal(requestState.isCurrent(token, 'project-1', 4), false)
+    assert.deepEqual(calls, ['/projects/project-1/start', '/projects/milestones/milestone-1/reach'])
+  } finally {
+    restorePost()
+  }
+
+  const [projects, detail] = await Promise.all([
+    readFile(new URL('./Projects.vue', import.meta.url), 'utf8'),
+    readFile(new URL('./ProjectDetail.vue', import.meta.url), 'utf8'),
+  ])
+  assert.match(projects, /startPendingIds\.has\(project\.id\)/)
+  assert.match(projects, /项目正在启动，请等待完成后再试。/)
+  assert.match(detail, /milestoneReachPendingIds\.has\(milestone\.id\)/)
+  assert.match(detail, /重试保存里程碑|请稍后再试/)
+})
+
+test('refresh callers share one Promise and reject incomplete refresh without looping', async () => {
+  const refreshAuthToken = await loadNamedSource('../services/auth.js', 'refreshAuthToken', {
+    api: contractApi,
+    axios,
+  })
+  const source = await readFile(new URL('../services/api.js', import.meta.url), 'utf8')
+  assert.match(source, /await\s+refreshAuthToken\(/)
+  assert.match(source, /originalRequest\._retry\s*=\s*true/)
+  assert.match(source, /return Promise\.reject\(error\)/)
+  assert.doesNotMatch(source, /originalRequest\._retry\s*=\s*false/)
+
+  const originalPost = axios.post
+  let calls = 0
+  let resolveRefresh
+  axios.post = () => {
+    calls += 1
+    return new Promise(resolve => { resolveRefresh = resolve })
+  }
+  try {
+    const first = refreshAuthToken('refresh-1')
+    const second = refreshAuthToken('refresh-1')
+    assert.strictEqual(first, second)
+    resolveRefresh({ data: { access_token: 'access-2', refresh_token: 'refresh-2' } })
+    assert.deepEqual(await first, { access_token: 'access-2', refresh_token: 'refresh-2' })
+    assert.equal(calls, 1)
+  } finally {
+    axios.post = originalPost
+  }
 })

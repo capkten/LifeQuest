@@ -1,0 +1,118 @@
+{
+  "runner": "strict-playwright-runner",
+  "generatedAt": "2026-09-16T05:24:32.784Z",
+  "contract": "/home/capkin/apps/LifeQuest/.worktrees/lifequest-defect-closure/.harness/contracts/task-12-browser.json",
+  "browser": {
+    "status": "blocked",
+    "authenticated": false,
+    "baseUrl": "http://127.0.0.1:4173",
+    "viewports": [],
+    "failures": [
+      "browser launch failed: browserType.launch: Executable doesn't exist at /home/capkin/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell\n╔════════════════════════════════════════════════════════════╗\n║ Looks like Playwright was just installed or updated.       ║\n║ Please run the following command to download new browsers: ║\n║                                                            ║\n║     npx playwright install                                 ║\n║                                                            ║\n║ <3 Playwright Team                                         ║\n╚════════════════════════════════════════════════════════════╝"
+    ]
+  },
+  "live": {
+    "endpoint": "https://life.capkin.cn/api",
+    "deployedVersion": null,
+    "health": {
+      "method": "GET",
+      "url": "https://life.capkin.cn/api/health",
+      "status": 200,
+      "body": "{\"status\":\"ok\"}",
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cf-cache-status": "DYNAMIC",
+        "cf-ray": "a3bd7212ad4a1c0a-AMS",
+        "connection": "keep-alive",
+        "content-length": "15",
+        "content-type": "application/json",
+        "date": "Wed, 16 Sep 2026 05:24:34 GMT",
+        "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+        "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=dFPkpgfBcF%2FhkqAatV2Z2noYHCLuYAyc63bTU9iYca9iAWcd7BvXKhSddkfOIXigcrO0P4tB1NMxUNcjOBFv1k158lmaweVotm%2BIQdROqqmLRnqoZs3lU567lvIFZOFmCw%3D%3D\"}]}",
+        "server": "cloudflare",
+        "speculation-rules": "\"/cdn-cgi/speculation\""
+      }
+    },
+    "openapi": {
+      "method": "GET",
+      "url": "https://life.capkin.cn/api/openapi.json",
+      "status": 404,
+      "body": "{\"detail\":\"Not Found\"}",
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cf-cache-status": "DYNAMIC",
+        "cf-ray": "a3bd720c1c4b3ec4-AMS",
+        "connection": "keep-alive",
+        "content-length": "22",
+        "content-type": "application/json",
+        "date": "Wed, 16 Sep 2026 05:24:33 GMT",
+        "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+        "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=ryRnZMwkTFhBuJmOZwK%2BHk65HqLselit0VNxuruIg95fF%2FvjzPO6I0nDTkBTnPlupJuaEx2g2jhDdwgsq%2F1QmcLKkhCww09%2BYel4u7UedpAez52tjYy37a6eaPfvyniaxA%3D%3D\"}]}",
+        "server": "cloudflare",
+        "speculation-rules": "\"/cdn-cgi/speculation\""
+      }
+    },
+    "dailySummary": {
+      "method": "GET",
+      "url": "https://life.capkin.cn/api/todos/daily",
+      "status": 401,
+      "body": "{\"detail\":\"Not authenticated\"}",
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cf-cache-status": "DYNAMIC",
+        "cf-ray": "a3bd720c19143c26-AMS",
+        "connection": "keep-alive",
+        "content-length": "30",
+        "content-type": "application/json",
+        "date": "Wed, 16 Sep 2026 05:24:33 GMT",
+        "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+        "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=0gzSRCl1wdjSH3P0nAs%2FrD6YNiWfa3CRk4MfuWwbztH%2BJKRGKwusu6KMuua0kOOXGY8zKMnVWniZoto2QfJ3uH6m6h2tjLMQ%2FecKRlmX7pf8Yw2L2HkREsqg4vNJrPRjOg%3D%3D\"}]}",
+        "server": "cloudflare",
+        "speculation-rules": "\"/cdn-cgi/speculation\"",
+        "www-authenticate": "Bearer"
+      }
+    },
+    "pauseProbe": {
+      "method": "POST",
+      "url": "https://life.capkin.cn/api/todos/habits/00000000-0000-0000-0000-000000000000/pause",
+      "status": 401,
+      "body": "{\"detail\":\"Not authenticated\"}",
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cf-cache-status": "DYNAMIC",
+        "cf-ray": "a3bd720c2bc4aa76-AMS",
+        "connection": "keep-alive",
+        "content-length": "30",
+        "content-type": "application/json",
+        "date": "Wed, 16 Sep 2026 05:24:33 GMT",
+        "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+        "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=jCV4E2qGRpn2QYVfuDsaUuq%2F9Mft7L73VxkK4tNe4J9A9a7x7t54HB9BLnvOKP%2BOo027MT2l4fK09IIyEZ%2BenA%2BNISzB0HhrBRvgTL5CAIw1y8RyLXQe8casIJP6DKFXBA%3D%3D\"}]}",
+        "server": "cloudflare",
+        "www-authenticate": "Bearer"
+      }
+    },
+    "resumeProbe": {
+      "method": "POST",
+      "url": "https://life.capkin.cn/api/todos/habits/00000000-0000-0000-0000-000000000000/resume",
+      "status": 401,
+      "body": "{\"detail\":\"Not authenticated\"}",
+      "headers": {
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cf-cache-status": "DYNAMIC",
+        "cf-ray": "a3bd720e4ffdf5ec-AMS",
+        "connection": "keep-alive",
+        "content-length": "30",
+        "content-type": "application/json",
+        "date": "Wed, 16 Sep 2026 05:24:34 GMT",
+        "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+        "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=HTFYvJ16MhcMm8riDI7ij%2Bj5HVLWZ66sHt6GU671tIpC%2FEzxTy0SjJl043BabdGriZA%2BT2XqGkRjMeJsfXUJ8fDJqpphLQA4t2YLxVjbQLu6V9ylppEvHOiDaEumRd4ZwA%3D%3D\"}]}",
+        "server": "cloudflare",
+        "www-authenticate": "Bearer"
+      }
+    },
+    "mutationAttempted": true,
+    "authenticatedMutation": "blocked: no production credentials were supplied; unauthenticated probes cannot mutate data",
+    "note": "POST probes used a non-existent habit UUID without credentials and returned the deployed auth response. No authenticated production pause/resume mutation was attempted.",
+    "status": "read-only evidence collected"
+  }
+}

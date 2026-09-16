@@ -1,0 +1,31 @@
+{
+  "name": "LifeQuest Task 12 strict browser contracts",
+  "retrySelector": ".retry-btn, [data-testid=\"retry\"]",
+  "allowedExternalOrigins": [
+    "https://fonts.googleapis.com",
+    "https://fonts.gstatic.com"
+  ],
+  "requiredViewports": [
+    "375x812",
+    "768x1024",
+    "1024x900",
+    "1440x1000"
+  ],
+  "requiredRoutes": [
+    "/",
+    "/todos",
+    "/coins/history",
+    "/finance",
+    "/finance/budgets",
+    "/finance/debts",
+    "/backpack/history",
+    "/notes",
+    "/projects"
+  ],
+  "onlineEvidence": {
+    "health": "GET /api/health",
+    "pause": "POST /api/todos/habits/{non-existent-id}/pause without credentials",
+    "resume": "POST /api/todos/habits/{non-existent-id}/resume without credentials",
+    "mutationAllowed": false
+  }
+}
