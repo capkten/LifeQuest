@@ -52,7 +52,9 @@ export const useAuthStore = defineStore('auth', () => {
         return true
       })
       .catch(() => {
-        logout()
+        if (refreshTokenValue.value === refreshTokenAtStart) {
+          logout()
+        }
         return false
       })
       .finally(() => {

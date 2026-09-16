@@ -128,6 +128,50 @@ test('pending refresh cannot revive a cleared or replaced local session', async 
   })
 })
 
+test('stale auth-store refresh rejection does not clear a replacement session', async () => {
+  const authSource = await readFile(new URL('../stores/auth.js', import.meta.url), 'utf8')
+  const refreshFunctionSource = authSource.match(
+    /function refreshAccessToken\(\) \{[\s\S]*?\n  \}/,
+  )?.[0]
+  assert.ok(refreshFunctionSource, 'auth store must expose refreshAccessToken')
+
+  let rejectRefresh
+  const pendingRefresh = new Promise((resolve, reject) => {
+    rejectRefresh = reject
+  })
+  const refreshTokenValue = { value: 'old-refresh' }
+  let logoutCalls = 0
+  let setTokensCalls = 0
+  const refreshAccessToken = new Function(
+    'refreshTokenValue',
+    'authService',
+    'logout',
+    'setTokens',
+    `let refreshPromise = null
+${refreshFunctionSource}
+return refreshAccessToken`,
+  )(
+    refreshTokenValue,
+    { refreshToken: () => pendingRefresh },
+    () => {
+      logoutCalls += 1
+      refreshTokenValue.value = null
+    },
+    () => {
+      setTokensCalls += 1
+    },
+  )
+
+  const request = refreshAccessToken()
+  refreshTokenValue.value = 'replacement-refresh'
+  rejectRefresh(new Error('old refresh failed'))
+
+  assert.equal(await request, false)
+  assert.equal(logoutCalls, 0)
+  assert.equal(setTokensCalls, 0)
+  assert.equal(refreshTokenValue.value, 'replacement-refresh')
+})
+
 test('sect business locks remain clickable so blocked reasons can be shown', async () => {
   const source = await readFile(new URL('./Sects.vue', viewsDirectory), 'utf8')
 

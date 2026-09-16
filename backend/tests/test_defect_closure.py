@@ -37,6 +37,11 @@ import mcp_server
 from tests.conftest import has_column, run_startup_migrations
 
 
+VALID_JPEG_CONTENT = base64.b64decode(
+    "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD5/ooor9gPxQ//2Q=="
+)
+
+
 def test_daily_summary_preserves_active_and_schedule_state(
     client, auth_headers, db_session,
 ):
@@ -1091,6 +1096,108 @@ def test_avatar_rejects_structurally_invalid_image_payloads(client, auth_headers
         assert response.status_code == 400, filename
 
     assert not any(users_api.UPLOAD_DIR.iterdir())
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "content_type"),
+    [
+        (
+            "avatar.jpg",
+            b"\xff\xd8\xff\xc0\x00\x0b\x08\x00\x01\x00\x01\x01\x01\x11\x00"
+            b"\xff\xda\x00\x08\x01\x01\x00\x00\x3f\x00\x01\xff\xd9",
+            "image/jpeg",
+        ),
+        (
+            "avatar.gif",
+            b"GIF89a"
+            + struct.pack("<HHBBB", 1, 1, 0x80, 0, 0)
+            + b"\x00" * 6
+            + b"\x2c"
+            + struct.pack("<HHHHB", 0, 0, 1, 1, 0)
+            + b"\x02\x01\xff\x00\x3b",
+            "image/gif",
+        ),
+        (
+            "avatar.webp",
+            b"RIFF"
+            + struct.pack("<I", 4 + 8 + 8)
+            + b"WEBPVP8L"
+            + struct.pack("<I", 8)
+            + b"\x2f\x00\x00\x00\x00\x00\x00\x00",
+            "image/webp",
+        ),
+    ],
+)
+def test_avatar_rejects_malformed_decoded_image_data(
+    client, auth_headers, filename, content, content_type,
+):
+    response = client.post(
+        "/api/users/me/avatar",
+        headers=auth_headers,
+        files={"file": (filename, content, content_type)},
+    )
+
+    assert response.status_code == 400, filename
+    assert not any(users_api.UPLOAD_DIR.iterdir())
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "content_type"),
+    [
+        (
+            "avatar.png",
+            base64.b64decode(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+            ),
+            "image/png",
+        ),
+        (
+            "avatar.jpg",
+            base64.b64decode(
+                """
+                /9j/4AAQSkZJRgABAgAAZABkAAD/7AARRHVja3kAAQAEAAAAMAAA/+4ADkFkb2JlAGTAAAAAAf/bAIQACQYGBgcGCQcHCQ0IBwgNDwsJCQsPEQ4ODw4OERENDg4ODg0RERQUFhQUERoaHBwaGiYmJiYmKysrKysrKysrKysrKwEJCAgJCgkMCgoMDwwODA8TDg4ODhMVDg4PDg4VGhMRERERExoXGhYWFhoXHR0aGh0dJCQjJCQrKysrKysrKysr/8AAEQgAjACMAwEiAAIRAQMRAf/EAF4AAQEBAAAAAAAAAAAAAAAAAAABBwEBAQAAAAAAAAAAAAAAAAAAAAIQAAEDAwIHAQEAAAAAAAAAAADwAREhYaExkUFRcYGxwdHh8REBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AyGFEjHaBS2fDDs2zkhKmBKktb7km+ZwwCnXPkLVmCTMItj6AXFxRS465/BTnkAJvkLkJe+7AKKoi2AtRS2zuAWsCb5GOlBN8gKfmuGHZ8MFqIth3ALmFoFwbwKWyAlTAp17uKqBvgBD8sM4fTjhvAhkzhaRkBMKBrfs7jGPIpzy7gFrAqnC0C0gB0EWwBDW2cBVQwm+QtPpa3wBO3sVvszCnLAhkzgL5/RLf13cLQd8/AGlu0Cb5HTx9KuAEieGJEdcehS3eRTp2ATdt3CpIm+QtZwAhROXFeb7swp/ahaM3kBE/jSIUBc/AWrgBN8uNFAl+b7sAXFxFn2YLUU5Ns7gFX8C4ib+hN8gFWXwK3bZglxEJm+gFWXwK3bZglxEJm+gKdciLPsFV/TClsgJUwKJ5FVA7tvIFrfZhVfGJDcsCKaYgAqv6YRbE+RWOWBtu7+AL3yRalXLyKqAIIfk+zARbDgFyEsncYwJvlgFRW+GEWntIi2P0BooyFxcNr8Ep3+ANLbMO+QyhvbiqdgC0kVvgUUiLYgBS2QtPbiVI1/sgOmG9uO+Y8DW+7jS2zAOnj6O2BndwuIAUtkdRN8gFoK3wwXMQyZwHVbClsuNLd4E3yAUR6FVDBR+BafQGt93LVMxJTv8ABts4CVLhcfYWsCb5kC9/BHdU8CLYFY5bMAd+eX9MGthhpbA1vu4B7+RKkaW2Yq4AQtVBBFsAJU/AuIXBhN8gGWnstefhiZyWvLAEnbYS1uzSFP6Jvn4Baxx70JKkQojLib5AVTey1jjgkKJGO0AKWyOm7N7cSpgSpAdPH0Tfd/gp1z5C1ZgKqN9J2wFxcUUuAFLZAm+QC0Fb4YUVRFsAOvj4KW2dwtYE3yAWk/wS/PLMKfmuGHZ8MAXF/Ja32Yi5haAKWz4Ydm2cSpgU693Atb7km+Zwwh+WGcPpxw3gAkzCLY+iYUDW/Z3Adc/gpzyFrAqnALkJe+7DoItgAtRS2zuKqGE3yAx0oJvkdvYrfZmALURbDuL5/RLf13cAuDeBS2RpbtAm+QFVA3wR+3fUtFHoBDJnC0jIXH0HWsgMY8inPLuOkd9chp4z20ALQLSA8cI9jYAIa2zjzjBd8gRafS1vgiUho/kAKcsCGTOGWvoOpkAtB3z8Hm8x2Ff5ADp4+lXAlIvcmwH/2Q==
+                """
+            ),
+            "image/jpeg",
+        ),
+        (
+            "avatar.gif",
+            b"GIF89a"
+            + struct.pack("<HHBBB", 1, 1, 0x80, 0, 0)
+            + b"\x00\x00\x00\xff\xff\xff"
+            + b"\x2c"
+            + struct.pack("<HHHHB", 0, 0, 1, 1, 0)
+            + b"\x02\x02\x44\x01\x00\x3b",
+            "image/gif",
+        ),
+        (
+            "avatar.webp",
+            base64.b64decode(
+                """
+                UklGRqgAAABXRUJQVlA4TJwAAAAvI0o6EQcQEREAUKT//ymi/6n//e9///vf//73v//973//+9///ve///3vf//73//+97///e9///vf//73v//973//+9///ve///3vf//73//+97///e9///vf//73v//973//+9///ve///3vf//73//+97///e9///vf//73v//973//+9///ve///3vf//73//+97///e//uQA=
+                """
+            ),
+            "image/webp",
+        ),
+    ],
+)
+def test_avatar_accepts_real_supported_image_content(
+    client, auth_headers, filename, content, content_type,
+):
+    if filename == "avatar.jpg":
+        content = VALID_JPEG_CONTENT
+
+    response = client.post(
+        "/api/users/me/avatar",
+        headers=auth_headers,
+        files={"file": (filename, content, content_type)},
+    )
+
+    assert response.status_code == 200, response.text
+    avatar_url = response.json()["avatar"]
+    saved_path = users_api.UPLOAD_DIR / avatar_url.rsplit("/", 1)[-1]
+    assert saved_path.read_bytes() == content
+    assert not any(path.name.startswith(".") for path in users_api.UPLOAD_DIR.iterdir())
 
 
 def test_avatar_update_failure_restores_database_and_filesystem(
