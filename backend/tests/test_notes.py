@@ -121,6 +121,11 @@ def test_renaming_folder_updates_descendant_db_and_files(client):
     headers = _register_and_login(client)
     tree = _create_nested_note_tree(client, headers)
     old_files = [Path(_get_node(client, note["id"], headers)["content_path"]) for note in tree["notes"]]
+    expected_paths = [
+        "/新目录/子目录/第一篇.md",
+        "/新目录/子目录/第二篇.md",
+    ]
+    expected_content = ["first", "second"]
 
     response = client.patch(
         f"/api/notes/nodes/{tree['root']['id']}",
@@ -129,17 +134,59 @@ def test_renaming_folder_updates_descendant_db_and_files(client):
     )
 
     assert response.status_code == 200
-    for old_file, note in zip(old_files, tree["notes"]):
+    moved_root = next(
+        item for item in client.get(
+            f"/api/notes/notebooks/{tree['notebook']['id']}/children",
+            headers=headers,
+        ).json()
+        if item["id"] == tree["root"]["id"]
+    )
+    moved_child = next(
+        item for item in client.get(
+            f"/api/notes/notebooks/{tree['notebook']['id']}/children",
+            params={"parent_id": tree["root"]["id"]},
+            headers=headers,
+        ).json()
+        if item["id"] == tree["child"]["id"]
+    )
+    assert moved_root["id"] == tree["root"]["id"]
+    assert moved_root["path"] == "/新目录"
+    assert moved_child["id"] == tree["child"]["id"]
+    assert moved_child["path"] == "/新目录/子目录"
+    for old_file, note, expected_path, content in zip(old_files, tree["notes"], expected_paths, expected_content):
         refreshed = _get_node(client, note["id"], headers)
-        assert refreshed["path"].startswith("/新目录/")
+        assert refreshed["path"] == expected_path
         assert Path(refreshed["content_path"]).exists()
+        assert refreshed["id"] == note["id"]
+        assert refreshed["content"] == content
         assert not old_file.exists()
+
+
+def test_note_tree_move_cleans_old_and_creates_new_directories(client):
+    headers = _register_and_login(client)
+    tree = _create_nested_note_tree(client, headers)
+    old_note = _get_node(client, tree["notes"][0]["id"], headers)
+    old_root_directory = Path(old_note["content_path"]).parents[1]
+    new_root_directory = old_root_directory.parent / "目标目录" / "旧目录"
+
+    response = client.patch(
+        f"/api/notes/nodes/{tree['root']['id']}",
+        json={"parent_id": tree["destination"]["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert not old_root_directory.exists()
+    assert new_root_directory.is_dir()
 
 
 def test_note_tree_move_restores_db_and_files_when_rename_fails(client, monkeypatch):
     headers = _register_and_login(client)
     tree = _create_nested_note_tree(client, headers)
     before = _snapshot_tree(client, tree, headers)
+    old_note = _get_node(client, tree["notes"][0]["id"], headers)
+    old_root_directory = Path(old_note["content_path"]).parents[1]
+    new_root_directory = old_root_directory.parent / "目标目录" / "旧目录"
     original_rename = Path.rename
     rename_count = 0
 
@@ -159,6 +206,79 @@ def test_note_tree_move_restores_db_and_files_when_rename_fails(client, monkeypa
 
     assert response.status_code == 500
     assert _snapshot_tree(client, tree, headers) == before
+    assert old_root_directory.is_dir()
+    assert not new_root_directory.exists()
+    assert not new_root_directory.parent.exists()
+
+
+def test_note_tree_move_restores_db_and_files_when_refresh_fails(client, monkeypatch):
+    from sqlalchemy.orm import Session
+
+    headers = _register_and_login(client)
+    tree = _create_nested_note_tree(client, headers)
+    before = _snapshot_tree(client, tree, headers)
+    original_refresh = Session.refresh
+
+    def fail_refresh(session, instance, *args, **kwargs):
+        if str(getattr(instance, "id", "")) == tree["root"]["id"]:
+            raise OSError("refresh failure")
+        return original_refresh(session, instance, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "refresh", fail_refresh)
+    response = client.patch(
+        f"/api/notes/nodes/{tree['root']['id']}",
+        json={"parent_id": tree["destination"]["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 500
+    assert _snapshot_tree(client, tree, headers) == before
+
+
+def test_note_tree_move_restores_db_and_files_when_commit_fails(client, monkeypatch):
+    from sqlalchemy.orm import Session
+
+    headers = _register_and_login(client)
+    tree = _create_nested_note_tree(client, headers)
+    before = _snapshot_tree(client, tree, headers)
+
+    def fail_commit(session, *args, **kwargs):
+        raise OSError("commit failure")
+
+    monkeypatch.setattr(Session, "commit", fail_commit)
+    response = client.patch(
+        f"/api/notes/nodes/{tree['root']['id']}",
+        json={"parent_id": tree["destination"]["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 500
+    assert _snapshot_tree(client, tree, headers) == before
+
+
+def test_note_tree_move_keeps_files_when_commit_already_persisted(client, monkeypatch):
+    from sqlalchemy.orm import Session
+
+    headers = _register_and_login(client)
+    tree = _create_nested_note_tree(client, headers)
+    original_commit = Session.commit
+
+    def commit_then_fail(session, *args, **kwargs):
+        original_commit(session, *args, **kwargs)
+        raise OSError("post-commit failure")
+
+    monkeypatch.setattr(Session, "commit", commit_then_fail)
+    response = client.patch(
+        f"/api/notes/nodes/{tree['root']['id']}",
+        json={"parent_id": tree["destination"]["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 500
+    moved_note = _get_node(client, tree["notes"][0]["id"], headers)
+    assert moved_note["path"] == "/目标目录/旧目录/子目录/第一篇.md"
+    assert moved_note["content"] == "first"
+    assert Path(moved_note["content_path"]).is_file()
 
 
 def test_create_notebook(client):

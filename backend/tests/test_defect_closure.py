@@ -2,7 +2,11 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from threading import Event, get_ident
+from pathlib import Path
 from uuid import uuid4
+
+import pytest
+from sqlalchemy.orm import sessionmaker
 
 from app.models.account import Account, AccountType
 from app.models.budget import Budget, BudgetPeriod
@@ -15,11 +19,14 @@ from app.models.backpack import BackpackItem, UsageAction, UsageHistory
 from app.models.shop import ExchangeHistory, ShopItem
 from app.services.finance import FinanceService
 from app.models.user import User
+from app.services.note import NoteService
 from app.database import Base
 from app.repositories.shop import ShopItemRepository
 from app.repositories.user import UserRepository
+from app.schemas.note import FolderCreate, NoteCreate
 from app.schemas.shop import ExchangeHistoryCreate
 from app.services.shop import ShopService
+import mcp_server
 from tests.conftest import has_column, run_startup_migrations
 
 
@@ -58,6 +65,130 @@ def test_daily_summary_preserves_active_and_schedule_state(
     resumed_row = next(item for item in resumed_daily["habits"] if item["id"] == str(habit.id))
     assert resumed_row["pause_intervals"] == resumed.json()["pause_intervals"]
     assert resumed_row["leave_intervals"] == []
+
+
+def test_mcp_tree_move_restores_files_when_combined_move_fails(client, auth_headers, user, db_session, monkeypatch):
+    notebook = client.post(
+        "/api/notes/notebooks",
+        json={"name": "MCP notes"},
+        headers=auth_headers,
+    ).json()
+    root = client.post(
+        f"/api/notes/notebooks/{notebook['id']}/folders",
+        json={"name": "旧目录"},
+        headers=auth_headers,
+    ).json()
+    child = client.post(
+        f"/api/notes/notebooks/{notebook['id']}/folders",
+        json={"name": "子目录", "parent_id": root["id"]},
+        headers=auth_headers,
+    ).json()
+    notes = [
+        client.post(
+            f"/api/notes/notebooks/{notebook['id']}/notes",
+            json={"title": title, "content": content, "parent_id": child["id"]},
+            headers=auth_headers,
+        ).json()
+        for title, content in (("第一篇", "first"), ("第二篇", "second"))
+    ]
+    destination = client.post(
+        f"/api/notes/notebooks/{notebook['id']}/folders",
+        json={"name": "目标目录"},
+        headers=auth_headers,
+    ).json()
+    before = [client.get(f"/api/notes/{note['id']}", headers=auth_headers).json() for note in notes]
+    old_files = [Path(note["content_path"]) for note in before]
+
+    original_rename = Path.rename
+
+    def fail_on_destination_rename(path, target):
+        if "目标目录" in str(target):
+            raise OSError("destination rename failed")
+        return original_rename(path, target)
+
+    monkeypatch.setattr(Path, "rename", fail_on_destination_rename)
+    factory = sessionmaker(bind=db_session.get_bind(), autoflush=False, autocommit=False)
+    monkeypatch.setattr(mcp_server, "SessionLocal", factory)
+    monkeypatch.setattr(mcp_server, "_ensure_db", lambda: None)
+    user_token = mcp_server._auth_user_id.set(user.id)
+    auth_token = mcp_server._auth_token_authenticated.set(False)
+    try:
+        with pytest.raises(OSError):
+            mcp_server.rename_or_move_node(
+                root["id"],
+                name="新目录",
+                parent_id=destination["id"],
+            )
+    finally:
+        mcp_server._auth_user_id.reset(user_token)
+        mcp_server._auth_token_authenticated.reset(auth_token)
+
+    after = [client.get(f"/api/notes/{note['id']}", headers=auth_headers).json() for note in notes]
+    assert [(item["id"], item["path"], item["content"]) for item in after] == [
+        (item["id"], item["path"], item["content"]) for item in before
+    ]
+    assert all(path.exists() for path in old_files)
+
+
+def test_note_tree_move_serializes_planning_and_application(database, monkeypatch):
+    from app.models.note import Notebook
+    from app.models.note_node import NoteNode
+
+    local_user = User(
+        username=f"concurrent-{uuid4().hex}",
+        email=f"concurrent-{uuid4().hex}@example.com",
+        password_hash="unused",
+    )
+    database.add(local_user)
+    database.commit()
+    notebook = Notebook(user_id=local_user.id, name="Concurrent notes")
+    database.add(notebook)
+    database.commit()
+    service = NoteService(database)
+    root = service.create_folder(notebook.id, local_user.id, FolderCreate(name="Root"))
+    target_a = service.create_folder(notebook.id, local_user.id, FolderCreate(name="A"))
+    target_b = service.create_folder(notebook.id, local_user.id, FolderCreate(name="B"))
+    note = service.create_note(notebook.id, local_user.id, NoteCreate(title="Note", content="stable", parent_id=root.id))
+    factory = sessionmaker(bind=database.get_bind(), autoflush=False, autocommit=False)
+    first_plan_started = Event()
+    allow_first_plan = Event()
+    second_plan_started = Event()
+    original_plan = NoteService._plan_tree_move
+    calls = []
+
+    def observe_plan(instance, *args, **kwargs):
+        calls.append(get_ident())
+        if len(calls) == 1:
+            first_plan_started.set()
+            assert allow_first_plan.wait(timeout=10)
+        else:
+            second_plan_started.set()
+        return original_plan(instance, *args, **kwargs)
+
+    monkeypatch.setattr(NoteService, "_plan_tree_move", observe_plan)
+
+    def move(parent_id):
+        session = factory()
+        try:
+            return NoteService(session).move_tree(note.id, parent_id, note.name)
+        finally:
+            session.close()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(move, target_a.id)
+        assert first_plan_started.wait(timeout=10)
+        second = executor.submit(move, target_b.id)
+        assert not second_plan_started.wait(timeout=0.25)
+        allow_first_plan.set()
+        first.result(timeout=20)
+        second.result(timeout=20)
+
+    database.expire_all()
+    refreshed = database.query(NoteNode).filter(NoteNode.id == note.id).one()
+    assert refreshed.parent_id == target_b.id
+    assert refreshed.path == "/B/Note.md"
+    assert refreshed.name == "Note"
+    assert Path(refreshed.content_path).read_text(encoding="utf-8") == "stable"
 
 
 def test_purchase_idempotency_key_returns_one_exchange(client, auth_headers, shop_item, db_session):

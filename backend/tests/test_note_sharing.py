@@ -213,3 +213,37 @@ def test_collaboration_scope_cannot_call_ordinary_endpoints(client):
 
     assert client.get("/api/users/me", headers=scoped_headers).status_code == 403
     assert client.get("/api/todos/daily", headers=scoped_headers).status_code == 403
+
+
+def test_collaboration_scope_cannot_access_attachments(client):
+    owner_headers = _register_and_login(client, "scope-attachment-owner", "scope-attachment-owner@example.com")
+    notebook, note = _create_note(client, owner_headers)
+    other_note = client.post(
+        f"/api/notes/notebooks/{notebook['id']}/notes",
+        json={"title": "Other note", "content": "other"},
+        headers=owner_headers,
+    ).json()
+    upload = client.post(
+        "/api/notes/upload-image",
+        data={"note_id": note["id"]},
+        files={"file": ("diagram.png", b"fake-image", "image/png")},
+        headers=owner_headers,
+    )
+    assert upload.status_code == 200
+
+    other_ticket = client.post(
+        f"/api/notes/{other_note['id']}/collaboration-ticket",
+        headers=owner_headers,
+    ).json()["ticket"]
+    scoped_headers = {"Authorization": f"Bearer {other_ticket}"}
+
+    assert client.get(
+        upload.json()["url"],
+        params={"token": other_ticket},
+    ).status_code == 403
+    assert client.post(
+        "/api/notes/upload-image",
+        data={"note_id": note["id"]},
+        files={"file": ("blocked.png", b"fake-image", "image/png")},
+        headers=scoped_headers,
+    ).status_code == 403

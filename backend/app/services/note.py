@@ -10,7 +10,7 @@ from threading import RLock
 from typing import List, Optional, Sequence, Tuple
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, or_, inspect, text
+from sqlalchemy import and_, or_, inspect, select, text
 from sqlalchemy.orm import Session
 
 from app.models.note import Notebook, Attachment
@@ -56,6 +56,13 @@ class TreeMoveOperation:
 
 
 @dataclass
+class TreeMoveDirectoryOperation:
+    path: pathlib.Path
+    action: str
+    applied: bool = False
+
+
+@dataclass
 class TreeMovePlan:
     node_id: UUID
     notebook_id: UUID
@@ -63,7 +70,10 @@ class TreeMovePlan:
     new_name: str
     changes: List[TreeMoveChange]
     operations: List[TreeMoveOperation]
+    directory_operations: List[TreeMoveDirectoryOperation] = field(default_factory=list)
     stage_root: Optional[pathlib.Path] = field(default=None, repr=False)
+    created_directories: List[pathlib.Path] = field(default_factory=list, repr=False)
+    removed_directories: List[pathlib.Path] = field(default_factory=list, repr=False)
     filesystem_applied: bool = field(default=False, repr=False)
 
     @property
@@ -72,6 +82,7 @@ class TreeMovePlan:
 
 
 _NOTE_TREE_MOVE_LOCK = RLock()
+_UNSET = object()
 
 
 def canonicalize_tags(tags: Optional[str]) -> Optional[str]:
@@ -439,7 +450,20 @@ class NoteService:
             raise ValueError("Note content path is outside the notebook storage root") from exc
         return resolved
 
-    def plan_tree_move(
+    @staticmethod
+    def _directory_ancestors(path: pathlib.Path, root: pathlib.Path) -> List[pathlib.Path]:
+        """Return directory paths between ``path`` and the notebook root."""
+        path = NoteService._confined_path(path, root)
+        if path == root:
+            return []
+        ancestors = []
+        current = path
+        while current != root:
+            ancestors.append(current)
+            current = current.parent
+        return ancestors
+
+    def _plan_tree_move(
         self,
         node_id: UUID,
         new_parent_id: Optional[UUID],
@@ -478,6 +502,8 @@ class NoteService:
         storage_root = self._storage_root(notebook)
         changes = []
         operations = []
+        new_directories = {storage_root}
+        old_directories = set()
         for item in [node, *descendants]:
             new_path = item.remap_path(old_root, new_root)
             old_content_path = item.content_path
@@ -493,14 +519,52 @@ class NoteService:
                 old_content_path=old_content_path,
                 new_content_path=new_content_path,
             ))
-            if not item.is_note or not old_content_path or old_content_path == new_content_path:
+            if item.is_folder:
+                old_directory = self._confined_path(
+                    storage_root / item.path.lstrip("/"),
+                    storage_root,
+                )
+                new_directory = self._confined_path(
+                    storage_root / new_path.lstrip("/"),
+                    storage_root,
+                )
+                old_directories.add(old_directory)
+                new_directories.update(self._directory_ancestors(new_directory, storage_root))
+                continue
+            if not old_content_path or old_content_path == new_content_path:
                 continue
             old_file = self._confined_path(pathlib.Path(old_content_path), storage_root)
             new_file = self._confined_path(pathlib.Path(new_content_path), storage_root)
             if new_file.exists() and new_file != old_file:
                 raise ValueError("目标文件已存在")
+            old_directories.update(self._directory_ancestors(old_file.parent, storage_root))
+            new_directories.update(self._directory_ancestors(new_file.parent, storage_root))
             if old_file.exists():
+                if not old_file.is_file():
+                    raise ValueError("Note content path is not a file")
                 operations.append(TreeMoveOperation(old_file, new_file))
+
+        for directory in new_directories:
+            if directory.exists() and not directory.is_dir():
+                raise ValueError("Note destination path is not a directory")
+
+        new_directories = {path.resolve() for path in new_directories}
+        old_directories = {
+            path.resolve()
+            for path in old_directories
+            if path.resolve() != storage_root.resolve()
+        }
+        old_directories.difference_update(new_directories)
+        directory_operations = [
+            TreeMoveDirectoryOperation(path, "create")
+            for path in sorted(new_directories, key=lambda item: (len(item.parts), str(item)))
+            if not path.exists()
+        ]
+        directory_operations.extend(
+            TreeMoveDirectoryOperation(path, "remove")
+            for path in sorted(old_directories, key=lambda item: (-len(item.parts), str(item)))
+            if path.exists()
+        )
 
         return TreeMovePlan(
             node_id=node.id,
@@ -509,80 +573,223 @@ class NoteService:
             new_name=display_name,
             changes=changes,
             operations=operations,
+            directory_operations=directory_operations,
         )
 
+    def plan_tree_move(
+        self,
+        node_id: UUID,
+        new_parent_id: Optional[UUID],
+        new_name: Optional[str] = None,
+    ) -> TreeMovePlan:
+        with _NOTE_TREE_MOVE_LOCK:
+            return self._plan_tree_move(node_id, new_parent_id, new_name)
+
     @staticmethod
-    def _restore_tree_move_files(plan: TreeMovePlan) -> None:
+    def _ensure_directory(path: pathlib.Path, created: List[pathlib.Path]) -> None:
+        path = path.resolve()
+        missing = []
+        current = path
+        while not current.exists():
+            missing.append(current)
+            parent = current.parent
+            if parent == current:
+                raise OSError(f"Unable to create directory: {path}")
+            current = parent
+        if not current.is_dir():
+            raise OSError(f"Directory path is not a directory: {current}")
+        for directory in reversed(missing):
+            directory.mkdir()
+            created.append(directory)
+
+    @staticmethod
+    def _remove_empty_directory(path: pathlib.Path) -> bool:
+        try:
+            path.rmdir()
+        except OSError:
+            if path.exists() and path.is_dir():
+                try:
+                    next(path.iterdir())
+                except StopIteration:
+                    raise
+                return False
+            raise
+        return True
+
+    def _restore_tree_move_files(self, plan: TreeMovePlan) -> None:
+        for directory in sorted(plan.removed_directories, key=lambda item: (len(item.parts), str(item))):
+            if not directory.exists():
+                self._ensure_directory(directory, [])
         for operation in reversed(plan.operations):
+            if operation.old_path.exists():
+                continue
+            source = None
             if operation.new_path.exists():
-                operation.new_path.parent.mkdir(parents=True, exist_ok=True)
-                operation.new_path.rename(operation.old_path)
+                source = operation.new_path
             elif operation.staged_path and operation.staged_path.exists():
-                operation.staged_path.parent.mkdir(parents=True, exist_ok=True)
-                operation.staged_path.rename(operation.old_path)
+                source = operation.staged_path
+            if source is not None:
+                self._ensure_directory(operation.old_path.parent, [])
+                source.rename(operation.old_path)
+        for directory in sorted(
+            plan.created_directories,
+            key=lambda item: (-len(item.parts), str(item)),
+        ):
+            if directory.exists():
+                try:
+                    directory.rmdir()
+                except OSError:
+                    logger.debug("Keeping non-empty directory after note move rollback: %s", directory)
+        plan.removed_directories.clear()
+        plan.created_directories.clear()
         plan.filesystem_applied = False
 
-    def apply_tree_move(self, plan: TreeMovePlan, commit: bool = True) -> NoteNode:
+    def _database_has_tree_move(self, plan: TreeMovePlan) -> bool:
+        """Detect a commit that raised after its transaction was persisted."""
+        try:
+            if self.db.in_transaction():
+                return False
+        except Exception:
+            return False
+
+        try:
+            bind = self.db.get_bind()
+            if not hasattr(bind, "connect"):
+                return True
+            with bind.connect() as connection:
+                row = connection.execute(
+                    select(
+                        NoteNode.parent_id,
+                        NoteNode.name,
+                        NoteNode.path,
+                        NoteNode.content_path,
+                    ).where(NoteNode.id == plan.node_id)
+                ).first()
+            if row is None:
+                return False
+            change = plan.changes[0]
+            return (
+                row.parent_id == plan.new_parent_id
+                and row.name == plan.new_name
+                and row.path == change.new_path
+                and row.content_path == change.new_content_path
+            )
+        except Exception:
+            logger.exception("Unable to determine note move commit state")
+            return True
+
+    def _apply_tree_move(self, plan: TreeMovePlan, commit: bool = True) -> NoteNode:
         if plan.notebook_id is None:
             raise ValueError("Notebook not found")
-        with _NOTE_TREE_MOVE_LOCK:
-            notebook = self.notebook_repo.get_by_id(plan.notebook_id)
-            if not notebook:
-                raise ValueError("Notebook not found")
-            stage_root = self._storage_root(notebook) / f".tree-move-{uuid4().hex}"
-            plan.stage_root = stage_root
-            try:
-                stage_root.mkdir(parents=True, exist_ok=False)
-                for index, operation in enumerate(plan.operations):
-                    operation.staged_path = stage_root / str(index)
-                    operation.staged_path.parent.mkdir(parents=True, exist_ok=True)
-                    operation.old_path.rename(operation.staged_path)
+        notebook = self.notebook_repo.get_by_id(plan.notebook_id)
+        if not notebook:
+            raise ValueError("Notebook not found")
+        storage_root = self._storage_root(notebook)
+        stage_root = storage_root / f".tree-move-{uuid4().hex}"
+        plan.stage_root = stage_root
+        commit_started = False
+        try:
+            self._ensure_directory(storage_root, plan.created_directories)
+            stage_root.mkdir(exist_ok=False)
+            for index, operation in enumerate(plan.operations):
+                operation.staged_path = stage_root / str(index)
+                if not operation.old_path.exists():
+                    raise FileNotFoundError(operation.old_path)
+                operation.old_path.rename(operation.staged_path)
 
+            for change in plan.changes:
+                change.node.path = change.new_path
+                if change.node.id == plan.node_id:
+                    change.node.parent_id = plan.new_parent_id
+                    change.node.name = plan.new_name
+                    change.node.normalized_name = normalize_name(plan.new_name)
+                if change.node.is_note:
+                    change.node.content_path = change.new_content_path
+            self.db.flush()
+
+            for directory_operation in plan.directory_operations:
+                if directory_operation.action == "create":
+                    if directory_operation.path.exists() and not directory_operation.path.is_dir():
+                        raise OSError(f"Directory path is not a directory: {directory_operation.path}")
+                    if not directory_operation.path.exists():
+                        self._ensure_directory(directory_operation.path, plan.created_directories)
+                    directory_operation.applied = True
+
+            for operation in plan.operations:
+                if operation.new_path.exists():
+                    raise FileExistsError(operation.new_path)
+                self._ensure_directory(operation.new_path.parent, plan.created_directories)
+                operation.staged_path.rename(operation.new_path)
+
+            for directory_operation in plan.directory_operations:
+                if directory_operation.action != "remove" or not directory_operation.path.exists():
+                    continue
+                if not directory_operation.path.is_dir():
+                    raise OSError(f"Directory path is not a directory: {directory_operation.path}")
+                if self._remove_empty_directory(directory_operation.path):
+                    plan.removed_directories.append(directory_operation.path)
+                    directory_operation.applied = True
+
+            plan.filesystem_applied = True
+            if stage_root.exists():
+                stage_root.rmdir()
+
+            if commit:
                 for change in plan.changes:
-                    change.node.path = change.new_path
-                    if change.node.id == plan.node_id:
-                        change.node.parent_id = plan.new_parent_id
-                        change.node.name = plan.new_name
-                        change.node.normalized_name = normalize_name(plan.new_name)
-                    if change.node.is_note:
-                        change.node.content_path = change.new_content_path
-                self.db.flush()
-
-                for operation in plan.operations:
-                    operation.new_path.parent.mkdir(parents=True, exist_ok=True)
-                    operation.staged_path.rename(operation.new_path)
+                    self.db.refresh(change.node)
+                commit_started = True
+                self.db.commit()
+            return plan.changes[0].node
+        except Exception:
+            if commit and commit_started and self._database_has_tree_move(plan):
                 plan.filesystem_applied = True
-                if commit:
-                    self.db.commit()
-                    self.db.refresh(plan.changes[0].node)
-                return plan.changes[0].node
-            except Exception:
-                self.db.rollback()
-                try:
-                    self._restore_tree_move_files(plan)
-                except Exception:
-                    logger.exception("Failed to restore note tree files after move failure")
                 raise
-            finally:
-                if stage_root.exists():
-                    shutil.rmtree(stage_root, ignore_errors=True)
-                plan.stage_root = None
+            self.db.rollback()
+            try:
+                self._restore_tree_move_files(plan)
+            except Exception:
+                logger.exception("Failed to restore note tree files after move failure")
+            raise
+        finally:
+            if stage_root.exists():
+                try:
+                    stage_root.rmdir()
+                except OSError:
+                    logger.error("Leaving note move staging directory for recovery: %s", stage_root)
+            plan.stage_root = None
+
+    def apply_tree_move(self, plan: TreeMovePlan, commit: bool = True) -> NoteNode:
+        with _NOTE_TREE_MOVE_LOCK:
+            return self._apply_tree_move(plan, commit=commit)
+
+    def move_tree(
+        self,
+        node_id: UUID,
+        new_parent_id=_UNSET,
+        new_name=_UNSET,
+        commit: bool = True,
+    ) -> NoteNode:
+        """Plan and apply one tree mutation while holding the tree lock."""
+        with _NOTE_TREE_MOVE_LOCK:
+            node = self.node_repo.get_by_id(node_id)
+            if not node:
+                raise ValueError("Node not found")
+            target_parent = node.parent_id if new_parent_id is _UNSET else new_parent_id
+            target_name = node.name if new_name is _UNSET else new_name
+            plan = self._plan_tree_move(node_id, target_parent, target_name)
+            return self._apply_tree_move(plan, commit=commit)
 
     def rename_node(self, node_id: UUID, new_name: str, commit: bool = True) -> NoteNode:
-        node = self.node_repo.get_by_id(node_id)
-        if not node:
-            raise ValueError("Node not found")
-        if normalize_name(new_name) == node.normalized_name:
-            return node
-        plan = self.plan_tree_move(node_id, node.parent_id, new_name)
-        return self.apply_tree_move(plan, commit=commit)
+        with _NOTE_TREE_MOVE_LOCK:
+            node = self.node_repo.get_by_id(node_id)
+            if not node:
+                raise ValueError("Node not found")
+            if normalize_name(new_name) == node.normalized_name:
+                return node
+            return self.move_tree(node_id, new_name=new_name, commit=commit)
 
     def move_node(self, node_id: UUID, new_parent_id: Optional[UUID]) -> NoteNode:
-        node = self.node_repo.get_by_id(node_id)
-        if not node:
-            raise ValueError("Node not found")
-        plan = self.plan_tree_move(node_id, new_parent_id, node.name)
-        return self.apply_tree_move(plan)
+        return self.move_tree(node_id, new_parent_id=new_parent_id)
 
     def update_note(self, node_id: UUID, note_in: NoteUpdate, user_id: Optional[UUID] = None) -> NoteNode:
         node = self.node_repo.get_by_id(node_id)
@@ -597,51 +804,64 @@ class NoteService:
 
         move_plan = None
         previous_content = None
-        content_path = None
-        try:
-            if note_in.title is not None:
-                move_plan = self.plan_tree_move(node_id, node.parent_id, note_in.title)
-                self.apply_tree_move(move_plan, commit=False)
+        previous_content_path = node.content_path
+        previous_content_exists = bool(
+            previous_content_path and os.path.exists(previous_content_path)
+        )
+        if note_in.content is not None and previous_content_exists:
+            with open(previous_content_path, "r", encoding="utf-8") as content_file:
+                previous_content = content_file.read()
+        content_path = previous_content_path
+        commit_started = False
+        with _NOTE_TREE_MOVE_LOCK:
+            try:
+                if note_in.title is not None:
+                    move_plan = self._plan_tree_move(node_id, node.parent_id, note_in.title)
+                    self._apply_tree_move(move_plan, commit=False)
 
-            if note_in.summary is not None:
-                node.summary = note_in.summary
-            if note_in.tags is not None:
-                node.tags = canonicalize_tags(note_in.tags)
-            else:
-                node.tags = canonicalize_tags(node.tags)
-            node.tags_normalized = True
-            if note_in.is_pinned is not None:
-                node.is_pinned = note_in.is_pinned
+                if note_in.summary is not None:
+                    node.summary = note_in.summary
+                if note_in.tags is not None:
+                    node.tags = canonicalize_tags(note_in.tags)
+                else:
+                    node.tags = canonicalize_tags(node.tags)
+                node.tags_normalized = True
+                if note_in.is_pinned is not None:
+                    node.is_pinned = note_in.is_pinned
 
-            content_path = node.content_path
-            if note_in.content is not None and content_path and os.path.exists(content_path):
-                with open(content_path, "r", encoding="utf-8") as content_file:
-                    previous_content = content_file.read()
-            if note_in.content is not None:
-                node.word_count = len(note_in.content.split())
-                if content_path:
-                    _write_content_atomically(content_path, note_in.content)
+                content_path = node.content_path
+                if note_in.content is not None:
+                    node.word_count = len(note_in.content.split())
+                    if content_path:
+                        _write_content_atomically(content_path, note_in.content)
 
-            changed = any(
-                value is not None
-                for value in (note_in.title, note_in.summary, note_in.tags, note_in.is_pinned, note_in.content)
-            )
-            if changed:
-                node.content_revision = (node.content_revision or 1) + 1
-                if user_id is not None:
-                    node.updated_by = user_id
-            self.db.commit()
-            self.db.refresh(node)
-        except Exception:
-            self.db.rollback()
-            if note_in.content is not None and content_path and previous_content is not None:
-                _write_content_atomically(content_path, previous_content)
-            if move_plan and move_plan.filesystem_applied:
-                try:
-                    self._restore_tree_move_files(move_plan)
-                except Exception:
-                    logger.exception("Failed to restore note tree files after note update failure")
-            raise
+                changed = any(
+                    value is not None
+                    for value in (note_in.title, note_in.summary, note_in.tags, note_in.is_pinned, note_in.content)
+                )
+                if changed:
+                    node.content_revision = (node.content_revision or 1) + 1
+                    if user_id is not None:
+                        node.updated_by = user_id
+                self.db.flush()
+                self.db.refresh(node)
+                commit_started = True
+                self.db.commit()
+            except Exception:
+                if commit_started and move_plan and self._database_has_tree_move(move_plan):
+                    raise
+                self.db.rollback()
+                if move_plan and move_plan.filesystem_applied:
+                    try:
+                        self._restore_tree_move_files(move_plan)
+                    except Exception:
+                        logger.exception("Failed to restore note tree files after note update failure")
+                if note_in.content is not None:
+                    if previous_content_exists and previous_content is not None:
+                        _write_content_atomically(previous_content_path, previous_content)
+                    elif content_path and os.path.exists(content_path):
+                        pathlib.Path(content_path).unlink()
+                raise
         return node
 
     def persist_collaboration_content(self, node_id: UUID, user_id: UUID, content: str) -> NoteNode:

@@ -2249,14 +2249,15 @@ def rename_or_move_node(
         if not svc.verify_node_ownership(node_uuid, uid):
             raise ValueError("Node not found")
         _require_node_write(svc, node_uuid, uid)
-        node = svc.node_repo.get_by_id(node_uuid)
+        move_kwargs = {}
         if name is not None:
-            svc.rename_node(node_uuid, name, commit=False)
-        if move_to_root or parent_id is not None:
-            svc.move_node(node_uuid, UUID(parent_id) if parent_id else None)
-        if name is not None and not (move_to_root or parent_id is not None):
-            db.commit()
-            db.refresh(node)
+            move_kwargs["new_name"] = name
+        if move_to_root:
+            move_kwargs["new_parent_id"] = None
+        elif parent_id is not None:
+            move_kwargs["new_parent_id"] = UUID(parent_id) if parent_id else None
+        if move_kwargs:
+            svc.move_tree(node_uuid, **move_kwargs)
         return _serialize(svc.node_repo.get_by_id(node_uuid))
     finally:
         db.close()

@@ -32,8 +32,12 @@ from app.schemas.note import (
 )
 from app.services.note import NoteService
 from app.services.note import NoteRevisionConflict
-from app.api.auth import get_current_user, get_scoped_collaboration_access
-from app.services.auth import create_access_token, decode_access_token
+from app.api.auth import (
+    get_current_user,
+    get_current_user_from_query_token,
+    get_scoped_collaboration_access,
+)
+from app.services.auth import create_access_token
 
 router = APIRouter(prefix="/api/notes", tags=["notes"])
 
@@ -301,11 +305,13 @@ def update_node(
         raise HTTPException(status_code=404, detail="Node not found")
     access = _require_notebook(service, node.notebook_id, current_user.id, write=True)
     try:
-        next_parent_id = node.parent_id
+        move_kwargs = {}
         if "parent_id" in node_in.model_fields_set:
-            next_parent_id = node_in.parent_id
-        next_name = node_in.name if node_in.name is not None else node.name
-        service.apply_tree_move(service.plan_tree_move(node_id, next_parent_id, next_name))
+            move_kwargs["new_parent_id"] = node_in.parent_id
+        if node_in.name is not None:
+            move_kwargs["new_name"] = node_in.name
+        if move_kwargs:
+            service.move_tree(node_id, **move_kwargs)
         return node_to_response(service.node_repo.get_by_id(node_id), access["role"])
     except ValueError as e:
         detail = str(e)
@@ -596,8 +602,8 @@ async def upload_image(
 def get_note_attachment(
     note_id: UUID,
     attachment_id: UUID,
-    token: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_query_token),
 ):
     """Serve note images only after validating the requesting user's access.
 
@@ -606,17 +612,9 @@ def get_note_attachment(
     access token as a query parameter at render time. The token is never
     stored in the note content.
     """
-    payload = decode_access_token(token) if token else None
-    try:
-        user_id = UUID(payload["sub"]) if payload else None
-    except (KeyError, TypeError, ValueError):
-        user_id = None
-    if user_id is None:
-        raise HTTPException(status_code=401, detail="Could not validate credentials")
-
     service = NoteService(db)
     try:
-        attachment = service.get_attachment(note_id, attachment_id, user_id)
+        attachment = service.get_attachment(note_id, attachment_id, current_user.id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Attachment not found")
     except PermissionError:

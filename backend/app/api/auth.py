@@ -1,7 +1,8 @@
 from datetime import timedelta
+from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -19,12 +20,14 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+def _get_user_from_access_token(token: Optional[str], db: Session):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    if not token:
+        raise credentials_exception
     payload = decode_access_token(token)
     if payload is None:
         raise credentials_exception
@@ -42,6 +45,18 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     if user is None:
         raise credentials_exception
     return user
+
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    return _get_user_from_access_token(token, db)
+
+
+def get_current_user_from_query_token(
+    token: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Authenticate an ordinary access token supplied for browser media loads."""
+    return _get_user_from_access_token(token, db)
 
 
 def get_scoped_collaboration_access(
