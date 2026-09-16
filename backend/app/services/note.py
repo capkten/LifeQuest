@@ -576,15 +576,6 @@ class NoteService:
             directory_operations=directory_operations,
         )
 
-    def plan_tree_move(
-        self,
-        node_id: UUID,
-        new_parent_id: Optional[UUID],
-        new_name: Optional[str] = None,
-    ) -> TreeMovePlan:
-        with _NOTE_TREE_MOVE_LOCK:
-            return self._plan_tree_move(node_id, new_parent_id, new_name)
-
     @staticmethod
     def _ensure_directory(path: pathlib.Path, created: List[pathlib.Path]) -> None:
         path = path.resolve()
@@ -647,16 +638,14 @@ class NoteService:
     def _database_has_tree_move(self, plan: TreeMovePlan) -> bool:
         """Detect a commit that raised after its transaction was persisted."""
         try:
-            if self.db.in_transaction():
-                return False
-        except Exception:
-            return False
-
-        try:
             bind = self.db.get_bind()
             if not hasattr(bind, "connect"):
                 return True
+            session_transaction = self.db.get_transaction()
+            session_connection = self.db.connection()
+            session_driver_connection = session_connection.connection.driver_connection
             with bind.connect() as connection:
+                driver_connection = connection.connection.driver_connection
                 row = connection.execute(
                     select(
                         NoteNode.parent_id,
@@ -666,6 +655,8 @@ class NoteService:
                     ).where(NoteNode.id == plan.node_id)
                 ).first()
             if row is None:
+                return False
+            if session_driver_connection is driver_connection and session_transaction is not None:
                 return False
             change = plan.changes[0]
             return (
@@ -758,10 +749,6 @@ class NoteService:
                     logger.error("Leaving note move staging directory for recovery: %s", stage_root)
             plan.stage_root = None
 
-    def apply_tree_move(self, plan: TreeMovePlan, commit: bool = True) -> NoteNode:
-        with _NOTE_TREE_MOVE_LOCK:
-            return self._apply_tree_move(plan, commit=commit)
-
     def move_tree(
         self,
         node_id: UUID,
@@ -792,28 +779,33 @@ class NoteService:
         return self.move_tree(node_id, new_parent_id=new_parent_id)
 
     def update_note(self, node_id: UUID, note_in: NoteUpdate, user_id: Optional[UUID] = None) -> NoteNode:
-        node = self.node_repo.get_by_id(node_id)
-        if not node or node.type != "note":
-            raise ValueError("Note not found")
-
-        if user_id is not None:
-            self.require_notebook_access(node.notebook_id, user_id, write=True)
-
-        if note_in.base_revision is not None and note_in.base_revision != (node.content_revision or 1):
-            raise NoteRevisionConflict(node, self.get_note_content(node_id))
-
-        move_plan = None
-        previous_content = None
-        previous_content_path = node.content_path
-        previous_content_exists = bool(
-            previous_content_path and os.path.exists(previous_content_path)
-        )
-        if note_in.content is not None and previous_content_exists:
-            with open(previous_content_path, "r", encoding="utf-8") as content_file:
-                previous_content = content_file.read()
-        content_path = previous_content_path
-        commit_started = False
         with _NOTE_TREE_MOVE_LOCK:
+            node = (
+                self.db.query(NoteNode)
+                .filter(NoteNode.id == node_id)
+                .populate_existing()
+                .first()
+            )
+            if not node or node.type != "note":
+                raise ValueError("Note not found")
+
+            if user_id is not None:
+                self.require_notebook_access(node.notebook_id, user_id, write=True)
+
+            if note_in.base_revision is not None and note_in.base_revision != (node.content_revision or 1):
+                raise NoteRevisionConflict(node, self.get_note_content(node_id))
+
+            move_plan = None
+            previous_content = None
+            previous_content_path = node.content_path
+            previous_content_exists = bool(
+                previous_content_path and os.path.exists(previous_content_path)
+            )
+            if note_in.content is not None and previous_content_exists:
+                with open(previous_content_path, "r", encoding="utf-8") as content_file:
+                    previous_content = content_file.read()
+            content_path = previous_content_path
+            commit_started = False
             try:
                 if note_in.title is not None:
                     move_plan = self._plan_tree_move(node_id, node.parent_id, note_in.title)
@@ -862,7 +854,7 @@ class NoteService:
                     elif content_path and os.path.exists(content_path):
                         pathlib.Path(content_path).unlink()
                 raise
-        return node
+            return node
 
     def persist_collaboration_content(self, node_id: UUID, user_id: UUID, content: str) -> NoteNode:
         node = self.node_repo.get_by_id(node_id)

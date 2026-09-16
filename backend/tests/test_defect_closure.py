@@ -23,7 +23,7 @@ from app.services.note import NoteService
 from app.database import Base
 from app.repositories.shop import ShopItemRepository
 from app.repositories.user import UserRepository
-from app.schemas.note import FolderCreate, NoteCreate
+from app.schemas.note import FolderCreate, NoteCreate, NoteUpdate
 from app.schemas.shop import ExchangeHistoryCreate
 from app.services.shop import ShopService
 import mcp_server
@@ -189,6 +189,57 @@ def test_note_tree_move_serializes_planning_and_application(database, monkeypatc
     assert refreshed.path == "/B/Note.md"
     assert refreshed.name == "Note"
     assert Path(refreshed.content_path).read_text(encoding="utf-8") == "stable"
+
+
+def test_update_note_uses_current_parent_after_concurrent_move(database):
+    from app.models.note import Notebook
+    from app.models.note_node import NoteNode
+
+    local_user = User(
+        username=f"stale-{uuid4().hex}",
+        email=f"stale-{uuid4().hex}@example.com",
+        password_hash="unused",
+    )
+    database.add(local_user)
+    database.commit()
+    notebook = Notebook(user_id=local_user.id, name="Stale note update")
+    database.add(notebook)
+    database.commit()
+    service = NoteService(database)
+    source = service.create_folder(notebook.id, local_user.id, FolderCreate(name="Source"))
+    destination = service.create_folder(notebook.id, local_user.id, FolderCreate(name="Destination"))
+    note = service.create_note(
+        notebook.id,
+        local_user.id,
+        NoteCreate(title="Note", content="stable", parent_id=source.id),
+    )
+
+    factory = sessionmaker(bind=database.get_bind(), autoflush=False, autocommit=False)
+    stale_session = factory()
+    mover_session = factory()
+    try:
+        stale_service = NoteService(stale_session)
+        stale_node = stale_service.node_repo.get_by_id(note.id)
+        assert stale_node.parent_id == source.id
+
+        NoteService(mover_session).move_tree(note.id, new_parent_id=destination.id)
+
+        updated = stale_service.update_note(
+            note.id,
+            NoteUpdate(title="Renamed"),
+            user_id=local_user.id,
+        )
+
+        assert updated.parent_id == destination.id
+        assert updated.path == "/Destination/Renamed.md"
+        assert Path(updated.content_path).read_text(encoding="utf-8") == "stable"
+        stale_session.expire_all()
+        refreshed = stale_session.query(NoteNode).filter(NoteNode.id == note.id).one()
+        assert refreshed.parent_id == destination.id
+        assert refreshed.path == "/Destination/Renamed.md"
+    finally:
+        stale_session.close()
+        mover_session.close()
 
 
 def test_purchase_idempotency_key_returns_one_exchange(client, auth_headers, shop_item, db_session):

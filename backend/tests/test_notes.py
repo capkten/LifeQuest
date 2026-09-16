@@ -256,18 +256,26 @@ def test_note_tree_move_restores_db_and_files_when_commit_fails(client, monkeypa
     assert _snapshot_tree(client, tree, headers) == before
 
 
-def test_note_tree_move_keeps_files_when_commit_already_persisted(client, monkeypatch):
+def test_note_tree_move_keeps_files_when_commit_already_persisted_with_active_marker(client, monkeypatch):
     from sqlalchemy.orm import Session
 
     headers = _register_and_login(client)
     tree = _create_nested_note_tree(client, headers)
     original_commit = Session.commit
+    original_in_transaction = Session.in_transaction
 
     def commit_then_fail(session, *args, **kwargs):
         original_commit(session, *args, **kwargs)
+        session._post_commit_transaction_marker = True
         raise OSError("post-commit failure")
 
+    def in_transaction_with_marker(session):
+        if getattr(session, "_post_commit_transaction_marker", False):
+            return True
+        return original_in_transaction(session)
+
     monkeypatch.setattr(Session, "commit", commit_then_fail)
+    monkeypatch.setattr(Session, "in_transaction", in_transaction_with_marker)
     response = client.patch(
         f"/api/notes/nodes/{tree['root']['id']}",
         json={"parent_id": tree["destination"]["id"]},
@@ -279,6 +287,7 @@ def test_note_tree_move_keeps_files_when_commit_already_persisted(client, monkey
     assert moved_note["path"] == "/目标目录/旧目录/子目录/第一篇.md"
     assert moved_note["content"] == "first"
     assert Path(moved_note["content_path"]).is_file()
+    assert not Path(tree["notes"][0]["content_path"]).exists()
 
 
 def test_create_notebook(client):
