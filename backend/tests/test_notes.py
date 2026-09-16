@@ -2,14 +2,19 @@
 import os
 import sqlite3
 import multiprocessing
+import io
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import event, text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import sessionmaker
+from starlette.datastructures import Headers, UploadFile
 
 from app.models.note_node import NoteNode
 
@@ -135,6 +140,447 @@ def _run_note_mutation_during_tree_move(
     finally:
         session.close()
         engine.dispose()
+
+
+def _create_attachment_process_database(tmp_path):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.database import Base
+    from app.models.note import Notebook
+    from app.models.note_node import NoteNode
+    from app.models.user import User
+
+    database_path = tmp_path / "attachment-race.sqlite"
+    database_url = f"sqlite:///{database_path}"
+    engine = create_engine(database_url, connect_args={"timeout": 30})
+    Base.metadata.create_all(bind=engine)
+    session = sessionmaker(bind=engine)()
+
+    user_id = uuid4()
+    notebook_id = uuid4()
+    note_id = uuid4()
+    user = User(
+        id=user_id,
+        username=f"attachment-race-{uuid4().hex}",
+        email=f"attachment-race-{uuid4().hex}@example.com",
+        password_hash="unused",
+    )
+    notebook = Notebook(id=notebook_id, user_id=user_id, name="Attachment race")
+    note = NoteNode(
+        id=note_id,
+        notebook_id=notebook_id,
+        type="note",
+        name="Document",
+        normalized_name="document",
+        path="/Document.md",
+    )
+    session.add_all([user, notebook, note])
+    session.commit()
+    session.close()
+    engine.dispose()
+    return database_url, user_id, notebook_id, note_id
+
+
+def _run_attachment_upload_process(
+    database_url,
+    notes_root,
+    upload_root,
+    user_id,
+    note_id,
+    entered,
+    resume_authorization,
+    pause_authorization,
+    fail_commit,
+    stages,
+    results,
+):
+    import asyncio
+
+    from sqlalchemy import create_engine, event
+    from sqlalchemy.orm import sessionmaker
+
+    from app.api import notes as notes_api
+    from app.models.user import User
+    from app.services import note as note_module
+    from app.services.note import NoteService
+
+    engine = create_engine(database_url, connect_args={"timeout": 30})
+    session = sessionmaker(bind=engine, autoflush=False)()
+    note_module.NOTES_DIR = Path(notes_root)
+    notes_api.UPLOAD_DIR = Path(upload_root)
+    upload_lock_acquired = threading.Event()
+    original_lock = NoteService._lock_notebook_tree
+    original_require_access = NoteService.require_node_access
+    access_checks = 0
+
+    def observe_lock(service, notebook_id):
+        stages.put(("upload", "lock_attempt"))
+        result = original_lock(service, notebook_id)
+        upload_lock_acquired.set()
+        return result
+
+    def observe_access(service, target_note_id, target_user_id, write=False):
+        nonlocal access_checks
+        access_checks += 1
+        result = original_require_access(service, target_note_id, target_user_id, write)
+        if pause_authorization and access_checks == 2:
+            if not upload_lock_acquired.is_set():
+                service.db.rollback()
+            stages.put(("upload", "authorized"))
+            if not resume_authorization.wait(25):
+                raise TimeoutError("upload authorization pause was not released")
+        return result
+
+    NoteService._lock_notebook_tree = observe_lock
+    NoteService.require_node_access = observe_access
+
+    if fail_commit:
+        def reject_commit(_session):
+            raise RuntimeError("injected attachment commit failure")
+
+        event.listen(session, "before_commit", reject_commit)
+
+    try:
+        user = session.query(User).filter(User.id == UUID(user_id)).one()
+        incoming = UploadFile(
+            file=io.BytesIO(b"independent-process-image"),
+            filename="race.png",
+            headers=Headers({"content-type": "image/png"}),
+        )
+        entered.set()
+        try:
+            response = asyncio.run(
+                notes_api.upload_image(
+                    file=incoming,
+                    note_id=UUID(note_id),
+                    db=session,
+                    current_user=user,
+                )
+            )
+            results.put(("upload", "ok", response["id"]))
+        except HTTPException as exc:
+            results.put(("upload", "http_error", exc.status_code, str(exc.detail)))
+        except Exception as exc:
+            results.put(("upload", "error", repr(exc)))
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def _run_attachment_delete_process(
+    database_url,
+    notes_root,
+    notebook_id,
+    entered,
+    release_lock,
+    pause_after_lock,
+    lock_acquired,
+    finished,
+    stages,
+    results,
+):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.services import note as note_module
+    from app.services.note import NoteService
+
+    engine = create_engine(database_url, connect_args={"timeout": 30})
+    session = sessionmaker(bind=engine, autoflush=False)()
+    note_module.NOTES_DIR = Path(notes_root)
+    service = NoteService(session)
+    original_lock = service._lock_notebook_tree
+
+    def observe_lock(target_notebook_id):
+        stages.put(("delete", "lock_attempt"))
+        result = original_lock(target_notebook_id)
+        lock_acquired.set()
+        stages.put(("delete", "lock_acquired"))
+        if pause_after_lock and not release_lock.wait(25):
+            raise TimeoutError("delete lock pause was not released")
+        return result
+
+    service._lock_notebook_tree = observe_lock
+    entered.set()
+    try:
+        service.delete_notebook(UUID(notebook_id))
+        results.put(("delete", "ok"))
+    except Exception as exc:
+        results.put(("delete", "error", repr(exc)))
+    finally:
+        finished.set()
+        session.close()
+        engine.dispose()
+
+
+def _attachment_state(database_url, upload_root, note_id):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.models.note import Attachment
+
+    engine = create_engine(database_url, connect_args={"timeout": 30})
+    session = sessionmaker(bind=engine)()
+    try:
+        attachments = session.query(Attachment).filter(
+            Attachment.note_id == UUID(note_id)
+        ).all()
+        files = [path for path in Path(upload_root).rglob("*") if path.is_file()]
+        return attachments, files
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def _join_processes(*processes):
+    for process in processes:
+        if process.pid is not None:
+            process.join(30)
+    for process in processes:
+        if process.is_alive():
+            process.terminate()
+            process.join(5)
+        if process.pid is not None:
+            assert process.exitcode == 0
+
+
+def _receive_stage(stages, expected_role, expected_stage, timeout=15):
+    deadline = time.monotonic() + timeout
+    seen = []
+    while time.monotonic() < deadline:
+        role, stage = stages.get(timeout=max(0.01, deadline - time.monotonic()))
+        seen.append((role, stage))
+        if (role, stage) == (expected_role, expected_stage):
+            return
+    raise AssertionError(f"Did not observe {(expected_role, expected_stage)}; saw {seen}")
+
+
+def test_notebook_deletion_winning_attachment_upload_returns_404_without_artifacts(tmp_path):
+    database_url, user_id, notebook_id, note_id = _create_attachment_process_database(tmp_path)
+    notes_root = tmp_path / "notes"
+    upload_root = tmp_path / "uploads" / "notes"
+    context = multiprocessing.get_context("fork")
+    stages = context.Queue()
+    results = context.Queue()
+    delete_entered = context.Event()
+    delete_release = context.Event()
+    delete_lock_acquired = context.Event()
+    delete_finished = context.Event()
+    upload_entered = context.Event()
+    upload_resume = context.Event()
+    delete_process = context.Process(
+        target=_run_attachment_delete_process,
+        args=(
+            database_url,
+            str(notes_root),
+            str(notebook_id),
+            delete_entered,
+            delete_release,
+            True,
+            delete_lock_acquired,
+            delete_finished,
+            stages,
+            results,
+        ),
+    )
+    upload_process = context.Process(
+        target=_run_attachment_upload_process,
+        args=(
+            database_url,
+            str(notes_root),
+            str(upload_root),
+            str(user_id),
+            str(note_id),
+            upload_entered,
+            upload_resume,
+            True,
+            False,
+            stages,
+            results,
+        ),
+    )
+
+    delete_process.start()
+    try:
+        assert delete_entered.wait(10)
+        assert delete_lock_acquired.wait(10)
+        _receive_stage(stages, "delete", "lock_acquired")
+        upload_process.start()
+        assert upload_entered.wait(10)
+        stage = stages.get(timeout=15)
+        assert stage in {("upload", "lock_attempt"), ("upload", "authorized")}
+
+        delete_release.set()
+        assert delete_finished.wait(20), "notebook deletion did not finish"
+        if stage == ("upload", "authorized"):
+            upload_resume.set()
+
+        process_results = [results.get(timeout=10), results.get(timeout=10)]
+        result_by_process = {result[0]: result[1:] for result in process_results}
+    finally:
+        delete_release.set()
+        upload_resume.set()
+        _join_processes(delete_process, upload_process)
+
+    assert result_by_process["delete"] == ("ok",)
+    assert result_by_process["upload"] == ("http_error", 404, "Note not found")
+    attachments, files = _attachment_state(database_url, upload_root, str(note_id))
+    assert attachments == []
+    assert files == []
+
+
+def test_attachment_upload_winning_notebook_deletion_removes_row_and_file(tmp_path):
+    database_url, user_id, notebook_id, note_id = _create_attachment_process_database(tmp_path)
+    notes_root = tmp_path / "notes"
+    upload_root = tmp_path / "uploads" / "notes"
+    context = multiprocessing.get_context("fork")
+    stages = context.Queue()
+    results = context.Queue()
+    upload_entered = context.Event()
+    upload_resume = context.Event()
+    delete_entered = context.Event()
+    delete_release = context.Event()
+    delete_lock_acquired = context.Event()
+    delete_finished = context.Event()
+    upload_process = context.Process(
+        target=_run_attachment_upload_process,
+        args=(
+            database_url,
+            str(notes_root),
+            str(upload_root),
+            str(user_id),
+            str(note_id),
+            upload_entered,
+            upload_resume,
+            True,
+            False,
+            stages,
+            results,
+        ),
+    )
+    delete_process = context.Process(
+        target=_run_attachment_delete_process,
+        args=(
+            database_url,
+            str(notes_root),
+            str(notebook_id),
+            delete_entered,
+            delete_release,
+            True,
+            delete_lock_acquired,
+            delete_finished,
+            stages,
+            results,
+        ),
+    )
+
+    upload_process.start()
+    try:
+        assert upload_entered.wait(10)
+        _receive_stage(stages, "upload", "authorized")
+        delete_process.start()
+        assert delete_entered.wait(10)
+        _receive_stage(stages, "delete", "lock_attempt")
+
+        if delete_lock_acquired.wait(0.5):
+            delete_release.set()
+            assert delete_finished.wait(20), "notebook deletion did not finish"
+            upload_resume.set()
+        else:
+            upload_resume.set()
+            assert delete_lock_acquired.wait(20), "deletion did not acquire the released notebook lock"
+            delete_release.set()
+            assert delete_finished.wait(20), "notebook deletion did not finish"
+
+        process_results = [results.get(timeout=10), results.get(timeout=10)]
+        result_by_process = {result[0]: result[1:] for result in process_results}
+    finally:
+        upload_resume.set()
+        delete_release.set()
+        _join_processes(upload_process, delete_process)
+
+    assert result_by_process["upload"][0] == "ok"
+    assert result_by_process["delete"] == ("ok",)
+    attachments, files = _attachment_state(database_url, upload_root, str(note_id))
+    assert attachments == []
+    assert files == []
+
+
+def test_attachment_storage_failure_does_not_create_a_database_row_or_file(tmp_path):
+    database_url, user_id, _notebook_id, note_id = _create_attachment_process_database(tmp_path)
+    notes_root = tmp_path / "notes"
+    upload_root = tmp_path / "uploads" / "notes"
+    upload_root.mkdir(parents=True)
+    blocked_note_directory = upload_root / str(note_id)
+    blocked_note_directory.write_bytes(b"not a directory")
+    context = multiprocessing.get_context("fork")
+    stages = context.Queue()
+    results = context.Queue()
+    entered = context.Event()
+    resume = context.Event()
+    worker = context.Process(
+        target=_run_attachment_upload_process,
+        args=(
+            database_url,
+            str(notes_root),
+            str(upload_root),
+            str(user_id),
+            str(note_id),
+            entered,
+            resume,
+            False,
+            False,
+            stages,
+            results,
+        ),
+    )
+    worker.start()
+    assert entered.wait(10)
+    result = results.get(timeout=15)
+    _join_processes(worker)
+
+    assert result[0:2] == ("upload", "error")
+    attachments, files = _attachment_state(database_url, upload_root, str(note_id))
+    assert attachments == []
+    assert files == [blocked_note_directory]
+
+
+def test_attachment_database_failure_removes_uploaded_file_and_row(tmp_path):
+    database_url, user_id, _notebook_id, note_id = _create_attachment_process_database(tmp_path)
+    notes_root = tmp_path / "notes"
+    upload_root = tmp_path / "uploads" / "notes"
+    context = multiprocessing.get_context("fork")
+    stages = context.Queue()
+    results = context.Queue()
+    entered = context.Event()
+    resume = context.Event()
+    worker = context.Process(
+        target=_run_attachment_upload_process,
+        args=(
+            database_url,
+            str(notes_root),
+            str(upload_root),
+            str(user_id),
+            str(note_id),
+            entered,
+            resume,
+            False,
+            True,
+            stages,
+            results,
+        ),
+    )
+    worker.start()
+    assert entered.wait(10)
+    result = results.get(timeout=15)
+    _join_processes(worker)
+
+    assert result[0:2] == ("upload", "error")
+    assert "injected attachment commit failure" in result[2]
+    attachments, files = _attachment_state(database_url, upload_root, str(note_id))
+    assert attachments == []
+    assert files == []
 
 
 @pytest.fixture

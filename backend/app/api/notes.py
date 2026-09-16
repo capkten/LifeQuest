@@ -572,11 +572,8 @@ async def upload_image(
 
     filename = f"{uuid.uuid4()}.{file_ext}"
     file_path = UPLOAD_DIR / str(note_id) / filename
-    file_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        with open(file_path, "wb") as buffer:
-            buffer.write(content)
         attachment = service.create_attachment(
             note_id=note_id,
             user_id=current_user.id,
@@ -584,13 +581,12 @@ async def upload_image(
             file_path=str(file_path),
             file_type=file.content_type,
             file_size=len(content),
+            file_content=content,
         )
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Note not found")
     except PermissionError:
-        file_path.unlink(missing_ok=True)
         raise HTTPException(status_code=403, detail="Not authorized")
-    except Exception:
-        file_path.unlink(missing_ok=True)
-        raise
 
     return {
         "id": str(attachment.id),

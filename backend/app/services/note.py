@@ -1036,19 +1036,41 @@ class NoteService:
         file_path: str,
         file_type: str,
         file_size: int,
+        file_content: bytes,
     ) -> Attachment:
-        self.require_node_access(note_id, user_id, write=True)
-        attachment = Attachment(
-            note_id=note_id,
-            filename=filename,
-            file_path=file_path,
-            file_type=file_type,
-            file_size=file_size,
-        )
-        self.db.add(attachment)
-        self.db.commit()
-        self.db.refresh(attachment)
-        return attachment
+        initial_node = self.node_repo.get_by_id(note_id)
+        if not initial_node:
+            raise ValueError("Note not found")
+        notebook_id = initial_node.notebook_id
+        attachment_path = pathlib.Path(file_path)
+
+        with _NOTE_TREE_MOVE_LOCK:
+            self._lock_notebook_tree(notebook_id)
+            try:
+                self.require_node_access(note_id, user_id, write=True)
+                attachment_path.parent.mkdir(parents=True, exist_ok=True)
+                with attachment_path.open("wb") as buffer:
+                    buffer.write(file_content)
+
+                attachment = Attachment(
+                    id=uuid4(),
+                    note_id=note_id,
+                    filename=filename,
+                    file_path=file_path,
+                    file_type=file_type,
+                    file_size=file_size,
+                )
+                self.db.add(attachment)
+                self.db.commit()
+                return attachment
+            except Exception:
+                self.db.rollback()
+                try:
+                    if attachment_path.exists():
+                        attachment_path.unlink()
+                except OSError:
+                    logger.exception("Failed to remove incomplete attachment: %s", attachment_path)
+                raise
 
     def get_attachment(self, note_id: UUID, attachment_id: UUID, user_id: UUID) -> Attachment:
         self.require_node_access(note_id, user_id)
