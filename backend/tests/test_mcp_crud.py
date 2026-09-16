@@ -173,6 +173,15 @@ def test_mcp_project_lifecycle_covers_nested_resources_and_completion(mcp_crud_d
     assert completed["status"] == "completed"
 
 
+def test_mcp_complete_project_preserves_direct_completion_from_planning(mcp_crud_db):
+    project = mcp_server.create_project("计划中的 MCP 项目")
+    assert project["status"] == "planning"
+
+    completed = mcp_server.complete_project(project["id"])
+
+    assert completed["status"] == "completed"
+
+
 def test_mcp_project_task_move_preserves_omitted_links_and_supports_explicit_clear(
     mcp_crud_db,
 ):

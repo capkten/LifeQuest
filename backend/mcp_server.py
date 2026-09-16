@@ -39,7 +39,12 @@ from app.models.finance_category import FinanceCategory, CategoryType
 from app.models.debt import Debt, DebtStatus, DebtType
 from app.models.finance_transaction import FinanceTransaction, FinanceTransactionType
 from app.models.recurring_transaction import RecurringTransaction, RecurFrequency
-from app.models.project import ProjectPhase, ProjectMilestone
+from app.models.project import (
+    ProjectPhase,
+    ProjectMilestone,
+    ProjectStatus,
+    normalize_project_status,
+)
 from app.schemas.finance import (
     AccountCreate,
     AccountUpdate,
@@ -1674,7 +1679,9 @@ def complete_project(project_id: str) -> Any:
     try:
         uid = _resolve_user_id(db)
         svc = ProjectService(db)
-        project = svc.get_project_for_user(UUID(project_id), uid)
+        project = svc.get_project_for_user_locked(UUID(project_id), uid)
+        if normalize_project_status(project.status) == ProjectStatus.PLANNING.value:
+            svc._transition_project(project, ProjectStatus.ACTIVE.value, commit=False)
         completed = svc.complete_project(project)
         return _serialize_project_stats(svc._compute_project_stats(completed))
     finally:
