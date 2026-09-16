@@ -381,3 +381,21 @@ External gates: Chromium download re-attempt received about 14 MiB of the 184 Mi
 Final fix wave implementer: `01a0a8d9-7b42-7251-bbe6-4f5ffa49802c` (Anscombe), model `gpt-5.6-luna`, base `d836322`.
 
 Final fix wave implementation commits: `675840edabe8a748ad882fb66b63437a599026d5` and `bfa208876e8993f162a23337cd358034b78e6657`. Final verification and Minor triage are recorded in `final-fix-report.md`. Authenticated browser/production acceptance remains an external gate; no production mutation, deployment, push, or merge was performed.
+
+## Final Scoped Re-Review
+
+Reviewer: `01a0a92b-eb93-7ec1-a10d-97eec389b6bc`, model `gpt-5.6-luna`, range `d836322..7504ea0`.
+
+Findings 1, 2, 4, and 5 were addressed. Finding 3 remains Important: the image-upload route writes the attachment file before `NoteService.create_attachment`, and that service does not acquire the per-notebook lock. `Attachment.note_id` has no database foreign key, so concurrent deletion can leave an attachment row or file without its note. No new Critical or Important breakage was reported. Minor report discrepancy: `final-fix-report.md:74` says 592 passed, while its final command output and the controller's fresh run report 598 passed.
+
+## Post-Review Rulings
+
+Ruling: For legacy tribulation rows without `attempted_at`, prefer a recoverable timestamp-backed row when its China date collides with the old stored date; when only timestamp-less rows share a stored user/day key, retain the lexicographically greatest ID — the migration still enforces the unique index and the key is deterministic — cost if wrong: UUID ordering is not chronology, so the retained row may not be the actual latest attempt.
+
+Ruling: Freeze an unrecoverable legacy exchange name as `未知商品` even if a catalog row appears in a later startup — historical presentation must not be inferred from mutable future catalog state — cost if wrong: an item whose identity later becomes knowable remains labeled unknown.
+
+Ruling: Extend the NOTE-04 notebook lock to folder/note creation, collaboration writes, node deletion, and notebook deletion, and stage deleted files until database commit — these operations share mutable paths and can race with a tree move or failed database transaction — cost if wrong: the wider lock and staging scope adds contention and transaction complexity.
+
+Ruling: Treat the attachment-upload lock gap as a real Important residual and stop code changes after the single final fix wave and one scoped re-review — the upload file is written before the locked service boundary, and the table has no foreign key to serialize deletion — cost if wrong: concurrent upload/delete can leave an orphan attachment row or file until an authorized follow-up fixes the path.
+
+Ruling: Park the `592` versus `598` final-fix-report sentence as a nonblocking documentation defect and use the fresh full-suite result of `598 passed` as final verification evidence — no implementation behavior is affected — cost if wrong: the committed report remains internally inconsistent.
