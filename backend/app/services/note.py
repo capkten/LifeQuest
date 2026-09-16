@@ -343,22 +343,36 @@ class NoteService:
         self.db.commit()
 
     def delete_notebook(self, notebook_id: UUID) -> None:
-        notebook = self.notebook_repo.get_by_id(notebook_id)
-        if not notebook:
-            raise ValueError("Notebook not found")
+        with _NOTE_TREE_MOVE_LOCK:
+            self._lock_notebook_tree(notebook_id)
+            notebook = (
+                self.db.query(Notebook)
+                .filter(Notebook.id == notebook_id)
+                .populate_existing()
+                .first()
+            )
+            if not notebook:
+                raise ValueError("Notebook not found")
 
-        root_nodes = [
-            node for node in self.node_repo.get_by_notebook(notebook_id)
-            if node.parent_id is None
-        ]
-        for node in root_nodes:
-            self.delete_node(node.id)
+            removed_files = []
+            root_nodes = self.db.query(NoteNode).filter(
+                NoteNode.notebook_id == notebook_id,
+                NoteNode.parent_id.is_(None),
+            ).populate_existing().all()
+            try:
+                for node in root_nodes:
+                    self._delete_node_locked(node, removed_files)
 
-        self.db.query(NotebookMember).filter(
-            NotebookMember.notebook_id == notebook_id,
-        ).delete(synchronize_session=False)
-        self.db.delete(notebook)
-        self.db.commit()
+                self.db.query(NotebookMember).filter(
+                    NotebookMember.notebook_id == notebook_id,
+                ).delete(synchronize_session=False)
+                self.db.delete(notebook)
+                self.db.commit()
+                self._finalize_deleted_files(removed_files)
+            except Exception:
+                self._restore_deleted_files(removed_files)
+                self.db.rollback()
+                raise
 
     # --- Node tree operations ---
 
@@ -381,66 +395,70 @@ class NoteService:
 
     def create_folder(self, notebook_id: UUID, user_id: UUID, folder_in: FolderCreate) -> NoteNode:
         norm = normalize_name(folder_in.name)
-        parent_path, _ = self._get_parent_path(folder_in.parent_id, notebook_id)
+        with _NOTE_TREE_MOVE_LOCK:
+            self._lock_notebook_tree(notebook_id)
+            parent_path, _ = self._get_parent_path(folder_in.parent_id, notebook_id)
 
-        if self.node_repo.check_name_conflict(notebook_id, folder_in.parent_id, norm):
-            raise ValueError("同名冲突: 当前目录已存在同名条目")
+            if self.node_repo.check_name_conflict(notebook_id, folder_in.parent_id, norm):
+                raise ValueError("同名冲突: 当前目录已存在同名条目")
 
-        path = _compute_path(parent_path, folder_in.name.strip(), is_note=False)
-        node = NoteNode(
-            id=uuid4(),
-            notebook_id=notebook_id,
-            parent_id=folder_in.parent_id,
-            type="folder",
-            name=folder_in.name.strip(),
-            normalized_name=norm,
-            path=path,
-            tags_normalized=True,
-        )
-        self.db.add(node)
-        self.db.commit()
-        self.db.refresh(node)
-        return node
+            path = _compute_path(parent_path, folder_in.name.strip(), is_note=False)
+            node = NoteNode(
+                id=uuid4(),
+                notebook_id=notebook_id,
+                parent_id=folder_in.parent_id,
+                type="folder",
+                name=folder_in.name.strip(),
+                normalized_name=norm,
+                path=path,
+                tags_normalized=True,
+            )
+            self.db.add(node)
+            self.db.commit()
+            self.db.refresh(node)
+            return node
 
     def create_note(self, notebook_id: UUID, user_id: UUID, note_in: NoteCreate) -> NoteNode:
         norm = normalize_name(note_in.title)
-        parent_path, _ = self._get_parent_path(note_in.parent_id, notebook_id)
+        with _NOTE_TREE_MOVE_LOCK:
+            self._lock_notebook_tree(notebook_id)
+            parent_path, _ = self._get_parent_path(note_in.parent_id, notebook_id)
 
-        if self.node_repo.check_name_conflict(notebook_id, note_in.parent_id, norm):
-            raise ValueError("同名冲突: 当前目录已存在同名条目")
+            if self.node_repo.check_name_conflict(notebook_id, note_in.parent_id, norm):
+                raise ValueError("同名冲突: 当前目录已存在同名条目")
 
-        path = _compute_path(parent_path, note_in.title.strip(), is_note=True)
-        notebook = self.notebook_repo.get_by_id(notebook_id)
-        if not notebook:
-            raise ValueError("Notebook not found")
-        # Shared notes use the notebook owner's existing storage root so a
-        # collaborator never creates a second private copy of the document.
-        content_path = _compute_content_path(notebook.user_id, notebook_id, path)
+            path = _compute_path(parent_path, note_in.title.strip(), is_note=True)
+            notebook = self.notebook_repo.get_by_id(notebook_id)
+            if not notebook:
+                raise ValueError("Notebook not found")
+            # Shared notes use the notebook owner's existing storage root so a
+            # collaborator never creates a second private copy of the document.
+            content_path = _compute_content_path(notebook.user_id, notebook_id, path)
 
-        node = NoteNode(
-            id=uuid4(),
-            notebook_id=notebook_id,
-            parent_id=note_in.parent_id,
-            type="note",
-            name=note_in.title.strip(),
-            normalized_name=norm,
-            path=path,
-            content_path=content_path,
-            summary=note_in.summary,
-            tags=canonicalize_tags(note_in.tags),
-            tags_normalized=True,
-            word_count=len(note_in.content.split()) if note_in.content else 0,
-        )
-        self.db.add(node)
-        try:
-            _write_content_atomically(content_path, note_in.content or "")
-            self.db.commit()
-            self.db.refresh(node)
-        except Exception:
-            self.db.rollback()
-            if os.path.exists(content_path):
-                os.remove(content_path)
-            raise
+            node = NoteNode(
+                id=uuid4(),
+                notebook_id=notebook_id,
+                parent_id=note_in.parent_id,
+                type="note",
+                name=note_in.title.strip(),
+                normalized_name=norm,
+                path=path,
+                content_path=content_path,
+                summary=note_in.summary,
+                tags=canonicalize_tags(note_in.tags),
+                tags_normalized=True,
+                word_count=len(note_in.content.split()) if note_in.content else 0,
+            )
+            self.db.add(node)
+            try:
+                _write_content_atomically(content_path, note_in.content or "")
+                self.db.commit()
+                self.db.refresh(node)
+            except Exception:
+                if os.path.exists(content_path):
+                    os.remove(content_path)
+                self.db.rollback()
+                raise
 
         # Check note_count achievements
         try:
@@ -882,25 +900,41 @@ class NoteService:
             return node
 
     def persist_collaboration_content(self, node_id: UUID, user_id: UUID, content: str) -> NoteNode:
-        node = self.node_repo.get_by_id(node_id)
-        if not node or node.type != "note":
+        initial_node = self.node_repo.get_by_id(node_id)
+        if not initial_node or initial_node.type != "note":
             raise ValueError("Note not found")
-        self.require_notebook_access(node.notebook_id, user_id, write=True)
-        previous_content = self.get_note_content(node_id)
-        try:
-            if node.content_path:
-                _write_content_atomically(node.content_path, content)
-            node.word_count = len(content.split())
-            node.content_revision = (node.content_revision or 1) + 1
-            node.updated_by = user_id
-            self.db.commit()
-            self.db.refresh(node)
-            return node
-        except Exception:
-            self.db.rollback()
-            if node.content_path:
-                _write_content_atomically(node.content_path, previous_content)
-            raise
+
+        with _NOTE_TREE_MOVE_LOCK:
+            self._lock_notebook_tree(initial_node.notebook_id)
+            node = (
+                self.db.query(NoteNode)
+                .filter(NoteNode.id == node_id)
+                .populate_existing()
+                .first()
+            )
+            if not node or node.type != "note":
+                raise ValueError("Note not found")
+            self.require_notebook_access(node.notebook_id, user_id, write=True)
+
+            content_path = node.content_path
+            previous_content = ""
+            if content_path and os.path.exists(content_path):
+                with open(content_path, "r", encoding="utf-8") as content_file:
+                    previous_content = content_file.read()
+            try:
+                if content_path:
+                    _write_content_atomically(content_path, content)
+                node.word_count = len(content.split())
+                node.content_revision = (node.content_revision or 1) + 1
+                node.updated_by = user_id
+                self.db.commit()
+                self.db.refresh(node)
+                return node
+            except Exception:
+                if content_path:
+                    _write_content_atomically(content_path, previous_content)
+                self.db.rollback()
+                raise
 
     def get_note_content(self, node_id: UUID) -> str:
         node = self.node_repo.get_by_id(node_id)
@@ -912,33 +946,77 @@ class NoteService:
         return ""
 
     def delete_node(self, node_id: UUID) -> None:
-        node = self.node_repo.get_by_id(node_id)
-        if not node:
+        initial_node = self.node_repo.get_by_id(node_id)
+        if not initial_node:
             raise ValueError("Node not found")
 
-        # Delete descendants first
-        descendants = self.node_repo.get_descendants(node_id)
+        with _NOTE_TREE_MOVE_LOCK:
+            self._lock_notebook_tree(initial_node.notebook_id)
+            node = (
+                self.db.query(NoteNode)
+                .filter(NoteNode.id == node_id)
+                .populate_existing()
+                .first()
+            )
+            if not node:
+                raise ValueError("Node not found")
+
+            removed_files = []
+            try:
+                self._delete_node_locked(node, removed_files)
+                self.db.commit()
+                self._finalize_deleted_files(removed_files)
+            except Exception:
+                self._restore_deleted_files(removed_files)
+                self.db.rollback()
+                raise
+
+    def _delete_node_locked(self, node: NoteNode, removed_files: list) -> None:
+        descendants = self.node_repo.get_descendants(node.id)
         for desc in sorted(descendants, key=lambda item: item.path.count("/"), reverse=True):
-            self._delete_note_related_data(desc)
-            if desc.type == "note" and desc.content_path and os.path.exists(desc.content_path):
-                os.remove(desc.content_path)
+            self._delete_note_related_data(desc, removed_files)
+            self._delete_note_file(desc, removed_files)
             self.db.delete(desc)
 
-        # Delete the node itself
-        self._delete_note_related_data(node)
-        if node.type == "note" and node.content_path and os.path.exists(node.content_path):
-            os.remove(node.content_path)
-
+        self._delete_note_related_data(node, removed_files)
+        self._delete_note_file(node, removed_files)
         self.db.delete(node)
-        self.db.commit()
 
-    def _delete_note_related_data(self, node: NoteNode) -> None:
+    @staticmethod
+    def _delete_note_file(node: NoteNode, removed_files: list) -> None:
+        if node.type != "note" or not node.content_path or not os.path.exists(node.content_path):
+            return
+        path = pathlib.Path(node.content_path)
+        NoteService._stage_deleted_file(path, removed_files)
+
+    @staticmethod
+    def _stage_deleted_file(path: pathlib.Path, removed_files: list) -> None:
+        staged_path = path.with_name(f".{path.name}.delete-{uuid4().hex}")
+        path.rename(staged_path)
+        removed_files.append((path, staged_path))
+
+    @staticmethod
+    def _restore_deleted_files(removed_files: list) -> None:
+        for path, staged_path in reversed(removed_files):
+            if staged_path.exists():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                staged_path.rename(path)
+
+    @staticmethod
+    def _finalize_deleted_files(removed_files: list) -> None:
+        for _, staged_path in removed_files:
+            try:
+                staged_path.unlink(missing_ok=True)
+            except OSError:
+                logger.exception("Failed to remove staged deleted note file: %s", staged_path)
+
+    def _delete_note_related_data(self, node: NoteNode, removed_files: list) -> None:
         if node.type != "note":
             return
         for attachment in self.attachment_repo.get_by_note(node.id):
             attachment_path = _attachment_file_path(attachment.file_path)
             if attachment_path and attachment_path.exists():
-                attachment_path.unlink()
+                self._stage_deleted_file(attachment_path, removed_files)
             self.db.delete(attachment)
         self.db.query(NoteUserActivity).filter(
             NoteUserActivity.note_id == node.id,

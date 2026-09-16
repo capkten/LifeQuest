@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import event, text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import sessionmaker
 
 from app.models.note_node import NoteNode
@@ -70,6 +70,68 @@ def _run_independent_tree_rename(
         result_queue.put((new_name, "ok", node.path))
     except Exception as exc:
         result_queue.put((new_name, "error", repr(exc)))
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def _run_note_mutation_during_tree_move(
+    database_url,
+    notes_root,
+    operation,
+    notebook_id,
+    user_id,
+    target_node_id,
+    started,
+    committing,
+    result_queue,
+):
+    from sqlalchemy import create_engine, event
+    from sqlalchemy.orm import sessionmaker
+
+    from app.services import note as note_module
+    from app.services.note import NoteService
+    from app.schemas.note import FolderCreate, NoteCreate
+
+    engine = create_engine(database_url, connect_args={"timeout": 30})
+    session = sessionmaker(bind=engine, autoflush=False)()
+    note_module.NOTES_DIR = Path(notes_root)
+    event.listen(session, "before_commit", lambda _: committing.set())
+    service = NoteService(session)
+
+    started.set()
+    try:
+        if operation == "create_folder":
+            result = service.create_folder(
+                UUID(notebook_id),
+                UUID(user_id),
+                FolderCreate(parent_id=UUID(target_node_id), name="Created folder"),
+            )
+        elif operation == "create_note":
+            result = service.create_note(
+                UUID(notebook_id),
+                UUID(user_id),
+                NoteCreate(
+                    parent_id=UUID(target_node_id),
+                    title="Created note",
+                    content="new content",
+                ),
+            )
+        elif operation == "persist_collaboration_content":
+            result = service.persist_collaboration_content(
+                UUID(target_node_id), UUID(user_id), "collaboration edit"
+            )
+        elif operation == "delete_node":
+            service.delete_node(UUID(target_node_id))
+            result = None
+        elif operation == "delete_notebook":
+            service.delete_notebook(UUID(notebook_id))
+            result = None
+        else:
+            raise AssertionError(f"Unknown note mutation: {operation}")
+        result_queue.put((operation, "ok", str(result.id) if result else None))
+    except Exception as exc:
+        result_queue.put((operation, "error", repr(exc)))
     finally:
         session.close()
         engine.dispose()
@@ -363,6 +425,170 @@ def test_note_tree_renames_serialize_across_processes_with_sqlite(tmp_path):
         assert moved_note.path == "/Second rename/Document.md"
         assert Path(moved_note.content_path) == expected_file
         assert expected_file.read_text(encoding="utf-8") == "stable content"
+    finally:
+        verify.close()
+        verify_engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        "create_folder",
+        "create_note",
+        "persist_collaboration_content",
+        "delete_node",
+        "delete_notebook",
+    ],
+)
+def test_note_tree_move_serializes_same_notebook_mutations(tmp_path, operation):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.database import Base
+    from app.models.note import Notebook
+    from app.models.user import User
+
+    database_path = tmp_path / "shared-notes.sqlite"
+    database_url = f"sqlite:///{database_path}"
+    engine = create_engine(database_url, connect_args={"timeout": 30})
+    Base.metadata.create_all(bind=engine)
+    session = sessionmaker(bind=engine)()
+
+    user_id = uuid4()
+    notebook_id = uuid4()
+    folder_id = uuid4()
+    note_id = uuid4()
+    user = User(
+        id=user_id,
+        username=f"note-mutation-{uuid4().hex}",
+        email=f"note-mutation-{uuid4().hex}@example.com",
+        password_hash="unused",
+    )
+    notebook = Notebook(id=notebook_id, user_id=user.id, name="Mutation notebook")
+    folder = NoteNode(
+        id=folder_id,
+        notebook_id=notebook.id,
+        type="folder",
+        name="Original",
+        normalized_name="original",
+        path="/Original",
+    )
+    note = NoteNode(
+        id=note_id,
+        notebook_id=notebook.id,
+        parent_id=folder.id,
+        type="note",
+        name="Document",
+        normalized_name="document",
+        path="/Original/Document.md",
+        content_path=str(
+            tmp_path / "notes" / str(user.id) / str(notebook.id) / "Original" / "Document.md"
+        ),
+    )
+    session.add_all([user, notebook, folder, note])
+    session.commit()
+    initial_content_path = Path(note.content_path)
+    initial_content_path.parent.mkdir(parents=True)
+    initial_content_path.write_text("stable content", encoding="utf-8")
+    session.close()
+    engine.dispose()
+
+    context = multiprocessing.get_context("fork")
+    move_staged = context.Event()
+    release_move = context.Event()
+    move_started = context.Event()
+    mutation_started = context.Event()
+    mutation_committing = context.Event()
+    result_queue = context.Queue()
+    mover = context.Process(
+        target=_run_independent_tree_rename,
+        args=(
+            database_url,
+            str(tmp_path / "notes"),
+            str(folder_id),
+            "Moved",
+            move_started,
+            None,
+            result_queue,
+            move_staged,
+            release_move,
+        ),
+    )
+    mutator = context.Process(
+        target=_run_note_mutation_during_tree_move,
+        args=(
+            database_url,
+            str(tmp_path / "notes"),
+            operation,
+            str(notebook_id),
+            str(user_id),
+            str(folder_id if operation in {"create_folder", "create_note"} else note_id),
+            mutation_started,
+            mutation_committing,
+            result_queue,
+        ),
+    )
+
+    mover.start()
+    try:
+        assert move_started.wait(5), "tree move did not enter the service"
+        assert move_staged.wait(10), "tree move did not stage its note file"
+        mutator.start()
+        assert mutation_started.wait(5), "competing mutation did not enter the service"
+        assert not mutation_committing.wait(0.5), (
+            f"{operation} reached commit while the tree move still held the notebook lock"
+        )
+    finally:
+        release_move.set()
+        mover.join(15)
+        if mutator.pid is not None:
+            mutator.join(15)
+        for process in (mover, mutator):
+            if process.is_alive():
+                process.terminate()
+                process.join(5)
+
+    results = [result_queue.get(timeout=2), result_queue.get(timeout=2)]
+    results_by_operation = {result[0]: result[1:] for result in results}
+    assert mover.exitcode == mutator.exitcode == 0
+    assert results_by_operation["Moved"] == ("ok", "/Moved")
+    assert results_by_operation[operation][0] == "ok", results_by_operation[operation]
+
+    verify_engine = create_engine(database_url)
+    verify = sessionmaker(bind=verify_engine)()
+    try:
+        moved_folder = verify.query(NoteNode).filter_by(id=folder_id).one_or_none()
+        moved_note = verify.query(NoteNode).filter_by(id=note_id).one_or_none()
+        expected_note_path = (
+            tmp_path / "notes" / str(user_id) / str(notebook_id) / "Moved" / "Document.md"
+        )
+
+        if operation == "create_folder":
+            created = verify.query(NoteNode).filter_by(name="Created folder").one()
+            assert created.path == "/Moved/Created folder"
+            assert created.parent_id == folder_id
+        elif operation == "create_note":
+            created = verify.query(NoteNode).filter_by(name="Created note").one()
+            created_path = (
+                tmp_path / "notes" / str(user_id) / str(notebook_id) / "Moved" / "Created note.md"
+            )
+            assert created.path == "/Moved/Created note.md"
+            assert Path(created.content_path) == created_path
+            assert created_path.read_text(encoding="utf-8") == "new content"
+            assert not (initial_content_path.parent / "Created note.md").exists()
+        elif operation == "persist_collaboration_content":
+            assert moved_note.path == "/Moved/Document.md"
+            assert Path(moved_note.content_path) == expected_note_path
+            assert expected_note_path.read_text(encoding="utf-8") == "collaboration edit"
+            assert not initial_content_path.exists()
+        elif operation == "delete_node":
+            assert moved_folder.path == "/Moved"
+            assert moved_note is None
+            assert not expected_note_path.exists()
+        elif operation == "delete_notebook":
+            assert verify.query(Notebook).filter_by(id=notebook_id).one_or_none() is None
+            assert verify.query(NoteNode).filter_by(notebook_id=notebook_id).count() == 0
+            assert not expected_note_path.exists()
     finally:
         verify.close()
         verify_engine.dispose()
@@ -741,6 +967,40 @@ def test_delete_folder_recursive(client):
     # Verify note is also gone
     r = client.get(f"/api/notes/{note_id}", headers=headers)
     assert r.status_code == 404
+
+
+def test_delete_node_restores_content_when_database_delete_fails(client, db_session):
+    from app.services.note import NoteService
+
+    headers = _register_and_login(client)
+    notebook = _create_notebook(client, headers, "Delete rollback")
+    created = client.post(
+        f"/api/notes/notebooks/{notebook['id']}/notes",
+        json={"title": "Keep me", "content": "restored content"},
+        headers=headers,
+    )
+    assert created.status_code == 200
+    node_id = UUID(created.json()["id"])
+    node = db_session.query(NoteNode).filter_by(id=node_id).one()
+    content_path = Path(node.content_path)
+    assert content_path.read_text(encoding="utf-8") == "restored content"
+
+    db_session.execute(text(
+        "CREATE TRIGGER reject_note_node_delete "
+        "BEFORE DELETE ON note_nodes "
+        "BEGIN SELECT RAISE(ABORT, 'forced delete failure'); END"
+    ))
+    db_session.commit()
+    try:
+        with pytest.raises(IntegrityError):
+            NoteService(db_session).delete_node(node_id)
+    finally:
+        db_session.rollback()
+        db_session.execute(text("DROP TRIGGER IF EXISTS reject_note_node_delete"))
+        db_session.commit()
+
+    assert db_session.query(NoteNode).filter_by(id=node_id).one_or_none() is not None
+    assert content_path.read_text(encoding="utf-8") == "restored content"
 
 
 def test_get_tree(client):
