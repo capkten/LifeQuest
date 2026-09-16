@@ -211,7 +211,9 @@ test('all application runtimes consume the root VERSION source', async () => {
 
   assert.match(backend, /readFileSync[\s\S]*VERSION|read_text\([\s\S]*VERSION/)
   assert.match(gradle, /VERSION[\s\S]*versionName|versionName[\s\S]*VERSION/)
-  assert.match(workflow, /diff --quiet HEAD\^ HEAD -- VERSION/)
+  assert.match(workflow, /fetch-depth: 0/)
+  assert.match(workflow, /PUSH_BEFORE: \$\{\{ github\.event\.before \}\}/)
+  assert.match(workflow, /git diff --quiet "\$PUSH_BEFORE" "\$GITHUB_SHA" -- VERSION frontend/)
 })
 
 test('todo metadata badges share a compact row with each title', async () => {
