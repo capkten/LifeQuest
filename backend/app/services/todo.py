@@ -27,6 +27,8 @@ from app.schemas.todo import (
     GoalUpdate,
     SubtaskCreate,
     SubtaskUpdate,
+    HabitPauseIntervalResponse,
+    HabitLeaveIntervalResponse,
 )
 from app.models.coin_transaction import CoinSource, CoinType
 from app.repositories.coin_transaction import CoinTransactionRepository
@@ -975,10 +977,16 @@ class TodoService:
             "completion_rate": habit.completion_rate,
             "is_active": habit.is_active,
             "paused_today": habit.paused_today,
-            "pause_intervals": habit.pause_intervals,
+            "pause_intervals": [
+                HabitPauseIntervalResponse.model_validate(interval).model_dump(mode="json")
+                for interval in habit.pause_intervals
+            ],
             "scheduled_today": habit.scheduled_today,
             "excused_today": habit.excused_today,
-            "leave_intervals": habit.leave_intervals,
+            "leave_intervals": [
+                HabitLeaveIntervalResponse.model_validate(interval).model_dump(mode="json")
+                for interval in habit.leave_intervals
+            ],
         }
 
     def get_daily_summary(self, user_id: UUID) -> dict:

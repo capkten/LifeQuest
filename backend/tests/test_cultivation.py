@@ -1207,6 +1207,33 @@ def test_overview_returns_today_and_recent_rewards_for_only_current_user(db_sess
     assert [item["cultivation"] for item in overview.recent_rewards] == [12]
 
 
+def test_overview_serializes_habit_intervals_in_today_payload(db_session, user):
+    from datetime import date, timedelta
+
+    from fastapi.encoders import jsonable_encoder
+
+    from app.models.habit_pause import HabitPauseInterval
+    from app.models.todo import Habit
+    from app.services.cultivation import CultivationService
+
+    habit = Habit(user_id=user.id, title="Paused habit", frequency="daily")
+    db_session.add(habit)
+    db_session.flush()
+    db_session.add(HabitPauseInterval(
+        habit_id=habit.id,
+        user_id=user.id,
+        paused_on=date.today() - timedelta(days=3),
+        resumed_on=date.today() - timedelta(days=2),
+    ))
+    db_session.commit()
+
+    overview = CultivationService(db_session).get_overview(user.id)
+    encoded = jsonable_encoder(overview)
+
+    habit_payload = next(item for item in encoded["today"] if item["title"] == "Paused habit")
+    assert habit_payload["pause_intervals"][0]["paused_on"] == (date.today() - timedelta(days=3)).isoformat()
+
+
 def test_settlement_advances_minor_stage_but_does_not_bypass_tribulation(db_session, user):
     from app.services.cultivation import CultivationService
 
