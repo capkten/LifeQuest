@@ -1200,6 +1200,61 @@ def test_avatar_accepts_real_supported_image_content(
     assert not any(path.name.startswith(".") for path in users_api.UPLOAD_DIR.iterdir())
 
 
+def test_avatar_rejects_over_limit_dimensions_before_staging(client, auth_headers):
+    def png_chunk(chunk_type, data):
+        return (
+            struct.pack(">I", len(data))
+            + chunk_type
+            + data
+            + struct.pack(">I", binascii.crc32(chunk_type + data) & 0xffffffff)
+        )
+
+    width = 4097
+    content = (
+        b"\x89PNG\r\n\x1a\n"
+        + png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, 1, 8, 6, 0, 0, 0))
+        + png_chunk(b"IDAT", zlib.compress(b"\x00" + b"\x00" * (width * 4)))
+        + png_chunk(b"IEND", b"")
+    )
+
+    response = client.post(
+        "/api/users/me/avatar",
+        headers=auth_headers,
+        files={"file": ("avatar.png", content, "image/png")},
+    )
+
+    assert response.status_code == 400
+    assert not any(users_api.UPLOAD_DIR.iterdir())
+    assert client.get("/api/users/me", headers=auth_headers).json()["avatar"] is None
+
+
+def test_avatar_rejects_excessive_animated_frame_count_before_staging(
+    client, auth_headers,
+):
+    frame = (
+        b"\x2c"
+        + struct.pack("<HHHHB", 0, 0, 1, 1, 0)
+        + b"\x02\x02\x44\x01\x00"
+    )
+    content = (
+        b"GIF89a"
+        + struct.pack("<HHBBB", 1, 1, 0x80, 0, 0)
+        + b"\x00\x00\x00\xff\xff\xff"
+        + frame * 33
+        + b"\x3b"
+    )
+
+    response = client.post(
+        "/api/users/me/avatar",
+        headers=auth_headers,
+        files={"file": ("avatar.gif", content, "image/gif")},
+    )
+
+    assert response.status_code == 400
+    assert not any(users_api.UPLOAD_DIR.iterdir())
+    assert client.get("/api/users/me", headers=auth_headers).json()["avatar"] is None
+
+
 def test_avatar_update_failure_restores_database_and_filesystem(
     client, auth_headers, db_session, user, monkeypatch,
 ):

@@ -25,8 +25,10 @@ IMAGE_MIME_TYPES = {
     "gif": "image/gif",
     "webp": "image/webp",
 }
-MAX_AVATAR_PIXELS = 64 * 1024 * 1024
-MAX_AVATAR_FRAMES = 1024
+MAX_AVATAR_DIMENSION = 4096
+MAX_AVATAR_PIXELS = 16 * 1024 * 1024
+MAX_AVATAR_DECODED_PIXELS = 32 * 1024 * 1024
+MAX_AVATAR_FRAMES = 32
 
 
 def detect_image_format(content: bytes):
@@ -38,7 +40,11 @@ def detect_image_format(content: bytes):
                 return None
             if image.width <= 0 or image.height <= 0:
                 return None
-            if image.width * image.height > MAX_AVATAR_PIXELS:
+            if (
+                image.width > MAX_AVATAR_DIMENSION
+                or image.height > MAX_AVATAR_DIMENSION
+                or image.width * image.height > MAX_AVATAR_PIXELS
+            ):
                 return None
             image.verify()
 
@@ -49,10 +55,18 @@ def detect_image_format(content: bytes):
             frame_count = getattr(image, "n_frames", 1)
             if frame_count > MAX_AVATAR_FRAMES:
                 return None
+            decoded_pixels = 0
             for frame_index in range(frame_count):
                 image.seek(frame_index)
-                if image.width * image.height > MAX_AVATAR_PIXELS:
+                frame_pixels = image.width * image.height
+                if (
+                    image.width > MAX_AVATAR_DIMENSION
+                    or image.height > MAX_AVATAR_DIMENSION
+                    or frame_pixels > MAX_AVATAR_PIXELS
+                    or decoded_pixels + frame_pixels > MAX_AVATAR_DECODED_PIXELS
+                ):
                     return None
+                decoded_pixels += frame_pixels
                 image.load()
         return detected_format
     except (
