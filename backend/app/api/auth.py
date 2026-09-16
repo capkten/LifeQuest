@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -148,6 +149,28 @@ def _revoke_replacement_chain(db: Session, token: RefreshToken, now: datetime):
         next_id = replacement.replaced_by_id
 
 
+def _claim_refresh_token(
+    db: Session,
+    token_hash: str,
+    jti: str,
+    user_id: UUID,
+    now: datetime,
+) -> bool:
+    result = db.execute(
+        update(RefreshToken)
+        .where(
+            RefreshToken.token_hash == token_hash,
+            RefreshToken.jti == jti,
+            RefreshToken.user_id == user_id,
+            RefreshToken.revoked_at.is_(None),
+            RefreshToken.expires_at > now,
+        )
+        .values(revoked_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    return result.rowcount == 1
+
+
 @router.post("/refresh", response_model=Token)
 def refresh_token(body: RefreshRequest, db: Session = Depends(get_db)):
     payload = decode_refresh_token(body.refresh_token)
@@ -167,38 +190,48 @@ def refresh_token(body: RefreshRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
     now = datetime.now(timezone.utc)
-    token_record = (
-        db.query(RefreshToken)
-        .filter(RefreshToken.token_hash == hash_refresh_token(body.refresh_token))
-        .with_for_update()
-        .first()
-    )
-    if (
-        token_record is None
-        or token_record.jti != jti
-        or token_record.user_id != parsed_user_id
-    ):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-    if token_record.revoked_at is not None:
-        _revoke_replacement_chain(db, token_record, now)
-        db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token has already been used",
+    token_hash = hash_refresh_token(body.refresh_token)
+    if not _claim_refresh_token(db, token_hash, jti, parsed_user_id, now):
+        # The conditional update is the SQLite-compatible single-use claim.
+        # Reload only after rolling back its failed write transaction so the
+        # losing caller sees the committed replacement created by the winner.
+        db.rollback()
+        token_record = (
+            db.query(RefreshToken)
+            .filter(RefreshToken.token_hash == token_hash)
+            .first()
         )
-    if _utc_datetime(token_record.expires_at) <= now:
+        if (
+            token_record is None
+            or token_record.jti != jti
+            or token_record.user_id != parsed_user_id
+        ):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        if token_record.revoked_at is not None:
+            _revoke_replacement_chain(db, token_record, now)
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token has already been used",
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token",
         )
 
+    token_record = db.query(RefreshToken).filter(RefreshToken.token_hash == token_hash).first()
+    if token_record is None:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
     service = UserService(db)
     try:
         user = service.get_by_id(parsed_user_id)
     except (ValueError, AttributeError):
+        db.rollback()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     if user is None:
+        db.rollback()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
     access_token = create_access_token(
@@ -210,7 +243,6 @@ def refresh_token(body: RefreshRequest, db: Session = Depends(get_db)):
         user.id,
         expires_delta=timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
-    token_record.revoked_at = now
     db.flush()
     token_record.replaced_by_id = replacement.id
     db.commit()

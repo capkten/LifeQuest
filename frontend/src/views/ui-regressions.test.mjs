@@ -75,6 +75,57 @@ test('auth refreshes share one Promise and the interceptor awaits it once', asyn
   assert.match(api, /await\s+refreshAuthToken\(/)
   assert.match(api, /_retry/)
   assert.match(api, /skipAuthRefresh|_skipAuthRefresh/)
+  assert.match(api, /canRetryAfterRefresh/)
+  assert.ok(
+    api.indexOf('!canRetryAfterRefresh(') < api.indexOf('originalRequest.headers.Authorization'),
+    'the interceptor must validate the refresh response before retrying',
+  )
+})
+
+test('pending refresh cannot revive a cleared or replaced local session', async () => {
+  const apiSource = await readFile(new URL('../services/api.js', import.meta.url), 'utf8')
+  const helperSource = apiSource.match(
+    /export function canRetryAfterRefresh\([\s\S]*?\n\}/,
+  )?.[0]
+  assert.ok(helperSource, 'api must expose the refresh-session guard')
+  const canRetryAfterRefresh = new Function(
+    `${helperSource.replace(/^export\s+/, '')}; return canRetryAfterRefresh`,
+  )()
+
+  assert.equal(canRetryAfterRefresh('old-refresh', 'old-refresh', 'new-refresh'), true)
+  assert.equal(canRetryAfterRefresh('new-refresh', 'old-refresh', 'new-refresh'), true)
+  assert.equal(canRetryAfterRefresh('old-refresh', 'old-refresh', null), false)
+
+  let resolveRefresh
+  const refresh = new Promise((resolve) => { resolveRefresh = resolve })
+  const session = { accessToken: 'old-access', refreshToken: 'old-refresh', retries: 0 }
+  const retry = refresh.then((response) => {
+    if (!canRetryAfterRefresh(session.refreshToken, 'old-refresh', response.refresh_token)) {
+      return false
+    }
+    session.accessToken = response.access_token
+    session.refreshToken = response.refresh_token
+    session.retries += 1
+    return true
+  })
+
+  session.accessToken = null
+  session.refreshToken = null
+  resolveRefresh({ access_token: 'stale-access', refresh_token: 'new-refresh' })
+  assert.equal(await retry, false)
+  assert.deepEqual(session, { accessToken: null, refreshToken: null, retries: 0 })
+
+  session.accessToken = 'replacement-access'
+  session.refreshToken = 'replacement-refresh'
+  assert.equal(
+    canRetryAfterRefresh(session.refreshToken, 'old-refresh', 'new-refresh'),
+    false,
+  )
+  assert.deepEqual(session, {
+    accessToken: 'replacement-access',
+    refreshToken: 'replacement-refresh',
+    retries: 0,
+  })
 })
 
 test('sect business locks remain clickable so blocked reasons can be shown', async () => {

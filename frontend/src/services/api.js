@@ -7,6 +7,18 @@ import { getErrorMessage } from '../utils/errorMessage'
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
 const serverBaseUrl = apiBaseUrl.replace(/\/api\/?$/, '')
 
+export function canRetryAfterRefresh(currentRefreshToken, submittedRefreshToken, responseRefreshToken) {
+  return Boolean(
+    currentRefreshToken
+      && submittedRefreshToken
+      && responseRefreshToken
+      && (
+        currentRefreshToken === submittedRefreshToken
+        || currentRefreshToken === responseRefreshToken
+      ),
+  )
+}
+
 export function resolveUrl(path) {
   if (!path) return ''
   if (typeof path !== 'string') return ''
@@ -72,8 +84,16 @@ api.interceptors.response.use(
       try {
         const response = await refreshAuthToken(refreshToken)
         const { access_token, refresh_token: newRefreshToken } = response
+        const currentRefreshToken = localStorage.getItem('refreshToken')
 
-        if (localStorage.getItem('refreshToken') === refreshToken) {
+        if (
+          !access_token
+          || !canRetryAfterRefresh(currentRefreshToken, refreshToken, newRefreshToken)
+        ) {
+          return Promise.reject(error)
+        }
+
+        if (currentRefreshToken === refreshToken) {
           localStorage.setItem('token', access_token)
           localStorage.setItem('refreshToken', newRefreshToken)
         }
@@ -82,7 +102,9 @@ api.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${access_token}`
         return api(originalRequest)
       } catch (refreshError) {
-        invalidateAuthSession()
+        if (localStorage.getItem('refreshToken') === refreshToken) {
+          invalidateAuthSession()
+        }
         return Promise.reject(refreshError)
       }
     }

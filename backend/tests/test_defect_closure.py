@@ -1,9 +1,13 @@
+import base64
+import binascii
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from threading import Event, get_ident
 from pathlib import Path
+import struct
 from uuid import uuid4
+import zlib
 
 import pytest
 from sqlalchemy.orm import sessionmaker
@@ -20,7 +24,9 @@ from app.models.project import ProjectPhase
 from app.models.shop import ExchangeHistory, ShopItem
 from app.services.finance import FinanceService
 from app.models.user import User
+from app.api import users as users_api
 from app.services.note import NoteService
+from app.services.user import UserService
 from app.database import Base
 from app.repositories.shop import ShopItemRepository
 from app.repositories.user import UserRepository
@@ -1012,6 +1018,108 @@ def test_avatar_rejects_fake_image_content(client, auth_headers):
     )
 
     assert response.status_code == 400
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "content_type"),
+    [
+        ("avatar.jpg", b"\xff\xd8\xff\xd9", "image/jpeg"),
+        (
+            "avatar.png",
+            b"\x89PNG\r\n\x1a\n" + b"\x00\x00\x00\rIHDR" + b"\x00" * 13 + b"\x00" * 4,
+            "image/png",
+        ),
+        ("avatar.gif", b"GIF89a" + b"\x00" * 7, "image/gif"),
+        ("avatar.webp", b"RIFF" + b"\x00" * 4 + b"WEBP" + b"\x00" * 8, "image/webp"),
+    ],
+)
+def test_avatar_rejects_truncated_image_signatures(
+    client, auth_headers, filename, content, content_type,
+):
+    response = client.post(
+        "/api/users/me/avatar",
+        headers=auth_headers,
+        files={"file": (filename, content, content_type)},
+    )
+
+    assert response.status_code == 400
+    assert not any(users_api.UPLOAD_DIR.iterdir())
+
+
+def test_avatar_rejects_structurally_invalid_image_payloads(client, auth_headers):
+    def png_chunk(chunk_type, data):
+        return (
+            struct.pack(">I", len(data))
+            + chunk_type
+            + data
+            + struct.pack(">I", binascii.crc32(chunk_type + data) & 0xffffffff)
+        )
+
+    invalid_png = (
+        b"\x89PNG\r\n\x1a\n"
+        + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
+        + png_chunk(b"IDAT", zlib.compress(b""))
+        + png_chunk(b"IEND", b"")
+    )
+    invalid_images = [
+        ("avatar.png", invalid_png, "image/png"),
+        (
+            "avatar.jpg",
+            b"\xff\xd8\xff\xc0\x00\x0b\x08\x00\x01\x00\x01\x01\x01\x11\x00"
+            b"\xff\xda\x00\x08\x01\x01\x00\x00\x3f\x00\xff\xd9",
+            "image/jpeg",
+        ),
+        (
+            "avatar.gif",
+            b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00"
+            b"\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x00\x00\x3b",
+            "image/gif",
+        ),
+        (
+            "avatar.webp",
+            b"RIFF\x10\x00\x00\x00WEBPVP8 \x04\x00\x00\x00fake",
+            "image/webp",
+        ),
+    ]
+
+    for filename, content, content_type in invalid_images:
+        response = client.post(
+            "/api/users/me/avatar",
+            headers=auth_headers,
+            files={"file": (filename, content, content_type)},
+        )
+        assert response.status_code == 400, filename
+
+    assert not any(users_api.UPLOAD_DIR.iterdir())
+
+
+def test_avatar_update_failure_restores_database_and_filesystem(
+    client, auth_headers, db_session, user, monkeypatch,
+):
+    old_avatar = f"/uploads/avatars/{user.id}.png"
+    old_content = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    )
+    old_path = users_api.UPLOAD_DIR / f"{user.id}.png"
+    old_path.write_bytes(old_content)
+    user.avatar = old_avatar
+    db_session.commit()
+
+    def fail_update(*args, **kwargs):
+        raise RuntimeError("avatar update failure")
+
+    monkeypatch.setattr(UserService, "update_user", fail_update)
+    with pytest.raises(RuntimeError, match="avatar update failure"):
+        client.post(
+            "/api/users/me/avatar",
+            headers=auth_headers,
+            files={"file": ("new.png", old_content, "image/png")},
+        )
+
+    db_session.expire_all()
+    assert db_session.get(User, user.id).avatar == old_avatar
+    assert old_path.read_bytes() == old_content
+    assert list(users_api.UPLOAD_DIR.iterdir()) == [old_path]
 
 
 def test_inactive_account_rejects_recurring_creation_without_mutation(

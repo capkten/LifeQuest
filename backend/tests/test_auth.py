@@ -1,5 +1,21 @@
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+
+from fastapi import HTTPException
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from app.api.auth import refresh_token
+from app.database import Base
 from app.models.refresh_token import RefreshToken
+from app.models.user import User
+from app.schemas.user import RefreshRequest
 from app.services.auth import decode_refresh_token
+from app.services.auth import (
+    get_password_hash,
+    hash_refresh_token,
+    issue_persisted_refresh_token,
+)
 
 
 def test_register(client):
@@ -192,3 +208,66 @@ def test_logout_revokes_submitted_refresh_token(client, login_payload):
 
     assert logout.status_code == 200
     assert refresh.status_code == 401
+
+
+def test_concurrent_sqlite_refresh_claims_token_once(tmp_path):
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'concurrent-refresh.sqlite'}",
+        connect_args={"check_same_thread": False, "timeout": 30},
+    )
+    sessions = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    Base.metadata.create_all(bind=engine)
+    setup = sessions()
+    try:
+        user = User(
+            username="concurrent-refresh-user",
+            email="concurrent-refresh@example.com",
+            password_hash=get_password_hash("testpassword123"),
+        )
+        setup.add(user)
+        setup.flush()
+        raw_token, _ = issue_persisted_refresh_token(setup, user.id)
+        setup.commit()
+    finally:
+        setup.close()
+
+    barrier = Barrier(2)
+
+    def refresh_once():
+        session = sessions()
+        try:
+            barrier.wait(timeout=10)
+            try:
+                refresh_token(RefreshRequest(refresh_token=raw_token), session)
+                return 200
+            except HTTPException as error:
+                return error.status_code
+            except Exception as error:  # The regression must expose lock errors.
+                return (type(error).__name__, str(error))
+        finally:
+            session.close()
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = [future.result(timeout=40) for future in (
+                pool.submit(refresh_once),
+                pool.submit(refresh_once),
+            )]
+
+        assert all(isinstance(result, int) for result in results), results
+        assert sorted(results) == [200, 401]
+
+        verify = sessions()
+        try:
+            rows = verify.query(RefreshToken).all()
+            assert len(rows) == 2
+            original = next(
+                row for row in rows if row.token_hash == hash_refresh_token(raw_token)
+            )
+            replacement = next(row for row in rows if row.id == original.replaced_by_id)
+            assert original.revoked_at is not None
+            assert replacement.user_id == original.user_id
+        finally:
+            verify.close()
+    finally:
+        engine.dispose()
