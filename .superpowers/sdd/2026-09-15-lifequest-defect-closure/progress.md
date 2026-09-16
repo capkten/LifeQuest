@@ -126,6 +126,7 @@ Ruling: Do not push, merge, publish, or trigger an external deployment from this
 - [x] Task 10: project and milestone lifecycle
 - [x] Task 11: refresh tokens and avatar validation
 - [x] Task 12: full integration and release gates
+- [ ] Task 13：串行化笔记附件上传与删除（最终复核跟进）
 
 ## Review loop
 
@@ -399,3 +400,5 @@ Ruling: Extend the NOTE-04 notebook lock to folder/note creation, collaboration 
 Ruling: Treat the attachment-upload lock gap as a real Important residual and stop code changes after the single final fix wave and one scoped re-review — the upload file is written before the locked service boundary, and the table has no foreign key to serialize deletion — cost if wrong: concurrent upload/delete can leave an orphan attachment row or file until an authorized follow-up fixes the path.
 
 Ruling: Park the `592` versus `598` final-fix-report sentence as a nonblocking documentation defect and use the fresh full-suite result of `598 passed` as final verification evidence — no implementation behavior is affected — cost if wrong: the committed report remains internally inconsistent.
+
+Ruling: 按用户确认，将附件上传与删除竞态作为 Task 13 重新纳入同一修复计划；修复限定于现有笔记本锁、附件文件写入和附件记录事务，不新增数据库结构 — 最终复核已确认该问题会造成孤立数据，且用户原始目标要求修完全部问题 — 若判断错误，代价是最终复核后增加一项任务及相应并发回归维护成本。

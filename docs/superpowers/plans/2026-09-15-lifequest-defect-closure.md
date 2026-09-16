@@ -39,6 +39,7 @@
 | 10 | PROJ-01 至 PROJ-04 | 项目状态、开始入口、阶段状态和里程碑 |
 | 11 | AUTH-01 至 AUTH-03 | Refresh Token、并发刷新和头像文件验证 |
 | 12 | 全部 | 跨域回归、浏览器、迁移、版本和线上发布门禁 |
+| 13 | 最终复核跟进 | 笔记图片附件上传与节点/笔记本删除互斥，失败不遗留文件或记录 |
 
 ## Defect-by-defect acceptance index
 
@@ -1028,9 +1029,32 @@ git add VERSION frontend/package.json frontend/package-lock.json android/app/bui
 git commit -m "chore: close LifeQuest defect verification"
 ```
 
+### Task 13: 串行化笔记附件上传与删除
+
+**背景：**最终复核发现，图片上传先在 API 路由写入附件文件，再调用未获取笔记本锁的 `NoteService.create_attachment`。并发删除可能在数据库记录和文件系统之间留下孤立附件。本任务是 NOTE-04 的复核跟进，不改变本次修复范围之外的架构。
+
+**涉及文件：**
+- 修改：`backend/app/api/notes.py`
+- 修改：`backend/app/services/note.py`
+- 修改：`backend/tests/test_notes.py`
+- 如有必要，修改：`backend/tests/test_note_sharing.py`
+
+**验收要求：**
+- 图片文件写入和附件记录提交必须在与节点/笔记本删除相同的跨进程笔记本锁内完成。
+- 获取锁后重新读取笔记并复核写权限；不能依赖加锁前读取的 ORM 对象。
+- 删除先完成时，上传返回 404，且不留下附件记录或上传文件；上传先完成时，后续删除必须同时清理记录和文件。
+- 附件写入或数据库提交失败时，回滚数据库并移除本次上传生成的文件。
+- 不增加外键或数据库迁移；沿用现有笔记本锁和删除文件暂存机制。
+- 使用独立进程和真实临时 SQLite/文件系统回归测试覆盖竞态顺序及失败清理。
+
+**验证：**
+- 先运行新增回归测试并确认其在旧实现上因竞态行为失败，再实现最小修复。
+- 运行：`cd backend && pytest -q tests/test_notes.py tests/test_note_sharing.py`
+- 最终集成时重新运行完整后端测试套件，并记录精确结果。
+
 ## Execution order and parallelism
 
-Run Task 1 first because it defines migrations and shared regression fixtures. Then run Tasks 2 and 3 sequentially because they share habit/date semantics. Tasks 4, 5, 6 and 7 can be dispatched in parallel after Task 1, but Task 6 and Task 7 both touch finance files, so an integrator must serialize their commits or resolve only deliberate overlapping changes. Task 8 depends on the Task 4 coin direction and Task 1 exchange columns. Task 9 can run independently after Task 1. Task 10 can run independently after Task 1. Task 11 depends on the Task 1 refresh-token model. Task 12 is sequential after Tasks 2-11.
+Run Task 1 first because it defines migrations and shared regression fixtures. Then run Tasks 2 and 3 sequentially because they share habit/date semantics. Tasks 4, 5, 6 and 7 can be dispatched in parallel after Task 1, but Task 6 and Task 7 both touch finance files, so an integrator must serialize their commits or resolve only deliberate overlapping changes. Task 8 depends on the Task 4 coin direction and Task 1 exchange columns. Task 9 can run independently after Task 1. Task 10 can run independently after Task 1. Task 11 depends on the Task 1 refresh-token model. Task 12 is sequential after Tasks 2-11. Task 13 is a post-review follow-up and runs after Task 12.
 
 Recommended execution mode: `superpowers:subagent-driven-development`, one fresh worker per task with a review after each commit. If executed inline, use `superpowers:executing-plans` and stop at every task's test/commit checkpoint.
 
@@ -1041,6 +1065,7 @@ Recommended execution mode: `superpowers:subagent-driven-development`, one fresh
 - [ ] Online pause failure is treated as an evidence-gathering release gate, not guessed at from local behavior.
 - [ ] Financial amount direction, account state, ownership, category type, budget periods and nullable updates have separate assertions.
 - [ ] Note operations cover database paths, real files, rollback and scoped authentication together.
+- [ ] Note attachment uploads and destructive mutations share the notebook lock, with both process orderings covered by real filesystem/database assertions.
 - [ ] New database structures use the existing startup migration path and preserve old rows.
 - [ ] Version changes happen only in the final release task and start from the current root `VERSION`.
 - [ ] No task depends on a vague placeholder, an unstated external feature, or an uncommitted prerequisite.
