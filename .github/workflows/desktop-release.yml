@@ -64,6 +64,7 @@ jobs:
         run: node --test src/views/note-sync-regressions.test.mjs
 
       - name: Configure desktop API endpoint
+        # DESKTOP_API_BASE_URL is configured in GitHub repository Settings -> Secrets and variables -> Actions
         shell: pwsh
         env:
           DESKTOP_API_BASE_URL: ${{ secrets.DESKTOP_API_BASE_URL }}
