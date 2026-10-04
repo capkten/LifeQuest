@@ -57,4 +57,6 @@ class ExchangeHistoryResponse(BaseModel):
     quantity: int
     total_cost: int
     status: ExchangeStatus
+    item_name_snapshot: Optional[str] = None
+    unit_price_snapshot: Optional[int] = None
     created_at: datetime

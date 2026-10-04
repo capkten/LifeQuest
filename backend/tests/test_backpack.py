@@ -118,7 +118,7 @@ def _purchase_item(client, headers, item_id, quantity=1):
     return client.post(
         "/api/shop/exchange",
         json={"item_id": item_id, "quantity": quantity},
-        headers=headers,
+        headers={**headers, "Idempotency-Key": f"backpack-purchase-{uuid4()}"},
     )
 
 

@@ -1,7 +1,7 @@
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -80,11 +80,12 @@ def delete_item(
 @router.post("/exchange", response_model=ExchangeHistoryResponse)
 def purchase_item(
     exchange_in: ExchangeHistoryCreate,
+    idempotency_key: str = Header(..., alias="Idempotency-Key"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     service = ShopService(db)
-    return service.purchase_item(current_user.id, exchange_in)
+    return service.purchase_item(current_user.id, exchange_in, idempotency_key)
 
 
 @router.get("/exchange/history", response_model=List[ExchangeHistoryResponse])

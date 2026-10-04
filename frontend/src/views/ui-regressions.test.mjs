@@ -61,6 +61,117 @@ test('cultivation interaction feedback uses body-level floating toast popups', a
   }
 })
 
+test('auth refreshes share one Promise and the interceptor awaits it once', async () => {
+  const [auth, api] = await Promise.all([
+    readFile(new URL('../services/auth.js', import.meta.url), 'utf8'),
+    readFile(new URL('../services/api.js', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(auth, /let refreshPromise\s*=\s*null/)
+  assert.match(auth, /if\s*\(refreshPromise\)\s*return refreshPromise/)
+  assert.match(auth, /refreshPromise\s*=\s*[\s\S]*?finally\(/)
+  assert.match(auth, /refreshPromise\s*=\s*null/)
+  assert.match(api, /refreshAuthToken\(/)
+  assert.match(api, /await\s+refreshAuthToken\(/)
+  assert.match(api, /_retry/)
+  assert.match(api, /skipAuthRefresh|_skipAuthRefresh/)
+  assert.match(api, /canRetryAfterRefresh/)
+  assert.ok(
+    api.indexOf('!canRetryAfterRefresh(') < api.indexOf('originalRequest.headers.Authorization'),
+    'the interceptor must validate the refresh response before retrying',
+  )
+})
+
+test('pending refresh cannot revive a cleared or replaced local session', async () => {
+  const apiSource = await readFile(new URL('../services/api.js', import.meta.url), 'utf8')
+  const helperSource = apiSource.match(
+    /export function canRetryAfterRefresh\([\s\S]*?\n\}/,
+  )?.[0]
+  assert.ok(helperSource, 'api must expose the refresh-session guard')
+  const canRetryAfterRefresh = new Function(
+    `${helperSource.replace(/^export\s+/, '')}; return canRetryAfterRefresh`,
+  )()
+
+  assert.equal(canRetryAfterRefresh('old-refresh', 'old-refresh', 'new-refresh'), true)
+  assert.equal(canRetryAfterRefresh('new-refresh', 'old-refresh', 'new-refresh'), true)
+  assert.equal(canRetryAfterRefresh('old-refresh', 'old-refresh', null), false)
+
+  let resolveRefresh
+  const refresh = new Promise((resolve) => { resolveRefresh = resolve })
+  const session = { accessToken: 'old-access', refreshToken: 'old-refresh', retries: 0 }
+  const retry = refresh.then((response) => {
+    if (!canRetryAfterRefresh(session.refreshToken, 'old-refresh', response.refresh_token)) {
+      return false
+    }
+    session.accessToken = response.access_token
+    session.refreshToken = response.refresh_token
+    session.retries += 1
+    return true
+  })
+
+  session.accessToken = null
+  session.refreshToken = null
+  resolveRefresh({ access_token: 'stale-access', refresh_token: 'new-refresh' })
+  assert.equal(await retry, false)
+  assert.deepEqual(session, { accessToken: null, refreshToken: null, retries: 0 })
+
+  session.accessToken = 'replacement-access'
+  session.refreshToken = 'replacement-refresh'
+  assert.equal(
+    canRetryAfterRefresh(session.refreshToken, 'old-refresh', 'new-refresh'),
+    false,
+  )
+  assert.deepEqual(session, {
+    accessToken: 'replacement-access',
+    refreshToken: 'replacement-refresh',
+    retries: 0,
+  })
+})
+
+test('stale auth-store refresh rejection does not clear a replacement session', async () => {
+  const authSource = await readFile(new URL('../stores/auth.js', import.meta.url), 'utf8')
+  const refreshFunctionSource = authSource.match(
+    /function refreshAccessToken\(\) \{[\s\S]*?\n  \}/,
+  )?.[0]
+  assert.ok(refreshFunctionSource, 'auth store must expose refreshAccessToken')
+
+  let rejectRefresh
+  const pendingRefresh = new Promise((resolve, reject) => {
+    rejectRefresh = reject
+  })
+  const refreshTokenValue = { value: 'old-refresh' }
+  let logoutCalls = 0
+  let setTokensCalls = 0
+  const refreshAccessToken = new Function(
+    'refreshTokenValue',
+    'authService',
+    'logout',
+    'setTokens',
+    `let refreshPromise = null
+${refreshFunctionSource}
+return refreshAccessToken`,
+  )(
+    refreshTokenValue,
+    { refreshToken: () => pendingRefresh },
+    () => {
+      logoutCalls += 1
+      refreshTokenValue.value = null
+    },
+    () => {
+      setTokensCalls += 1
+    },
+  )
+
+  const request = refreshAccessToken()
+  refreshTokenValue.value = 'replacement-refresh'
+  rejectRefresh(new Error('old refresh failed'))
+
+  assert.equal(await request, false)
+  assert.equal(logoutCalls, 0)
+  assert.equal(setTokensCalls, 0)
+  assert.equal(refreshTokenValue.value, 'replacement-refresh')
+})
+
 test('sect business locks remain clickable so blocked reasons can be shown', async () => {
   const source = await readFile(new URL('./Sects.vue', viewsDirectory), 'utf8')
 
@@ -100,7 +211,9 @@ test('all application runtimes consume the root VERSION source', async () => {
 
   assert.match(backend, /readFileSync[\s\S]*VERSION|read_text\([\s\S]*VERSION/)
   assert.match(gradle, /VERSION[\s\S]*versionName|versionName[\s\S]*VERSION/)
-  assert.match(workflow, /diff --quiet HEAD\^ HEAD -- VERSION/)
+  assert.match(workflow, /fetch-depth: 0/)
+  assert.match(workflow, /PUSH_BEFORE: \$\{\{ github\.event\.before \}\}/)
+  assert.match(workflow, /git diff --quiet "\$PUSH_BEFORE" "\$GITHUB_SHA" -- VERSION frontend/)
 })
 
 test('todo metadata badges share a compact row with each title', async () => {
@@ -132,19 +245,34 @@ test('android release workflow and in-app update contract are present', async ()
   assert.match(workflow, /bundleRelease/)
   assert.match(workflow, /latest\.json/)
   assert.match(workflow, /ANDROID_KEYSTORE_BASE64/)
-  assert.match(workflow, /ANDROID_API_BASE_URL/)
   assert.match(workflow, /node-version: 22/)
   assert.match(workflow, /npx cap sync android/)
   assert.match(app, /VITE_ANDROID_UPDATE_MANIFEST_URL|UpdatePrompt/)
 })
 
+test('android production builds use the canonical API domain without a secret override', async () => {
+  const [envAndroid, envExample, workflow] = await Promise.all([
+    readFile(new URL('../../.env.android', import.meta.url), 'utf8'),
+    readFile(new URL('../../.env.android.example', import.meta.url), 'utf8'),
+    readFile(new URL('../../../.github/workflows/android-release.yml', import.meta.url), 'utf8'),
+  ])
+
+  for (const source of [envAndroid, envExample, workflow]) {
+    assert.match(source, /VITE_API_BASE_URL=https:\/\/life\.capkin\.cn\/api/)
+  }
+  assert.doesNotMatch(workflow, /ANDROID_API_BASE_URL/)
+  assert.doesNotMatch(workflow, /secrets\.ANDROID_API_BASE_URL/)
+})
+
 test('android update prompt downloads and launches APK installation natively', async () => {
-  const [prompt, updater, activity, manifest, filePaths] = await Promise.all([
+  const [prompt, updater, activity, manifest, filePaths, updaterComposable, workflow] = await Promise.all([
     readFile(new URL('../components/layout/UpdatePrompt.vue', import.meta.url), 'utf8'),
     readFile(new URL('../../android/app/src/main/java/com/lifequest/app/AppUpdaterPlugin.java', import.meta.url), 'utf8'),
     readFile(new URL('../../android/app/src/main/java/com/lifequest/app/MainActivity.java', import.meta.url), 'utf8'),
     readFile(new URL('../../android/app/src/main/AndroidManifest.xml', import.meta.url), 'utf8'),
     readFile(new URL('../../android/app/src/main/res/xml/file_paths.xml', import.meta.url), 'utf8'),
+    readFile(new URL('../composables/useAppUpdate.js', import.meta.url), 'utf8'),
+    readFile(new URL('../../../.github/workflows/android-release.yml', import.meta.url), 'utf8'),
   ])
 
   assert.match(prompt, /AppUpdater|startDownload/)
@@ -158,6 +286,15 @@ test('android update prompt downloads and launches APK installation natively', a
   assert.match(activity, /resumePendingInstall\(\)/)
   assert.match(manifest, /REQUEST_INSTALL_PACKAGES/)
   assert.match(filePaths, /external-files-path/)
+  assert.match(updaterComposable, /addListener\(['"]downloadProgress['"],/)
+  assert.match(updaterComposable, /openGithubDownload/)
+  assert.match(prompt, /role="progressbar"/)
+  assert.match(prompt, /下载进度|正在连接下载服务/)
+  assert.match(prompt, /打开 GitHub 下载/)
+  assert.match(updater, /notifyListeners\(['"]downloadProgress['"]/)
+  assert.match(updater, /COLUMN_BYTES_DOWNLOADED_SO_FAR/)
+  assert.match(updater, /STATUS_FAILED/)
+  assert.match(workflow, /releaseUrl/)
 })
 
 function compileRender(source) {
@@ -230,9 +367,32 @@ test('todo habit completion uses the server completed_today field for all lock s
 
   assert.match(source, /'todo-card--completed': habit\.completed_today/)
   assert.match(source, /'complete-btn--done': habit\.completed_today/)
-  assert.match(source, /:aria-disabled="habit\.completed_today"/)
+  assert.match(source, /:disabled="completingId === habit\.id"/)
+  assert.match(source, /:aria-disabled="Boolean\(habitBlockReason\(habit\)\)"/)
+  assert.match(source, /function habitBlockReason\(habit\)/)
   assert.match(source, /if \(habit\.completed_today\)/)
-  assert.doesNotMatch(source, /habit\.is_active/)
+  assert.match(source, /v-model="form\.weekdays" type="checkbox"/)
+  assert.match(source, /v-model\.number="form\.weekly_target"/)
+  assert.match(source, /habit\.weekly_completed.*habit\.weekly_target/)
+})
+
+test('daily habit consumers compare optional server state fields explicitly', async () => {
+  const [service, home, todos] = await Promise.all([
+    readFile(new URL('../services/todo.js', viewsDirectory), 'utf8'),
+    readFile(new URL('./Home.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('./Todos.vue', viewsDirectory), 'utf8'),
+  ])
+
+  for (const [file, source] of [['Home.vue', home], ['Todos.vue', todos]]) {
+    assert.match(source, /habit\.paused_today === true/, `${file} must check paused_today explicitly`)
+    assert.match(source, /habit\.is_active === false/, `${file} must check is_active explicitly`)
+    assert.match(source, /habit\.excused_today === true/, `${file} must check excused_today explicitly`)
+    assert.match(source, /habit\.scheduled_today === false/, `${file} must check scheduled_today explicitly`)
+  }
+
+  const dailyMethod = service.match(/async getDailySummary\(\) \{[\s\S]*?\n  \},/)?.[0]
+  assert.ok(dailyMethod, 'daily summary service method must remain available')
+  assert.doesNotMatch(dailyMethod, /result\.data/)
 })
 
 test('todo task filters use project buttons and show unfinished tasks first', async () => {
@@ -256,6 +416,28 @@ test('todo subtasks use a compact right-side arrow toggle', async () => {
   assert.match(source, /aria-label="expandedTaskId === task\.id \? '收起子任务' : '展开子任务'"/)
   assert.match(source, /class="subtask-divider"/)
   assert.match(source, /subtask-toggle-icon--expanded/)
+})
+
+test('finance account editor applies type-aware balance rules and credit guidance', async () => {
+  const source = await readFile(new URL('./FinanceAccounts.vue', viewsDirectory), 'utf8')
+
+  assert.doesNotMatch(source, /:min="form\.type === 'credit'/)
+  assert.match(source, /信用额度至少需要/)
+  assert.match(source, /creditLimit < Math\.abs\(balance\)/)
+  assert.match(source, /信用卡可为负|当前欠款/)
+  assert.match(source, /已用额度/)
+  assert.match(source, /可用额度/)
+  assert.match(source, /净资产/)
+})
+
+test('finance accounts expose inactive accounts and a reactivation flow', async () => {
+  const source = await readFile(new URL('./FinanceAccounts.vue', viewsDirectory), 'utf8')
+
+  assert.match(source, /getAccounts\(\{ include_inactive: true \}\)/)
+  assert.match(source, /activeAccounts/)
+  assert.match(source, /!acct\.is_active/)
+  assert.match(source, /reactivateAccount\(acct\)/)
+  assert.match(source, /updateAccount\(.*is_active: true/s)
 })
 
 test('todo task creation supports optional project and milestone context', async () => {
@@ -325,6 +507,34 @@ test('home action center keeps request failures separate from the legitimate emp
   assert.match(actionCenter, /v-if="error"[\s\S]*today-action-inline-error/)
   assert.match(composable, /if \(currentRequestId === requestId\) error\.value = cause/)
   assert.doesNotMatch(home, /todoService\.getDailySummary\(\)/)
+})
+
+test('habit entry points respect all server lock fields and non-retryable refresh failures', async () => {
+  const [todos, home, history] = await Promise.all([
+    readFile(new URL('./Todos.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('./Home.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('../components/HabitHistoryDialog.vue', import.meta.url), 'utf8'),
+  ])
+
+  for (const source of [todos, home]) {
+    assert.match(source, /completed_today/)
+    assert.match(source, /paused_today/)
+    assert.match(source, /excused_today/)
+    assert.match(source, /scheduled_today/)
+    assert.match(source, /weekly_remaining/)
+  }
+  assert.match(history, /shiftDateKey/)
+  assert.doesNotMatch(history, /function shiftDate\(/)
+  assert.match(todos, /Promise\.allSettled\(/)
+  assert.match(todos, /无需再次提交/)
+})
+
+test('habit history initializes date forms when mounted already visible', async () => {
+  const source = await readFile(new URL('../components/HabitHistoryDialog.vue', import.meta.url), 'utf8')
+  const mounted = source.match(/onMounted\(\(\) => \{([\s\S]*?)\n\}\)/)?.[1]
+
+  assert.ok(mounted, 'habit history needs a mounted lifecycle handler')
+  assert.match(mounted, /if \(props\.visible\) \{[\s\S]*resetForms\(\)[\s\S]*loadHistory\(\)/)
 })
 
 test('notes preserve prior results and expose retryable errors for search and discovery', async () => {
@@ -420,9 +630,8 @@ test('notebook workspace and viewer ignore stale responses after selection chang
 })
 
 test('pagination refreshes release stale loading locks and expose retryable failures', async () => {
-  const [finance, coins, stats] = await Promise.all([
+  const [finance, stats] = await Promise.all([
     readFile(new URL('./FinanceTransactions.vue', viewsDirectory), 'utf8'),
-    readFile(new URL('./CoinHistory.vue', viewsDirectory), 'utf8'),
     readFile(new URL('./Stats.vue', viewsDirectory), 'utf8'),
   ])
 
@@ -434,11 +643,7 @@ test('pagination refreshes release stale loading locks and expose retryable fail
   assert.match(finance, /transactions\.length === 0 && supportError/)
   assert.match(finance, /transactions\.length === 0 && supportLoading/)
   assert.match(finance, /filter\(Boolean\)\.join/)
-  assert.match(coins, /loadMoreError/)
-  assert.match(coins, /filterGeneration/)
-  assert.match(coins, /loadingMore\.value = false/)
   assert.match(finance, /hasMore\.value = false/)
-  assert.match(coins, /hasMore\.value = false/)
   assert.match(stats, /function syncGlobalError\(/)
   assert.match(stats, /syncGlobalError\(\)/)
   assert.match(stats, /loadingOverview/)
@@ -491,6 +696,143 @@ test('project mutations use independent locks and phase deletion preserves task 
   assert.doesNotMatch(source, /tasks\.value\.forEach\(t => \{ if \(t\.phase_id === phase\.id\) t\.phase_id = null \}\)/)
   assert.match(service, /deletePhase\(phaseId, options = \{\}\)/)
   assert.match(service, /params: options/)
+})
+
+test('project lifecycle exposes start, milestone reach, and centralized phase labels', async () => {
+  const [projects, detail, service, labels] = await Promise.all([
+    readFile(new URL('./Projects.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('../services/project.js', import.meta.url), 'utf8'),
+    readFile(new URL('../utils/displayLabels.js', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(service, /startProject\(id\)/)
+  assert.match(service, /\/projects\/\$\{id\}\/start/)
+  assert.match(service, /reachMilestone\(msId\)/)
+  assert.match(projects, /projectService\.startProject\(/)
+  assert.match(projects, /startPending/)
+  assert.match(detail, /projectService\.reachMilestone\(/)
+  assert.match(detail, /milestoneReachPending/)
+  assert.match(detail, /里程碑已达成/)
+  assert.match(labels, /PHASE_STATUS_LABELS/)
+  assert.match(labels, /labelPhaseStatus\(/)
+  assert.match(detail, /labelPhaseStatus\(/)
+  assert.doesNotMatch(detail, /const map = \{ planning: '规划中'/)
+})
+
+test('project milestone reach requests keep independent runtime results', async () => {
+  const [source, module] = await Promise.all([
+    readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8'),
+    import('../utils/milestoneReachState.js'),
+  ])
+
+  assert.equal(typeof module.createMilestoneReachRequestState, 'function')
+  assert.match(source, /createMilestoneReachRequestState\(\)/)
+  assert.match(source, /milestoneReachRequestState\.begin\(milestone\.id/)
+  assert.match(source, /milestoneReachRequestState\.isCurrent\(/)
+  assert.doesNotMatch(source, /milestoneReachRequestId/)
+
+  const requestState = module.createMilestoneReachRequestState()
+  const reached = new Map()
+  const deferred = () => {
+    let resolve
+    const promise = new Promise((next) => { resolve = next })
+    return { promise, resolve }
+  }
+  const first = deferred()
+  const second = deferred()
+
+  const reach = async (milestoneId, response) => {
+    const token = requestState.begin(milestoneId, 'project-1', 0)
+    try {
+      const updated = await response
+      if (!requestState.isCurrent(token, 'project-1', 0)) return
+      reached.set(milestoneId, updated)
+    } finally {
+      requestState.finish(token)
+    }
+  }
+
+  const firstRequest = reach('milestone-1', first.promise)
+  const secondRequest = reach('milestone-2', second.promise)
+  second.resolve({ id: 'milestone-2', status: 'reached' })
+  first.resolve({ id: 'milestone-1', status: 'reached' })
+  await Promise.all([firstRequest, secondRequest])
+
+  assert.deepEqual([...reached.entries()], [
+    ['milestone-2', { id: 'milestone-2', status: 'reached' }],
+    ['milestone-1', { id: 'milestone-1', status: 'reached' }],
+  ])
+})
+
+test('project start button stops keyboard events before card navigation', async () => {
+  const source = await readFile(new URL('./Projects.vue', viewsDirectory), 'utf8')
+  const startButton = source.match(/<button\s+v-if="project\.status === 'planning'"[\s\S]*?<\/button>/)?.[0]
+
+  assert.ok(startButton, 'project start button must remain inside the project card')
+  assert.match(startButton, /type="button"/)
+  assert.match(startButton, /@click\.stop="startProject\(project\)"/)
+  assert.match(startButton, /@keydown\.stop/)
+})
+
+test('ProjectDetail inline task creation locks duplicate submissions and keeps failed input retryable', async () => {
+  const source = await readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8')
+  const phaseHandler = source.match(/function addTaskToPhase\(phaseId, event\) \{([\s\S]*?)\n\}/)?.[1]
+  const kanbanHandler = source.match(/function addKanbanTask\(event\) \{([\s\S]*?)\n\}/)?.[1]
+  const creationHandler = source.match(/async function createTaskFromInlineForm\(event, payload\) \{([\s\S]*?)\n\}/)?.[1]
+
+  assert.ok(phaseHandler, 'phase task creation handler must remain available')
+  assert.ok(kanbanHandler, 'kanban task creation handler must remain available')
+  assert.ok(creationHandler, 'shared task creation handler must remain available')
+  assert.match(source, /const taskCreationPending = ref\(false\)/)
+  assert.match(source, /let taskCreationRequestId = 0/)
+  assert.match(source, /:disabled="taskCreationPending"/)
+  assert.match(phaseHandler, /return createTaskFromInlineForm\(event, \{ phase_id: phaseId \}\)/)
+  assert.match(kanbanHandler, /return createTaskFromInlineForm\(event, \{ status: 'pending' \}\)/)
+  assert.match(creationHandler, /if \(taskCreationPending\.value\)/)
+  assert.match(creationHandler, /const token = createProjectRequestToken\(\+\+taskCreationRequestId/)
+  assert.match(creationHandler, /isCurrentProjectRequest\(token, taskCreationRequestId\)/)
+  assert.match(creationHandler, /finally \{[\s\S]*taskCreationPending\.value = false/)
+})
+
+test('ProjectDetail project mutations ignore stale route responses and reset every dialog state', async () => {
+  const source = await readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8')
+  const handlers = ['savePhase', 'confirmDeletePhase', 'saveEditProject', 'completeProject', 'confirmDeleteProject']
+
+  for (const name of handlers) {
+    const handler = source.match(new RegExp(`async function ${name}\\([^)]*\\) \\{([\\s\\S]*?)\\n\\}`))?.[1]
+    assert.ok(handler, `${name} handler must remain available`)
+    assert.match(handler, /createProjectRequestToken\(\+\+/)
+    assert.match(handler, /isCurrentProjectRequest\(/)
+  }
+
+  assert.match(source, /let routeRevision = 0/)
+  assert.match(source, /function createProjectRequestToken\(/)
+  assert.match(source, /function isCurrentProjectRequest\(/)
+  assert.match(source, /fetchData\([\s\S]*revision !== dataRevision/)
+  assert.match(source, /finally \{[\s\S]*if \(isCurrentFetch\(requestId, normalizedId\)\) loading\.value = false/)
+
+  const routeWatcher = source.match(/watch\(\(\) => route\.params\.id, \(nextId, previousId\) => \{([\s\S]*?)\n\}\)/)?.[1]
+  const invalidationHandler = source.match(/function invalidateRequests\(\) \{([\s\S]*?)\n\}/)?.[1]
+  assert.ok(routeWatcher, 'project route watcher must remain available')
+  assert.ok(invalidationHandler, 'project request invalidation handler must remain available')
+  assert.match(routeWatcher, /invalidateRequests\(\)/)
+  assert.match(invalidationHandler, /cancelPhaseDialog\(\{ force: true \}\)/)
+  assert.match(invalidationHandler, /closeEditProjectDialog\(\{ force: true \}\)/)
+  assert.match(invalidationHandler, /closeDeleteDialog\(\{ force: true \}\)/)
+  assert.match(invalidationHandler, /phaseDeleteState\.value = createPhaseDeleteState\(\)/)
+})
+
+test('ProjectDetail suppresses stale settlement feedback after a route change', async () => {
+  const source = await readFile(new URL('./ProjectDetail.vue', viewsDirectory), 'utf8')
+  const rewardHandler = source.match(/async function refreshTaskReward\(updated, taskId, taskToken\) \{([\s\S]*?)\n\}/)?.[1]
+
+  assert.ok(rewardHandler, 'task reward refresh handler must remain available')
+  assert.match(source, /let rewardRequestId = 0/)
+  assert.match(source, /refreshTaskReward\(updated, task\.id, token\)/)
+  assert.match(rewardHandler, /const rewardToken = createProjectRequestToken\(\+\+rewardRequestId\)/)
+  assert.match(rewardHandler, /isCurrentProjectRequest\(rewardToken, rewardRequestId\)/)
+  assert.match(rewardHandler, /isCurrentTaskMutation\(taskId, taskToken\)/)
 })
 
 test('notebook mutations expose independent pending action state and preserve failed forms', async () => {
@@ -651,4 +993,197 @@ test('header profile and logout actions stop propagation before closing the menu
   const menuOpeningTag = source.match(/<div v-if="dropdownOpen" class="dropdown-menu"[^>]*>/)?.[0]
   assert.ok(menuOpeningTag, 'dropdown menu must remain available for the propagation contract')
   assert.match(menuOpeningTag, /@click\.stop="dropdownOpen = false"/)
+})
+
+test('profile exposes one-time MCP token management', async () => {
+  const [profile, service] = await Promise.all([
+    readFile(new URL('./Profile.vue', viewsDirectory), 'utf8'),
+    readFile(new URL('../services/mcpToken.js', import.meta.url), 'utf8'),
+  ])
+  assert.match(service, /get.*auth\/mcp-tokens/)
+  assert.match(service, /post.*auth\/mcp-tokens/)
+  assert.match(service, /import\s+api\s+from\s+['"]\.\/api['"]/, 'MCP token service must use the JWT-aware api client')
+  assert.match(service, /api\.get\(\s*['"]\/auth\/mcp-tokens['"]\s*,/, 'list must use api.get')
+  assert.match(service, /api\.post\(\s*['"]\/auth\/mcp-tokens['"]\s*,/, 'create must use api.post')
+  assert.match(service, /api\.delete\(\s*`\/auth\/mcp-tokens\/\$\{tokenId\}`\s*\)/, 'revoke must interpolate tokenId into api.delete')
+  assert.match(profile, /mcpTokenService/)
+  assert.match(profile, /newMcpToken/)
+  assert.match(profile, /navigator\.clipboard\.writeText/)
+  assert.match(profile, /LIFEQUEST_MCP_TOKEN/)
+  assert.match(profile, /revokeTarget/)
+  assert.match(profile, /:disabled="mcpTokensLoading \|\| mcpTokenCreating"/)
+  assert.match(profile, /:disabled="mcpTokenCopying \|\| mcpTokenRevoking"/)
+  assert.match(profile, /if \(mcpTokensLoading\.value\) \{[\s\S]*!waitForActive/)
+  assert.match(profile, /if \(mcpTokenCreating\.value && !waitForActive\) return/)
+  assert.match(profile, /async function createMcpToken\(\) \{\s*if \(mcpTokenCreating\.value\) return/)
+  assert.match(profile, /<form class="mcp-token-form"[^>]*@submit\.prevent="createMcpToken">/)
+  assert.match(profile, /<button type="button" class="[^\"]*mcp-copy-btn[^\"]*"[^>]*@click="copyMcpToken">[\s\S]*复制凭证[\s\S]*<\/button>/)
+  const revokeButtonOpeningTag = profile.match(/<button\b[^>]*v-if="isMcpTokenRevocable\(token\)"[^>]*>/)?.[0]
+  assert.ok(revokeButtonOpeningTag, 'MCP revoke control must remain a button opening tag')
+  assert.match(revokeButtonOpeningTag, /v-if="isMcpTokenRevocable\(token\)"/)
+  assert.match(revokeButtonOpeningTag, /class="[^"]*\bmcp-token-revoke\b[^"]*"/)
+  assert.match(revokeButtonOpeningTag, /@click="openRevokeDialog\(token\)"/)
+  assert.match(profile, /<button type="button" class="primary-btn" :disabled="mcpTokenRevoking \|\| mcpTokenCopying" @click="revokeMcpToken">/)
+  assert.match(profile, /function openRevokeDialog\(token\) \{\s*if \(mcpTokenRevoking\.value\) return\s*applyMcpTokenAction/)
+  assert.match(profile, /:disabled="mcpTokenRevoking \|\| mcpTokenCopying"/)
+  assert.match(profile, /if \(!tokenId \|\| mcpTokenRevoking\.value \|\| mcpTokenCopying\.value\) return/)
+  assert.match(profile, /fetchMcpTokens\(\{ waitForActive: true \}\)/)
+  assert.doesNotMatch(profile, /localStorage\.(getItem|setItem).*mcp/i)
+})
+
+test('MCP credential panel presents modern duration and action controls', async () => {
+  const source = await readFile(new URL('./Profile.vue', viewsDirectory), 'utf8')
+
+  assert.match(source, /class="mcp-token-card__heading"/)
+  assert.match(source, /class="mcp-token-card__icon"/)
+  assert.match(source, /mcpActiveTokenCount/)
+  assert.match(source, /role="group" aria-label="快速选择有效期"/)
+  assert.match(source, /v-for="duration in mcpTokenDurationOptions"/)
+  assert.match(source, /class="mcp-duration-option"/)
+  assert.match(source, /@click="setMcpTokenDuration\(duration\)"/)
+  assert.match(source, /id="mcp-token-expires"[\s\S]*class="mcp-token-duration-input"/)
+  assert.match(source, /id="mcp-token-name"[\s\S]*class="mcp-token-name-input"/)
+  assert.doesNotMatch(source, /id="mcp-token-name"[\s\S]*class="form-input"/)
+  assert.match(source, /<Plus\b[^>]*\/>/)
+  assert.match(source, /<CopyDocument\b[^>]*\/>/)
+  assert.match(source, /<Delete\b[^>]*\/>/)
+  assert.match(source, /\.mcp-token-name-input\s*\{[\s\S]*min-height: 44px;[\s\S]*border-radius: 10px;[\s\S]*background: var\(--color-card\)/)
+  assert.match(source, /\.mcp-token-name-input:focus\s*\{[\s\S]*box-shadow: 0 0 0 3px/)
+  assert.match(source, /@media \(max-width: 767px\) \{[\s\S]*?\.mcp-token-card__heading[\s\S]*?grid-template-columns: 1fr/)
+})
+
+async function loadMcpTokenStateModule() {
+  return import('../services/mcpTokenState.js').catch(() => ({}))
+}
+
+test('MCP token list failures preserve prior metadata and block overlapping loads', async () => {
+  const { createMcpTokenState, reduceMcpTokenState } = await loadMcpTokenStateModule()
+  assert.equal(typeof createMcpTokenState, 'function')
+  assert.equal(typeof reduceMcpTokenState, 'function')
+
+  const prior = { id: 'token-1', name: 'Desktop', status: 'active' }
+  let state = reduceMcpTokenState(createMcpTokenState(), { type: 'list-success', tokens: [prior] })
+  state = reduceMcpTokenState(state, { type: 'list-start' })
+  assert.strictEqual(reduceMcpTokenState(state, { type: 'list-start' }), state)
+
+  state = reduceMcpTokenState(state, { type: 'list-failure', error: '加载失败' })
+  assert.deepEqual(state.mcpTokens, [prior])
+  assert.equal(state.mcpTokensLoading, false)
+  assert.equal(state.mcpTokensError, '加载失败')
+})
+
+test('MCP one-time result state clears the complete result on close', async () => {
+  const { createMcpTokenState, reduceMcpTokenState } = await loadMcpTokenStateModule()
+  assert.equal(typeof createMcpTokenState, 'function')
+  assert.equal(typeof reduceMcpTokenState, 'function')
+
+  const created = { token: 'secret-value', expires_at: '2030-01-01T00:00:00Z' }
+  let state = reduceMcpTokenState(createMcpTokenState(), { type: 'new-token', token: created })
+  assert.deepEqual(state.newMcpToken, created)
+
+  state = reduceMcpTokenState(state, { type: 'clear-new-token' })
+  assert.equal(state.newMcpToken, null)
+})
+
+test('MCP token copy state blocks duplicates and preserves the result through success or failure', async () => {
+  const { createMcpTokenState, reduceMcpTokenState } = await loadMcpTokenStateModule()
+  assert.equal(typeof createMcpTokenState, 'function')
+  assert.equal(typeof reduceMcpTokenState, 'function')
+
+  const created = { token: 'secret-value' }
+  let state = reduceMcpTokenState(createMcpTokenState(), { type: 'new-token', token: created })
+  state = reduceMcpTokenState(state, { type: 'copy-start' })
+  assert.equal(state.mcpTokenCopying, true)
+  assert.strictEqual(reduceMcpTokenState(state, { type: 'copy-start' }), state)
+  state = reduceMcpTokenState(state, { type: 'copy-success' })
+  assert.equal(state.mcpTokenCopyStatus, 'success')
+  state = reduceMcpTokenState(state, { type: 'copy-finish' })
+  assert.equal(state.mcpTokenCopying, false)
+  assert.deepEqual(state.newMcpToken, created)
+
+  state = reduceMcpTokenState(state, { type: 'copy-start' })
+  state = reduceMcpTokenState(state, { type: 'copy-failure' })
+  assert.equal(state.mcpTokenCopyStatus, 'failure')
+  state = reduceMcpTokenState(state, { type: 'copy-finish' })
+  assert.equal(state.mcpTokenCopying, false)
+  assert.deepEqual(state.newMcpToken, created)
+})
+
+test('MCP revoke state confirms, disables duplicate actions while pending, and closes after success', async () => {
+  const { createMcpTokenState, reduceMcpTokenState } = await loadMcpTokenStateModule()
+  assert.equal(typeof createMcpTokenState, 'function')
+  assert.equal(typeof reduceMcpTokenState, 'function')
+
+  const target = { id: 'token-2', name: 'CLI', status: 'active' }
+  let state = reduceMcpTokenState(createMcpTokenState(), { type: 'open-revoke', token: target })
+  assert.deepEqual(state.revokeTarget, target)
+  state = reduceMcpTokenState(state, { type: 'revoke-start' })
+  assert.equal(state.mcpTokenRevoking, true)
+  assert.strictEqual(reduceMcpTokenState(state, { type: 'revoke-start' }), state)
+  assert.strictEqual(
+    reduceMcpTokenState(state, { type: 'open-revoke', token: { id: 'token-3', status: 'active' } }),
+    state
+  )
+
+  state = reduceMcpTokenState(state, { type: 'revoke-success' })
+  assert.equal(state.revokeTarget, null)
+  state = reduceMcpTokenState(state, { type: 'revoke-finish' })
+  assert.equal(state.mcpTokenRevoking, false)
+})
+
+test('MCP create failure preserves the one-time result and duplicate starts are ignored', async () => {
+  const { createMcpTokenState, reduceMcpTokenState } = await loadMcpTokenStateModule()
+  assert.equal(typeof createMcpTokenState, 'function')
+  assert.equal(typeof reduceMcpTokenState, 'function')
+
+  const created = { id: 'token-3', token: 'secret-value' }
+  let state = reduceMcpTokenState(createMcpTokenState(), { type: 'new-token', token: created })
+  state = reduceMcpTokenState(state, { type: 'create-start' })
+  assert.strictEqual(reduceMcpTokenState(state, { type: 'create-start' }), state)
+  state = reduceMcpTokenState(state, { type: 'create-failure' })
+
+  assert.equal(state.mcpTokenCreating, false)
+  assert.deepEqual(state.newMcpToken, created)
+})
+
+test('MCP revoke failure preserves confirmation and one-time result, while only matching success clears it', async () => {
+  const { createMcpTokenState, reduceMcpTokenState } = await loadMcpTokenStateModule()
+  assert.equal(typeof createMcpTokenState, 'function')
+  assert.equal(typeof reduceMcpTokenState, 'function')
+
+  const target = { id: 'token-4', name: 'CLI', status: 'active' }
+  const created = { id: target.id, token: 'secret-value' }
+  let state = reduceMcpTokenState(createMcpTokenState(), { type: 'new-token', token: created })
+  state = reduceMcpTokenState(state, { type: 'open-revoke', token: target })
+  state = reduceMcpTokenState(state, { type: 'revoke-start' })
+  state = reduceMcpTokenState(state, { type: 'revoke-failure' })
+  state = reduceMcpTokenState(state, { type: 'revoke-finish' })
+  assert.deepEqual(state.revokeTarget, target)
+  assert.deepEqual(state.newMcpToken, created)
+
+  state = reduceMcpTokenState(state, { type: 'revoke-start' })
+  state = reduceMcpTokenState(state, { type: 'revoke-success', tokenId: 'other-token' })
+  assert.deepEqual(state.newMcpToken, created)
+
+  state = reduceMcpTokenState(state, { type: 'new-token', token: created })
+  state = reduceMcpTokenState(state, { type: 'open-revoke', token: target })
+  state = reduceMcpTokenState(state, { type: 'revoke-start' })
+  state = reduceMcpTokenState(state, { type: 'revoke-success', tokenId: target.id })
+  assert.equal(state.newMcpToken, null)
+})
+
+test('MCP copy and revoke actions cannot start while the other action is pending', async () => {
+  const { createMcpTokenState, reduceMcpTokenState } = await loadMcpTokenStateModule()
+  assert.equal(typeof createMcpTokenState, 'function')
+  assert.equal(typeof reduceMcpTokenState, 'function')
+
+  const target = { id: 'token-5', name: 'Editor', status: 'active' }
+  let state = reduceMcpTokenState(createMcpTokenState(), { type: 'new-token', token: { id: target.id, token: 'secret-value' } })
+  state = reduceMcpTokenState(state, { type: 'copy-start' })
+  assert.strictEqual(reduceMcpTokenState(state, { type: 'open-revoke', token: target }), state)
+
+  state = reduceMcpTokenState(createMcpTokenState(), { type: 'open-revoke', token: target })
+  state = reduceMcpTokenState(state, { type: 'revoke-start' })
+  assert.strictEqual(reduceMcpTokenState(state, { type: 'copy-start' }), state)
+  assert.strictEqual(reduceMcpTokenState(state, { type: 'revoke-start' }), state)
 })

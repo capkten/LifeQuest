@@ -22,6 +22,15 @@ import {
   TRANSACTION_TYPE_LABELS,
 } from '../locales/zh-CN.js'
 
+export const PHASE_STATUS_LABELS = Object.freeze({
+  planning: '规划中',
+  active: '进行中',
+  completed: '已完成',
+  archived: '已归档',
+  pending: '规划中',
+  in_progress: '进行中',
+})
+
 export function labelRealm(value) {
   return labelValue(REALM_LABELS, value, '未知境界')
 }
@@ -84,6 +93,10 @@ export function labelSource(value) {
 
 export function labelProjectStatus(value) {
   return labelValue(PROJECT_STATUS_LABELS, value, '未知项目状态')
+}
+
+export function labelPhaseStatus(value) {
+  return labelValue(PHASE_STATUS_LABELS, value, '未知阶段状态')
 }
 
 export function labelTaskStatus(value) {

@@ -15,7 +15,7 @@ from app.schemas.finance import (
     CategoryCreate, CategoryResponse,
     TransactionCreate, TransactionUpdate, TransactionResponse,
     TransactionPageResponse,
-    RecurringCreate, RecurringResponse,
+    RecurringCreate, RecurringUpdate, RecurringResponse,
     DebtCreate, DebtUpdate, DebtResponse, DebtPaymentCreate, DebtPaymentResponse,
     FinanceDashboardResponse,
 )
@@ -57,11 +57,12 @@ def get_dashboard(
 
 @router.get("/accounts", response_model=List[AccountResponse])
 def get_accounts(
+    include_inactive: bool = Query(False),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     service = FinanceService(db)
-    return service.get_accounts(current_user.id)
+    return service.get_accounts(current_user.id, include_inactive=include_inactive)
 
 
 @router.post("/accounts", response_model=AccountResponse)
@@ -109,7 +110,7 @@ def transfer(
     db: Session = Depends(get_db),
 ):
     service = FinanceService(db)
-    return service.transfer(
+    result = service.transfer(
         current_user.id,
         body.from_id,
         body.to_id,
@@ -117,6 +118,10 @@ def transfer(
         body.description,
         body.date,
     )
+    result["transaction"] = service.build_transaction_response(
+        result["transaction"], current_user.id
+    )
+    return result
 
 
 # --- Categories ---
@@ -186,7 +191,8 @@ def create_transaction(
     db: Session = Depends(get_db),
 ):
     service = FinanceService(db)
-    return service.create_transaction(current_user.id, data)
+    transaction = service.create_transaction(current_user.id, data)
+    return service.build_transaction_response(transaction, current_user.id)
 
 
 @router.put("/transactions/{transaction_id}", response_model=TransactionResponse)
@@ -200,7 +206,8 @@ def update_transaction(
     txn = service.transaction_repo.get_by_id(transaction_id)
     if not txn or txn.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Transaction not found")
-    return service.update_transaction(txn, data, current_user.id)
+    transaction = service.update_transaction(txn, data, current_user.id)
+    return service.build_transaction_response(transaction, current_user.id)
 
 
 @router.delete("/transactions/{transaction_id}")
@@ -219,7 +226,7 @@ def delete_transaction(
 
 # --- Budgets ---
 
-@router.get("/budgets")
+@router.get("/budgets", response_model=List[BudgetResponse])
 def get_budgets(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -287,6 +294,20 @@ def create_recurring(
     return service.create_recurring(current_user.id, data)
 
 
+@router.put("/recurring/{recurring_id}", response_model=RecurringResponse)
+def update_recurring(
+    recurring_id: UUID,
+    data: RecurringUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = FinanceService(db)
+    rec = service.recurring_repo.get_by_id(recurring_id)
+    if not rec or rec.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Recurring transaction not found")
+    return service.update_recurring(rec, data, current_user.id)
+
+
 @router.post("/recurring/{recurring_id}/trigger", response_model=TransactionResponse)
 def trigger_recurring(
     recurring_id: UUID,
@@ -297,7 +318,8 @@ def trigger_recurring(
     rec = service.recurring_repo.get_by_id(recurring_id)
     if not rec or rec.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Recurring transaction not found")
-    return service.trigger_recurring(rec)
+    transaction = service.trigger_recurring(rec)
+    return service.build_transaction_response(transaction, current_user.id)
 
 
 @router.delete("/recurring/{recurring_id}")
@@ -319,11 +341,12 @@ def delete_recurring(
 @router.get("/debts", response_model=List[DebtResponse])
 def get_debts(
     status: Optional[str] = None,
+    type: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     service = FinanceService(db)
-    return service.get_debts(current_user.id, status=status)
+    return service.get_debts(current_user.id, status=status, type=type)
 
 
 @router.post("/debts", response_model=DebtResponse)

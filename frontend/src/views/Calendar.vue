@@ -55,7 +55,7 @@
                 v-for="dot in cell.dots.slice(0, 3)"
                 :key="dot.event_key || dot.type + dot.id + (dot.occurrence_date || '')"
                 class="event-dot"
-                :class="'event-dot--' + dot.type"
+                :class="['event-dot--' + dot.type, dot.status === 'completed' ? 'event-dot--completed' : '']"
                 :style="dot.type === 'task' && dot.project_color ? { background: dot.project_color } : undefined"
               ></span>
               <span v-if="cell.dots.length > 3" class="event-more">+{{ cell.dots.length - 3 }}</span>
@@ -366,13 +366,21 @@ import { useRouter } from 'vue-router'
 import { calendarService } from '../services/calendar'
 import { todoService } from '../services/todo'
 import { getErrorMessage } from '../utils/errorMessage'
+import {
+  dateKeyFromParts,
+  dateKeyParts,
+  formatDateTimeInput,
+  shiftDateKey,
+  todayChinaDateKey,
+  weekdayForDateKey,
+} from '../utils/dateTime'
 
 const router = useRouter()
 
 const weekdays = ['一', '二', '三', '四', '五', '六', '日']
-const now = new Date()
-const currentMonth = ref(now.getMonth())
-const currentYear = ref(now.getFullYear())
+const todayParts = dateKeyParts(todayChinaDateKey())
+const currentMonth = ref(todayParts.monthIndex)
+const currentYear = ref(todayParts.year)
 const events = ref([])
 const selectedDate = ref(null)
 const dayDetail = ref(null)
@@ -403,18 +411,12 @@ const calendarCells = computed(() => {
   const year = currentYear.value
   const month = currentMonth.value
   const cells = []
+  const firstDate = dateKeyFromParts(year, month, 1)
 
-  // First day of month (0=Sun, adjust to Mon-based)
-  const firstDay = new Date(year, month, 1)
-  let startWeekday = firstDay.getDay() // 0=Sun
-  startWeekday = startWeekday === 0 ? 6 : startWeekday - 1 // Convert to Mon=0
-
-  // Last day of month
-  const lastDay = new Date(year, month + 1, 0)
-  const daysInMonth = lastDay.getDate()
-
-  // Today string
-  const todayStr = formatDateStr(now.getFullYear(), now.getMonth(), now.getDate())
+  const startWeekday = weekdayForDateKey(firstDate)
+  const nextMonthFirst = dateKeyFromParts(month === 11 ? year + 1 : year, month === 11 ? 0 : month + 1, 1)
+  const daysInMonth = dateKeyParts(shiftDateKey(nextMonthFirst, -1)).day
+  const todayStr = todayChinaDateKey()
 
   // Build event lookup by date
   const eventsByDate = {}
@@ -423,15 +425,10 @@ const calendarCells = computed(() => {
     eventsByDate[ev.date].push(ev)
   }
 
-  // Previous month padding
-  const prevMonthLastDay = new Date(year, month, 0).getDate()
-  for (let i = startWeekday - 1; i >= 0; i--) {
-    const dayNum = prevMonthLastDay - i
-    const prevMonth = month === 0 ? 11 : month - 1
-    const prevYear = month === 0 ? year - 1 : year
-    const dateStr = formatDateStr(prevYear, prevMonth, dayNum)
+  for (let offset = startWeekday; offset > 0; offset--) {
+    const dateStr = shiftDateKey(firstDate, -offset)
     cells.push({
-      dayNumber: dayNum,
+      dayNumber: dateKeyParts(dateStr).day,
       date: dateStr,
       isCurrentMonth: false,
       isToday: dateStr === todayStr,
@@ -441,7 +438,7 @@ const calendarCells = computed(() => {
 
   // Current month days
   for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = formatDateStr(year, month, d)
+    const dateStr = dateKeyFromParts(year, month, d)
     cells.push({
       dayNumber: d,
       date: dateStr,
@@ -454,9 +451,7 @@ const calendarCells = computed(() => {
   // Next month padding to fill 6 rows (42 cells)
   const remaining = 42 - cells.length
   for (let d = 1; d <= remaining; d++) {
-    const nextMonth = month === 11 ? 0 : month + 1
-    const nextYear = month === 11 ? year + 1 : year
-    const dateStr = formatDateStr(nextYear, nextMonth, d)
+    const dateStr = shiftDateKey(nextMonthFirst, d - 1)
     cells.push({
       dayNumber: d,
       date: dateStr,
@@ -475,28 +470,13 @@ const formatSelectedDate = computed(() => {
   return `${parts[0]}年${parseInt(parts[1])}月${parseInt(parts[2])}日`
 })
 
-function formatDateStr(year, month, day) {
-  const m = String(month + 1).padStart(2, '0')
-  const d = String(day).padStart(2, '0')
-  return `${year}-${m}-${d}`
-}
-
 function getMonthRange(year, month) {
-  const start = formatDateStr(year, month, 1)
-  const lastDay = new Date(year, month + 1, 0).getDate()
-  const end = formatDateStr(year, month, lastDay)
-  // Also include padding range (prev/next month days visible)
-  const firstDay = new Date(year, month, 1)
-  let startWeekday = firstDay.getDay()
-  startWeekday = startWeekday === 0 ? 6 : startWeekday - 1
-  const rangeStart = new Date(year, month, 1 - startWeekday)
-  const totalCells = 42
-  const rangeEnd = new Date(rangeStart)
-  rangeEnd.setDate(rangeStart.getDate() + totalCells - 1)
+  const start = dateKeyFromParts(year, month, 1)
+  const rangeStart = shiftDateKey(start, -weekdayForDateKey(start))
 
   return {
-    start: `${rangeStart.getFullYear()}-${String(rangeStart.getMonth() + 1).padStart(2, '0')}-${String(rangeStart.getDate()).padStart(2, '0')}`,
-    end: `${rangeEnd.getFullYear()}-${String(rangeEnd.getMonth() + 1).padStart(2, '0')}-${String(rangeEnd.getDate()).padStart(2, '0')}`,
+    start: rangeStart,
+    end: shiftDateKey(rangeStart, 41),
   }
 }
 
@@ -539,11 +519,6 @@ function closeDetail() {
   loadingDetail.value = false
 }
 
-function toDateTimeLocal(date) {
-  const pad = value => String(value).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
 function openRescheduleDialog(item) {
   calendarRescheduleItem.value = item
   calendarRescheduleError.value = null
@@ -551,12 +526,12 @@ function openRescheduleDialog(item) {
   if (item.occurrence_date) {
     calendarRescheduleForm.value = {
       deadline: '',
-      newOccurrenceDate: addDays(item.occurrence_date, 1)
+      newOccurrenceDate: shiftDateKey(item.occurrence_date, 1)
     }
   } else {
-    const deadline = item.deadline ? new Date(item.deadline) : new Date(`${selectedDate.value}T09:00:00`)
+    const deadline = item.deadline || `${selectedDate.value}T09:00:00`
     calendarRescheduleForm.value = {
-      deadline: toDateTimeLocal(deadline),
+      deadline: formatDateTimeInput(deadline),
       newOccurrenceDate: ''
     }
   }
@@ -592,13 +567,6 @@ async function confirmReschedule() {
   }
 }
 
-function addDays(dateStr, days) {
-  const [year, month, day] = dateStr.split('-').map(Number)
-  const date = new Date(year, month - 1, day)
-  date.setDate(date.getDate() + days)
-  return formatDateStr(date.getFullYear(), date.getMonth(), date.getDate())
-}
-
 function prevMonth() {
   if (currentMonth.value === 0) {
     currentMonth.value = 11
@@ -620,10 +588,11 @@ function nextMonth() {
 }
 
 function goToday() {
-  const today = new Date()
-  currentMonth.value = today.getMonth()
-  currentYear.value = today.getFullYear()
-  selectedDate.value = formatDateStr(today.getFullYear(), today.getMonth(), today.getDate())
+  const today = todayChinaDateKey()
+  const parts = dateKeyParts(today)
+  currentMonth.value = parts.monthIndex
+  currentYear.value = parts.year
+  selectedDate.value = today
   selectDate(selectedDate.value)
 }
 
@@ -844,6 +813,11 @@ onMounted(() => {
 
 .event-dot--checkin {
   background: #eab308;
+}
+
+.event-dot--completed {
+  outline: 2px solid var(--color-success);
+  outline-offset: 1px;
 }
 
 .event-more {

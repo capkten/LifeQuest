@@ -177,18 +177,6 @@ function readNamedArrowCallback(source, name) {
   return { caughtName: match[1], body: readBracedBody(source, openBraceIndex) }
 }
 
-function readPromiseCatchCallbacks(source) {
-  const callbacks = []
-  const pattern = /\.catch\s*\(\s*([A-Za-z_$][\w$]*)\s*=>\s*\{/g
-
-  for (const match of source.matchAll(pattern)) {
-    const openBraceIndex = source.indexOf('{', match.index)
-    callbacks.push({ caughtName: match[1], body: readBracedBody(source, openBraceIndex) })
-  }
-
-  return callbacks
-}
-
 function readBranchBody(source, pattern, label) {
   const match = pattern.exec(source)
   assert.ok(match, `${label} must exist`)
@@ -311,6 +299,7 @@ test('display labels translate stable server keys', () => {
   assert.equal(labelEventSummary('met'), '与普通弟子相遇')
   assert.equal(labelDifficulty('hard'), '困难')
   assert.equal(labelFrequency('weekly'), '每周')
+  assert.equal(labelFrequency('weekly_target'), '每周目标')
   assert.equal(labelAccountType('credit'), '信用卡')
   assert.equal(labelPeriod('monthly'), '每月')
   assert.equal(labelSource('checkin'), '签到')
@@ -621,11 +610,11 @@ test('Sects onError converts the request error before rendering it', async () =>
   assert.match(body, new RegExp(`getErrorMessage\\(\\s*${caughtName}\\s*\\)`))
 })
 
-test('ProjectDetail converts every Promise catch error before showing it', async () => {
+test('ProjectDetail converts every caught error before showing it', async () => {
   const source = await readFile(new URL('./ProjectDetail.vue', import.meta.url), 'utf8')
-  const callbacks = readPromiseCatchCallbacks(source)
+  const callbacks = readCatchBlocks(source)
 
-  assert.equal(callbacks.length, 2, 'ProjectDetail Promise catch callbacks must remain covered')
+  assert.ok(callbacks.length >= 2, 'ProjectDetail catch callbacks must remain covered')
   for (const { caughtName, body } of callbacks) {
     assert.match(body, new RegExp(`getErrorMessage\\(\\s*${caughtName}\\s*\\)`))
   }

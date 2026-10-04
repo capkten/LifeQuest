@@ -15,17 +15,31 @@ class ProjectStatus(str, Enum):
     ARCHIVED = "archived"
 
 
+PhaseStatus = ProjectStatus
+
+
+def normalize_project_status(value) -> str:
+    value = value.value if isinstance(value, Enum) else value
+    return value if value in {status.value for status in ProjectStatus} else "unknown"
+
+
+def normalize_phase_status(value) -> str:
+    value = value.value if isinstance(value, Enum) else value
+    return {
+        "pending": ProjectStatus.PLANNING.value,
+        "in_progress": ProjectStatus.ACTIVE.value,
+        "planning": ProjectStatus.PLANNING.value,
+        "active": ProjectStatus.ACTIVE.value,
+        "completed": ProjectStatus.COMPLETED.value,
+        "archived": ProjectStatus.ARCHIVED.value,
+    }.get(value, "unknown")
+
+
 class ProjectPriority(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
     URGENT = "urgent"
-
-
-class PhaseStatus(str, Enum):
-    PENDING = "pending"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
 
 
 class MilestoneStatus(str, Enum):
@@ -61,7 +75,7 @@ class ProjectPhase(Base):
     project_id = Column(Uuid, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
-    status = Column(String(20), default=PhaseStatus.PENDING)
+    status = Column(String(20), default=ProjectStatus.PLANNING)
     sort_order = Column(Integer, default=0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

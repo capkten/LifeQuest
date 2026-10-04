@@ -1,6 +1,6 @@
 {
   "name": "lifequest-desktop",
-  "version": "1.8.10",
+  "version": "1.14.8",
   "private": true,
   "type": "module",
   "scripts": {

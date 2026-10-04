@@ -129,18 +129,18 @@ def test_action_center_uses_habit_frequency_and_completed_state(client, db_sessi
         json={"title": "Weekly habit", "frequency": "weekly"},
         headers=headers,
     )
-    monthly = client.post(
+    daily = client.post(
         "/api/todos/habits",
-        json={"title": "Monthly habit", "frequency": "monthly"},
+        json={"title": "Daily habit", "frequency": "daily"},
         headers=headers,
     )
     assert weekly.status_code == 200
-    assert monthly.status_code == 200
+    assert daily.status_code == 200
 
     weekly_row = db_session.get(Habit, UUID(weekly.json()["id"]))
-    monthly_row = db_session.get(Habit, UUID(monthly.json()["id"]))
+    daily_row = db_session.get(Habit, UUID(daily.json()["id"]))
     weekly_row.created_at = datetime(2026, 8, 24, tzinfo=timezone.utc)
-    monthly_row.created_at = datetime(2026, 8, 31, tzinfo=timezone.utc)
+    daily_row.created_at = datetime(2026, 8, 31, tzinfo=timezone.utc)
     weekly_row.last_completed_at = datetime(2026, 8, 31, 1, tzinfo=timezone.utc)
     db_session.commit()
 
@@ -151,7 +151,7 @@ def test_action_center_uses_habit_frequency_and_completed_state(client, db_sessi
 
     assert response.status_code == 200
     habits = response.json()["sections"]["habits"]
-    assert [item["title"] for item in habits] == ["Weekly habit", "Monthly habit"]
+    assert [item["title"] for item in habits] == ["Weekly habit", "Daily habit"]
     assert habits[0]["completed"] is True
     assert habits[1]["completed"] is False
     assert response.json()["summary"]["habit_due_count"] == 2

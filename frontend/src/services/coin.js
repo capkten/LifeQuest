@@ -1,16 +1,10 @@
 import api from './api'
+import { createCoinHistoryClient } from './coinHistoryContract'
+
+const historyClient = createCoinHistoryClient(api)
 
 export const coinService = {
-  /**
-   * Get coin transaction history with optional filters
-   * @param {Object} params - Query params (type, source, page, limit)
-   * @returns {Promise<Object>} Paginated transaction list
-   */
-  async getHistory(params) {
-    const response = await api.get('/coins/history', { params })
-    return response.data
-  },
-
+  ...historyClient,
   /**
    * Get coin totals (earned, spent)
    * @returns {Promise<Object>} Total earned and spent amounts

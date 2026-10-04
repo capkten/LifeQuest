@@ -123,7 +123,7 @@ def test_purchase_insufficient_coins(client):
             "item_id": item_id,
             "quantity": 1,
         },
-        headers=headers,
+        headers={**headers, "Idempotency-Key": "purchase-insufficient-coins"},
     )
     assert purchase_response.status_code == 400
     assert "Insufficient coins" in purchase_response.json()["detail"]
@@ -165,7 +165,7 @@ def test_purchase_success(client):
             "item_id": item_id,
             "quantity": 2,
         },
-        headers=headers,
+        headers={**headers, "Idempotency-Key": "purchase-success"},
     )
     assert purchase_response.status_code == 200
     exchange = purchase_response.json()
@@ -180,6 +180,38 @@ def test_purchase_success(client):
     # Verify stock was decremented
     item_detail = client.get(f"/api/shop/items/{item_id}", headers=headers).json()
     assert item_detail["stock"] == 3  # 5 - 2
+
+
+def test_purchase_history_uses_positive_spend_magnitude(client):
+    headers = _register_and_login(client, "coin-buyer", "coin-buyer@example.com")
+    item_response = _create_item(client, headers, coin_price=10, stock=5)
+    item_id = item_response.json()["id"]
+
+    task_response = client.post(
+        "/api/todos/tasks",
+        json={"title": "Earn coins", "coins_reward": 100, "exp_reward": 0},
+        headers=headers,
+    )
+    task_id = task_response.json()["id"]
+    assert client.post(f"/api/todos/tasks/{task_id}/complete", headers=headers).status_code == 200
+
+    purchase_response = client.post(
+        "/api/shop/exchange",
+        json={"item_id": item_id, "quantity": 2},
+        headers={**headers, "Idempotency-Key": "purchase-spend-history"},
+    )
+    assert purchase_response.status_code == 200
+
+    history = client.get(
+        "/api/coins/history",
+        params={"coin_type": "spend", "source": "shop"},
+        headers=headers,
+    )
+    assert history.status_code == 200
+    transaction = history.json()["transactions"][0]
+    assert transaction["type"] == "spend"
+    assert transaction["amount"] == 20
+    assert transaction["amount"] > 0
 
 
 def test_update_item_authorization(client):
@@ -231,7 +263,7 @@ def test_refund_exchange(client):
     purchase_response = client.post(
         "/api/shop/exchange",
         json={"item_id": item_id, "quantity": 1},
-        headers=headers,
+        headers={**headers, "Idempotency-Key": "purchase-refund"},
     )
     exchange_id = purchase_response.json()["id"]
 
@@ -282,7 +314,7 @@ def test_purchase_unlimited_stock(client):
         purchase_response = client.post(
             "/api/shop/exchange",
             json={"item_id": item_id, "quantity": 1},
-            headers=headers,
+            headers={**headers, "Idempotency-Key": f"purchase-unlimited-{i}"},
         )
         assert purchase_response.status_code == 200
         assert purchase_response.json()["status"] == "completed"

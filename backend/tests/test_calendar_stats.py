@@ -1,3 +1,10 @@
+from datetime import date, datetime, timezone
+from uuid import uuid4
+
+from app.models.user import User
+from app.services.stats import StatsService
+
+
 def _login(client):
     client.post(
         "/api/auth/register",
@@ -76,3 +83,232 @@ def test_calendar_exposes_recurring_occurrence_identity_and_action(client):
     assert recurring_detail["occurrence_date"] == "2026-09-01"
     assert recurring_detail["action"] == "open"
     assert recurring_detail["target_id"] == task.json()["id"]
+
+
+def test_calendar_keeps_pre_pause_history_and_marks_completed_habits(
+    client,
+    auth_headers,
+    db_session,
+    user,
+    create_habit_with_pause_interval,
+    complete_on,
+):
+    habit, _ = create_habit_with_pause_interval(
+        db_session,
+        user.id,
+        paused_on=date(2026, 9, 10),
+        created_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+    )
+    complete_on(db_session, habit, date(2026, 9, 9))
+
+    response = client.get(
+        "/api/calendar/events",
+        params={"start": "2026-09-09", "end": "2026-09-11"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    events = response.json()
+    assert next(
+        event for event in events
+        if event["date"] == "2026-09-09" and event["id"] == str(habit.id)
+    )["status"] == "completed"
+    assert not any(event["date"] == "2026-09-11" for event in events)
+
+
+def test_weekly_target_stats_use_target_slots_not_daily_slots(
+    database,
+    clock,
+    create_weekly_target_habit,
+):
+    user = User(
+        username=f"stats-{uuid4().hex}",
+        email=f"stats-{uuid4().hex}@example.com",
+        password_hash="unused",
+    )
+    database.add(user)
+    database.commit()
+    habit = create_weekly_target_habit(
+        database,
+        user.id,
+        weekly_target=3,
+        created_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+    )
+    from app.models.habit_completion import HabitCompletion
+
+    database.add_all([
+        HabitCompletion(
+            habit_id=habit.id,
+            user_id=user.id,
+            completed_on=completed_on,
+            completed_at=datetime.combine(completed_on, datetime.min.time()),
+        )
+        for completed_on in [date(2026, 9, 8), date(2026, 9, 10)]
+    ])
+    database.commit()
+
+    rows = StatsService(database).get_habit_stats(user.id, "week")
+
+    assert sum(row["total"] for row in rows) == 6
+    assert sum(row["completed"] for row in rows) == 2
+
+
+def test_weekly_target_stats_include_the_current_intersecting_china_week(
+    database,
+    clock,
+    create_weekly_target_habit,
+):
+    clock(datetime(2026, 9, 15, 8, tzinfo=timezone.utc))
+    user = User(
+        username=f"intersecting-{uuid4().hex}",
+        email=f"intersecting-{uuid4().hex}@example.com",
+        password_hash="unused",
+    )
+    database.add(user)
+    database.commit()
+    habit = create_weekly_target_habit(
+        database,
+        user.id,
+        weekly_target=3,
+        created_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+    )
+    from app.models.habit_completion import HabitCompletion
+
+    database.add_all([
+        HabitCompletion(
+            habit_id=habit.id,
+            user_id=user.id,
+            completed_on=completed_on,
+            completed_at=datetime.combine(completed_on, datetime.min.time()),
+        )
+        for completed_on in [date(2026, 9, 9), date(2026, 9, 10)]
+    ])
+    database.commit()
+
+    rows = StatsService(database).get_habit_stats(user.id, "week")
+
+    assert sum(row["total"] for row in rows) == 6
+    assert sum(row["completed"] for row in rows) == 2
+
+
+def test_calendar_day_detail_keeps_historical_inactive_habits(
+    client,
+    auth_headers,
+    db_session,
+    user,
+    create_habit_with_pause_interval,
+    complete_on,
+):
+    habit, _ = create_habit_with_pause_interval(
+        db_session,
+        user.id,
+        paused_on=date(2026, 9, 10),
+        created_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+    )
+    habit.is_active = False
+    db_session.commit()
+    complete_on(db_session, habit, date(2026, 9, 9))
+
+    response = client.get(
+        "/api/calendar/day/2026-09-09",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert any(item["id"] == str(habit.id) for item in response.json()["habits"])
+
+
+def test_stats_overview_returns_cumulative_total_experience(database):
+    user = User(
+        username=f"overview-{uuid4().hex}",
+        email=f"overview-{uuid4().hex}@example.com",
+        password_hash="unused",
+        experience=12,
+        total_experience=212,
+    )
+    database.add(user)
+    database.commit()
+
+    overview = StatsService(database).get_overview(user.id)
+
+    assert overview["total_exp"] == 212
+
+
+def test_goal_update_rejects_progress_outside_percentage_bounds(client, auth_headers, goal):
+    for progress in (-1, 101):
+        response = client.put(
+            f"/api/todos/goals/{goal.id}",
+            headers=auth_headers,
+            json={"progress": progress},
+        )
+        assert response.status_code == 422
+
+
+def test_goal_status_update_settles_reward_once(
+    client,
+    auth_headers,
+    db_session,
+    goal,
+):
+    response = client.put(
+        f"/api/todos/goals/{goal.id}",
+        headers=auth_headers,
+        json={"status": "completed", "progress": 100},
+    )
+    assert response.status_code == 200
+
+    repeat = client.put(
+        f"/api/todos/goals/{goal.id}",
+        headers=auth_headers,
+        json={"status": "completed", "progress": 100},
+    )
+    assert repeat.status_code == 200
+    from app.models.coin_transaction import CoinTransaction
+
+    assert db_session.query(CoinTransaction).filter_by(
+        user_id=goal.user_id,
+        source="goal",
+    ).count() == 1
+
+
+def test_goal_update_then_explicit_complete_keeps_all_settlements_once(
+    client, auth_headers, db_session, goal,
+):
+    from app.models.cultivation import CultivationLog
+    from app.models.coin_transaction import CoinTransaction
+    from app.models.user import User
+
+    user = db_session.query(User).filter_by(id=goal.user_id).one()
+    initial_coins = user.coins
+    initial_total_experience = user.total_experience
+    updated = client.put(
+        f"/api/todos/goals/{goal.id}",
+        headers=auth_headers,
+        json={"status": "completed", "progress": 100},
+    )
+    assert updated.status_code == 200
+    db_session.expire_all()
+    after_update = db_session.query(User).filter_by(id=goal.user_id).one()
+    updated_coins = after_update.coins
+    updated_experience = after_update.total_experience
+
+    completed = client.post(
+        f"/api/todos/goals/{goal.id}/complete",
+        headers=auth_headers,
+    )
+
+    assert completed.status_code == 200
+    db_session.expire_all()
+    after_explicit_complete = db_session.query(User).filter_by(id=goal.user_id).one()
+    assert updated_coins >= initial_coins + goal.coins_reward
+    assert updated_experience >= initial_total_experience + goal.exp_reward
+    assert after_explicit_complete.coins == updated_coins
+    assert after_explicit_complete.total_experience == updated_experience
+    assert db_session.query(CoinTransaction).filter_by(
+        user_id=goal.user_id,
+        source="goal",
+    ).count() == 1
+    assert db_session.query(CultivationLog).filter_by(
+        user_id=goal.user_id,
+        source_key=f"todo:goal:{goal.id}",
+    ).count() == 1

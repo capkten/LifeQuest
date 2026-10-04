@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, Uuid, UniqueConstraint
 
 from app.database import Base
+from app.timezone import today as china_today
 
 
 def utc_now():
@@ -46,6 +47,14 @@ class CultivationLog(Base):
     created_at = Column(DateTime, nullable=False, default=utc_now)
 
 
+def _current_china_today():
+    fn = globals().get("china_today")
+    if callable(fn):
+        return fn()
+    from app.timezone import today
+    return today()
+
+
 class TribulationAttempt(Base):
     __tablename__ = "tribulation_attempts"
     __table_args__ = (UniqueConstraint("user_id", "attempted_date", name="uq_tribulation_attempt_user_day"),)
@@ -60,5 +69,5 @@ class TribulationAttempt(Base):
     roll = Column(Float, nullable=False)
     success = Column(Boolean, nullable=False)
     cultivation_loss = Column(Integer, nullable=False, default=0)
-    attempted_date = Column(Date, nullable=False, default=lambda: datetime.now(timezone.utc).date())
+    attempted_date = Column(Date, nullable=False, default=_current_china_today)
     attempted_at = Column(DateTime, nullable=False, default=utc_now)

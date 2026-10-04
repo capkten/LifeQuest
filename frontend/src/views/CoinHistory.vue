@@ -98,8 +98,8 @@
         <div class="group-date">{{ group.date }}</div>
         <div class="group-items">
           <div v-for="tx in group.items" :key="tx.id" class="transaction-item">
-            <div class="tx-icon" :class="tx.amount > 0 ? 'tx-icon--income' : 'tx-icon--expense'">
-              <svg v-if="tx.amount > 0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <div class="tx-icon" :class="coinTransactionPresentation(tx).iconClass">
+              <svg v-if="!coinTransactionPresentation(tx).isSpend" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <line x1="12" y1="19" x2="12" y2="5" />
                 <polyline points="5 12 12 5 19 12" />
               </svg>
@@ -112,8 +112,8 @@
               <span class="tx-desc">{{ tx.description || sourceLabel(tx.source) }}</span>
               <span class="tx-source">{{ sourceLabel(tx.source) }}</span>
             </div>
-            <span class="tx-amount" :class="tx.amount > 0 ? 'tx-amount--positive' : 'tx-amount--negative'">
-              {{ tx.amount > 0 ? '+' : '' }}{{ tx.amount }}
+            <span class="tx-amount" :class="coinTransactionPresentation(tx).amountClass">
+              {{ coinTransactionPresentation(tx).sign }}{{ coinTransactionPresentation(tx).amount }}
             </span>
           </div>
         </div>
@@ -134,28 +134,24 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, reactive, toRefs, onMounted } from 'vue'
 import { useUserStats } from '../composables/useUserStats'
 import { coinService } from '../services/coin'
+import {
+  coinTransactionDateKey,
+  coinTransactionPresentation,
+  createCoinHistoryController,
+} from '../services/coinHistoryContract.js'
 import { labelSource } from '../utils/displayLabels'
 import { getErrorMessage } from '../utils/errorMessage'
 
 const { user } = useUserStats()
 
-const transactions = ref([])
 const totals = ref({ total_earned: 0, total_spent: 0 })
-const loading = ref(true)
-const error = ref(null)
-const loadingMore = ref(false)
-const loadMoreError = ref(null)
 const totalsError = ref(null)
 const totalsLoading = ref(false)
 const typeFilter = ref('')
 const sourceFilter = ref('')
-const page = ref(1)
-const hasMore = ref(false)
-let requestSequence = 0
-let filterGeneration = 0
 let totalsRequestId = 0
 
 const typeOptions = [
@@ -164,72 +160,41 @@ const typeOptions = [
   { label: '支出', value: 'expense' }
 ]
 
+const PAGE_SIZE = 20
+
 function sourceLabel(source) {
   return labelSource(source)
 }
 
+const historyController = createCoinHistoryController({
+  getHistory: (params) => coinService.getHistory(params),
+  getFilters: () => ({ type: typeFilter.value, source: sourceFilter.value }),
+  pageSize: PAGE_SIZE,
+  formatError: getErrorMessage,
+})
+const historyState = reactive(historyController.state)
+const {
+  transactions,
+  loading,
+  error,
+  loadingMore,
+  loadMoreError,
+  historyCount,
+  hasMore,
+} = toRefs(historyState)
+
 const groupedTransactions = computed(() => {
   const groups = {}
   for (const tx of transactions.value) {
-    const d = tx.created_at ? new Date(tx.created_at) : new Date()
-    const key = d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+    const key = coinTransactionDateKey(tx.created_at)
     if (!groups[key]) groups[key] = []
     groups[key].push(tx)
   }
   return Object.entries(groups).map(([date, items]) => ({ date, items }))
 })
 
-async function fetchHistory() {
-  const requestId = ++requestSequence
-  const generation = ++filterGeneration
-  loading.value = true
-  error.value = null
-  loadMoreError.value = null
-  loadingMore.value = false
-  hasMore.value = false
-  page.value = 1
-  try {
-    const params = { page: 1, limit: 20 }
-    if (typeFilter.value) params.type = typeFilter.value
-    if (sourceFilter.value) params.source = sourceFilter.value
-    const result = await coinService.getHistory(params)
-    if (requestId !== requestSequence) return
-    transactions.value = Array.isArray(result) ? result : (result?.data || [])
-    hasMore.value = transactions.value.length >= 20
-  } catch (e) {
-    if (requestId === requestSequence) error.value = getErrorMessage(e, '加载金币记录失败，请重试。')
-  } finally {
-    if (requestId === requestSequence) loading.value = false
-  }
-}
-
-async function loadMore() {
-  if (loadingMore.value || !hasMore.value) return
-  const requestId = ++requestSequence
-  const generation = filterGeneration
-  const nextPage = page.value + 1
-  const type = typeFilter.value
-  const source = sourceFilter.value
-  loadingMore.value = true
-  loadMoreError.value = null
-  try {
-    const params = { page: nextPage, limit: 20 }
-    if (type) params.type = type
-    if (source) params.source = source
-    const result = await coinService.getHistory(params)
-    if (requestId !== requestSequence || generation !== filterGeneration) return
-    const items = Array.isArray(result) ? result : (result?.data || [])
-    transactions.value.push(...items)
-    page.value = nextPage
-    hasMore.value = items.length >= 20
-  } catch (e) {
-    if (requestId === requestSequence && generation === filterGeneration) {
-      loadMoreError.value = getErrorMessage(e, '加载更多金币记录失败，请重试。')
-    }
-  } finally {
-    if (requestId === requestSequence && generation === filterGeneration) loadingMore.value = false
-  }
-}
+const fetchHistory = historyController.fetchHistory
+const loadMore = historyController.loadMore
 
 async function fetchTotals() {
   const requestId = ++totalsRequestId

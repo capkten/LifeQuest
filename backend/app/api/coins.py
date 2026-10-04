@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.coin_transaction import CoinType
 from app.models.user import User
 from app.schemas.coin import CoinHistoryResponse
 from app.services.coin import CoinService
@@ -15,7 +16,7 @@ router = APIRouter(prefix="/api/coins", tags=["coins"])
 
 @router.get("/history", response_model=CoinHistoryResponse)
 def get_history(
-    coin_type: Optional[str] = Query(None, description="Filter by type: earn or spend"),
+    coin_type: Optional[CoinType] = Query(None, description="Filter by type: earn or spend"),
     source: Optional[str] = Query(None, description="Filter by source: task, habit, goal, checkin, shop, achievement"),
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),

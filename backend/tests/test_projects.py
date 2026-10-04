@@ -1,9 +1,12 @@
 import pytest
 from fastapi import HTTPException
-from uuid import UUID
+from uuid import UUID, uuid4
 
+from app.models.achievement import Achievement, UserAchievement
+from app.models.coin_transaction import CoinTransaction
 from app.models.project import Project, ProjectPhase
 from app.models.todo import Task
+from app.models.user import User
 from app.schemas.project import PhaseCreate, ProjectUpdate
 from app.services.project import ProjectService
 
@@ -62,6 +65,228 @@ def test_move_task_persists_status(client):
 
     assert move_response.status_code == 200
     assert move_response.json()["status"] == "completed"
+
+
+def test_project_start_is_idempotent(client, auth_headers, project):
+    first = client.post(f"/api/projects/{project.id}/start", headers=auth_headers)
+    second = client.post(f"/api/projects/{project.id}/start", headers=auth_headers)
+    assert first.status_code == second.status_code == 200
+    assert first.json()["status"] == second.json()["status"] == "active"
+
+
+def test_project_rejects_unknown_status(client, auth_headers, project):
+    response = client.put(
+        f"/api/projects/{project.id}",
+        headers=auth_headers,
+        json={"status": "unknown"},
+    )
+    assert response.status_code == 422
+
+
+def test_project_status_lifecycle_rejects_skipped_transitions(client, auth_headers, project):
+    skipped = client.put(
+        f"/api/projects/{project.id}",
+        headers=auth_headers,
+        json={"status": "completed"},
+    )
+    assert skipped.status_code == 409
+
+    started = client.post(f"/api/projects/{project.id}/start", headers=auth_headers)
+    assert started.status_code == 200
+    completed = client.put(
+        f"/api/projects/{project.id}",
+        headers=auth_headers,
+        json={"status": "completed"},
+    )
+    assert completed.status_code == 200
+    archived = client.put(
+        f"/api/projects/{project.id}",
+        headers=auth_headers,
+        json={"status": "archived"},
+    )
+    assert archived.status_code == 200
+
+
+def test_reaching_milestone_is_idempotent(client, auth_headers, project):
+    milestone = client.post(
+        f"/api/projects/{project.id}/milestones",
+        headers=auth_headers,
+        json={"name": "完成首个版本"},
+    ).json()
+    first = client.post(
+        f"/api/projects/milestones/{milestone['id']}/reach",
+        headers=auth_headers,
+    )
+    second = client.post(
+        f"/api/projects/milestones/{milestone['id']}/reach",
+        headers=auth_headers,
+    )
+    assert first.status_code == second.status_code == 200
+    assert first.json()["status"] == second.json()["status"] == "reached"
+    assert first.json()["reached_at"] == second.json()["reached_at"]
+
+
+def test_project_put_completion_settles_achievement_once_and_keeps_fields(
+    client, auth_headers, project, db_session,
+):
+    achievement = Achievement(
+        name=f"PUT completion {uuid4().hex}",
+        description="Completion through project update",
+        icon="test",
+        condition_type="project_completed",
+        condition_value=1,
+        coin_reward=7,
+        exp_reward=11,
+    )
+    db_session.add(achievement)
+    db_session.commit()
+    user = db_session.query(User).filter_by(id=project.user_id).one()
+    initial_coins = user.coins
+    initial_experience = user.experience
+
+    started = client.post(f"/api/projects/{project.id}/start", headers=auth_headers)
+    completed = client.put(
+        f"/api/projects/{project.id}",
+        headers=auth_headers,
+        json={
+            "status": "completed",
+            "name": "Settled by PUT",
+            "description": "Fields stay editable with completion",
+        },
+    )
+    repeated = client.put(
+        f"/api/projects/{project.id}",
+        headers=auth_headers,
+        json={"status": "completed"},
+    )
+    explicit = client.post(
+        f"/api/projects/{project.id}/complete",
+        headers=auth_headers,
+    )
+
+    assert started.status_code == 200
+    assert completed.status_code == repeated.status_code == explicit.status_code == 200
+    assert completed.json()["name"] == "Settled by PUT"
+    assert completed.json()["description"] == "Fields stay editable with completion"
+    db_session.expire_all()
+    persisted = db_session.query(Project).filter_by(id=project.id).one()
+    persisted_user = db_session.query(User).filter_by(id=project.user_id).one()
+    assert persisted.status == "completed"
+    assert persisted.name == "Settled by PUT"
+    assert persisted.description == "Fields stay editable with completion"
+    assert db_session.query(UserAchievement).filter_by(
+        user_id=project.user_id,
+        achievement_id=achievement.id,
+    ).count() == 1
+    reward_rows = db_session.query(CoinTransaction).filter_by(
+        user_id=project.user_id,
+        source_id=f"a:{achievement.id.hex}",
+    ).all()
+    assert len(reward_rows) == 1
+    assert reward_rows[0].amount == 7
+    assert persisted_user.coins == initial_coins + 7
+    assert persisted_user.experience == initial_experience + 11
+
+
+def test_project_completion_rolls_back_status_and_rewards_when_reward_write_fails(
+    client, auth_headers, project, db_session, monkeypatch,
+):
+    project.status = "active"
+    achievement = Achievement(
+        name="项目奖励回滚测试",
+        description="测试项目完成奖励的一致性",
+        icon="test",
+        condition_type="project_completed",
+        condition_value=1,
+        coin_reward=7,
+        exp_reward=11,
+    )
+    db_session.add(achievement)
+    db_session.commit()
+    initial_coins = project.user.coins
+    initial_experience = project.user.experience
+    service = ProjectService(db_session)
+    db_project = db_session.query(Project).filter(Project.id == project.id).one()
+    original_create_reward = service.achievement_service.coin_repo._create_no_commit
+
+    def fail_reward_write(data):
+        original_create_reward(data)
+        raise RuntimeError("reward write failed")
+
+    monkeypatch.setattr(
+        service.achievement_service.coin_repo,
+        "_create_no_commit",
+        fail_reward_write,
+    )
+
+    with pytest.raises(RuntimeError, match="reward write failed"):
+        service.complete_project(db_project)
+
+    db_session.rollback()
+    persisted_project = db_session.query(Project).filter(Project.id == project.id).one()
+    persisted_user = persisted_project.user
+    assert persisted_project.status == "active"
+    assert persisted_user.coins == initial_coins
+    assert persisted_user.experience == initial_experience
+    assert db_session.query(UserAchievement).filter_by(
+        user_id=project.user_id,
+        achievement_id=achievement.id,
+    ).count() == 0
+    assert db_session.query(CoinTransaction).filter_by(
+        user_id=project.user_id,
+        source="achievement",
+    ).count() == 0
+
+
+def test_phase_status_create_update_boundaries_normalize_legacy_reads_and_reject_unknown_writes(
+    client, auth_headers, project, db_session,
+):
+    unknown_create = client.post(
+        f"/api/projects/{project.id}/phases",
+        headers=auth_headers,
+        json={"name": "未知状态阶段", "status": "unknown"},
+    )
+    assert unknown_create.status_code == 422
+
+    created = client.post(
+        f"/api/projects/{project.id}/phases",
+        headers=auth_headers,
+        json={"name": "阶段边界", "status": "active"},
+    )
+    assert created.status_code == 200
+    assert created.json()["status"] == "active"
+    phase_id = UUID(created.json()["id"])
+
+    phase = db_session.query(ProjectPhase).filter(ProjectPhase.id == phase_id).one()
+    for stored_status, response_status in (
+        ("pending", "planning"),
+        ("in_progress", "active"),
+        ("completed", "completed"),
+        ("old_phase_state", "unknown"),
+    ):
+        phase.status = stored_status
+        db_session.commit()
+        detail = client.get(f"/api/projects/{project.id}", headers=auth_headers)
+        assert detail.status_code == 200
+        phase_response = next(
+            item for item in detail.json()["phases"] if item["id"] == str(phase_id)
+        )
+        assert phase_response["status"] == response_status
+
+    updated = client.put(
+        f"/api/projects/phases/{phase_id}",
+        headers=auth_headers,
+        json={"status": "active"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "active"
+
+    unknown_update = client.put(
+        f"/api/projects/phases/{phase_id}",
+        headers=auth_headers,
+        json={"status": "unknown"},
+    )
+    assert unknown_update.status_code == 422
 
 
 def test_project_task_rejects_cross_project_references(client):

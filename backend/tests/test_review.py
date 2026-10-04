@@ -545,16 +545,19 @@ def test_weekly_review_counts_each_habit_completion_date(client, db_session):
     db_session.add_all([
         HabitCompletion(
             habit_id=habit_row.id,
+            user_id=habit_row.user_id,
             completed_date=date(2026, 8, 24),
             completed_at=_local_utc_naive(2026, 8, 24, 9),
         ),
         HabitCompletion(
             habit_id=habit_row.id,
+            user_id=habit_row.user_id,
             completed_date=date(2026, 8, 25),
             completed_at=_local_utc_naive(2026, 8, 25, 9),
         ),
         HabitCompletion(
             habit_id=habit_row.id,
+            user_id=habit_row.user_id,
             completed_date=date(2026, 8, 26),
             completed_at=_local_utc_naive(2026, 8, 26, 9),
         ),

@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from typing import List
 from uuid import UUID
 
@@ -6,7 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.budget import Budget
-from app.models.finance_transaction import FinanceTransaction
+from app.models.finance_transaction import FinanceTransaction, FinanceTransactionType
 from app.repositories.base import BaseRepository
 
 
@@ -22,24 +23,26 @@ class BudgetRepository(BaseRepository[Budget]):
             .all()
         )
 
-    def get_spent_amount(self, budget: Budget, year: int, month: int) -> float:
-        from datetime import date as date_type
-
-        start = date_type(year, month, 1)
-        if month == 12:
-            end = date_type(year + 1, 1, 1)
-        else:
-            end = date_type(year, month + 1, 1)
+    def get_spent_amount(
+        self, budget: Budget, period_start: date, period_end: date,
+    ) -> Decimal:
+        effective_start = max(
+            period_start,
+            budget.start_date if budget.start_date is not None else period_start,
+        )
+        if effective_start >= period_end:
+            return Decimal("0")
 
         query = self.db.query(
-            func.coalesce(func.sum(FinanceTransaction.amount), 0.0)
+            func.coalesce(func.sum(FinanceTransaction.amount), Decimal("0"))
         ).filter(
             FinanceTransaction.user_id == budget.user_id,
-            FinanceTransaction.type == "expense",
-            FinanceTransaction.date >= start,
-            FinanceTransaction.date < end,
+            FinanceTransaction.type == FinanceTransactionType.EXPENSE.value,
+            FinanceTransaction.date >= effective_start,
+            FinanceTransaction.date < period_end,
         )
         if budget.category_id:
             query = query.filter(FinanceTransaction.category_id == budget.category_id)
 
-        return float(query.scalar() or 0.0)
+        spent_amount = query.scalar()
+        return spent_amount if isinstance(spent_amount, Decimal) else Decimal(str(spent_amount or 0))

@@ -1,5 +1,5 @@
 import math
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from uuid import UUID, uuid4
@@ -496,6 +496,44 @@ def test_npc_cultivation_uses_utc_day_across_midnight_and_is_idempotent(db_sessi
     assert after_crossing_utc_day > before
     assert npc.cultivation == after_crossing_utc_day
     assert npc.cultivation_updated_on == date(2026, 8, 18)
+
+
+def test_cultivation_daily_reward_cap_resets_at_china_midnight(db_session, user, clock):
+    from app.models.cultivation import CultivationLog
+    from app.services.cultivation import CultivationService
+
+    service = CultivationService(db_session)
+    clock(datetime(2026, 9, 15, 15, 59, 59, tzinfo=timezone.utc))
+    db_session.add_all([
+        CultivationLog(
+            user_id=user.id,
+            source="daily-cap-seed",
+            source_key=f"daily-cap-seed-{index}",
+            created_at=datetime(2026, 9, 15, 15, 59, 0, tzinfo=timezone.utc),
+        )
+        for index in range(8)
+    ])
+    db_session.commit()
+
+    before_midnight = service.settle_todo_reward(
+        user.id,
+        "task",
+        10,
+        "hard",
+        source_key="daily-cap-before-midnight",
+    )
+    assert before_midnight.aptitude_points == 0
+
+    clock(datetime(2026, 9, 15, 16, tzinfo=timezone.utc))
+    after_midnight = service.settle_todo_reward(
+        user.id,
+        "task",
+        10,
+        "hard",
+        source_key="daily-cap-after-midnight",
+    )
+
+    assert after_midnight.aptitude_points == 1
 
 
 def test_npc_population_is_stable_but_isolated_between_users(db_session, user):
@@ -1169,6 +1207,33 @@ def test_overview_returns_today_and_recent_rewards_for_only_current_user(db_sess
     assert [item["cultivation"] for item in overview.recent_rewards] == [12]
 
 
+def test_overview_serializes_habit_intervals_in_today_payload(db_session, user):
+    from datetime import date, timedelta
+
+    from fastapi.encoders import jsonable_encoder
+
+    from app.models.habit_pause import HabitPauseInterval
+    from app.models.todo import Habit
+    from app.services.cultivation import CultivationService
+
+    habit = Habit(user_id=user.id, title="Paused habit", frequency="daily")
+    db_session.add(habit)
+    db_session.flush()
+    db_session.add(HabitPauseInterval(
+        habit_id=habit.id,
+        user_id=user.id,
+        paused_on=date.today() - timedelta(days=3),
+        resumed_on=date.today() - timedelta(days=2),
+    ))
+    db_session.commit()
+
+    overview = CultivationService(db_session).get_overview(user.id)
+    encoded = jsonable_encoder(overview)
+
+    habit_payload = next(item for item in encoded["today"] if item["title"] == "Paused habit")
+    assert habit_payload["pause_intervals"][0]["paused_on"] == (date.today() - timedelta(days=3)).isoformat()
+
+
 def test_settlement_advances_minor_stage_but_does_not_bypass_tribulation(db_session, user):
     from app.services.cultivation import CultivationService
 
@@ -1569,6 +1634,40 @@ def test_tribulation_attempts_have_database_unique_user_day_constraint():
 
     assert "attempted_date" in columns
     assert {"user_id", "attempted_date"} in constraints
+
+
+def test_tribulation_attempt_default_uses_shared_china_business_date(
+    db_session, user, monkeypatch,
+):
+    from app import models
+    from app.models.cultivation import TribulationAttempt
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            value = datetime(2026, 9, 15, 16, tzinfo=timezone.utc)
+            return value if tz is None else value.astimezone(tz)
+
+    monkeypatch.setattr(models.cultivation, "datetime", FixedDateTime)
+    monkeypatch.setattr(
+        models.cultivation,
+        "china_today",
+        lambda: date(2026, 9, 16),
+        raising=False,
+    )
+    attempt = TribulationAttempt(
+        user_id=user.id,
+        target_realm="foundation",
+        base_probability=50,
+        readiness_score=50,
+        final_probability=50,
+        roll=1,
+        success=False,
+    )
+    db_session.add(attempt)
+    db_session.flush()
+
+    assert attempt.attempted_date == date(2026, 9, 16)
 
 
 def test_calculate_preparation_score_uses_authoritative_breakdown_weights():

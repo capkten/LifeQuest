@@ -22,6 +22,7 @@ from app.schemas.project import (
 from app.schemas.todo import TaskCreate, TaskResponse
 from app.schemas.note_link import NoteLinkSummary, TargetNoteLinkCreate
 from app.models.todo import TaskStatus
+from app.models.project import normalize_phase_status, normalize_project_status
 from app.services.project import ProjectService
 from app.services.note_link import NoteLinkService
 from app.api.auth import get_current_user
@@ -39,7 +40,7 @@ def _project_to_response(stats: dict) -> dict:
         "description": p.description,
         "color": p.color,
         "icon": p.icon,
-        "status": p.status,
+        "status": normalize_project_status(p.status),
         "start_date": p.start_date,
         "end_date": p.end_date,
         "created_at": p.created_at,
@@ -47,6 +48,19 @@ def _project_to_response(stats: dict) -> dict:
         "total_tasks": stats["total_tasks"],
         "completed_tasks": stats["completed_tasks"],
         "progress": stats["progress"],
+    }
+
+
+def _phase_to_response(phase) -> dict:
+    return {
+        "id": phase.id,
+        "project_id": phase.project_id,
+        "name": phase.name,
+        "description": phase.description,
+        "status": normalize_phase_status(phase.status),
+        "sort_order": phase.sort_order,
+        "created_at": phase.created_at,
+        "updated_at": phase.updated_at,
     }
 
 
@@ -90,7 +104,7 @@ def get_project_detail(
         "description": p.description,
         "color": p.color,
         "icon": p.icon,
-        "status": p.status,
+        "status": normalize_project_status(p.status),
         "start_date": p.start_date,
         "end_date": p.end_date,
         "created_at": p.created_at,
@@ -98,7 +112,7 @@ def get_project_detail(
         "total_tasks": detail["total_tasks"],
         "completed_tasks": detail["completed_tasks"],
         "progress": detail["progress"],
-        "phases": detail["phases"],
+        "phases": [_phase_to_response(phase) for phase in detail["phases"]],
         "milestones": detail["milestones"],
     }
 
@@ -115,6 +129,18 @@ def update_project(
     updated = service.update_project(project, data)
     stats = service._compute_project_stats(updated)
     return _project_to_response(stats)
+
+
+@router.post("/{project_id}/start", response_model=ProjectResponse)
+def start_project(
+    project_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = ProjectService(db)
+    project = service.get_project_for_user_locked(project_id, current_user.id)
+    started = service.start_project(project)
+    return _project_to_response(service._compute_project_stats(started))
 
 
 @router.delete("/{project_id}")
@@ -136,7 +162,7 @@ def complete_project(
     db: Session = Depends(get_db),
 ):
     service = ProjectService(db)
-    project = service.get_project_for_user(project_id, current_user.id)
+    project = service.get_project_for_user_locked(project_id, current_user.id)
     completed = service.complete_project(project)
     stats = service._compute_project_stats(completed)
     return _project_to_response(stats)
@@ -153,7 +179,7 @@ def create_phase(
 ):
     service = ProjectService(db)
     service.get_project_for_user(project_id, current_user.id)
-    return service.create_phase(project_id, data)
+    return _phase_to_response(service.create_phase(project_id, data))
 
 
 @router.put("/phases/{phase_id}", response_model=PhaseResponse)
@@ -168,7 +194,7 @@ def update_phase(
     if phase is None:
         raise HTTPException(status_code=404, detail="Phase not found")
     service.get_project_for_user(phase.project_id, current_user.id)
-    return service.update_phase(phase, data)
+    return _phase_to_response(service.update_phase(phase, data))
 
 
 @router.delete("/phases/{phase_id}")
@@ -241,6 +267,7 @@ def reach_milestone(
     if milestone is None:
         raise HTTPException(status_code=404, detail="Milestone not found")
     service.get_project_for_user(milestone.project_id, current_user.id)
+    milestone = service.get_milestone_for_project_locked(milestone_id, milestone.project_id)
     return service.reach_milestone(milestone)
 
 
@@ -268,7 +295,7 @@ def get_project_tasks(
 ):
     service = ProjectService(db)
     service.get_project_for_user(project_id, current_user.id)
-    tasks = service.get_project_tasks(project_id, phase_id, milestone_id)
+    tasks = service.get_project_tasks(project_id, current_user.id, phase_id, milestone_id)
     # Populate project_name and project_color
     result = []
     for t in tasks:
@@ -346,11 +373,4 @@ def move_task(
     from app.services.todo import TodoService
     todo_service = TodoService(db)
     task = todo_service.get_task_for_user(task_id, current_user.id)
-    return service.move_task(
-        task,
-        current_user.id,
-        project_id=body.project_id,
-        phase_id=body.phase_id,
-        milestone_id=body.milestone_id,
-        status=body.status,
-    )
+    return service.move_task(task, current_user.id, **body.model_dump(exclude_unset=True))

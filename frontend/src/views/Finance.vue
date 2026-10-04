@@ -125,7 +125,7 @@
           <div v-for="b in budgets" :key="b.id" class="budget-item">
             <div class="budget-item-header">
               <span class="budget-item-name">{{ b.category_name || '未分类' }}</span>
-              <span class="budget-item-amount">{{ formatMoney(b.spent || 0) }} / {{ formatMoney(b.amount) }}</span>
+              <span class="budget-item-amount">{{ formatMoney(b.spent_amount) }} / {{ formatMoney(b.amount) }}</span>
             </div>
             <div class="budget-progress-bar">
               <div
@@ -135,8 +135,8 @@
               ></div>
             </div>
             <span class="budget-item-remaining" :class="budgetProgressClass(b)">
-              <template v-if="budgetPercent(b) > 100">超支 {{ formatMoney((b.spent || 0) - b.amount) }}</template>
-              <template v-else>剩余 {{ formatMoney(b.amount - (b.spent || 0)) }}</template>
+              <template v-if="Number(b.spent_amount || 0) > Number(b.amount || 0)">超支 {{ formatMoney(Number(b.spent_amount) - Number(b.amount)) }}</template>
+              <template v-else>剩余 {{ formatMoney(b.remaining_amount) }}</template>
             </span>
           </div>
         </div>
@@ -360,6 +360,7 @@ import { ref, computed, onMounted } from 'vue'
 import { financeService } from '../services/finance'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
+import { formatChinaDate, todayChinaDateKey } from '../utils/dateTime'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -380,8 +381,6 @@ const savingTx = ref(false)
 const txError = ref(null)
 const editingTx = ref(null)
 
-const today = new Date().toISOString().split('T')[0]
-
 const txForm = ref({
   type: 'expense',
   amount: null,
@@ -389,7 +388,7 @@ const txForm = ref({
   to_account_id: '',
   category_id: '',
   description: '',
-  date: today
+  date: todayChinaDateKey()
 })
 
 const filteredCategories = computed(() => {
@@ -406,19 +405,16 @@ function formatNet(val) {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+  return formatChinaDate(dateStr, { month: 'short', day: 'numeric' })
 }
 
 function budgetPercent(b) {
-  if (!b.amount) return 0
-  return Math.round(((b.spent || 0) / b.amount) * 100)
+  return Number(b.progress || 0)
 }
 
 function budgetProgressClass(b) {
   const pct = budgetPercent(b)
-  if (pct > 100) return 'budget--red'
+  if (pct >= 100 && Number(b.spent_amount || 0) > Number(b.amount || 0)) return 'budget--red'
   if (pct >= 80) return 'budget--yellow'
   return 'budget--green'
 }
@@ -431,7 +427,7 @@ function resetTxForm() {
     to_account_id: '',
     category_id: '',
     description: '',
-    date: today
+    date: todayChinaDateKey()
   }
   txError.value = null
   editingTx.value = null
@@ -479,6 +475,38 @@ function explainBlocked(message) {
   showError(message)
 }
 
+async function submitTransactionMutation({ wasEditing, transactionId, form, service }) {
+  if (wasEditing) {
+    await service.updateTransaction(transactionId, {
+      type: form.type,
+      amount: form.amount,
+      account_id: form.account_id,
+      to_account_id: form.type === 'transfer' ? form.to_account_id : null,
+      category_id: form.type === 'transfer' ? null : (form.category_id || null),
+      description: form.description || undefined,
+      date: form.date
+    })
+  } else if (form.type === 'transfer') {
+    await service.transfer({
+      from_account_id: form.account_id,
+      to_account_id: form.to_account_id,
+      amount: form.amount,
+      description: form.description || undefined,
+      date: form.date
+    })
+  } else {
+    await service.createTransaction({
+      type: form.type,
+      amount: form.amount,
+      account_id: form.account_id,
+      category_id: form.category_id || undefined,
+      description: form.description || undefined,
+      date: form.date
+    })
+  }
+  return { feedback: wasEditing ? '流水已更新' : '记账成功！' }
+}
+
 async function saveTransaction() {
   if (!txForm.value.amount) { explainBlocked('请输入金额后再保存。'); return }
   if (!txForm.value.account_id) { explainBlocked('请先选择账户。'); return }
@@ -486,36 +514,15 @@ async function saveTransaction() {
   savingTx.value = true
   txError.value = null
   try {
-    if (editingTx.value) {
-      await financeService.updateTransaction(editingTx.value.id, {
-        type: txForm.value.type,
-        amount: txForm.value.amount,
-        account_id: txForm.value.account_id,
-        to_account_id: txForm.value.type === 'transfer' ? txForm.value.to_account_id : null,
-        category_id: txForm.value.type === 'transfer' ? null : (txForm.value.category_id || null),
-        description: txForm.value.description || undefined,
-        date: txForm.value.date
-      })
-    } else if (txForm.value.type === 'transfer') {
-      await financeService.transfer({
-        from_account_id: txForm.value.account_id,
-        to_account_id: txForm.value.to_account_id,
-        amount: txForm.value.amount,
-        description: txForm.value.description || undefined,
-        date: txForm.value.date
-      })
-    } else {
-      await financeService.createTransaction({
-        type: txForm.value.type,
-        amount: txForm.value.amount,
-        account_id: txForm.value.account_id,
-        category_id: txForm.value.category_id || undefined,
-        description: txForm.value.description || undefined,
-        date: txForm.value.date
-      })
-    }
+    const wasEditing = Boolean(editingTx.value)
+    const result = await submitTransactionMutation({
+      wasEditing,
+      transactionId: editingTx.value?.id,
+      form: txForm.value,
+      service: financeService
+    })
     cancelQuickAdd()
-    showSuccess(editingTx.value ? '流水已更新' : '记账成功！')
+    showSuccess(result.feedback)
     await fetchDashboard()
   } catch (e) {
     txError.value = getErrorMessage(e)

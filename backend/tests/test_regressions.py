@@ -101,7 +101,7 @@ def _run_todo_completion_process(db_path, kind, todo_id, user_id, barrier, resul
         _connection, _cursor, statement, _parameters, _context, _executemany
     ):
         nonlocal synchronized
-        if not synchronized and f"update {table_name}" in statement.lower():
+        if not synchronized and (f"update {table_name}" in statement.lower() or "update users" in statement.lower()):
             synchronized = True
             results.put(("barrier_reached",))
             barrier.wait(timeout=20)

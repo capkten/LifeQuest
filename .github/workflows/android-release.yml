@@ -21,16 +21,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
       - id: check
         shell: bash
+        env:
+          PUSH_BEFORE: ${{ github.event.before }}
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
             echo "should_release=true" >> "$GITHUB_OUTPUT"
-          elif git diff --quiet HEAD^ HEAD -- VERSION frontend .github/workflows/android-release.yml; then
+          elif [[ "$PUSH_BEFORE" =~ ^0+$ ]]; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          elif git diff --quiet "$PUSH_BEFORE" "$GITHUB_SHA" -- VERSION frontend .github/workflows/android-release.yml; then
             echo "Application version and frontend release inputs did not change; skipping release."
             echo "should_release=false" >> "$GITHUB_OUTPUT"
           else
+            diff_status=$?
+            if [[ "$diff_status" -ne 1 ]]; then
+              echo "Could not compare the pushed commit range (git diff exit=$diff_status)." >&2
+              exit "$diff_status"
+            fi
             echo "should_release=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -62,13 +71,11 @@ jobs:
       - name: Configure Android environment
         working-directory: frontend
         env:
-          ANDROID_API_BASE_URL: ${{ secrets.ANDROID_API_BASE_URL }}
           ANDROID_UPDATE_MANIFEST_URL: ${{ secrets.ANDROID_UPDATE_MANIFEST_URL }}
         run: |
-          test -n "$ANDROID_API_BASE_URL"
           MANIFEST_URL="${ANDROID_UPDATE_MANIFEST_URL:-https://github.com/${{ github.repository }}/releases/latest/download/latest.json}"
-          printf 'VITE_API_BASE_URL=%s\nVITE_ANDROID_UPDATE_MANIFEST_URL=%s\n' \
-            "$ANDROID_API_BASE_URL" "$MANIFEST_URL" > .env.android
+          printf 'VITE_API_BASE_URL=https://life.capkin.cn/api\nVITE_ANDROID_UPDATE_MANIFEST_URL=%s\n' \
+            "$MANIFEST_URL" > .env.android
 
       - name: Build web assets for Android
         working-directory: frontend
@@ -124,6 +131,7 @@ jobs:
               'versionName': version_name,
               'versionCode': int(version_code),
               'downloadUrl': f'https://github.com/{repository}/releases/latest/download/app-release.apk',
+              'releaseUrl': f'https://github.com/{repository}/releases/tag/android-v{version_name}-{version_code}',
               'forceUpdate': False,
               'releaseNotes': f'LifeQuest {version_name} 更新。',
           }

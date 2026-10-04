@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.models.coin_transaction import CoinType
 from app.repositories.coin_transaction import CoinTransactionRepository
 from app.services.content_catalog import TODO_SOURCE_PREFIXES, source_label
 
@@ -24,6 +25,8 @@ class CoinService:
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
     ) -> dict:
+        if coin_type is not None:
+            coin_type = CoinType(coin_type)
         transactions = self.coin_repo.get_by_user(
             user_id,
             skip=skip,
@@ -33,7 +36,7 @@ class CoinService:
             start_date=start_date,
             end_date=end_date,
         )
-        transactions = [self._localized_transaction(transaction) for transaction in transactions]
+        transactions = [self._history_transaction(transaction) for transaction in transactions]
         totals = self.coin_repo.get_totals(user_id)
         count = self.coin_repo.count_by_user(
             user_id,
@@ -61,6 +64,9 @@ class CoinService:
         source_id: Optional[str] = None,
         description: str = "",
     ):
+        if amount < 0:
+            raise ValueError("amount must be non-negative")
+        coin_type = CoinType(coin_type)
         if not description:
             description = self._default_description(source)
         return self.coin_repo.create_transaction(
@@ -99,13 +105,13 @@ class CoinService:
         )
 
     @classmethod
-    def _localized_transaction(cls, transaction):
+    def _history_transaction(cls, transaction):
         source_value = getattr(transaction.source, "value", transaction.source)
+        history_transaction = copy(transaction)
+        history_transaction.amount = abs(history_transaction.amount)
         if (
             cls._is_proven_todo_system_transaction(transaction)
             and transaction.description == f"Reward from {source_value}"
         ):
-            localized = copy(transaction)
-            localized.description = cls._default_description(source_value)
-            return localized
-        return transaction
+            history_transaction.description = cls._default_description(source_value)
+        return history_transaction

@@ -2,9 +2,11 @@ from datetime import date
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
+from app.models.account import Account
+from app.models.finance_category import FinanceCategory
 from app.models.finance_transaction import FinanceTransaction
 from app.repositories.base import BaseRepository
 
@@ -97,3 +99,34 @@ class FinanceTransactionRepository(BaseRepository[FinanceTransaction]):
         if end_date:
             query = query.filter(FinanceTransaction.date <= end_date)
         return query.count()
+
+    def get_with_names(self, transaction_id: UUID, user_id: UUID):
+        return (
+            self.db.query(
+                FinanceTransaction,
+                Account.name.label("account_name"),
+                FinanceCategory.name.label("category_name"),
+            )
+            .outerjoin(
+                Account,
+                and_(
+                    Account.id == FinanceTransaction.account_id,
+                    Account.user_id == user_id,
+                ),
+            )
+            .outerjoin(
+                FinanceCategory,
+                and_(
+                    FinanceCategory.id == FinanceTransaction.category_id,
+                    or_(
+                        FinanceCategory.is_system == True,
+                        FinanceCategory.user_id == user_id,
+                    ),
+                ),
+            )
+            .filter(
+                FinanceTransaction.id == transaction_id,
+                FinanceTransaction.user_id == user_id,
+            )
+            .one_or_none()
+        )

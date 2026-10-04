@@ -34,7 +34,11 @@ from app.schemas.note_link import NoteLinkCreate, NoteLinkSummary
 from app.services.note import NoteService
 from app.services.note import NoteRevisionConflict
 from app.services.note_link import NoteLinkService
-from app.api.auth import get_current_user
+from app.api.auth import (
+    get_current_user,
+    get_current_user_from_query_token,
+    get_scoped_collaboration_access,
+)
 from app.services.auth import create_access_token, decode_access_token
 
 router = APIRouter(prefix="/api/notes", tags=["notes"])
@@ -303,16 +307,21 @@ def update_node(
         raise HTTPException(status_code=404, detail="Node not found")
     access = _require_notebook(service, node.notebook_id, current_user.id, write=True)
     try:
-        if node_in.name is not None:
-            service.rename_node(node_id, node_in.name)
+        move_kwargs = {}
         if "parent_id" in node_in.model_fields_set:
-            service.move_node(node_id, node_in.parent_id)
+            move_kwargs["new_parent_id"] = node_in.parent_id
+        if node_in.name is not None:
+            move_kwargs["new_name"] = node_in.name
+        if move_kwargs:
+            service.move_tree(node_id, **move_kwargs)
         return node_to_response(service.node_repo.get_by_id(node_id), access["role"])
     except ValueError as e:
         detail = str(e)
         if "同名冲突" in detail:
             raise HTTPException(status_code=409, detail=detail)
         raise HTTPException(status_code=400, detail=detail)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Node move failed; no changes were applied")
 
 
 @router.delete("/nodes/{node_id}")
@@ -502,43 +511,25 @@ def create_collaboration_ticket(
 async def collaborate_on_note(
     websocket: WebSocket,
     note_id: UUID,
-    db: Session = Depends(get_db),
+    collaboration=Depends(get_scoped_collaboration_access),
 ):
     """Join a note collaboration room using a short-lived REST ticket."""
-    ticket = websocket.query_params.get("ticket")
-    payload = decode_access_token(ticket) if ticket else None
-    if not payload or payload.get("scope") != "note_collab" or payload.get("note_id") != str(note_id):
-        await websocket.close(code=4401)
-        return
-
+    user = collaboration["user"]
+    access = collaboration["access"]
     try:
-        user_id = UUID(payload["sub"])
-    except (KeyError, ValueError, TypeError):
-        await websocket.close(code=4401)
-        return
-
-    try:
-        service = NoteService(db)
-        access = service.require_node_access(note_id, user_id)
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            await websocket.close(code=4401)
-            return
         from app.collaboration import collaboration_manager
         await collaboration_manager.serve(
             websocket,
             note_id,
-            user_id,
+            user.id,
             user.username,
             access["role"],
-            sessionmaker(bind=db.get_bind(), autoflush=False, autocommit=False),
+            sessionmaker(bind=collaboration["db"].get_bind(), autoflush=False, autocommit=False),
         )
-    except (ValueError, PermissionError):
-        await websocket.close(code=4403)
     except WebSocketDisconnect:
         pass
-    finally:
-        db.close()
+    except Exception:
+        await websocket.close(code=4403)
 
 
 @router.get("/{note_id}", response_model=NoteDetailResponse)
@@ -641,11 +632,8 @@ async def upload_image(
 
     filename = f"{uuid.uuid4()}.{file_ext}"
     file_path = UPLOAD_DIR / str(note_id) / filename
-    file_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        with open(file_path, "wb") as buffer:
-            buffer.write(content)
         attachment = service.create_attachment(
             note_id=note_id,
             user_id=current_user.id,
@@ -653,13 +641,12 @@ async def upload_image(
             file_path=str(file_path),
             file_type=file.content_type,
             file_size=len(content),
+            file_content=content,
         )
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Note not found")
     except PermissionError:
-        file_path.unlink(missing_ok=True)
         raise HTTPException(status_code=403, detail="Not authorized")
-    except Exception:
-        file_path.unlink(missing_ok=True)
-        raise
 
     return {
         "id": str(attachment.id),
@@ -671,8 +658,8 @@ async def upload_image(
 def get_note_attachment(
     note_id: UUID,
     attachment_id: UUID,
-    token: Optional[str] = Query(None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_query_token),
 ):
     """Serve note images only after validating the requesting user's access.
 
@@ -681,17 +668,9 @@ def get_note_attachment(
     access token as a query parameter at render time. The token is never
     stored in the note content.
     """
-    payload = decode_access_token(token) if token else None
-    try:
-        user_id = UUID(payload["sub"]) if payload else None
-    except (KeyError, TypeError, ValueError):
-        user_id = None
-    if user_id is None:
-        raise HTTPException(status_code=401, detail="Could not validate credentials")
-
     service = NoteService(db)
     try:
-        attachment = service.get_attachment(note_id, attachment_id, user_id)
+        attachment = service.get_attachment(note_id, attachment_id, current_user.id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Attachment not found")
     except PermissionError:

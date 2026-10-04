@@ -1,5 +1,6 @@
 <template>
   <div class="home-page">
+    <TodayWorkbench ref="todayWorkbench" class="home-workbench" @changed="refreshHomeTasks" />
     <section class="hero-card">
       <div class="hero-main">
         <div class="hero-copy">
@@ -60,6 +61,7 @@
     </section>
 
     <CultivationStatusBar
+      class="home-cultivation"
       :overview="cultivationOverview"
       :loading="cultivationLoading"
       :error="cultivationError"
@@ -83,11 +85,11 @@
           <h3>快速行动</h3>
         </div>
         <div class="quick-actions-list">
-          <router-link to="/todos" class="quick-action-item">
+          <button type="button" class="quick-action-item" @click="todayWorkbench?.focusQuickAdd()">
             <span class="quick-action-icon quick-action-icon--primary">+</span>
             <span>创建任务</span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-          </router-link>
+          </button>
           <router-link to="/projects" class="quick-action-item">
             <span class="quick-action-icon quick-action-icon--secondary">◇</span>
             <span>新建项目</span>
@@ -225,16 +227,19 @@ import { getErrorMessage } from '../utils/errorMessage'
 import { labelDifficulty } from '../utils/displayLabels'
 import CultivationStatusBar from '../components/cultivation/CultivationStatusBar.vue'
 import TodayActionCenter from '../components/home/TodayActionCenter.vue'
+import TodayWorkbench from '../components/home/TodayWorkbench.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()
+const todayWorkbench = ref(null)
 const user = computed(() => authStore.user)
 const {
   expPercent,
   cultivationOverview,
   cultivationLoading,
   cultivationError,
-  loadCultivation
+  loadCultivation,
+  refreshCultivation
 } = useUserStats()
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -285,15 +290,16 @@ async function fetchCheckinStatus() {
 }
 
 async function doCheckin() {
+  if (checkinLoading.value) return
   if (checkinStatus.value?.checked_in) { showError('今天已经签到过了。'); return }
   checkinLoading.value = true
   try {
     const result = await checkinService.checkin()
     checkinStatus.value = { checked_in: true, streak: result.streak || 0 }
-    await authStore.fetchUser()
-    const coins = result.coins_earned || 0
-    const exp = result.exp_earned || 0
+    const coins = result.reward_coins || 0
+    const exp = result.reward_exp || 0
     showSuccess(`签到成功！获得 ${coins} 金币、${exp} 经验值`)
+    await refreshActionRewards()
   } catch (e) {
     showError(getErrorMessage(e))
   } finally {
@@ -318,6 +324,7 @@ async function handleActionComplete(item) {
     await completeAction(item)
     showSuccess(`${item.title} 已完成`)
     await Promise.allSettled([authStore.fetchUser(), loadCultivation()])
+    todayWorkbench.value?.load?.()
   } catch (e) {
     showError(getErrorMessage(e, '完成行动失败，请重试。'))
   }
@@ -325,6 +332,35 @@ async function handleActionComplete(item) {
 
 function handleActionOpen() {
   router.push('/todos')
+}
+
+function refreshHomeTasks() {
+  return Promise.allSettled([fetchTasks(), fetchActionCenter?.() ?? Promise.resolve()])
+}
+
+function dailyHabitBlockReason(habit) {
+  if (habit.completed_today) return '该习惯今天已经完成，明天再来继续。'
+  if (habit.paused_today === true || habit.is_active === false) return '该习惯已暂停。'
+  if (habit.excused_today === true) return '该习惯今天已请假。'
+  if (habit.scheduled_today === false) return '今天不是该习惯的计划日。'
+  if (habit.frequency === 'weekly_target' && habit.weekly_remaining <= 0) return '本周已完成目标次数，下周再继续。'
+  return ''
+}
+
+async function completeDailyHabit(habit) {
+  if (completingActionKey.value !== null) return
+  const blockReason = dailyHabitBlockReason(habit)
+  if (blockReason) {
+    showError(blockReason)
+    return
+  }
+  try {
+    await todoService.completeHabit(habit.id)
+    showSuccess('习惯完成！')
+    await refreshHomeTasks()
+  } catch (e) {
+    showError(getErrorMessage(e))
+  }
 }
 
 onMounted(() => {
@@ -351,23 +387,31 @@ onMounted(() => {
 
   .hero-card {
     grid-column: 1 / -1;
+    grid-row: 2;
     margin-bottom: 0;
   }
 
-  .cultivation-status-bar {
+  .home-workbench {
     grid-column: 1 / -1;
-    grid-row: 2;
+    grid-row: 1;
+    margin-bottom: 0;
+  }
+
+  .cultivation-status-bar,
+  .home-cultivation {
+    grid-column: 1 / -1;
+    grid-row: 3;
   }
 
   .today-action-center {
     grid-column: 1;
-    grid-row: 3;
+    grid-row: 4;
     margin-bottom: 0;
   }
 
   .home-aside-actions {
     grid-column: 2;
-    grid-row: 3;
+    grid-row: 4;
   }
 
   .content-grid {
@@ -376,17 +420,17 @@ onMounted(() => {
 
   .content-grid .content-section:first-child {
     grid-column: 1;
-    grid-row: 4;
+    grid-row: 5;
   }
 
   .content-grid .content-section:last-child {
     grid-column: 2;
-    grid-row: 4;
+    grid-row: 5;
   }
 
   .habit-progress-card {
     grid-column: 2;
-    grid-row: 5;
+    grid-row: 6;
   }
 }
 
@@ -826,7 +870,7 @@ onMounted(() => {
 
 .daily-item {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 12px;
 }
@@ -963,6 +1007,24 @@ onMounted(() => {
   color: var(--color-warning);
   font-weight: 600;
   flex-shrink: 0;
+}
+
+.daily-weekly-progress {
+  font-size: var(--font-size-xs);
+  color: var(--color-secondary);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.daily-habit-lock {
+  min-width: 0;
+  color: var(--color-error);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .daily-streak svg {
@@ -1190,6 +1252,8 @@ onMounted(() => {
   }
 
   .daily-streak,
+  .daily-weekly-progress,
+  .daily-habit-lock,
   .daily-overdue,
   .task-difficulty {
     margin-left: 44px;

@@ -559,6 +559,7 @@ def test_startup_runs_localization_after_seed_and_closes_session(monkeypatch):
     monkeypatch.setattr(ShopService, "seed_system_items", lambda db: calls.append("shop"))
     monkeypatch.setattr(CultivationService, "seed_world", lambda db: calls.append("seed"))
     monkeypatch.setattr(ContentLocalizationService, "backfill_system_content", lambda db: calls.append("backfill"))
+    monkeypatch.setattr("app.services.habit_history.backfill_latest_completions", lambda db: calls.append("habit_history"))
 
     main.startup_event()
 
@@ -571,6 +572,7 @@ def test_startup_runs_localization_after_seed_and_closes_session(monkeypatch):
         "shop",
         "seed",
         "backfill",
+        "habit_history",
         "close",
     ]
 

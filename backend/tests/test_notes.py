@@ -1,17 +1,595 @@
 # backend/tests/test_notes.py
 import os
 import sqlite3
+import multiprocessing
+import io
+import threading
+import time
 from datetime import datetime, timezone
-from uuid import UUID
+from pathlib import Path
+from uuid import UUID, uuid4
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import event, text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import sessionmaker
+from starlette.datastructures import Headers, UploadFile
 
 from app.models.note_node import NoteNode
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing-only")
+
+_skip_without_fork = pytest.mark.skipif(
+    "fork" not in multiprocessing.get_all_start_methods(),
+    reason="multiprocessing fork start method is not available on this platform",
+)
+
+
+def _run_independent_tree_rename(
+    database_url,
+    notes_root,
+    node_id,
+    new_name,
+    started,
+    planned,
+    result_queue,
+    staged=None,
+    resume=None,
+):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.services import note as note_module
+    from app.services.note import NoteService
+
+    engine = create_engine(database_url, connect_args={"timeout": 30})
+    session = sessionmaker(bind=engine, autoflush=False)()
+    note_module.NOTES_DIR = Path(notes_root)
+    service = NoteService(session)
+
+    if planned is not None:
+        original_plan = service._plan_tree_move
+
+        def signal_after_plan(*args, **kwargs):
+            result = original_plan(*args, **kwargs)
+            planned.set()
+            return result
+
+        service._plan_tree_move = signal_after_plan
+
+    if staged is not None:
+        original_rename = Path.rename
+        paused = False
+
+        def pause_after_staging(path, target):
+            nonlocal paused
+            result = original_rename(path, target)
+            if not paused:
+                paused = True
+                staged.set()
+                if not resume.wait(15):
+                    raise TimeoutError("tree move pause was not released")
+            return result
+
+        Path.rename = pause_after_staging
+
+    started.set()
+    try:
+        node = service.rename_node(UUID(node_id), new_name)
+        result_queue.put((new_name, "ok", node.path))
+    except Exception as exc:
+        result_queue.put((new_name, "error", repr(exc)))
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def _run_note_mutation_during_tree_move(
+    database_url,
+    notes_root,
+    operation,
+    notebook_id,
+    user_id,
+    target_node_id,
+    started,
+    committing,
+    result_queue,
+):
+    from sqlalchemy import create_engine, event
+    from sqlalchemy.orm import sessionmaker
+
+    from app.services import note as note_module
+    from app.services.note import NoteService
+    from app.schemas.note import FolderCreate, NoteCreate
+
+    engine = create_engine(database_url, connect_args={"timeout": 30})
+    session = sessionmaker(bind=engine, autoflush=False)()
+    note_module.NOTES_DIR = Path(notes_root)
+    event.listen(session, "before_commit", lambda _: committing.set())
+    service = NoteService(session)
+
+    started.set()
+    try:
+        if operation == "create_folder":
+            result = service.create_folder(
+                UUID(notebook_id),
+                UUID(user_id),
+                FolderCreate(parent_id=UUID(target_node_id), name="Created folder"),
+            )
+        elif operation == "create_note":
+            result = service.create_note(
+                UUID(notebook_id),
+                UUID(user_id),
+                NoteCreate(
+                    parent_id=UUID(target_node_id),
+                    title="Created note",
+                    content="new content",
+                ),
+            )
+        elif operation == "persist_collaboration_content":
+            result = service.persist_collaboration_content(
+                UUID(target_node_id), UUID(user_id), "collaboration edit"
+            )
+        elif operation == "delete_node":
+            service.delete_node(UUID(target_node_id))
+            result = None
+        elif operation == "delete_notebook":
+            service.delete_notebook(UUID(notebook_id))
+            result = None
+        else:
+            raise AssertionError(f"Unknown note mutation: {operation}")
+        result_queue.put((operation, "ok", str(result.id) if result else None))
+    except Exception as exc:
+        result_queue.put((operation, "error", repr(exc)))
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def _create_attachment_process_database(tmp_path):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.database import Base
+    from app.models.note import Notebook
+    from app.models.note_node import NoteNode
+    from app.models.user import User
+
+    database_path = tmp_path / "attachment-race.sqlite"
+    database_url = f"sqlite:///{database_path}"
+    engine = create_engine(database_url, connect_args={"timeout": 30})
+    Base.metadata.create_all(bind=engine)
+    session = sessionmaker(bind=engine)()
+
+    user_id = uuid4()
+    notebook_id = uuid4()
+    note_id = uuid4()
+    user = User(
+        id=user_id,
+        username=f"attachment-race-{uuid4().hex}",
+        email=f"attachment-race-{uuid4().hex}@example.com",
+        password_hash="unused",
+    )
+    notebook = Notebook(id=notebook_id, user_id=user_id, name="Attachment race")
+    note = NoteNode(
+        id=note_id,
+        notebook_id=notebook_id,
+        type="note",
+        name="Document",
+        normalized_name="document",
+        path="/Document.md",
+    )
+    session.add_all([user, notebook, note])
+    session.commit()
+    session.close()
+    engine.dispose()
+    return database_url, user_id, notebook_id, note_id
+
+
+def _run_attachment_upload_process(
+    database_url,
+    notes_root,
+    upload_root,
+    user_id,
+    note_id,
+    entered,
+    resume_authorization,
+    pause_authorization,
+    fail_commit,
+    stages,
+    results,
+):
+    import asyncio
+
+    from sqlalchemy import create_engine, event
+    from sqlalchemy.orm import sessionmaker
+
+    from app.api import notes as notes_api
+    from app.models.user import User
+    from app.services import note as note_module
+    from app.services.note import NoteService
+
+    engine = create_engine(database_url, connect_args={"timeout": 30})
+    session = sessionmaker(bind=engine, autoflush=False)()
+    note_module.NOTES_DIR = Path(notes_root)
+    notes_api.UPLOAD_DIR = Path(upload_root)
+    upload_lock_acquired = threading.Event()
+    original_lock = NoteService._lock_notebook_tree
+    original_require_access = NoteService.require_node_access
+    access_checks = 0
+
+    def observe_lock(service, notebook_id):
+        stages.put(("upload", "lock_attempt"))
+        result = original_lock(service, notebook_id)
+        upload_lock_acquired.set()
+        return result
+
+    def observe_access(service, target_note_id, target_user_id, write=False):
+        nonlocal access_checks
+        access_checks += 1
+        result = original_require_access(service, target_note_id, target_user_id, write)
+        if pause_authorization and access_checks == 2:
+            if not upload_lock_acquired.is_set():
+                service.db.rollback()
+            stages.put(("upload", "authorized"))
+            if not resume_authorization.wait(25):
+                raise TimeoutError("upload authorization pause was not released")
+        return result
+
+    NoteService._lock_notebook_tree = observe_lock
+    NoteService.require_node_access = observe_access
+
+    if fail_commit:
+        def reject_commit(_session):
+            raise RuntimeError("injected attachment commit failure")
+
+        event.listen(session, "before_commit", reject_commit)
+
+    try:
+        user = session.query(User).filter(User.id == UUID(user_id)).one()
+        incoming = UploadFile(
+            file=io.BytesIO(b"independent-process-image"),
+            filename="race.png",
+            headers=Headers({"content-type": "image/png"}),
+        )
+        entered.set()
+        try:
+            response = asyncio.run(
+                notes_api.upload_image(
+                    file=incoming,
+                    note_id=UUID(note_id),
+                    db=session,
+                    current_user=user,
+                )
+            )
+            results.put(("upload", "ok", response["id"]))
+        except HTTPException as exc:
+            results.put(("upload", "http_error", exc.status_code, str(exc.detail)))
+        except Exception as exc:
+            results.put(("upload", "error", repr(exc)))
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def _run_attachment_delete_process(
+    database_url,
+    notes_root,
+    notebook_id,
+    entered,
+    release_lock,
+    pause_after_lock,
+    lock_acquired,
+    finished,
+    stages,
+    results,
+):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.services import note as note_module
+    from app.services.note import NoteService
+
+    engine = create_engine(database_url, connect_args={"timeout": 30})
+    session = sessionmaker(bind=engine, autoflush=False)()
+    note_module.NOTES_DIR = Path(notes_root)
+    service = NoteService(session)
+    original_lock = service._lock_notebook_tree
+
+    def observe_lock(target_notebook_id):
+        stages.put(("delete", "lock_attempt"))
+        result = original_lock(target_notebook_id)
+        lock_acquired.set()
+        stages.put(("delete", "lock_acquired"))
+        if pause_after_lock and not release_lock.wait(25):
+            raise TimeoutError("delete lock pause was not released")
+        return result
+
+    service._lock_notebook_tree = observe_lock
+    entered.set()
+    try:
+        service.delete_notebook(UUID(notebook_id))
+        results.put(("delete", "ok"))
+    except Exception as exc:
+        results.put(("delete", "error", repr(exc)))
+    finally:
+        finished.set()
+        session.close()
+        engine.dispose()
+
+
+def _attachment_state(database_url, upload_root, note_id):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.models.note import Attachment
+
+    engine = create_engine(database_url, connect_args={"timeout": 30})
+    session = sessionmaker(bind=engine)()
+    try:
+        attachments = session.query(Attachment).filter(
+            Attachment.note_id == UUID(note_id)
+        ).all()
+        files = [path for path in Path(upload_root).rglob("*") if path.is_file()]
+        return attachments, files
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def _join_processes(*processes):
+    for process in processes:
+        if process.pid is not None:
+            process.join(30)
+    for process in processes:
+        if process.is_alive():
+            process.terminate()
+            process.join(5)
+        if process.pid is not None:
+            assert process.exitcode == 0
+
+
+def _receive_stage(stages, expected_role, expected_stage, timeout=15):
+    deadline = time.monotonic() + timeout
+    seen = []
+    while time.monotonic() < deadline:
+        role, stage = stages.get(timeout=max(0.01, deadline - time.monotonic()))
+        seen.append((role, stage))
+        if (role, stage) == (expected_role, expected_stage):
+            return
+    raise AssertionError(f"Did not observe {(expected_role, expected_stage)}; saw {seen}")
+
+
+@_skip_without_fork
+def test_notebook_deletion_winning_attachment_upload_returns_404_without_artifacts(tmp_path):
+    database_url, user_id, notebook_id, note_id = _create_attachment_process_database(tmp_path)
+    notes_root = tmp_path / "notes"
+    upload_root = tmp_path / "uploads" / "notes"
+    context = multiprocessing.get_context("fork")
+    stages = context.Queue()
+    results = context.Queue()
+    delete_entered = context.Event()
+    delete_release = context.Event()
+    delete_lock_acquired = context.Event()
+    delete_finished = context.Event()
+    upload_entered = context.Event()
+    upload_resume = context.Event()
+    delete_process = context.Process(
+        target=_run_attachment_delete_process,
+        args=(
+            database_url,
+            str(notes_root),
+            str(notebook_id),
+            delete_entered,
+            delete_release,
+            True,
+            delete_lock_acquired,
+            delete_finished,
+            stages,
+            results,
+        ),
+    )
+    upload_process = context.Process(
+        target=_run_attachment_upload_process,
+        args=(
+            database_url,
+            str(notes_root),
+            str(upload_root),
+            str(user_id),
+            str(note_id),
+            upload_entered,
+            upload_resume,
+            True,
+            False,
+            stages,
+            results,
+        ),
+    )
+
+    delete_process.start()
+    try:
+        assert delete_entered.wait(10)
+        assert delete_lock_acquired.wait(10)
+        _receive_stage(stages, "delete", "lock_acquired")
+        upload_process.start()
+        assert upload_entered.wait(10)
+        stage = stages.get(timeout=15)
+        assert stage in {("upload", "lock_attempt"), ("upload", "authorized")}
+
+        delete_release.set()
+        assert delete_finished.wait(20), "notebook deletion did not finish"
+        if stage == ("upload", "authorized"):
+            upload_resume.set()
+
+        process_results = [results.get(timeout=10), results.get(timeout=10)]
+        result_by_process = {result[0]: result[1:] for result in process_results}
+    finally:
+        delete_release.set()
+        upload_resume.set()
+        _join_processes(delete_process, upload_process)
+
+    assert result_by_process["delete"] == ("ok",)
+    assert result_by_process["upload"] == ("http_error", 404, "Note not found")
+    attachments, files = _attachment_state(database_url, upload_root, str(note_id))
+    assert attachments == []
+    assert files == []
+
+
+@_skip_without_fork
+def test_attachment_upload_winning_notebook_deletion_removes_row_and_file(tmp_path):
+    database_url, user_id, notebook_id, note_id = _create_attachment_process_database(tmp_path)
+    notes_root = tmp_path / "notes"
+    upload_root = tmp_path / "uploads" / "notes"
+    context = multiprocessing.get_context("fork")
+    stages = context.Queue()
+    results = context.Queue()
+    upload_entered = context.Event()
+    upload_resume = context.Event()
+    delete_entered = context.Event()
+    delete_release = context.Event()
+    delete_lock_acquired = context.Event()
+    delete_finished = context.Event()
+    upload_process = context.Process(
+        target=_run_attachment_upload_process,
+        args=(
+            database_url,
+            str(notes_root),
+            str(upload_root),
+            str(user_id),
+            str(note_id),
+            upload_entered,
+            upload_resume,
+            True,
+            False,
+            stages,
+            results,
+        ),
+    )
+    delete_process = context.Process(
+        target=_run_attachment_delete_process,
+        args=(
+            database_url,
+            str(notes_root),
+            str(notebook_id),
+            delete_entered,
+            delete_release,
+            True,
+            delete_lock_acquired,
+            delete_finished,
+            stages,
+            results,
+        ),
+    )
+
+    upload_process.start()
+    try:
+        assert upload_entered.wait(10)
+        _receive_stage(stages, "upload", "authorized")
+        delete_process.start()
+        assert delete_entered.wait(10)
+        _receive_stage(stages, "delete", "lock_attempt")
+
+        if delete_lock_acquired.wait(0.5):
+            delete_release.set()
+            assert delete_finished.wait(20), "notebook deletion did not finish"
+            upload_resume.set()
+        else:
+            upload_resume.set()
+            assert delete_lock_acquired.wait(20), "deletion did not acquire the released notebook lock"
+            delete_release.set()
+            assert delete_finished.wait(20), "notebook deletion did not finish"
+
+        process_results = [results.get(timeout=10), results.get(timeout=10)]
+        result_by_process = {result[0]: result[1:] for result in process_results}
+    finally:
+        upload_resume.set()
+        delete_release.set()
+        _join_processes(upload_process, delete_process)
+
+    assert result_by_process["upload"][0] == "ok"
+    assert result_by_process["delete"] == ("ok",)
+    attachments, files = _attachment_state(database_url, upload_root, str(note_id))
+    assert attachments == []
+    assert files == []
+
+
+@_skip_without_fork
+def test_attachment_storage_failure_does_not_create_a_database_row_or_file(tmp_path):
+    database_url, user_id, _notebook_id, note_id = _create_attachment_process_database(tmp_path)
+    notes_root = tmp_path / "notes"
+    upload_root = tmp_path / "uploads" / "notes"
+    upload_root.mkdir(parents=True)
+    blocked_note_directory = upload_root / str(note_id)
+    blocked_note_directory.write_bytes(b"not a directory")
+    context = multiprocessing.get_context("fork")
+    stages = context.Queue()
+    results = context.Queue()
+    entered = context.Event()
+    resume = context.Event()
+    worker = context.Process(
+        target=_run_attachment_upload_process,
+        args=(
+            database_url,
+            str(notes_root),
+            str(upload_root),
+            str(user_id),
+            str(note_id),
+            entered,
+            resume,
+            False,
+            False,
+            stages,
+            results,
+        ),
+    )
+    worker.start()
+    assert entered.wait(10)
+    result = results.get(timeout=15)
+    _join_processes(worker)
+
+    assert result[0:2] == ("upload", "error")
+    attachments, files = _attachment_state(database_url, upload_root, str(note_id))
+    assert attachments == []
+    assert files == [blocked_note_directory]
+
+
+@_skip_without_fork
+def test_attachment_database_failure_removes_uploaded_file_and_row(tmp_path):
+    database_url, user_id, _notebook_id, note_id = _create_attachment_process_database(tmp_path)
+    notes_root = tmp_path / "notes"
+    upload_root = tmp_path / "uploads" / "notes"
+    context = multiprocessing.get_context("fork")
+    stages = context.Queue()
+    results = context.Queue()
+    entered = context.Event()
+    resume = context.Event()
+    worker = context.Process(
+        target=_run_attachment_upload_process,
+        args=(
+            database_url,
+            str(notes_root),
+            str(upload_root),
+            str(user_id),
+            str(note_id),
+            entered,
+            resume,
+            False,
+            True,
+            stages,
+            results,
+        ),
+    )
+    worker.start()
+    assert entered.wait(10)
+    result = results.get(timeout=15)
+    _join_processes(worker)
+
+    assert result[0:2] == ("upload", "error")
+    assert "injected attachment commit failure" in result[2]
+    attachments, files = _attachment_state(database_url, upload_root, str(note_id))
+    assert attachments == []
+    assert files == []
 
 
 @pytest.fixture
@@ -59,6 +637,528 @@ def _create_notebook(client, headers, name="My Notebook"):
         headers=headers,
     )
     return response.json()
+
+
+def _create_nested_note_tree(client, headers):
+    notebook = _create_notebook(client, headers, "Nested notebook")
+    root = client.post(
+        f"/api/notes/notebooks/{notebook['id']}/folders",
+        json={"name": "旧目录"},
+        headers=headers,
+    ).json()
+    child = client.post(
+        f"/api/notes/notebooks/{notebook['id']}/folders",
+        json={"name": "子目录", "parent_id": root["id"]},
+        headers=headers,
+    ).json()
+    first_note = client.post(
+        f"/api/notes/notebooks/{notebook['id']}/notes",
+        json={"title": "第一篇", "content": "first", "parent_id": child["id"]},
+        headers=headers,
+    ).json()
+    second_note = client.post(
+        f"/api/notes/notebooks/{notebook['id']}/notes",
+        json={"title": "第二篇", "content": "second", "parent_id": child["id"]},
+        headers=headers,
+    ).json()
+    destination = client.post(
+        f"/api/notes/notebooks/{notebook['id']}/folders",
+        json={"name": "目标目录"},
+        headers=headers,
+    ).json()
+    return {
+        "notebook": notebook,
+        "root": root,
+        "child": child,
+        "notes": [first_note, second_note],
+        "destination": destination,
+    }
+
+
+def _get_node(client, node_id, headers):
+    response = client.get(f"/api/notes/{node_id}", headers=headers)
+    assert response.status_code == 200
+    return response.json()
+
+
+def _snapshot_tree(client, tree, headers):
+    nodes = [tree["root"], tree["child"], *tree["notes"], tree["destination"]]
+    snapshot = []
+    for node in nodes:
+        if node["type"] == "note":
+            current = _get_node(client, node["id"], headers)
+            content = Path(current["content_path"]).read_text(encoding="utf-8")
+            snapshot.append((current["id"], current["parent_id"], current["path"], current["content_path"], content))
+        else:
+            snapshot.append((node["id"], node["parent_id"], node["path"], node.get("content_path")))
+    return snapshot
+
+
+def test_renaming_folder_updates_descendant_db_and_files(client):
+    headers = _register_and_login(client)
+    tree = _create_nested_note_tree(client, headers)
+    old_files = [Path(_get_node(client, note["id"], headers)["content_path"]) for note in tree["notes"]]
+    expected_paths = [
+        "/新目录/子目录/第一篇.md",
+        "/新目录/子目录/第二篇.md",
+    ]
+    expected_content = ["first", "second"]
+
+    response = client.patch(
+        f"/api/notes/nodes/{tree['root']['id']}",
+        json={"name": "新目录"},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    moved_root = next(
+        item for item in client.get(
+            f"/api/notes/notebooks/{tree['notebook']['id']}/children",
+            headers=headers,
+        ).json()
+        if item["id"] == tree["root"]["id"]
+    )
+    moved_child = next(
+        item for item in client.get(
+            f"/api/notes/notebooks/{tree['notebook']['id']}/children",
+            params={"parent_id": tree["root"]["id"]},
+            headers=headers,
+        ).json()
+        if item["id"] == tree["child"]["id"]
+    )
+    assert moved_root["id"] == tree["root"]["id"]
+    assert moved_root["path"] == "/新目录"
+    assert moved_child["id"] == tree["child"]["id"]
+    assert moved_child["path"] == "/新目录/子目录"
+    for old_file, note, expected_path, content in zip(old_files, tree["notes"], expected_paths, expected_content):
+        refreshed = _get_node(client, note["id"], headers)
+        assert refreshed["path"] == expected_path
+        assert Path(refreshed["content_path"]).exists()
+        assert refreshed["id"] == note["id"]
+        assert refreshed["content"] == content
+        assert not old_file.exists()
+
+
+def test_note_tree_move_cleans_old_and_creates_new_directories(client):
+    headers = _register_and_login(client)
+    tree = _create_nested_note_tree(client, headers)
+    old_note = _get_node(client, tree["notes"][0]["id"], headers)
+    old_root_directory = Path(old_note["content_path"]).parents[1]
+    new_root_directory = old_root_directory.parent / "目标目录" / "旧目录"
+
+    response = client.patch(
+        f"/api/notes/nodes/{tree['root']['id']}",
+        json={"parent_id": tree["destination"]["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert not old_root_directory.exists()
+    assert new_root_directory.is_dir()
+
+
+@_skip_without_fork
+def test_note_tree_renames_serialize_across_processes_with_sqlite(tmp_path):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.database import Base
+    from app.models.note import Notebook
+    from app.models.user import User
+
+    database_path = tmp_path / "shared-notes.sqlite"
+    database_url = f"sqlite:///{database_path}"
+    engine = create_engine(database_url, connect_args={"timeout": 30})
+    Base.metadata.create_all(bind=engine)
+    session = sessionmaker(bind=engine)()
+
+    user_id = uuid4()
+    notebook_id = uuid4()
+    folder_id = uuid4()
+    note_id = uuid4()
+    user = User(
+        id=user_id,
+        username=f"note-race-{uuid4().hex}",
+        email=f"note-race-{uuid4().hex}@example.com",
+        password_hash="unused",
+    )
+    notebook = Notebook(id=notebook_id, user_id=user.id, name="Concurrent notebook")
+    folder = NoteNode(
+        id=folder_id,
+        notebook_id=notebook.id,
+        type="folder",
+        name="Original",
+        normalized_name="original",
+        path="/Original",
+    )
+    note = NoteNode(
+        id=note_id,
+        notebook_id=notebook.id,
+        parent_id=folder.id,
+        type="note",
+        name="Document",
+        normalized_name="document",
+        path="/Original/Document.md",
+        content_path=str(
+            tmp_path / "notes" / str(user.id) / str(notebook.id) / "Original" / "Document.md"
+        ),
+    )
+    session.add_all([user, notebook, folder, note])
+    session.commit()
+    initial_content_path = Path(note.content_path)
+    initial_content_path.parent.mkdir(parents=True)
+    initial_content_path.write_text("stable content", encoding="utf-8")
+    session.close()
+    engine.dispose()
+
+    context = multiprocessing.get_context("fork")
+    staged = context.Event()
+    resume = context.Event()
+    first_started = context.Event()
+    second_started = context.Event()
+    second_planned = context.Event()
+    result_queue = context.Queue()
+    first = context.Process(
+        target=_run_independent_tree_rename,
+        args=(
+            database_url,
+            str(tmp_path / "notes"),
+            str(folder_id),
+            "First rename",
+            first_started,
+            None,
+            result_queue,
+            staged,
+            resume,
+        ),
+    )
+    second = context.Process(
+        target=_run_independent_tree_rename,
+        args=(
+            database_url,
+            str(tmp_path / "notes"),
+            str(folder_id),
+            "Second rename",
+            second_started,
+            second_planned,
+            result_queue,
+        ),
+    )
+
+    first.start()
+    try:
+        assert first_started.wait(5), "first process did not enter the move service"
+        if not staged.wait(10):
+            first.join(1)
+            detail = result_queue.get(timeout=2) if not first.is_alive() else "worker still running"
+            pytest.fail(f"first process did not stage the note file: {detail}")
+        second.start()
+        assert second_started.wait(5)
+        assert not second_planned.wait(0.5), "second process planned before acquiring the notebook lock"
+    finally:
+        resume.set()
+        first.join(15)
+        if second.pid is not None:
+            second.join(15)
+        for process in (first, second):
+            if process.is_alive():
+                process.terminate()
+                process.join(5)
+
+    results = [result_queue.get(timeout=2), result_queue.get(timeout=2)]
+    results_by_process = {result[0]: result[1:] for result in results}
+    assert first.exitcode == second.exitcode == 0
+    assert results_by_process["First rename"] == ("ok", "/First rename")
+    assert results_by_process["Second rename"] == ("ok", "/Second rename")
+
+    verify_engine = create_engine(database_url)
+    verify = sessionmaker(bind=verify_engine)()
+    try:
+        moved_folder = verify.query(NoteNode).filter_by(id=folder_id).one()
+        moved_note = verify.query(NoteNode).filter_by(id=note_id).one()
+        expected_file = tmp_path / "notes" / str(user_id) / str(notebook_id) / "Second rename" / "Document.md"
+        assert moved_folder.path == "/Second rename"
+        assert moved_note.path == "/Second rename/Document.md"
+        assert Path(moved_note.content_path) == expected_file
+        assert expected_file.read_text(encoding="utf-8") == "stable content"
+    finally:
+        verify.close()
+        verify_engine.dispose()
+
+
+@_skip_without_fork
+@pytest.mark.parametrize(
+    "operation",
+    [
+        "create_folder",
+        "create_note",
+        "persist_collaboration_content",
+        "delete_node",
+        "delete_notebook",
+    ],
+)
+def test_note_tree_move_serializes_same_notebook_mutations(tmp_path, operation):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.database import Base
+    from app.models.note import Notebook
+    from app.models.user import User
+
+    database_path = tmp_path / "shared-notes.sqlite"
+    database_url = f"sqlite:///{database_path}"
+    engine = create_engine(database_url, connect_args={"timeout": 30})
+    Base.metadata.create_all(bind=engine)
+    session = sessionmaker(bind=engine)()
+
+    user_id = uuid4()
+    notebook_id = uuid4()
+    folder_id = uuid4()
+    note_id = uuid4()
+    user = User(
+        id=user_id,
+        username=f"note-mutation-{uuid4().hex}",
+        email=f"note-mutation-{uuid4().hex}@example.com",
+        password_hash="unused",
+    )
+    notebook = Notebook(id=notebook_id, user_id=user.id, name="Mutation notebook")
+    folder = NoteNode(
+        id=folder_id,
+        notebook_id=notebook.id,
+        type="folder",
+        name="Original",
+        normalized_name="original",
+        path="/Original",
+    )
+    note = NoteNode(
+        id=note_id,
+        notebook_id=notebook.id,
+        parent_id=folder.id,
+        type="note",
+        name="Document",
+        normalized_name="document",
+        path="/Original/Document.md",
+        content_path=str(
+            tmp_path / "notes" / str(user.id) / str(notebook.id) / "Original" / "Document.md"
+        ),
+    )
+    session.add_all([user, notebook, folder, note])
+    session.commit()
+    initial_content_path = Path(note.content_path)
+    initial_content_path.parent.mkdir(parents=True)
+    initial_content_path.write_text("stable content", encoding="utf-8")
+    session.close()
+    engine.dispose()
+
+    context = multiprocessing.get_context("fork")
+    move_staged = context.Event()
+    release_move = context.Event()
+    move_started = context.Event()
+    mutation_started = context.Event()
+    mutation_committing = context.Event()
+    result_queue = context.Queue()
+    mover = context.Process(
+        target=_run_independent_tree_rename,
+        args=(
+            database_url,
+            str(tmp_path / "notes"),
+            str(folder_id),
+            "Moved",
+            move_started,
+            None,
+            result_queue,
+            move_staged,
+            release_move,
+        ),
+    )
+    mutator = context.Process(
+        target=_run_note_mutation_during_tree_move,
+        args=(
+            database_url,
+            str(tmp_path / "notes"),
+            operation,
+            str(notebook_id),
+            str(user_id),
+            str(folder_id if operation in {"create_folder", "create_note"} else note_id),
+            mutation_started,
+            mutation_committing,
+            result_queue,
+        ),
+    )
+
+    mover.start()
+    try:
+        assert move_started.wait(5), "tree move did not enter the service"
+        assert move_staged.wait(10), "tree move did not stage its note file"
+        mutator.start()
+        assert mutation_started.wait(5), "competing mutation did not enter the service"
+        assert not mutation_committing.wait(0.5), (
+            f"{operation} reached commit while the tree move still held the notebook lock"
+        )
+    finally:
+        release_move.set()
+        mover.join(15)
+        if mutator.pid is not None:
+            mutator.join(15)
+        for process in (mover, mutator):
+            if process.is_alive():
+                process.terminate()
+                process.join(5)
+
+    results = [result_queue.get(timeout=2), result_queue.get(timeout=2)]
+    results_by_operation = {result[0]: result[1:] for result in results}
+    assert mover.exitcode == mutator.exitcode == 0
+    assert results_by_operation["Moved"] == ("ok", "/Moved")
+    assert results_by_operation[operation][0] == "ok", results_by_operation[operation]
+
+    verify_engine = create_engine(database_url)
+    verify = sessionmaker(bind=verify_engine)()
+    try:
+        moved_folder = verify.query(NoteNode).filter_by(id=folder_id).one_or_none()
+        moved_note = verify.query(NoteNode).filter_by(id=note_id).one_or_none()
+        expected_note_path = (
+            tmp_path / "notes" / str(user_id) / str(notebook_id) / "Moved" / "Document.md"
+        )
+
+        if operation == "create_folder":
+            created = verify.query(NoteNode).filter_by(name="Created folder").one()
+            assert created.path == "/Moved/Created folder"
+            assert created.parent_id == folder_id
+        elif operation == "create_note":
+            created = verify.query(NoteNode).filter_by(name="Created note").one()
+            created_path = (
+                tmp_path / "notes" / str(user_id) / str(notebook_id) / "Moved" / "Created note.md"
+            )
+            assert created.path == "/Moved/Created note.md"
+            assert Path(created.content_path) == created_path
+            assert created_path.read_text(encoding="utf-8") == "new content"
+            assert not (initial_content_path.parent / "Created note.md").exists()
+        elif operation == "persist_collaboration_content":
+            assert moved_note.path == "/Moved/Document.md"
+            assert Path(moved_note.content_path) == expected_note_path
+            assert expected_note_path.read_text(encoding="utf-8") == "collaboration edit"
+            assert not initial_content_path.exists()
+        elif operation == "delete_node":
+            assert moved_folder.path == "/Moved"
+            assert moved_note is None
+            assert not expected_note_path.exists()
+        elif operation == "delete_notebook":
+            assert verify.query(Notebook).filter_by(id=notebook_id).one_or_none() is None
+            assert verify.query(NoteNode).filter_by(notebook_id=notebook_id).count() == 0
+            assert not expected_note_path.exists()
+    finally:
+        verify.close()
+        verify_engine.dispose()
+
+
+def test_note_tree_move_restores_db_and_files_when_rename_fails(client, monkeypatch):
+    headers = _register_and_login(client)
+    tree = _create_nested_note_tree(client, headers)
+    before = _snapshot_tree(client, tree, headers)
+    old_note = _get_node(client, tree["notes"][0]["id"], headers)
+    old_root_directory = Path(old_note["content_path"]).parents[1]
+    new_root_directory = old_root_directory.parent / "目标目录" / "旧目录"
+    original_rename = Path.rename
+    rename_count = 0
+
+    def fail_on_second_rename(path, target):
+        nonlocal rename_count
+        rename_count += 1
+        if rename_count == 2:
+            raise OSError("disk failure")
+        return original_rename(path, target)
+
+    monkeypatch.setattr(Path, "rename", fail_on_second_rename)
+    response = client.patch(
+        f"/api/notes/nodes/{tree['root']['id']}",
+        json={"parent_id": tree["destination"]["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 500
+    assert _snapshot_tree(client, tree, headers) == before
+    assert old_root_directory.is_dir()
+    assert not new_root_directory.exists()
+    assert not new_root_directory.parent.exists()
+
+
+def test_note_tree_move_restores_db_and_files_when_refresh_fails(client, monkeypatch):
+    from sqlalchemy.orm import Session
+
+    headers = _register_and_login(client)
+    tree = _create_nested_note_tree(client, headers)
+    before = _snapshot_tree(client, tree, headers)
+    original_refresh = Session.refresh
+
+    def fail_refresh(session, instance, *args, **kwargs):
+        if str(getattr(instance, "id", "")) == tree["root"]["id"]:
+            raise OSError("refresh failure")
+        return original_refresh(session, instance, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "refresh", fail_refresh)
+    response = client.patch(
+        f"/api/notes/nodes/{tree['root']['id']}",
+        json={"parent_id": tree["destination"]["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 500
+    assert _snapshot_tree(client, tree, headers) == before
+
+
+def test_note_tree_move_restores_db_and_files_when_commit_fails(client, monkeypatch):
+    from sqlalchemy.orm import Session
+
+    headers = _register_and_login(client)
+    tree = _create_nested_note_tree(client, headers)
+    before = _snapshot_tree(client, tree, headers)
+
+    def fail_commit(session, *args, **kwargs):
+        raise OSError("commit failure")
+
+    monkeypatch.setattr(Session, "commit", fail_commit)
+    response = client.patch(
+        f"/api/notes/nodes/{tree['root']['id']}",
+        json={"parent_id": tree["destination"]["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 500
+    assert _snapshot_tree(client, tree, headers) == before
+
+
+def test_note_tree_move_keeps_files_when_commit_already_persisted_with_active_marker(client, monkeypatch):
+    from sqlalchemy.orm import Session
+
+    headers = _register_and_login(client)
+    tree = _create_nested_note_tree(client, headers)
+    original_commit = Session.commit
+    original_in_transaction = Session.in_transaction
+
+    def commit_then_fail(session, *args, **kwargs):
+        original_commit(session, *args, **kwargs)
+        session._post_commit_transaction_marker = True
+        raise OSError("post-commit failure")
+
+    def in_transaction_with_marker(session):
+        if getattr(session, "_post_commit_transaction_marker", False):
+            return True
+        return original_in_transaction(session)
+
+    monkeypatch.setattr(Session, "commit", commit_then_fail)
+    monkeypatch.setattr(Session, "in_transaction", in_transaction_with_marker)
+    response = client.patch(
+        f"/api/notes/nodes/{tree['root']['id']}",
+        json={"parent_id": tree["destination"]["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 500
+    moved_note = _get_node(client, tree["notes"][0]["id"], headers)
+    assert moved_note["path"] == "/目标目录/旧目录/子目录/第一篇.md"
+    assert moved_note["content"] == "first"
+    assert Path(moved_note["content_path"]).is_file()
+    assert not Path(tree["notes"][0]["content_path"]).exists()
 
 
 def test_create_notebook(client):
@@ -326,6 +1426,40 @@ def test_delete_folder_recursive(client):
     assert r.status_code == 404
 
 
+def test_delete_node_restores_content_when_database_delete_fails(client, db_session):
+    from app.services.note import NoteService
+
+    headers = _register_and_login(client)
+    notebook = _create_notebook(client, headers, "Delete rollback")
+    created = client.post(
+        f"/api/notes/notebooks/{notebook['id']}/notes",
+        json={"title": "Keep me", "content": "restored content"},
+        headers=headers,
+    )
+    assert created.status_code == 200
+    node_id = UUID(created.json()["id"])
+    node = db_session.query(NoteNode).filter_by(id=node_id).one()
+    content_path = Path(node.content_path)
+    assert content_path.read_text(encoding="utf-8") == "restored content"
+
+    db_session.execute(text(
+        "CREATE TRIGGER reject_note_node_delete "
+        "BEFORE DELETE ON note_nodes "
+        "BEGIN SELECT RAISE(ABORT, 'forced delete failure'); END"
+    ))
+    db_session.commit()
+    try:
+        with pytest.raises(IntegrityError):
+            NoteService(db_session).delete_node(node_id)
+    finally:
+        db_session.rollback()
+        db_session.execute(text("DROP TRIGGER IF EXISTS reject_note_node_delete"))
+        db_session.commit()
+
+    assert db_session.query(NoteNode).filter_by(id=node_id).one_or_none() is not None
+    assert content_path.read_text(encoding="utf-8") == "restored content"
+
+
 def test_get_tree(client):
     headers = _register_and_login(client)
     nb = _create_notebook(client, headers)
@@ -587,7 +1721,7 @@ class _TribulationMigrationConnection:
     def __init__(self):
         self.rows = [
             ("keep-latest", "user-1", "2026-08-17", "2026-08-17 18:00:00"),
-            ("delete-older", "user-1", "2026-08-17", "2026-08-17 09:00:00"),
+            ("delete-older", "user-1", "2026-08-17", "2026-08-17 17:00:00"),
             ("keep-other-day", "user-1", "2026-08-16", "2026-08-16 09:00:00"),
         ]
         self.deleted = []

@@ -7,6 +7,9 @@ from app.models.note_sync import NoteSyncChange, NoteSyncOperation, NoteSyncConf
 from app.models.todo import Habit, Task, Goal, Subtask
 from app.models.habit_completion import HabitCompletion
 from app.models.task_schedule import TaskSchedule, TaskOccurrence
+from app.models.habit_pause import HabitPauseInterval
+from app.models.habit_leave import HabitLeaveInterval
+from app.models.daily_workbench import DailyFocusPlan, WorkbenchTaskRequest
 from app.models.shop import ShopItem, ExchangeHistory, ExchangeStatus
 from app.models.backpack import (
     BackpackItem, ItemType, ItemStatus,
@@ -16,6 +19,7 @@ from app.models.achievement import Achievement, UserAchievement
 from app.models.checkin import DailyCheckin
 from app.models.title import Title, UserTitle
 from app.models.coin_transaction import CoinTransaction, CoinSource, CoinType
+from app.models.finance_daily_reward import FinanceDailyRewardClaim
 from app.models.account import Account, AccountType
 from app.models.finance_category import FinanceCategory, CategoryType
 from app.models.finance_transaction import FinanceTransaction, FinanceTransactionType
@@ -27,6 +31,8 @@ from app.models.cultivation import CultivationProfile, CultivationLog, Tribulati
 from app.models.world import WorldNode, WorldNodeProgress, Sect, SectMembership, SectAccessProgress, Npc, NpcEvent
 from app.models.technique import Technique, TechniqueSlot, LearnedTechnique
 from app.models.immortal import ImmortalProfile, AscensionRecord, CrossRealmSettlement, ImmortalActivityRecord, ImmortalStageAdvance, ImmortalOfficialCommission
+from app.models.mcp_access_token import MCPAccessToken
+from app.models.refresh_token import RefreshToken
 
 __all__ = [
     "User",
@@ -34,7 +40,8 @@ __all__ = [
     "NoteCollabDocument", "NoteCollabEvent",
     "NoteSyncChange", "NoteSyncOperation", "NoteSyncConflict",
     "TaskNoteLink", "GoalNoteLink", "ProjectNoteLink",
-    "Habit", "HabitCompletion", "Task", "Goal", "Subtask",
+    "Habit", "HabitCompletion", "HabitPauseInterval", "HabitLeaveInterval", "DailyFocusPlan", "WorkbenchTaskRequest",
+    "Task", "Goal", "Subtask",
     "TaskSchedule", "TaskOccurrence",
     "ShopItem", "ExchangeHistory", "ExchangeStatus",
     "BackpackItem", "ItemType", "ItemStatus",
@@ -43,6 +50,7 @@ __all__ = [
     "DailyCheckin",
     "Title", "UserTitle",
     "CoinTransaction", "CoinSource", "CoinType",
+    "FinanceDailyRewardClaim",
     "Account", "AccountType",
     "FinanceCategory", "CategoryType",
     "FinanceTransaction", "FinanceTransactionType",
@@ -54,4 +62,6 @@ __all__ = [
     "WorldNode", "WorldNodeProgress", "Sect", "SectMembership", "SectAccessProgress", "Npc", "NpcEvent",
     "Technique", "TechniqueSlot", "LearnedTechnique",
     "ImmortalProfile", "AscensionRecord", "CrossRealmSettlement", "ImmortalActivityRecord", "ImmortalStageAdvance", "ImmortalOfficialCommission",
+    "MCPAccessToken",
+    "RefreshToken",
 ]

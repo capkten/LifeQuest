@@ -40,7 +40,13 @@ class NoteNodeRepository(BaseRepository[NoteNode]):
             .all()
         )
 
-    def check_name_conflict(self, notebook_id: UUID, parent_id: Optional[UUID], normalized_name: str) -> bool:
+    def check_name_conflict(
+        self,
+        notebook_id: UUID,
+        parent_id: Optional[UUID],
+        normalized_name: str,
+        exclude_id: Optional[UUID] = None,
+    ) -> bool:
         """Check if a node with the same normalized name exists in the same directory."""
         q = self.db.query(NoteNode).filter(
             NoteNode.notebook_id == notebook_id,
@@ -50,6 +56,8 @@ class NoteNodeRepository(BaseRepository[NoteNode]):
             q = q.filter(NoteNode.parent_id.is_(None))
         else:
             q = q.filter(NoteNode.parent_id == parent_id)
+        if exclude_id is not None:
+            q = q.filter(NoteNode.id != exclude_id)
         return q.first() is not None
 
     def get_descendants(self, node_id: UUID) -> List[NoteNode]:

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, Text, Uuid
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, Index, Text, Uuid
 
 from app.database import Base
 
@@ -35,6 +35,14 @@ class ShopItem(Base):
 
 class ExchangeHistory(Base):
     __tablename__ = "exchange_history"
+    __table_args__ = (
+        Index(
+            "uq_exchange_history_user_idempotency_key",
+            "user_id",
+            "idempotency_key",
+            unique=True,
+        ),
+    )
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     user_id = Column(Uuid, ForeignKey("users.id"), nullable=False)
@@ -42,4 +50,7 @@ class ExchangeHistory(Base):
     quantity = Column(Integer, default=1)
     total_cost = Column(Integer, nullable=False)
     status = Column(String(20), default=ExchangeStatus.COMPLETED)
+    idempotency_key = Column(String(128), nullable=True)
+    item_name_snapshot = Column(String(200), nullable=True)
+    unit_price_snapshot = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

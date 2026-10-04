@@ -36,6 +36,10 @@ export const projectService = {
     const r = await api.post(`/projects/${id}/complete`)
     return r.data
   },
+  async startProject(id) {
+    const r = await api.post(`/projects/${id}/start`)
+    return r.data
+  },
 
   // Phases
   async createPhase(projectId, data) {
@@ -78,6 +82,10 @@ export const projectService = {
   },
   async moveTask(taskId, data) {
     const r = await api.put(`/projects/tasks/${taskId}/move`, data)
+    return r.data
+  },
+  async updateTask(taskId, data) {
+    const r = await api.put(`/todos/tasks/${taskId}`, data)
     return r.data
   }
 }

@@ -43,7 +43,7 @@ class CoinTransactionRepository(BaseRepository[CoinTransaction]):
         result = (
             self.db.query(
                 CoinTransaction.type,
-                func.sum(CoinTransaction.amount).label("total"),
+                func.sum(func.abs(CoinTransaction.amount)).label("total"),
             )
             .filter(CoinTransaction.user_id == user_id)
             .group_by(CoinTransaction.type)
