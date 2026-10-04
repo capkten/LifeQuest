@@ -13,12 +13,19 @@ declare module 'vue' {
   export interface GlobalComponents {
     AppLayout: typeof import('./src/components/layout/AppLayout.vue')['default']
     CollaborativeMarkdownEditor: typeof import('./src/components/notes/CollaborativeMarkdownEditor.vue')['default']
+    CultivationRetreatModal: typeof import('./src/components/retreat/CultivationRetreatModal.vue')['default']
     CultivationStatusBar: typeof import('./src/components/cultivation/CultivationStatusBar.vue')['default']
     ElButton: typeof import('element-plus/es')['ElButton']
+    ElCheckbox: typeof import('element-plus/es')['ElCheckbox']
     ElDialog: typeof import('element-plus/es')['ElDialog']
+    ElDrawer: typeof import('element-plus/es')['ElDrawer']
     ElForm: typeof import('element-plus/es')['ElForm']
     ElFormItem: typeof import('element-plus/es')['ElFormItem']
     ElInput: typeof import('element-plus/es')['ElInput']
+    ElProgress: typeof import('element-plus/es')['ElProgress']
+    ElTooltip: typeof import('element-plus/es')['ElTooltip']
+    EncounterCatalogDrawer: typeof import('./src/components/retreat/EncounterCatalogDrawer.vue')['default']
+    EncounterScrollDialog: typeof import('./src/components/retreat/EncounterScrollDialog.vue')['default']
     HabitHistoryDialog: typeof import('./src/components/HabitHistoryDialog.vue')['default']
     Header: typeof import('./src/components/layout/Header.vue')['default']
     MapNode: typeof import('./src/components/cultivation/MapNode.vue')['default']
@@ -28,6 +35,7 @@ declare module 'vue' {
     NpcTimeline: typeof import('./src/components/cultivation/NpcTimeline.vue')['default']
     RealmProgress: typeof import('./src/components/cultivation/RealmProgress.vue')['default']
     ResourceSummary: typeof import('./src/components/cultivation/ResourceSummary.vue')['default']
+    RetreatCountdownRing: typeof import('./src/components/retreat/RetreatCountdownRing.vue')['default']
     RewardToast: typeof import('./src/components/cultivation/RewardToast.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
@@ -39,5 +47,8 @@ declare module 'vue' {
     TribulationProbability: typeof import('./src/components/cultivation/TribulationProbability.vue')['default']
     UpdatePrompt: typeof import('./src/components/layout/UpdatePrompt.vue')['default']
     WorkbenchTaskRow: typeof import('./src/components/home/WorkbenchTaskRow.vue')['default']
+  }
+  export interface GlobalDirectives {
+    vLoading: typeof import('element-plus/es')['ElLoadingDirective']
   }
 }
