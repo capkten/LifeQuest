@@ -31,3 +31,27 @@ test('cultivation retreat modal integrates composable, presets, fullscreen and s
   assert.match(source, /completeRetreat/, 'completeRetreat missing')
   assert.match(source, /markTodoComplete|mark_todo_complete/, 'todo complete linkage option missing')
 })
+
+test('encounter scroll dialog displays ancient scroll, rarity seal, story text and rewards', async () => {
+  const source = await readFile(
+    new URL('../components/retreat/EncounterScrollDialog.vue', import.meta.url),
+    'utf8'
+  )
+
+  assert.match(source, /scroll|宣纸|卷轴/i, 'scroll motif missing')
+  assert.match(source, /rarity|品质|仙缘|奇缘|福源/, 'rarity seal missing')
+  assert.match(source, /story_text|storyText|故事/, 'story text missing')
+  assert.match(source, /reward|奖励|修为|灵石/, 'reward display missing')
+})
+
+test('encounter catalog drawer displays collection grid, unlock progress and silhouettes', async () => {
+  const source = await readFile(
+    new URL('../components/retreat/EncounterCatalogDrawer.vue', import.meta.url),
+    'utf8'
+  )
+
+  assert.match(source, /getCatalog|fetchCatalog|catalog/, 'catalog loading missing')
+  assert.match(source, /万象机缘|机缘录|图鉴/, 'catalog title missing')
+  assert.match(source, /unlock|unlocked|已解锁/, 'unlock status missing')
+})
+

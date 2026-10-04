@@ -33,7 +33,7 @@
               size="small"
               circle
               class="icon-action-btn"
-              @click="emit('open-catalog')"
+              @click="showCatalog = true; emit('open-catalog')"
             >
               📜
             </el-button>
@@ -132,6 +132,18 @@
       </div>
     </div>
   </el-dialog>
+
+  <!-- Encounter Revelation Scroll Dialog -->
+  <EncounterScrollDialog
+    v-model="showEncounterDialog"
+    :encounter="currentEncounter"
+    @claim="handleEncounterClaim"
+  />
+
+  <!-- Encounter Catalog Drawer -->
+  <EncounterCatalogDrawer
+    v-model="showCatalog"
+  />
 </template>
 
 <script setup>
@@ -139,6 +151,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useCultivationRetreat } from '../../composables/useCultivationRetreat.js'
 import RetreatCountdownRing from './RetreatCountdownRing.vue'
+import EncounterScrollDialog from './EncounterScrollDialog.vue'
+import EncounterCatalogDrawer from './EncounterCatalogDrawer.vue'
 
 const props = defineProps({
   modelValue: {
@@ -175,6 +189,9 @@ const modalContainer = ref(null)
 const selectedDuration = ref(25)
 const markTodoComplete = ref(true)
 const isFullscreen = ref(false)
+const showCatalog = ref(false)
+const currentEncounter = ref(null)
+const showEncounterDialog = ref(false)
 
 const boundTodoTitle = computed(() => {
   return props.todoItem?.title || activeRetreat.value?.todo?.title || null
@@ -225,12 +242,18 @@ async function handleComplete() {
     ElMessage.success(`出关大吉！斩获修为 +${res.exp_gained}，灵石 +${res.coins_gained}`)
     emit('completed', res)
     if (res.encounter_result) {
+      currentEncounter.value = res.encounter_result
+      showEncounterDialog.value = true
       emit('encounter', res.encounter_result)
     }
     emit('update:modelValue', false)
   } catch (err) {
     ElMessage.error(err?.message || '结算失败')
   }
+}
+
+function handleEncounterClaim(enc) {
+  showEncounterDialog.value = false
 }
 
 async function handleAbort() {
