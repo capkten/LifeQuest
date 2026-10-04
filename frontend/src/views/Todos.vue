@@ -5,13 +5,18 @@
         <h2 class="page-title">待办</h2>
         <span class="item-count">{{ currentList.length }} {{ activeTab === 'habits' ? '个习惯' : activeTab === 'tasks' ? '个任务' : '个目标' }}</span>
       </div>
-      <button class="btn-create" @click="showCreateDialog = true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-        新建{{ activeTabSingular }}
-      </button>
+      <div class="header-actions-group">
+        <button class="btn-retreat" @click="openRetreatModal(null)">
+          🧘 闭关专注
+        </button>
+        <button class="btn-create" @click="showCreateDialog = true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          新建{{ activeTabSingular }}
+        </button>
+      </div>
     </div>
 
     <div class="tabs">
@@ -291,6 +296,9 @@
             </div>
             <div class="todo-card-actions">
               <div class="action-buttons">
+                <button class="action-btn action-btn--focus" @click="openRetreatModal(task)" aria-label="为此任务闭关专注" title="闭关专注">
+                  🧘
+                </button>
                 <button class="action-btn action-btn--snooze" @click="openSnoozeDialog(task)" aria-label="延期任务" title="延期任务">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="9" />
@@ -826,6 +834,13 @@
       @complete="completeHabitFromHistory"
       @updated="updateHabitFromHistory"
     />
+
+    <!-- Cultivation Retreat Modal -->
+    <CultivationRetreatModal
+      v-model="showRetreatModal"
+      :todo-item="retreatSelectedTodo"
+      @completed="handleRetreatCompleted"
+    />
   </div>
 </template>
 
@@ -840,6 +855,19 @@ import { useCultivationStore } from '../stores/cultivation'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelDifficulty, labelFrequency, labelTaskStatus } from '../utils/displayLabels'
 import HabitHistoryDialog from '../components/HabitHistoryDialog.vue'
+import CultivationRetreatModal from '../components/retreat/CultivationRetreatModal.vue'
+
+const showRetreatModal = ref(false)
+const retreatSelectedTodo = ref(null)
+
+function openRetreatModal(todo = null) {
+  retreatSelectedTodo.value = todo
+  showRetreatModal.value = true
+}
+
+function handleRetreatCompleted() {
+  loadData()
+}
 
 const authStore = useAuthStore()
 const cultivationStore = useCultivationStore()
@@ -3587,5 +3615,39 @@ onMounted(() => {
     border-radius: 12px;
     padding: 11px 13px;
   }
+}
+
+.header-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-retreat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.12), rgba(79, 209, 197, 0.12));
+  color: var(--color-primary);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 8px 14px;
+  border-radius: var(--radius-md, 8px);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-retreat:hover {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(79, 209, 197, 0.2));
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+}
+
+.action-btn--focus {
+  font-size: 1rem;
+}
+.action-btn--focus:hover {
+  color: #38bdf8;
+  transform: scale(1.1);
 }
 </style>

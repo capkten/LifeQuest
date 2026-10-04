@@ -1187,3 +1187,17 @@ test('MCP copy and revoke actions cannot start while the other action is pending
   assert.strictEqual(reduceMcpTokenState(state, { type: 'copy-start' }), state)
   assert.strictEqual(reduceMcpTokenState(state, { type: 'revoke-start' }), state)
 })
+
+test('TodayWorkbench and Todos integrate cultivation retreat focus triggers and modal', async () => {
+  const [workbenchSource, todosSource] = await Promise.all([
+    readFile(new URL('../components/home/TodayWorkbench.vue', import.meta.url), 'utf8'),
+    readFile(new URL('./Todos.vue', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(workbenchSource, /CultivationRetreatModal/, 'TodayWorkbench missing CultivationRetreatModal')
+  assert.match(workbenchSource, /闭关|入定|retreat/i, 'TodayWorkbench missing retreat trigger')
+
+  assert.match(todosSource, /CultivationRetreatModal/, 'Todos missing CultivationRetreatModal')
+  assert.match(todosSource, /闭关|入定|action-btn--focus/i, 'Todos missing retreat trigger')
+})
+

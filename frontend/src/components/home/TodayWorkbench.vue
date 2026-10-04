@@ -6,7 +6,12 @@
         <h2 id="workbench-heading">今日工作台</h2>
         <p class="muted">{{ data?.date || '正在获取日期' }} · 中国时间 · 今天最重要的事，从这里开始</p>
       </div>
-      <button type="button" :disabled="busy || loading" @click="load()">{{ loading ? '刷新中…' : '刷新' }}</button>
+      <div class="header-actions">
+        <button type="button" class="retreat-trigger-btn" @click="openRetreatModal(null)">
+          🧘 闭关专注
+        </button>
+        <button type="button" :disabled="busy || loading" @click="load()">{{ loading ? '刷新中…' : '刷新' }}</button>
+      </div>
     </header>
 
     <div v-if="data" class="workbench-metrics" aria-label="今日行动进展">
@@ -124,6 +129,12 @@
       工作台没有返回可显示的数据。
       <button type="button" :disabled="busy" @click="load()">重试加载</button>
     </div>
+    <!-- Cultivation Retreat Modal -->
+    <CultivationRetreatModal
+      v-model="showRetreatModal"
+      :todo-item="retreatSelectedTodo"
+      @completed="load()"
+    />
   </section>
 </template>
 
@@ -135,6 +146,15 @@ import { useCultivationStore } from '../../stores/cultivation'
 import { todayChinaDateKey } from '../../utils/dateTime'
 import { useDailyWorkbench } from '../../composables/useDailyWorkbench'
 import WorkbenchTaskRow from './WorkbenchTaskRow.vue'
+import CultivationRetreatModal from '../retreat/CultivationRetreatModal.vue'
+
+const showRetreatModal = ref(false)
+const retreatSelectedTodo = ref(null)
+
+function openRetreatModal(todo = null) {
+  retreatSelectedTodo.value = todo
+  showRetreatModal.value = true
+}
 
 const emit = defineEmits(['changed'])
 const authStore = useAuthStore()
@@ -264,6 +284,18 @@ legend { font-size: 14px; font-weight: 600; padding: 0 0 12px; }
 .more-button { width: 100%; color: var(--color-primary); }
 .workbench-footer { margin-top: 18px; }
 .workbench-footer a { color: var(--color-primary); font-size: 14px; flex-shrink: 0; }
+.header-actions { display: flex; align-items: center; gap: 8px; }
+.retreat-trigger-btn {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.15), rgba(79, 209, 197, 0.15));
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: var(--color-primary);
+  font-weight: 600;
+  border-radius: 10px;
+}
+.retreat-trigger-btn:hover {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(79, 209, 197, 0.25));
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+}
 @media (max-width: 900px) { .focus-tasks { grid-template-columns: 1fr; } }
 @media (max-width: 600px) {
   .task-groups { grid-template-columns: 1fr; gap: 12px; }
