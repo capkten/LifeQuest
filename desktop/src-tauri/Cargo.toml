@@ -1,6 +1,6 @@
 [package]
 name = "lifequest-desktop"
-version = "1.14.8"
+version = "1.15.0"
 description = "LifeQuest Windows desktop client"
 authors = ["LifeQuest"]
 edition = "2021"
