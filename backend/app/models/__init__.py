@@ -28,6 +28,7 @@ from app.models.recurring_transaction import RecurringTransaction, RecurFrequenc
 from app.models.debt import Debt, DebtPayment, DebtType, DebtStatus
 from app.models.project import Project, ProjectPhase, ProjectMilestone, ProjectStatus, PhaseStatus, MilestoneStatus
 from app.models.cultivation import CultivationProfile, CultivationLog, TribulationAttempt
+from app.models.cultivation_retreat import CultivationRetreat, EncounterEvent, UserEncounterRecord
 from app.models.world import WorldNode, WorldNodeProgress, Sect, SectMembership, SectAccessProgress, Npc, NpcEvent
 from app.models.technique import Technique, TechniqueSlot, LearnedTechnique
 from app.models.immortal import ImmortalProfile, AscensionRecord, CrossRealmSettlement, ImmortalActivityRecord, ImmortalStageAdvance, ImmortalOfficialCommission
@@ -59,6 +60,7 @@ __all__ = [
     "Debt", "DebtPayment", "DebtType", "DebtStatus",
     "Project", "ProjectPhase", "ProjectMilestone", "ProjectStatus", "PhaseStatus", "MilestoneStatus",
     "CultivationProfile", "CultivationLog", "TribulationAttempt",
+    "CultivationRetreat", "EncounterEvent", "UserEncounterRecord",
     "WorldNode", "WorldNodeProgress", "Sect", "SectMembership", "SectAccessProgress", "Npc", "NpcEvent",
     "Technique", "TechniqueSlot", "LearnedTechnique",
     "ImmortalProfile", "AscensionRecord", "CrossRealmSettlement", "ImmortalActivityRecord", "ImmortalStageAdvance", "ImmortalOfficialCommission",
