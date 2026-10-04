@@ -19,7 +19,7 @@ from app.database import engine, Base, SessionLocal
 from app import models  # noqa: F401  # Register all ORM models before create_all.
 from app.timezone import local_date
 from app.services.note import NoteService
-from app.api import auth, users, notes, note_sync, todos, shop, backpack, achievements, checkin, titles, coins, calendar, stats, finance, projects, cultivation, immortal, action_center, review
+from app.api import auth, users, notes, note_sync, todos, shop, backpack, achievements, checkin, titles, coins, calendar, stats, finance, projects, cultivation, immortal, action_center, review, cultivation_retreat
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -1433,6 +1433,7 @@ app.include_router(finance.router)
 app.include_router(projects.router)
 app.include_router(cultivation.router)
 app.include_router(immortal.router)
+app.include_router(cultivation_retreat.router)
 
 # MCP SSE server — subprocess on internal port, proxied through explicit routes.
 _mcp_process = None
