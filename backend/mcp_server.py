@@ -95,6 +95,7 @@ from app.services.todo import TodoService
 from app.services.daily_workbench import DailyWorkbenchService
 from app.services.user import UserService
 from app.services.mcp_access_token import MCPAccessTokenService
+from app.services.cultivation_retreat import CultivationRetreatService
 
 logger = logging.getLogger(__name__)
 
@@ -2414,6 +2415,72 @@ def update_note(
         result = _serialize(updated)
         result["content"] = svc.get_note_content(updated.id)
         return result
+    finally:
+        db.close()
+
+
+# ===================== 专注与修仙闭关 =====================
+
+
+@mcp.tool()
+def start_focus_session(target_duration: int = 25, todo_id: Optional[str] = None) -> Any:
+    """开启一段修仙闭关专注（番茄钟）。可选择关联一个待办任务 ID。返回闭关状态。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        todo_uuid = UUID(todo_id) if todo_id else None
+        session = CultivationRetreatService.start_retreat(
+            db=db,
+            user_id=uid,
+            target_duration=target_duration,
+            todo_id=todo_uuid,
+        )
+        return _serialize(session)
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def get_active_focus_session() -> Any:
+    """获取当前用户正在进行中的闭关专注会话。若无则返回 None。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        session = CultivationRetreatService.get_active_retreat(db=db, user_id=uid)
+        return _serialize(session)
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def complete_focus_session(session_id: str, mark_todo_complete: bool = False) -> Any:
+    """完成并结算修仙闭关专注会话。若关联了待办任务，可同时将其标记为已完成。返回结算修为、灵石与奇遇事件。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        session = CultivationRetreatService.complete_retreat(
+            db=db,
+            user_id=uid,
+            retreat_id=UUID(session_id),
+            mark_todo_complete=mark_todo_complete,
+        )
+        return _serialize(session)
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def abort_focus_session(session_id: str) -> Any:
+    """中止/放弃当前的闭关专注会话。"""
+    db = SessionLocal()
+    try:
+        uid = _resolve_user_id(db)
+        session = CultivationRetreatService.abort_retreat(
+            db=db,
+            user_id=uid,
+            retreat_id=UUID(session_id),
+        )
+        return _serialize(session)
     finally:
         db.close()
 
