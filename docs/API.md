@@ -8,7 +8,7 @@ OAuth 复用现有 LifeQuest 登录与业务权限，授权范围为 `mcp`。与
 | --- | --- |
 | `GET /.well-known/oauth-authorization-server` | RFC 8414 授权服务器元数据，公开，不含用户数据 |
 | `GET /.well-known/oauth-protected-resource`、`GET /.well-known/oauth-protected-resource/mcp/http` | RFC 9728 资源元数据，公开 |
-| `POST /api/oauth/register` | 注册公开/机密客户端，JSON；精确 HTTPS 回调 URI，返回 client_id，机密客户端 Secret 仅返回一次 |
+| `POST /api/oauth/register` | 注册公开/机密客户端，JSON；grant_types 省略默认 authorization_code + refresh_token，显式指定须同时包含二者（拒绝子集）；认证方式 none/client_secret_post/client_secret_basic；精确 HTTPS 回调 URI，返回 client_id，机密客户端 Secret 仅返回一次 |
 | `GET /api/oauth/authorize` | 校验 `response_type=code`、client_id、redirect_uri、scope、resource、state、S256 code_challenge，然后跳转前端；不在此端点传网站密码 |
 | `GET /api/oauth/requests/{request_id}` | 普通网站 Bearer JWT；读取并绑定待处理请求到当前用户，返回 client_name、redirect_uri、scope、resource、user_id |
 | `POST /api/oauth/consent` | 普通网站 Bearer JWT；JSON `{request_id, approve}`，返回服务端验证过的 `{redirect_uri}`，保留客户端 state；必须由用户明确同意/拒绝 |

@@ -14,13 +14,13 @@
 MCP_OAUTH_ENABLED=true
 MCP_OAUTH_ISSUER_URL=https://life.capkin.cn
 MCP_OAUTH_RESOURCE_URL=https://life.capkin.cn/mcp/http
-MCP_OAUTH_FRONTEND_URL=https://life.capkin.cn
+MCP_OAUTH_FRONTEND_URL=https://life.capkin.cn/oauth/authorize
 MCP_OAUTH_ALLOW_LOOPBACK=false
 ```
 
-以上是配置示例；若使用独立 MCP 域名，需要管理员另外配置 DNS、TLS 和反向代理，并将 resource 改成实际完整 MCP URL。Issuer 的 `/.well-known/oauth-authorization-server` 必须路由到 API，不能由前端 SPA 接管。受保护资源元数据位于资源域名的 `/.well-known/oauth-protected-resource/mcp/http`；独立 MCP transport 也提供相应发现响应。公开 URL 取自配置，不信任请求的 Host/转发头。
+`MCP_OAUTH_FRONTEND_URL` 必须是完整授权页 URL（包含 `/oauth/authorize`），不能只填网站域名。以上是配置示例；若使用独立 MCP 域名，需要管理员另外配置 DNS、TLS 和反向代理，并将 resource 改成实际完整 MCP URL。Issuer 的 `/.well-known/oauth-authorization-server` 必须路由到 API，不能由前端 SPA 接管。受保护资源元数据位于资源域名的 `/.well-known/oauth-protected-resource/mcp/http`；独立 MCP transport 也提供相应发现响应。公开 URL 取自配置，不信任请求的 Host/转发头。
 
-在 ChatGPT 的自定义 MCP 连接配置中，填入实际 Streamable HTTP URL，选择 OAuth 授权。客户端从 MCP 的 401 `WWW-Authenticate` 挑战发现 Protected Resource Metadata，再发现授权服务器。自动客户端注册使用 `/api/oauth/register`；若客户端需要预先填写 Client ID/Secret，可先通过该端点注册，保存返回的 ID，机密客户端的 Secret 仅首次返回。客户端须发送 `resource`（完整 MCP URL）、`scope=mcp`，使用授权码流程和 `code_challenge_method=S256`。不支持隐式授权、密码授权、OIDC 或通过任意客户端元数据 URL 拉取注册信息。
+在 ChatGPT 的自定义 MCP 连接配置中，填入实际 Streamable HTTP URL，选择 OAuth 授权。客户端从 MCP 的 401 `WWW-Authenticate` 挑战发现 Protected Resource Metadata，再发现授权服务器。自动客户端注册使用 `/api/oauth/register`。注册仅支持同时声明 `grant_types: ["authorization_code", "refresh_token"]`，省略时默认这一对；显式声明子集或其他类型会拒绝。公开客户端使用 `token_endpoint_auth_method=none`，机密客户端支持 `client_secret_post` 或 `client_secret_basic`；若客户端需要预先填写 Client ID/Secret，可先通过该端点注册，保存返回的 ID，机密客户端的 Secret 仅首次返回。客户端须发送 `resource`（完整 MCP URL）、`scope=mcp`，使用授权码流程和 `code_challenge_method=S256`。不支持隐式授权、密码授权、OIDC 或通过任意客户端元数据 URL 拉取注册信息。
 
 **回调地址必须使用客户端实际提供的完整 HTTPS URI，并与注册值精确匹配**，不要猜测 ChatGPT 的回调域名或使用通配符。客户端必须生成并验证 `state`，保管 PKCE verifier。仅开发环境可显式打开 loopback HTTP；公开部署保持关闭。客户端注册本身不会授予用户权限。
 
@@ -69,7 +69,7 @@ MCP_OAUTH_ALLOW_LOOPBACK=false
 Authorization: Bearer <LifeQuest MCP access token>
 ```
 
-这里需要通过 LifeQuest 已有 MCP Token 管理接口创建的 Token，不是普通登录 JWT。Token 权限等于该用户通过现有 Service 可执行的业务权限，目前没有每个工具的细粒度权限范围；`LIFEQUEST_MCP_SERVICE_USER_ID` 只是用户绑定限制，不是只读权限。Token 管理仍使用登录后的网页或 `/api/auth/mcp-tokens`：创建、查看元数据、撤销；创建响应只应保存到客户端的凭据配置中。工具不会替用户签发新 Token。
+PAT 连接时，使用 LifeQuest 已有 MCP Token 管理接口创建的个人访问令牌；启用 OAuth 后，也可使用上述 OAuth 流程取得的 MCP 访问令牌。两者均不能使用普通登录 JWT 替代。权限等于该用户通过现有 Service 可执行的业务权限，目前没有每个工具的细粒度权限范围；`LIFEQUEST_MCP_SERVICE_USER_ID` 只是用户绑定限制，不是只读权限。Token 管理仍使用登录后的网页或 `/api/auth/mcp-tokens`：创建、查看元数据、撤销；创建响应只应保存到客户端的凭据配置中。工具不会替用户签发新 Token。
 
 从 `backend/` 启动本地远程服务：
 
