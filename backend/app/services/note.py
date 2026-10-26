@@ -22,6 +22,7 @@ from app.models.user import User
 from app.repositories.note import NotebookRepository, NoteNodeRepository, AttachmentRepository
 from app.schemas.note import (
     NotebookCreate,
+    NotebookUpdate,
     FolderCreate,
     NoteCreate,
     NoteUpdate,
@@ -208,6 +209,14 @@ class NoteService:
         data = notebook_in.model_dump()
         data["user_id"] = user_id
         return self.notebook_repo.create(data)
+
+    def update_notebook(self, notebook_id: UUID, user_id: UUID, notebook_in: NotebookUpdate) -> Notebook:
+        access = self.require_notebook_access(notebook_id, user_id)
+        if not access["is_owner"]:
+            raise PermissionError("Not authorized")
+        return self.notebook_repo.update(
+            access["notebook"], notebook_in.model_dump(exclude_unset=True)
+        )
 
     def get_notebooks(self, user_id: UUID) -> List[Notebook]:
         owned = self.notebook_repo.get_by_user(user_id)

@@ -1507,7 +1507,38 @@ async def mcp_messages_proxy(request: Request):
         return Response(content='{"detail":"MCP service unavailable"}', status_code=503, media_type="application/json")
     return Response(content=resp.content, status_code=resp.status_code, headers=dict(resp.headers))
 
-logger.info("MCP proxy registered at /mcp/sse and /mcp/messages")
+@app.api_route("/mcp/http", methods=["GET", "POST", "DELETE"])
+@app.api_route("/mcp/http/", methods=["GET", "POST", "DELETE"])
+async def mcp_http_proxy(request: Request):
+    """Forward Streamable HTTP, including protocol/session headers and streams."""
+    mcp_port = int(os.environ.get("MCP_PORT", "3001"))
+    suffix = "/" if request.url.path.endswith("/") else ""
+    query = f"?{request.url.query}" if request.url.query else ""
+    url = f"http://127.0.0.1:{mcp_port}/http{suffix}{query}"
+    headers = {key: value for key, value in request.headers.items()
+               if key.lower() not in {"host", "connection", "transfer-encoding", "content-length"}}
+    client = httpx.AsyncClient(timeout=None)
+    try:
+        upstream = client.build_request(request.method, url, content=await request.body(), headers=headers)
+        response = await client.send(upstream, stream=True)
+    except httpx.HTTPError:
+        await client.aclose()
+        return Response(content='{"detail":"MCP service unavailable"}', status_code=503, media_type="application/json")
+
+    async def stream():
+        try:
+            async for chunk in response.aiter_bytes():
+                yield chunk
+        finally:
+            await response.aclose()
+            await client.aclose()
+
+    response_headers = {key: value for key, value in response.headers.items()
+                        if key.lower() not in {"connection", "transfer-encoding", "content-length", "content-encoding"}}
+    return StreamingResponse(stream(), status_code=response.status_code, headers=response_headers)
+
+
+logger.info("MCP proxy registered at /mcp/http, /mcp/sse and /mcp/messages")
 
 
 # Serve frontend static files (production mode)

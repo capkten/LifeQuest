@@ -823,7 +823,11 @@ class CultivationService:
                 if value is None:
                     continue
                 slot = slots[index]
-                technique = self.db.query(Technique).filter(Technique.id == value).first()
+                try:
+                    technique_id = value if isinstance(value, UUID) else UUID(str(value))
+                except (ValueError, TypeError, AttributeError) as exc:
+                    raise ValueError("INVALID_TECHNIQUE_ID") from exc
+                technique = self.db.query(Technique).filter(Technique.id == technique_id).first()
                 if technique is None:
                     raise LookupError("TECHNIQUE_NOT_FOUND:technique or slot not found")
                 if technique.technique_type != slot_type:

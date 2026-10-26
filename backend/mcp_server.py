@@ -20,7 +20,10 @@ import os
 import re
 import sys
 import weakref
+from urllib.parse import parse_qs, urlparse
 from datetime import date, datetime
+from decimal import Decimal
+from enum import Enum
 from typing import Any, Optional
 from uuid import UUID
 
@@ -66,6 +69,10 @@ from app.schemas.todo import (
     HabitCompletionCreate,
     HabitBackfillCreate,
     HabitLeaveCreate,
+    HabitResponse,
+    TaskResponse,
+    GoalResponse,
+    SubtaskResponse,
     TaskCreate,
     TaskUpdate,
     GoalUpdate,
@@ -85,7 +92,8 @@ from app.schemas.project import (
     MilestoneUpdate,
 )
 from app.schemas.note import FolderCreate, NotebookCreate, NoteCreate, NoteUpdate
-from app.models.todo import TaskStatus
+from app.models.todo import TaskStatus, Habit, Task, Goal, Subtask
+from app.models.user import User
 from app.services.checkin import CheckinService
 from app.services.finance import FinanceService
 from app.services.note import NoteService
@@ -114,6 +122,8 @@ _auth_token_authenticated: contextvars.ContextVar[bool] = contextvars.ContextVar
 )
 _auth_users_by_session: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 _token_sessions: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+_session_tokens: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+_remote_request: contextvars.ContextVar[bool] = contextvars.ContextVar("_remote_request", default=False)
 
 
 def _current_mcp_session():
@@ -202,37 +212,41 @@ def _ensure_db():
 # ---------------------------------------------------------------------------
 
 def _resolve_user_id(db) -> UUID:
-    """Resolve user ID from session, context authentication, or MCP token."""
+    """Resolve credentials on every call, including already authenticated sessions."""
     _ensure_db()
-    # 1. Check the authenticated MCP session.
     session = _current_mcp_session()
-    if session is not None:
-        uid = _auth_users_by_session.get(session)
-        if uid:
-            if os.environ.get("LIFEQUEST_MCP_SERVICE_USER_ID") and not _token_sessions.get(session, False):
-                raise RuntimeError("LIFEQUEST_MCP_SERVICE_USER_ID 必须与有效 MCP Token 一起使用")
-            _validate_service_user_id(uid)
-            return uid
-
-    # 2. Check the context-local value for stdio/direct calls.
-    uid = _auth_user_id.get()
-    if uid and (
-        not os.environ.get("LIFEQUEST_MCP_SERVICE_USER_ID")
-        or _auth_token_authenticated.get()
-    ):
-        _validate_service_user_id(uid)
-        return uid
-
-    # 3. Check the context-local or stdio environment token.
-    raw_token = _auth_token.get() or os.environ.get("LIFEQUEST_MCP_TOKEN")
+    try:
+        request = getattr(request_ctx.get(), "request", None)
+    except LookupError:
+        request = None
+    remote = _remote_request.get() or request is not None
+    # Transport tasks may inherit the initialization request's context. The
+    # request metadata is authoritative for each subsequent HTTP tool call.
+    request_auth = request.scope.get("lifequest.mcp_auth") if request is not None else None
+    raw_token = request_auth[1] if request_auth else None
+    if raw_token is None and session is not None:
+        raw_token = _session_tokens.get(session)
+    if raw_token is None and not remote:
+        raw_token = _auth_token.get() or os.environ.get("LIFEQUEST_MCP_TOKEN")
     if raw_token:
         uid = MCPAccessTokenService(db).authenticate(raw_token)
         if uid is None:
             raise RuntimeError("MCP Token 无效或已过期")
         _validate_service_user_id(uid)
         _set_authenticated_user(uid, token_authenticated=True)
+        if session is not None:
+            _session_tokens[session] = raw_token
         return uid
 
+    uid = _auth_users_by_session.get(session) if session is not None else None
+    if uid is None and not remote:
+        uid = _auth_user_id.get()
+    if uid:
+        if (session is not None and _token_sessions.get(session, False)) or _auth_token_authenticated.get():
+            raise RuntimeError("MCP Token 无效或已过期")
+        if os.environ.get("LIFEQUEST_MCP_SERVICE_USER_ID"):
+            raise RuntimeError("LIFEQUEST_MCP_SERVICE_USER_ID 必须与有效 MCP Token 一起使用")
+        return uid
     if os.environ.get("LIFEQUEST_MCP_SERVICE_USER_ID"):
         raise RuntimeError("LIFEQUEST_MCP_SERVICE_USER_ID 必须与有效 MCP Token 一起使用")
     raise RuntimeError("请先调用 login 工具登录")
@@ -260,6 +274,16 @@ def _serialize(obj):
         return obj.isoformat()
     if isinstance(obj, UUID):
         return str(obj)
+    if isinstance(obj, Decimal):
+        return float(obj)
+    if isinstance(obj, Enum):
+        return _serialize(obj.value)
+    if isinstance(obj, User):
+        return _serialize_public_user(obj)
+    for model, schema in ((Habit, HabitResponse), (Task, TaskResponse),
+                          (Goal, GoalResponse), (Subtask, SubtaskResponse)):
+        if isinstance(obj, model):
+            return schema.model_validate(obj).model_dump(mode="json")
     if isinstance(obj, (list, tuple)):
         return [_serialize(item) for item in obj]
     if isinstance(obj, dict):
@@ -280,60 +304,131 @@ def _serialize_public_user(user) -> dict:
 
 
 class MCPTokenAuthMiddleware:
-    """Authenticate optional SSE Bearer headers while keeping login compatible."""
+    """Authenticate requests and bind HTTP/SSE transport IDs to their owner."""
 
-    def __init__(self, app):
+    def __init__(self, app, strict_paths=()):
         self.app = app
+        self.strict_paths = strict_paths
+        # Active transport IDs only; DELETE/disconnect releases each entry.
+        self.session_users = {}
 
     async def __call__(self, scope, receive, send):
         if scope.get("type") != "http":
             await self.app(scope, receive, send)
             return
-
-        raw_header = next(
-            (value for name, value in scope.get("headers", []) if name.lower() == b"authorization"),
-            None,
-        )
-        if raw_header is None:
-            await self.app(scope, receive, send)
+        from starlette.requests import Request
+        scope.setdefault("query_string", b"")
+        request = Request(scope)
+        raw_headers = [value for name, value in scope.get("headers", []) if name.lower() == b"authorization"]
+        path = scope.get("path", "")
+        strict = any(path == prefix or path.startswith(prefix + "/") for prefix in self.strict_paths)
+        if path == "/messages" or path.startswith("/messages/"):
+            session_id = request.query_params.get("session_id")
+            if session_id:
+                try:
+                    session_id = UUID(session_id).hex
+                except ValueError:
+                    await self._unauthorized(send)
+                    return
+        else:
+            session_id = request.headers.get("mcp-session-id")
+        owner = self.session_users.get(session_id)
+        if not raw_headers:
+            if strict or owner is not None:
+                await self._unauthorized(send)
+                return
+            remote_context = _remote_request.set(True)
+            try:
+                await self.app(scope, receive, send)
+            finally:
+                _remote_request.reset(remote_context)
             return
-
         try:
-            authorization = raw_header.decode("ascii")
+            authorization = raw_headers[0].decode("ascii") if len(raw_headers) == 1 else ""
         except UnicodeDecodeError:
             authorization = ""
         match = re.fullmatch(r"Bearer ([^\s]+)", authorization)
         if not match:
             await self._unauthorized(send)
             return
-
         db = SessionLocal()
-        user_token = _auth_token.set(match.group(1))
-        user_context = _auth_user_id.set(_auth_user_id.get())
-        token_context = _auth_token_authenticated.set(True)
         try:
             user_id = MCPAccessTokenService(db).authenticate(match.group(1))
             if user_id is None:
                 await self._unauthorized(send)
                 return
-            _validate_service_user_id(user_id)
-            _set_authenticated_user(user_id, token_authenticated=True)
-            await self.app(scope, receive, send)
+            try:
+                _validate_service_user_id(user_id)
+            except RuntimeError:
+                await self._unauthorized(send)
+                return
         finally:
+            db.close()
+        if owner is not None and owner != user_id:
+            await self._unauthorized(send, status=403)
+            return
+        scope["lifequest.mcp_auth"] = (user_id, match.group(1))
+        user_token = _auth_token.set(match.group(1))
+        user_context = _auth_user_id.set(_auth_user_id.get())
+        token_context = _auth_token_authenticated.set(True)
+        remote_context = _remote_request.set(True)
+        opened_ids = []
+        response_status = None
+
+        async def bind_send(message):
+            nonlocal response_status
+            if message["type"] == "http.response.start":
+                response_status = message["status"]
+                for name, value in message.get("headers", []):
+                    if name.lower() == b"mcp-session-id":
+                        transport_id = value.decode("ascii")
+                        self.session_users[transport_id] = user_id
+            elif message["type"] == "http.response.body" and scope.get("path", "").rstrip("/") == "/sse":
+                # The legacy SSE endpoint announces its session in an endpoint event.
+                for line in message.get("body", b"").decode("utf-8", errors="replace").splitlines():
+                    if line.startswith("data: "):
+                        announced = parse_qs(urlparse(line[6:]).query).get("session_id", [])
+                        if announced:
+                            self.session_users[announced[0]] = user_id
+                            opened_ids.append(announced[0])
+            await send(message)
+
+        try:
+            _set_authenticated_user(user_id, token_authenticated=True)
+            await self.app(scope, receive, bind_send)
+        finally:
+            if scope.get("method") == "DELETE" and response_status == 200:
+                self.session_users.pop(session_id, None)
+            for transport_id in opened_ids:
+                self.session_users.pop(transport_id, None)
+            _remote_request.reset(remote_context)
             _auth_user_id.reset(user_context)
             _auth_token_authenticated.reset(token_context)
             _auth_token.reset(user_token)
-            db.close()
 
     @staticmethod
-    async def _unauthorized(send):
+    async def _unauthorized(send, status=401):
         body = b'{"detail":"MCP authentication required"}'
         await send({
             "type": "http.response.start",
-            "status": 401,
+            "status": status,
             "headers": [(b"content-type", b"application/json"), (b"www-authenticate", b"Bearer")],
         })
         await send({"type": "http.response.body", "body": body})
+
+
+def create_http_app():
+    """Serve Streamable HTTP at /http and retain legacy SSE endpoints."""
+    from starlette.applications import Starlette
+    from starlette.routing import Mount
+    from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+    manager = StreamableHTTPSessionManager(app=mcp._mcp_server)
+    app = Starlette(
+        routes=[*mcp.sse_app().routes, Mount("/http", app=manager.handle_request)],
+        lifespan=lambda app: manager.run(),
+    )
+    app.add_middleware(MCPTokenAuthMiddleware, strict_paths=("/http",))
+    return app
 
 
 # ---------------------------------------------------------------------------
@@ -349,8 +444,7 @@ mcp = FastMCP(
 )
 
 
-# ===================== 认证 =====================
-
+# ===================== 认证 ==============
 
 @mcp.tool()
 def login(username: str, password: str) -> Any:
@@ -387,6 +481,9 @@ def login_with_token(token: str) -> Any:
         _validate_service_user_id(user_id)
         _set_authenticated_user(user_id, token_authenticated=True)
         _auth_token.set(token)
+        session = _current_mcp_session()
+        if session is not None:
+            _session_tokens[session] = token
         return {
             "status": "ok",
             "message": f"已登录为 {user.username}",
@@ -396,8 +493,7 @@ def login_with_token(token: str) -> Any:
         db.close()
 
 
-# ===================== 待办 =====================
-
+# ===================== 待办 ==============
 
 @mcp.tool()
 def list_habits() -> Any:
@@ -1007,8 +1103,7 @@ def get_daily_summary() -> Any:
         db.close()
 
 
-# ===================== 财务 =====================
-
+# ===================== 财务 ==============
 
 def _mcp_debt_type(value: str) -> DebtType:
     """Accept the MCP compatibility alias while preserving schema validation."""
@@ -1585,8 +1680,7 @@ def add_debt_payment(
         db.close()
 
 
-# ===================== 项目 =====================
-
+# ===================== 项目 ==============
 
 def _serialize_project_stats(stats: dict) -> dict:
     """Flatten project service stats into a stable MCP response."""
@@ -2029,8 +2123,7 @@ def move_project_task(
         db.close()
 
 
-# ===================== 打卡 =====================
-
+# ===================== 打卡 ==============
 
 @mcp.tool()
 def daily_checkin() -> Any:
@@ -2045,8 +2138,7 @@ def daily_checkin() -> Any:
         db.close()
 
 
-# ===================== 统计 =====================
-
+# ===================== 统计 ==============
 
 @mcp.tool()
 def get_stats() -> Any:
@@ -2060,8 +2152,7 @@ def get_stats() -> Any:
         db.close()
 
 
-# ===================== 用户 =====================
-
+# ===================== 用户 ==============
 
 @mcp.tool()
 def get_profile() -> Any:
@@ -2078,8 +2169,7 @@ def get_profile() -> Any:
         db.close()
 
 
-# ===================== 笔记 =====================
-
+# ===================== 笔记 ==============
 
 def _build_note_tree(nodes: list) -> list:
     """Build the nested tree shape used by the notes REST endpoint."""
@@ -2419,8 +2509,7 @@ def update_note(
         db.close()
 
 
-# ===================== 专注与修仙闭关 =====================
-
+# ===================== 专注与修仙闭关 ==============
 
 @mcp.tool()
 def start_focus_session(target_duration: int = 25, todo_id: Optional[str] = None) -> Any:
@@ -2483,6 +2572,15 @@ def abort_focus_session(session_id: str) -> Any:
         return _serialize(session)
     finally:
         db.close()
+# Register focused feature adapters while preserving existing public tool names.
+from app.mcp import daily, collaboration, progression
+
+for _module in (daily, collaboration, progression):
+    _registered = _module.register(
+        mcp, _resolve_user_id, _serialize, lambda: SessionLocal()
+    )
+    if _registered:
+        globals().update(_registered)
 
 
 # ---------------------------------------------------------------------------
@@ -2493,7 +2591,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="LifeQuest MCP Server")
     parser.add_argument(
         "--transport",
-        choices=["stdio", "sse"],
+        choices=["stdio", "sse", "streamable-http"],
         default="stdio",
         help="Transport type (default: stdio)",
     )
@@ -2501,11 +2599,10 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=3001)
     args = parser.parse_args()
 
-    if args.transport == "sse":
+    if args.transport in {"sse", "streamable-http"}:
         import uvicorn
 
-        app = mcp.sse_app()
-        app.add_middleware(MCPTokenAuthMiddleware)
+        app = create_http_app()
         config = uvicorn.Config(app, host=args.host, port=args.port)
         uvicorn.Server(config).run()
     else:

@@ -119,9 +119,8 @@ def update_notebook(
     db: Session = Depends(get_db),
 ):
     service = NoteService(db)
-    access = _require_owner(service, notebook_id, current_user.id)
-    notebook = access["notebook"]
-    return service.notebook_repo.update(notebook, notebook_in.model_dump(exclude_unset=True))
+    _require_owner(service, notebook_id, current_user.id)
+    return service.update_notebook(notebook_id, current_user.id, notebook_in)
 
 
 @router.delete("/notebooks/{notebook_id}")

@@ -21,6 +21,8 @@ class AscensionService:
             raise ValueError("request_key must be non-empty")
         existing = self.db.query(AscensionRecord).filter_by(request_key=request_key).one_or_none()
         if existing:
+            if existing.user_id != user_id:
+                raise ValueError("REQUEST_KEY_UNAVAILABLE")
             return existing
         profile = self.db.query(CultivationProfile).filter_by(user_id=user_id).one_or_none()
         if profile is None or profile.realm_key not in ASCENDED_REALM_KEYS:
@@ -40,6 +42,8 @@ class AscensionService:
             self.db.rollback()
             existing = self.db.query(AscensionRecord).filter_by(request_key=request_key).one_or_none()
             if existing:
+                if existing.user_id != user_id:
+                    raise ValueError("REQUEST_KEY_UNAVAILABLE")
                 return existing
             raise
         return record
