@@ -26,7 +26,8 @@
 - [x] Increment VERSION from latest origin/main 1.15.0 to 1.16.0 and sync frontend.
 - [x] Run full backend pytest, frontend check:version/build and git diff --check.
 - [x] Review changes and fix findings.
-- [ ] Commit scoped files, push feature branch and create PR; no merge or deploy.
+- [x] Commit scoped files and push `feat/mcp-business-coverage`; no merge or deploy.
+- [ ] Create PR against main (prepared body; GitHub API login is required, Git SSH push succeeded).
 
 ## Updated remote baseline audit
 
