@@ -25,7 +25,10 @@ def register(s, **kw):
 def code(s, u, c, **kw):
     request = s.begin_authorization({"client_id":c["client_id"], "redirect_uri":CALLBACK, "response_type":"code", "scope":"mcp", "resource":RESOURCE, "state":"state", "code_challenge_method":"S256", "code_challenge":base64.urlsafe_b64encode(hashlib.sha256(VERIFIER.encode()).digest()).rstrip(b"=").decode(), **kw})
     s.authorization_details(request,u.id)
-    result = parse_qs(urlsplit(s.consent(request,u.id,True)).query)
+    callback = s.consent(request,u.id,True)
+    if "?" in kw.get("redirect_uri", ""):
+        assert callback.startswith(kw["redirect_uri"] + "&")
+    result = parse_qs(urlsplit(callback).query)
     assert result["state"] == ["state"]
     return result["code"][0]
 
@@ -152,3 +155,22 @@ def test_registration_supported_grants_accepts_either_order(service):
     client = register(service[0], grant_types=["refresh_token", "authorization_code"], scope="mcp")
     assert set(client["grant_types"]) == {"authorization_code", "refresh_token"}
     assert client["scope"] == "mcp"
+
+@pytest.mark.parametrize("key", ["code", "state", "error", "error_description"])
+def test_registration_rejects_reserved_callback_response_keys(service, key):
+    with pytest.raises(OAuthError) as caught:
+        register(service[0], redirect_uris=[CALLBACK + "?" + key + "=fixed"])
+    assert caught.value.error == "invalid_redirect_uri"
+
+
+def test_fixed_callback_query_preserved_and_old_resource_request_rejected(service):
+    s,u,_=service
+    callback = CALLBACK + "?tenant=life%20quest&empty="
+    c=register(s, redirect_uris=[callback])
+    value=code(s,u,c,redirect_uri=callback)
+    assert exchange(s,c,value,redirect_uri=callback)["access_token"]
+    request=s.begin_authorization({"client_id":c["client_id"],"redirect_uri":callback,"response_type":"code","scope":"mcp","resource":RESOURCE,"code_challenge_method":"S256","code_challenge":base64.urlsafe_b64encode(hashlib.sha256(VERIFIER.encode()).digest()).rstrip(b"=").decode()})
+    s.authorization_details(request,u.id)
+    s.config.resource_url="https://new.example/mcp/http"
+    with pytest.raises(OAuthError):s.authorization_details(request,u.id)
+    with pytest.raises(OAuthError):s.consent(request,u.id,True)

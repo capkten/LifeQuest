@@ -51,6 +51,9 @@ class MCPOAuthService:
                 or parsed.fragment or "#" in uri or "*" in uri or "\\" in uri
                 or parsed.scheme != "https" and not (parsed.scheme == "http" and allowed_http)):
             fail("invalid_redirect_uri", "Redirect URI must use HTTPS with no fragment or credentials")
+        if any(key in {"code", "state", "error", "error_description"}
+               for key, _ in parse_qsl(parsed.query, keep_blank_values=True)):
+            fail("invalid_redirect_uri", "Redirect URI query contains OAuth response parameters")
         return uri
 
     def register_client(self, payload):
@@ -123,6 +126,8 @@ class MCPOAuthService:
         row = self.db.get(MCPOAuthRequest, digest(request_id), populate_existing=True)
         if not row or row.consumed_at or row.expires_at <= now():
             fail("invalid_request", "Authorization request expired or consumed")
+        if row.resource != self.config.resource_url or row.scope != "mcp":
+            fail("invalid_request", "Authorization request resource is no longer available")
         if not self.db.get(User, user_id):
             fail("access_denied", "Unknown user", 403)
         if bind and row.user_id is None:
@@ -148,7 +153,7 @@ class MCPOAuthService:
         if not consumed:
             self.db.rollback()
             fail("invalid_request", "Authorization request already consumed")
-        query = list(parse_qsl(urlsplit(row.redirect_uri).query, keep_blank_values=True))
+        query = []
         if row.state is not None:
             query.append(("state", row.state))
         if approve:
@@ -163,7 +168,8 @@ class MCPOAuthService:
             query.append(("error", "access_denied"))
         self.db.commit()
         parsed = urlsplit(row.redirect_uri)
-        return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), ""))
+        response_query = parsed.query + "&" + urlencode(query) if parsed.query else urlencode(query)
+        return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, response_query, ""))
 
     def _authenticate_client(self, form, authorization):
         client_id, secret, method = form.get("client_id"), form.get("client_secret"), "client_secret_post" if "client_secret" in form else "none"
