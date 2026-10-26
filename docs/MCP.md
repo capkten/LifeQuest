@@ -4,6 +4,34 @@
 
 这里描述的是现有业务操作的覆盖范围，不代表全部 HTTP 接口和所有参数逐项一一对应。工具复用现有业务 Service；权限、奖励、库存、余额、修炼前置条件和幂等处理仍由业务层执行。日期使用各业务的既有规则；习惯完成和补签采用 `Asia/Shanghai` 自然日，同一习惯同一天最多一次完成。
 
+## OAuth 连接（待审核部署）
+
+新增 OAuth 是可选授权方式，默认 `MCP_OAUTH_ENABLED=false`。本文描述仓库中的实现，未表示已部署，亦未表示已经在真实 ChatGPT 账号中完成连接验收。原有 PAT、stdio 和 SSE 连接保留。OAuth 授权仅用于 MCP，不替代网站登录令牌，也不允许匿名访问工具数据。
+
+管理员启用前，应通过 HTTPS 暴露网站、API 和 MCP，设置以下公开地址（不要使用容器内部地址）：
+
+```dotenv
+MCP_OAUTH_ENABLED=true
+MCP_OAUTH_ISSUER_URL=https://life.capkin.cn
+MCP_OAUTH_RESOURCE_URL=https://life.capkin.cn/mcp/http
+MCP_OAUTH_FRONTEND_URL=https://life.capkin.cn
+MCP_OAUTH_ALLOW_LOOPBACK=false
+```
+
+以上是配置示例；若使用独立 MCP 域名，需要管理员另外配置 DNS、TLS 和反向代理，并将 resource 改成实际完整 MCP URL。Issuer 的 `/.well-known/oauth-authorization-server` 必须路由到 API，不能由前端 SPA 接管。受保护资源元数据位于资源域名的 `/.well-known/oauth-protected-resource/mcp/http`；独立 MCP transport 也提供相应发现响应。公开 URL 取自配置，不信任请求的 Host/转发头。
+
+在 ChatGPT 的自定义 MCP 连接配置中，填入实际 Streamable HTTP URL，选择 OAuth 授权。客户端从 MCP 的 401 `WWW-Authenticate` 挑战发现 Protected Resource Metadata，再发现授权服务器。自动客户端注册使用 `/api/oauth/register`；若客户端需要预先填写 Client ID/Secret，可先通过该端点注册，保存返回的 ID，机密客户端的 Secret 仅首次返回。客户端须发送 `resource`（完整 MCP URL）、`scope=mcp`，使用授权码流程和 `code_challenge_method=S256`。不支持隐式授权、密码授权、OIDC 或通过任意客户端元数据 URL 拉取注册信息。
+
+**回调地址必须使用客户端实际提供的完整 HTTPS URI，并与注册值精确匹配**，不要猜测 ChatGPT 的回调域名或使用通配符。客户端必须生成并验证 `state`，保管 PKCE verifier。仅开发环境可显式打开 loopback HTTP；公开部署保持关闭。客户端注册本身不会授予用户权限。
+
+浏览器会进入 LifeQuest 的现有登录页，然后显示应用名称、完整回调地址、回调域名、请求权限及当前账号。用户明确同意或拒绝后才返回客户端；授权码短期有效且仅可交换一次。应用名称由客户端提供，请核实回调域名。授权范围 `mcp` 允许现有 MCP 工具的全部业务操作，业务 Service 继续校验当前用户、笔记协作权限、库存和奖励条件；它不是只读权限。
+
+访问令牌默认 15 分钟有效，刷新令牌默认 30 天有效且每次刷新轮换；重放已消费的刷新令牌会撤销该授权。令牌、授权码及客户端 Secret 在服务器仅存哈希。客户端通过 Bearer 请求头发送访问令牌，通过 Token 端点的表单正文刷新；不要把访问/刷新令牌放进 URL、聊天、笔记或工具参数。授权回调 URL 仅携带短期单次授权码和 state，页面待处理请求 URL 仅携带短期请求句柄。服务器每次请求和工具调用重新校验授权，撤销后现有 MCP 会话也不能继续读取或写入。
+
+用户可在**个人中心 → 应用授权**（`/oauth/authorize`）查看、撤销自己的应用授权；撤销同时失效该授权的全部访问/刷新令牌，不影响独立 PAT。OAuth `/api/oauth/revoke` 也支持客户端撤销。用户网站登录凭据、OAuth Refresh Token 及授权码不能用作 MCP Bearer。PAT 的管理方式不变，传统 SSE 的兼容性与会话 URL 保密要求见下文。
+
+验收应分为隔离环境的协议与权限测试，以及部署后由用户在真实 ChatGPT 账号中完成的连接测试。后者依赖客户端当时的配置界面、回调 URI 和产品可用性，不能用本地测试代替。官方 MCP 授权规范：<https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization>。
+
 ## 业务映射
 
 下表中的路径省略 `/api` 前缀。工具参数及枚举以客户端 `tools/list` 返回的 JSON Schema 为准。

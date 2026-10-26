@@ -6,6 +6,12 @@ const cultivationRouteComponent = () => import('../components/cultivation/Cultiv
 
 const routes = [
   {
+    path: '/oauth/authorize',
+    name: 'OAuthAuthorize',
+    component: () => import('../views/OAuthAuthorize.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('../views/Login.vue'),

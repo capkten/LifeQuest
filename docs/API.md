@@ -1,5 +1,26 @@
 # LifeQuest API 文档
 
+## MCP OAuth（默认关闭，待审核部署）
+
+OAuth 复用现有 LifeQuest 登录与业务权限，授权范围为 `mcp`。与普通网站 JWT、PAT 分开存储和校验。设置说明见 [MCP 文档](MCP.md#oauth-连接待审核部署)，新增环境变量见 `.env.example`。
+
+| 端点 | 用途及认证 |
+| --- | --- |
+| `GET /.well-known/oauth-authorization-server` | RFC 8414 授权服务器元数据，公开，不含用户数据 |
+| `GET /.well-known/oauth-protected-resource`、`GET /.well-known/oauth-protected-resource/mcp/http` | RFC 9728 资源元数据，公开 |
+| `POST /api/oauth/register` | 注册公开/机密客户端，JSON；精确 HTTPS 回调 URI，返回 client_id，机密客户端 Secret 仅返回一次 |
+| `GET /api/oauth/authorize` | 校验 `response_type=code`、client_id、redirect_uri、scope、resource、state、S256 code_challenge，然后跳转前端；不在此端点传网站密码 |
+| `GET /api/oauth/requests/{request_id}` | 普通网站 Bearer JWT；读取并绑定待处理请求到当前用户，返回 client_name、redirect_uri、scope、resource、user_id |
+| `POST /api/oauth/consent` | 普通网站 Bearer JWT；JSON `{request_id, approve}`，返回服务端验证过的 `{redirect_uri}`，保留客户端 state；必须由用户明确同意/拒绝 |
+| `POST /api/oauth/token` | `application/x-www-form-urlencoded`；authorization_code + code_verifier 或 refresh_token；按注册方式使用 none、client_secret_post、client_secret_basic |
+| `POST /api/oauth/revoke` | 表单 token 和客户端认证；撤销访问/刷新令牌所属授权；未知令牌不泄露存在性 |
+| `GET /api/oauth/grants` | 普通网站 Bearer JWT；仅列当前用户的应用授权，不返回令牌 |
+| `DELETE /api/oauth/grants/{grant_id}` | 普通网站 Bearer JWT；仅可撤销自己的授权，立即失效关联访问和刷新令牌 |
+
+Token 响应包含 `access_token`、`token_type=Bearer`、`expires_in`、`refresh_token`、`scope`，敏感响应 `Cache-Control: no-store`。协议错误使用 OAuth 的 `error`/`error_description` 字段。客户端必须安全存储返回值，验证 state；Refresh Token 每次轮换，旧值重放撤销授权。MCP 只接收 resource 绑定正确、scope 为 mcp 的有效访问令牌或兼容 PAT。未认证返回 401 及 Protected Resource Metadata 发现挑战；OAuth 访问令牌不能调用普通网站 API。
+
+默认关闭时不发放 OAuth 凭据；原有 MCP PAT、stdio、SSE 不变。部署和真实 ChatGPT 账号连接需在本次 PR 审核后另外执行。
+
 ## 习惯计划（1.10.0-1.13.0）
 
 `POST /api/todos/habits` 和 `PUT /api/todos/habits/{habit_id}` 支持

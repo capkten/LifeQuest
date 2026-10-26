@@ -4,6 +4,7 @@ import { authService } from '../services/auth'
 import router from '../router'
 import { useCultivationStore } from './cultivation'
 import { registerAuthCleanup } from '../services/authSession'
+import { safeLoginRedirect } from '../services/mcpOAuthState'
 
 let refreshPromise = null
 let logoutPromise = null
@@ -71,7 +72,7 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await authService.login(credentials.username, credentials.password)
       setTokens(response.access_token, response.refresh_token)
       await fetchUser()
-      const redirect = router.currentRoute.value.query.redirect || '/'
+      const redirect = safeLoginRedirect(router.currentRoute.value.query.redirect)
       router.push(redirect)
     } finally {
       loading.value = false

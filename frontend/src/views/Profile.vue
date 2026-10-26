@@ -28,6 +28,7 @@
         </div>
 
         <div class="profile-actions">
+          <RouterLink to="/oauth/authorize" class="secondary-btn">应用授权</RouterLink>
           <button class="secondary-btn" @click="showTitleModal = true">切换称号</button>
           <button class="primary-btn" @click="goToEditProfile">编辑资料</button>
         </div>
