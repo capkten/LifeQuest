@@ -1558,6 +1558,6 @@ if os.path.isdir(_frontend_dist):
     async def spa_fallback(request: Request, exc):
         """Serve index.html for unmatched GET requests (SPA client-side routing)."""
         path = request.url.path
-        if request.method == "GET" and not path.startswith(("/api/", "/mcp/", "/uploads/")):
+        if request.method == "GET" and not path.startswith(("/api/", "/mcp/", "/uploads/", "/.well-known/")):
             return FileResponse(os.path.join(_frontend_dist, "index.html"))
         return JSONResponse(status_code=404, content={"detail": "Not Found"})
