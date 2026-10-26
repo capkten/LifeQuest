@@ -20,12 +20,17 @@ from app import models  # noqa: F401  # Register all ORM models before create_al
 from app.timezone import local_date
 from app.services.note import NoteService
 from app.api import auth, users, notes, note_sync, todos, shop, backpack, achievements, checkin, titles, coins, calendar, stats, finance, projects, cultivation, immortal, action_center, review, cultivation_retreat
+from app.api import mcp_oauth
+from app.oauth_config import get_oauth_config
+
+get_oauth_config()  # Reject invalid enabled OAuth configuration before startup.
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
 _APP_VERSION = (Path(__file__).resolve().parents[2] / "VERSION").read_text(encoding="utf-8").strip()
 app = FastAPI(title="LifeQuest", version=_APP_VERSION)
+app.include_router(mcp_oauth.router)
 
 
 logger = logging.getLogger(__name__)

@@ -105,6 +105,8 @@ from app.services.todo import TodoService
 from app.services.daily_workbench import DailyWorkbenchService
 from app.services.user import UserService
 from app.services.mcp_access_token import MCPAccessTokenService
+from app.services.mcp_bearer import authenticate_mcp_bearer
+from app.oauth_config import get_oauth_config, bearer_challenge, protected_resource_metadata, authorization_server_metadata
 from app.services.cultivation_retreat import CultivationRetreatService
 
 logger = logging.getLogger(__name__)
@@ -231,7 +233,7 @@ def _resolve_user_id(db) -> UUID:
     if raw_token is None and not remote:
         raw_token = _auth_token.get() or os.environ.get("LIFEQUEST_MCP_TOKEN")
     if raw_token:
-        uid = MCPAccessTokenService(db).authenticate(raw_token)
+        uid = authenticate_mcp_bearer(db, raw_token)
         if uid is None:
             raise RuntimeError("MCP Token 无效或已过期")
         _validate_service_user_id(uid)
@@ -349,13 +351,13 @@ class MCPTokenAuthMiddleware:
             authorization = raw_headers[0].decode("ascii") if len(raw_headers) == 1 else ""
         except UnicodeDecodeError:
             authorization = ""
-        match = re.fullmatch(r"Bearer ([^\s]+)", authorization)
+        match = re.fullmatch(r"Bearer ([^\s]+)", authorization, re.IGNORECASE)
         if not match:
             await self._unauthorized(send)
             return
         db = SessionLocal()
         try:
-            user_id = MCPAccessTokenService(db).authenticate(match.group(1))
+            user_id = authenticate_mcp_bearer(db, match.group(1))
             if user_id is None:
                 await self._unauthorized(send)
                 return
@@ -414,7 +416,7 @@ class MCPTokenAuthMiddleware:
         await send({
             "type": "http.response.start",
             "status": status,
-            "headers": [(b"content-type", b"application/json"), (b"www-authenticate", b"Bearer")],
+            "headers": [(b"content-type", b"application/json"), (b"www-authenticate", bearer_challenge().encode("ascii"))],
         })
         await send({"type": "http.response.body", "body": body})
 
@@ -422,11 +424,35 @@ class MCPTokenAuthMiddleware:
 def create_http_app():
     """Serve Streamable HTTP at /http and retain legacy SSE endpoints."""
     from starlette.applications import Starlette
-    from starlette.routing import Mount
+    from starlette.routing import Mount, Route
+    from starlette.responses import JSONResponse
     from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+    # Validate configured public URLs before accepting remote traffic.
+    get_oauth_config()
+
+    async def metadata(request):
+        config = get_oauth_config()
+        if not config.enabled:
+            return JSONResponse({"detail": "OAuth is not enabled"}, status_code=404)
+        if request.url.path == "/.well-known/oauth-authorization-server":
+            data = authorization_server_metadata(config)
+        else:
+            canonical = urlparse(config.resource_url).path.strip("/")
+            path = request.path_params.get("resource_path", "").rstrip("/")
+            if path and path != canonical:
+                return JSONResponse({"detail": "Unknown protected resource"}, status_code=404)
+            data = protected_resource_metadata(config)
+        return JSONResponse(data, headers={"Cache-Control": "no-store"})
+
     manager = StreamableHTTPSessionManager(app=mcp._mcp_server)
     app = Starlette(
-        routes=[*mcp.sse_app().routes, Mount("/http", app=manager.handle_request)],
+        routes=[
+            Route("/.well-known/oauth-authorization-server", metadata),
+            Route("/.well-known/oauth-protected-resource", metadata),
+            Route("/.well-known/oauth-protected-resource/{resource_path:path}", metadata),
+            *mcp.sse_app().routes,
+            Mount("/http", app=manager.handle_request),
+        ],
         lifespan=lambda app: manager.run(),
     )
     app.add_middleware(MCPTokenAuthMiddleware, strict_paths=("/http",))

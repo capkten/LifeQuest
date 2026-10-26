@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    MCP_OAUTH_ENABLED: bool = False
+    MCP_OAUTH_ISSUER_URL: str = ""
+    MCP_OAUTH_RESOURCE_URL: str = ""
+    MCP_OAUTH_FRONTEND_URL: str = ""
+    MCP_OAUTH_ALLOW_LOOPBACK: bool = False
 
     @field_validator("SECRET_KEY")
     @classmethod
