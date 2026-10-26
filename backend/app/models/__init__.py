@@ -67,3 +67,8 @@ __all__ = [
     "MCPAccessToken",
     "RefreshToken",
 ]
+
+from app.models.mcp_oauth import (
+    MCPOAuthClient, MCPOAuthRequest, MCPOAuthGrant, MCPOAuthCode, MCPOAuthToken,
+)
+__all__ += ["MCPOAuthClient", "MCPOAuthRequest", "MCPOAuthGrant", "MCPOAuthCode", "MCPOAuthToken"]
