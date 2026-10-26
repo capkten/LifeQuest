@@ -174,7 +174,7 @@ class MCPOAuthService:
     def _authenticate_client(self, form, authorization):
         client_id, secret, method = form.get("client_id"), form.get("client_secret"), "client_secret_post" if "client_secret" in form else "none"
         if authorization:
-            if not authorization.startswith("Basic ") or "client_secret" in form:
+            if authorization[:6].lower() != "basic " or "client_secret" in form:
                 fail("invalid_client", "Invalid client authentication", 401)
             try:
                 decoded = base64.b64decode(authorization[6:], validate=True).decode("utf-8")

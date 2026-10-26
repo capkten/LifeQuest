@@ -174,3 +174,15 @@ def test_fixed_callback_query_preserved_and_old_resource_request_rejected(servic
     s.config.resource_url="https://new.example/mcp/http"
     with pytest.raises(OAuthError):s.authorization_details(request,u.id)
     with pytest.raises(OAuthError):s.consent(request,u.id,True)
+
+@pytest.mark.parametrize("scheme", ["basic", "bAsIc"])
+def test_basic_auth_scheme_is_case_insensitive(service, scheme):
+    s,u,_=service
+    c=register(s, token_endpoint_auth_method="client_secret_basic")
+    value=code(s,u,c)
+    form={"grant_type":"authorization_code", "code":value, "resource":RESOURCE,
+          "redirect_uri":CALLBACK, "code_verifier":VERIFIER}
+    authorization=scheme + " " + base64.b64encode(f'{c["client_id"]}:{c["client_secret"]}'.encode()).decode()
+    with pytest.raises(OAuthError):
+        s.exchange_token({**form, "client_secret":c["client_secret"]}, authorization)
+    assert s.exchange_token(form, authorization)["access_token"]
