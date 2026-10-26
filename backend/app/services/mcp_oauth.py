@@ -5,7 +5,7 @@ import hmac
 import re
 import secrets
 from datetime import timedelta
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit, unquote
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit, unquote_plus
 from uuid import UUID
 from sqlalchemy import update
 from app.models.user import User
@@ -62,11 +62,13 @@ class MCPOAuthService:
         method = payload.get("token_endpoint_auth_method", "none")
         if method not in ("none", "client_secret_post", "client_secret_basic"):
             fail("invalid_client_metadata", "Unsupported client authentication method")
-        if payload.get("grant_types", ["authorization_code", "refresh_token"]) != ["authorization_code", "refresh_token"]:
-            # Both subsets are supported; never silently enable an unsupported grant.
-            grants = payload["grant_types"]
-            if not isinstance(grants, list) or not grants or any(g not in ("authorization_code", "refresh_token") for g in grants):
-                fail("invalid_client_metadata", "Unsupported grant types")
+        grants = payload.get("grant_types", ["authorization_code", "refresh_token"])
+        if (not isinstance(grants, list) or len(grants) != 2
+                or any(not isinstance(value, str) for value in grants)
+                or set(grants) != {"authorization_code", "refresh_token"}):
+            fail("invalid_client_metadata", "Register both authorization_code and refresh_token grants")
+        if payload.get("scope", "mcp") != "mcp":
+            fail("invalid_client_metadata", "Only mcp scope is supported")
         if payload.get("response_types", ["code"]) != ["code"]:
             fail("invalid_client_metadata", "Only code response type is supported")
         name = payload.get("client_name", "MCP client")
@@ -78,7 +80,7 @@ class MCPOAuthService:
         self.db.add(row)
         self.db.commit()
         result = {"client_id": row.id, "client_name": row.name, "redirect_uris": uris,
-            "token_endpoint_auth_method": method, "grant_types": ["authorization_code", "refresh_token"], "response_types": ["code"]}
+            "token_endpoint_auth_method": method, "grant_types": ["authorization_code", "refresh_token"], "response_types": ["code"], "scope": "mcp"}
         if secret:
             result.update(client_secret=secret, client_secret_expires_at=0)
         return result
@@ -170,7 +172,7 @@ class MCPOAuthService:
                 fail("invalid_client", "Invalid client authentication", 401)
             try:
                 decoded = base64.b64decode(authorization[6:], validate=True).decode("utf-8")
-                basic_id, secret = (unquote(v) for v in decoded.split(":", 1))
+                basic_id, secret = (unquote_plus(v) for v in decoded.split(":", 1))
             except (ValueError, UnicodeError):
                 fail("invalid_client", "Invalid Basic client authentication", 401)
             if client_id is not None and client_id != basic_id:

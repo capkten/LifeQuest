@@ -134,3 +134,21 @@ def test_code_replay_revokes_issued_tokens(service):
     s,u,_=service;c=register(s);value=code(s,u,c);tokens=exchange(s,c,value)
     with pytest.raises(OAuthError):exchange(s,c,value)
     assert s.authenticate_access_token(tokens["access_token"]) is None
+
+@pytest.mark.parametrize("metadata", [
+    {"grant_types": ["authorization_code"]},
+    {"grant_types": ["refresh_token"]},
+    {"grant_types": ["authorization_code", "refresh_token", "refresh_token"]},
+    {"scope": "admin"},
+    {"scope": "mcp admin"},
+])
+def test_registration_rejects_silent_capability_expansion(service, metadata):
+    with pytest.raises(OAuthError) as caught:
+        register(service[0], **metadata)
+    assert caught.value.error == "invalid_client_metadata"
+
+
+def test_registration_supported_grants_accepts_either_order(service):
+    client = register(service[0], grant_types=["refresh_token", "authorization_code"], scope="mcp")
+    assert set(client["grant_types"]) == {"authorization_code", "refresh_token"}
+    assert client["scope"] == "mcp"
