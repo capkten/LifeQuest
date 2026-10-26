@@ -211,3 +211,50 @@ def test_independent_oauth_users_cannot_read_or_modify_each_others_tasks(oauth_b
         read = rpc(mcp.post('/http', headers=auth(first['access_token'], owner_session), json={'jsonrpc': '2.0', 'id': 5, 'method': 'tools/call', 'params': {'name': 'get_task', 'arguments': {'task_id': task['id']}}}))['result']
         assert 'Owner confidential task' in str(read)
         assert 'Stolen' not in str(read)
+
+
+@pytest.mark.parametrize('path', ['/mcp/http', '/mcp/http/'])
+def test_public_proxy_discovers_tools_without_redirects(oauth_browser, monkeypatch, path):
+    """Exercise both real ASGI apps; emulate only the local TCP hop."""
+    import httpx
+    import app.main as main
+
+    b = oauth_browser
+    token = b['issue']()['access_token']
+    real_async_client = httpx.AsyncClient
+    with TestClient(mcp_server.create_http_app()) as upstream:
+        def forward(request):
+            response = upstream.request(request.method, str(request.url),
+                                        headers=dict(request.headers), content=request.content,
+                                        follow_redirects=False)
+            return httpx.Response(response.status_code, headers=response.headers,
+                                  content=response.content)
+
+        def local_client(**kwargs):
+            return real_async_client(transport=httpx.MockTransport(forward), **kwargs)
+
+        monkeypatch.setattr(main.httpx, 'AsyncClient', local_client)
+        browser = b['client']
+        denied = browser.post(path, json={}, follow_redirects=False)
+        assert denied.status_code == 401
+        response = browser.post(path, headers=auth(token), follow_redirects=False,
+                                json={'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
+                                      'params': {'protocolVersion': '2024-11-05', 'capabilities': {},
+                                                 'clientInfo': {'name': 'ChatGPT-proxy-test', 'version': '1'}}})
+        assert response.status_code == 200, (response.status_code, response.headers.get('location'))
+        assert 'location' not in response.headers
+        assert rpc(response)['result']['serverInfo']['name'] == 'lifequest'
+        session = response.headers['mcp-session-id']
+        assert browser.post(path, headers=auth(token, session), follow_redirects=False,
+                            json={'jsonrpc': '2.0', 'method': 'notifications/initialized'}).status_code == 202
+        response = browser.post(path, headers=auth(token, session), follow_redirects=False,
+                                json={'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'})
+        tools = rpc(response)['result']['tools']
+        assert {'list_tasks', 'get_profile'} <= {tool['name'] for tool in tools}
+        response = browser.post(path, headers=auth(token, session), follow_redirects=False,
+                                json={'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call',
+                                      'params': {'name': 'get_profile', 'arguments': {}}})
+        assert not rpc(response)['result'].get('isError')
+        grant = browser.get('/api/oauth/grants', headers=b['headers']).json()[0]
+        assert browser.delete('/api/oauth/grants/' + grant['id'], headers=b['headers']).status_code == 200
+        assert browser.post(path, headers=auth(token, session), json={}, follow_redirects=False).status_code == 401

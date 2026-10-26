@@ -112,7 +112,7 @@ def test_api_streamable_proxy_forwards_protocol_headers(client, monkeypatch, met
     response = client.request(method, '/mcp/http', content=b'{}', headers={'Authorization': 'Bearer test', 'Mcp-Session-Id': 'test-session', 'MCP-Protocol-Version': '2024-11-05', 'Accept': 'application/json, text/event-stream'})
     assert response.status_code == 200
     assert response.headers['mcp-session-id'] == 'test-session'
-    assert seen[0].url.path == '/http'
+    assert seen[0].url.path == '/http/'
     assert seen[0].method == method
     assert seen[0].headers['authorization'] == 'Bearer test'
     assert seen[0].headers['mcp-protocol-version'] == '2024-11-05'

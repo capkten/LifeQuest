@@ -1517,9 +1517,9 @@ async def mcp_messages_proxy(request: Request):
 async def mcp_http_proxy(request: Request):
     """Forward Streamable HTTP, including protocol/session headers and streams."""
     mcp_port = int(os.environ.get("MCP_PORT", "3001"))
-    suffix = "/" if request.url.path.endswith("/") else ""
     query = f"?{request.url.query}" if request.url.query else ""
-    url = f"http://127.0.0.1:{mcp_port}/http{suffix}{query}"
+    # Starlette Mount requires the slash; never expose its loopback redirect.
+    url = f"http://127.0.0.1:{mcp_port}/http/{query}"
     headers = {key: value for key, value in request.headers.items()
                if key.lower() not in {"host", "connection", "transfer-encoding", "content-length"}}
     client = httpx.AsyncClient(timeout=None)
