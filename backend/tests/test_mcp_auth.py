@@ -29,7 +29,9 @@ def test_mcp_documentation_describes_token_configuration():
     install_doc = (repo_root / "deploy/install.sh").read_text(encoding="utf-8")
     nginx_doc = (repo_root / "deploy/nginx.conf").read_text(encoding="utf-8")
     assert "/profile" in api_doc
-    assert "已有会话的客户端需要在撤销后断开并重新连接" in api_doc
+    assert "已有会话下一次业务调用也会重新校验并拒绝访问" in api_doc
+    assert "Streamable HTTP" in api_doc
+    assert "/mcp/http" in api_doc
     assert "location /mcp/" in install_doc
     assert "proxy_pass http://127.0.0.1:3001/;" in install_doc
     assert "proxy_buffering off;" in install_doc

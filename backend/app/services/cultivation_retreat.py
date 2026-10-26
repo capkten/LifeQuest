@@ -1,9 +1,14 @@
+from functools import wraps
+
 import uuid
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+
+from app.repositories.user import UserRepository
+from app.schemas.cultivation_retreat import RetreatStartRequest
 
 from app.models.coin_transaction import CoinSource, CoinTransaction, CoinType
 from app.models.cultivation import CultivationProfile
@@ -19,14 +24,30 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def rollback_retreat_on_error(method):
+    @wraps(method)
+    def guarded(*args, **kwargs):
+        db = kwargs.get("db") if "db" in kwargs else args[0]
+        try:
+            return method(*args, **kwargs)
+        except Exception:
+            db.rollback()
+            raise
+    return guarded
+
+
 class CultivationRetreatService:
     @staticmethod
+    @rollback_retreat_on_error
     def start_retreat(
         db: Session,
         user_id: UUID,
         target_duration: int,
         todo_id: Optional[UUID] = None,
     ) -> CultivationRetreat:
+        payload = RetreatStartRequest(target_duration=target_duration, todo_id=todo_id)
+        target_duration, todo_id = payload.target_duration, payload.todo_id
+        UserRepository(db).lock(user_id)
         # Check for existing active retreat
         active = (
             db.query(CultivationRetreat)
@@ -75,16 +96,25 @@ class CultivationRetreatService:
         )
 
     @staticmethod
+    @rollback_retreat_on_error
     def abort_retreat(db: Session, user_id: UUID, retreat_id: UUID) -> CultivationRetreat:
+        UserRepository(db).lock(user_id)
+        claimed = db.query(CultivationRetreat).filter(
+            CultivationRetreat.id == retreat_id,
+            CultivationRetreat.user_id == user_id,
+            CultivationRetreat.status == "active",
+        ).update({CultivationRetreat.status: "settling"}, synchronize_session=False)
+        if claimed != 1:
+            raise HTTPException(status_code=404, detail="Active retreat not found")
         retreat = (
-            db.query(CultivationRetreat)
+            db.query(CultivationRetreat).populate_existing()
             .filter(
                 CultivationRetreat.id == retreat_id,
                 CultivationRetreat.user_id == user_id,
             )
             .first()
         )
-        if not retreat or retreat.status != "active":
+        if not retreat or retreat.status != "settling":
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Active retreat not found",
@@ -99,6 +129,7 @@ class CultivationRetreatService:
         return retreat
 
     @staticmethod
+    @rollback_retreat_on_error
     def complete_retreat(
         db: Session,
         user_id: UUID,
@@ -106,33 +137,42 @@ class CultivationRetreatService:
         mark_todo_complete: bool = False,
         force_encounter: bool = False,
     ) -> CultivationRetreat:
+        UserRepository(db).lock(user_id)
+        claimed = db.query(CultivationRetreat).filter(
+            CultivationRetreat.id == retreat_id,
+            CultivationRetreat.user_id == user_id,
+            CultivationRetreat.status == "active",
+        ).update({CultivationRetreat.status: "settling"}, synchronize_session=False)
+        if claimed != 1:
+            raise HTTPException(status_code=404, detail="Active retreat not found")
         retreat = (
-            db.query(CultivationRetreat)
+            db.query(CultivationRetreat).populate_existing()
             .filter(
                 CultivationRetreat.id == retreat_id,
                 CultivationRetreat.user_id == user_id,
             )
             .first()
         )
-        if not retreat or retreat.status != "active":
+        if not retreat or retreat.status != "settling":
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Active retreat not found",
             )
 
         now = utc_now()
-        actual_minutes = max(0, int((now - as_utc(retreat.started_at)).total_seconds() / 60))
+        elapsed_seconds = max(0, (now - as_utc(retreat.started_at)).total_seconds())
+        actual_minutes = int(elapsed_seconds / 60)
         retreat.actual_duration = actual_minutes
         retreat.ended_at = now
 
         # Anti-cheat: must reach at least 80% of target duration
-        min_threshold = int(retreat.target_duration * 0.8)
-        if actual_minutes < min_threshold:
+        min_threshold_seconds = retreat.target_duration * 60 * 0.8
+        if elapsed_seconds < min_threshold_seconds:
             retreat.status = "aborted"
-            retreat.exp_gained = max(5, actual_minutes * 2)
+            retreat.exp_gained = max(5, actual_minutes * 2) if actual_minutes > 0 else 0
             user = db.query(User).filter(User.id == user_id).first()
             if user:
-                user.experience = (user.experience or 0) + retreat.exp_gained
+                UserRepository(db)._update_experience_no_commit(user, retreat.exp_gained)
             db.commit()
             db.refresh(retreat)
             return retreat
@@ -204,8 +244,8 @@ class CultivationRetreatService:
         # Grant user rewards
         user = db.query(User).filter(User.id == user_id).first()
         if user:
-            user.experience = (user.experience or 0) + retreat.exp_gained
-            user.coins = (user.coins or 0) + retreat.coins_gained
+            UserRepository(db)._update_experience_no_commit(user, retreat.exp_gained)
+            UserRepository(db)._update_coins_no_commit(user, retreat.coins_gained)
 
         if profile:
             profile.cultivation = (profile.cultivation or 0) + retreat.exp_gained
@@ -224,10 +264,10 @@ class CultivationRetreatService:
 
         # Mark todo complete if requested
         if mark_todo_complete and retreat.todo_id:
-            task = db.query(Task).filter(Task.id == retreat.todo_id, Task.user_id == user_id).first()
-            if task and task.status != TaskStatus.COMPLETED:
-                task.status = TaskStatus.COMPLETED
-                task.completed_at = utc_now()
+            from app.services.todo import TodoService
+            todo_service = TodoService(db)
+            task = todo_service.get_task_for_user(retreat.todo_id, user_id)
+            todo_service.complete_task(task, user_id, commit=False)
 
         db.commit()
         db.refresh(retreat)

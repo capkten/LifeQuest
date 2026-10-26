@@ -193,3 +193,44 @@ def test_mcp_finance_results_and_public_user_are_json_safe(remote_db):
     account = mcp_server.create_account('Decimal account', balance=12.34)
     assert json.dumps(account)
     assert 'password_hash' not in mcp_server._serialize(users[0])
+
+
+def test_existing_task_tools_support_schedule_and_occurrence(remote_db):
+    from app.timezone import today
+    db, users, tokens = remote_db
+    mcp_server.login_with_token(tokens[0])
+    day = today().isoformat()
+    task = mcp_server.create_task('Recurring task', schedule={'rule_type': 'daily', 'starts_on': day})
+    assert task['schedule']['rule_type'] == 'daily'
+    result = mcp_server.complete_task(task['id'], occurrence_date=day)
+    assert result['occurrence_status'] == 'completed'
+    balance = mcp_server.get_profile()['coins']
+    mcp_server.complete_task(task['id'], occurrence_date=day)
+    assert mcp_server.get_profile()['coins'] == balance
+    updated = mcp_server.update_task(task['id'], schedule={'rule_type': 'weekly', 'weekdays': [0], 'starts_on': day})
+    assert updated['schedule']['rule_type'] == 'weekly'
+    assert mcp_server.update_task(task['id'], clear_schedule=True)['schedule'] is None
+
+
+def test_existing_task_tools_can_clear_dates(remote_db):
+    _, _, tokens = remote_db
+    mcp_server.login_with_token(tokens[0])
+    task = mcp_server.create_task('Clear date', deadline='2027-01-01', start_date='2026-12-01')
+    updated = mcp_server.update_task(task['id'], clear_deadline=True, clear_start_date=True)
+    assert updated['deadline'] is None and updated['start_date'] is None
+    with pytest.raises(ValueError):
+        mcp_server.update_task(task['id'], deadline='2027-01-01', clear_deadline=True)
+
+
+def test_note_updates_can_use_revision_conflict_protection(remote_db):
+    from app.services.note import NoteRevisionConflict
+    _, _, tokens = remote_db
+    mcp_server.login_with_token(tokens[0])
+    notebook = mcp_server.create_notebook('Revision test')
+    note = mcp_server.create_note(notebook['id'], 'Safe edit', 'first')
+    revision = mcp_server.get_note(note['id'])['content_revision']
+    updated = mcp_server.update_note(note['id'], content='second', base_revision=revision)
+    assert updated['content_revision'] == revision + 1
+    with pytest.raises(NoteRevisionConflict):
+        mcp_server.update_note(note['id'], content='stale edit', base_revision=revision)
+    assert mcp_server.get_note(note['id'])['content'] == 'second'

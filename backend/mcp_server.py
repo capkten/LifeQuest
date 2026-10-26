@@ -5,11 +5,11 @@ Usage:
     # stdio (Claude Desktop / Claude Code)
     python backend/mcp_server.py
 
-    # SSE (remote / HTTP)
-    python backend/mcp_server.py --transport sse --port 3001
+    # Remote Streamable HTTP (also serves legacy SSE)
+    python backend/mcp_server.py --transport streamable-http --port 3001
 
 Authentication:
-    Use Authorization: Bearer <token> for SSE, LIFEQUEST_MCP_TOKEN for stdio,
+    Use Authorization: Bearer <token> for HTTP/SSE, LIFEQUEST_MCP_TOKEN for stdio,
     or call `login_with_token`; password `login` remains available for compatibility.
 """
 
@@ -83,6 +83,8 @@ from app.schemas.todo import (
     Frequency,
 )
 from app.schemas.daily_workbench import DailyFocusUpdate, QuickTaskCreate
+from app.schemas.task_schedule import TaskScheduleCreate
+from app.schemas.cultivation_retreat import RetreatStartRequest
 from app.schemas.project import (
     ProjectCreate,
     ProjectUpdate,
@@ -444,7 +446,8 @@ mcp = FastMCP(
 )
 
 
-# ===================== 认证 ==============
+# ===================== 认证 =====================
+
 
 @mcp.tool()
 def login(username: str, password: str) -> Any:
@@ -493,7 +496,8 @@ def login_with_token(token: str) -> Any:
         db.close()
 
 
-# ===================== 待办 ==============
+# ===================== 待办 =====================
+
 
 @mcp.tool()
 def list_habits() -> Any:
@@ -644,6 +648,7 @@ def create_task(
     milestone_id: Optional[str] = None,
     start_date: Optional[str] = None,
     priority: str = "medium",
+    schedule: Optional[TaskScheduleCreate] = None,
 ) -> Any:
     """创建一个新任务。difficulty: easy/medium/hard。deadline 格式: ISO 8601。"""
     db = SessionLocal()
@@ -662,6 +667,7 @@ def create_task(
             milestone_id=UUID(milestone_id) if milestone_id else None,
             start_date=datetime.fromisoformat(start_date) if start_date else None,
             priority=priority,
+            schedule=schedule,
         )
         task = svc.create_task(uid, data)
         return _serialize(task)
@@ -670,14 +676,14 @@ def create_task(
 
 
 @mcp.tool()
-def complete_task(task_id: str) -> Any:
+def complete_task(task_id: str, occurrence_date: Optional[str] = None) -> Any:
     """完成一个任务。返回更新后的任务信息（含金币/经验奖励）。"""
     db = SessionLocal()
     try:
         uid = _resolve_user_id(db)
         svc = TodoService(db)
         task = svc.get_task_for_user(UUID(task_id), uid)
-        result = svc.complete_task(task, uid)
+        result = svc.complete_task(task, uid, date.fromisoformat(occurrence_date) if occurrence_date else None)
         return _serialize(result)
     finally:
         db.close()
@@ -698,6 +704,10 @@ def update_task(
     milestone_id: Optional[str] = None,
     start_date: Optional[str] = None,
     priority: Optional[str] = None,
+    schedule: Optional[TaskScheduleCreate] = None,
+    clear_schedule: bool = False,
+    clear_deadline: bool = False,
+    clear_start_date: bool = False,
 ) -> Any:
     """更新任务。只传入需要修改的字段；日期使用 ISO 8601 格式。"""
     db = SessionLocal()
@@ -730,6 +740,15 @@ def update_task(
             update_data["start_date"] = datetime.fromisoformat(start_date)
         if priority is not None:
             update_data["priority"] = priority
+        for field, value, clear in (("schedule", schedule, clear_schedule),
+                                     ("deadline", deadline, clear_deadline),
+                                     ("start_date", start_date, clear_start_date)):
+            if clear:
+                if value is not None:
+                    raise ValueError(f"Cannot set and clear {field} together")
+                update_data[field] = None
+            elif field == "schedule" and value is not None:
+                update_data[field] = value
         if not update_data:
             return _serialize(task)
         updated_task = svc.update_task(task, TaskUpdate(**update_data))
@@ -1103,7 +1122,8 @@ def get_daily_summary() -> Any:
         db.close()
 
 
-# ===================== 财务 ==============
+# ===================== 财务 =====================
+
 
 def _mcp_debt_type(value: str) -> DebtType:
     """Accept the MCP compatibility alias while preserving schema validation."""
@@ -1680,7 +1700,8 @@ def add_debt_payment(
         db.close()
 
 
-# ===================== 项目 ==============
+# ===================== 项目 =====================
+
 
 def _serialize_project_stats(stats: dict) -> dict:
     """Flatten project service stats into a stable MCP response."""
@@ -2123,7 +2144,8 @@ def move_project_task(
         db.close()
 
 
-# ===================== 打卡 ==============
+# ===================== 打卡 =====================
+
 
 @mcp.tool()
 def daily_checkin() -> Any:
@@ -2138,7 +2160,8 @@ def daily_checkin() -> Any:
         db.close()
 
 
-# ===================== 统计 ==============
+# ===================== 统计 =====================
+
 
 @mcp.tool()
 def get_stats() -> Any:
@@ -2152,7 +2175,8 @@ def get_stats() -> Any:
         db.close()
 
 
-# ===================== 用户 ==============
+# ===================== 用户 =====================
+
 
 @mcp.tool()
 def get_profile() -> Any:
@@ -2169,7 +2193,8 @@ def get_profile() -> Any:
         db.close()
 
 
-# ===================== 笔记 ==============
+# ===================== 笔记 =====================
+
 
 def _build_note_tree(nodes: list) -> list:
     """Build the nested tree shape used by the notes REST endpoint."""
@@ -2477,8 +2502,9 @@ def update_note(
     summary: Optional[str] = None,
     tags: Optional[str] = None,
     is_pinned: Optional[bool] = None,
+    base_revision: Optional[int] = None,
 ) -> Any:
-    """更新笔记标题、正文或元数据。只传入需要修改的字段。"""
+    """更新笔记；传入读取时的 content_revision 作为 base_revision，防止覆盖并发修改。"""
     db = SessionLocal()
     try:
         uid = _resolve_user_id(db)
@@ -2493,7 +2519,7 @@ def update_note(
         update_data = {}
         for key, value in {
             "title": title, "content": content, "summary": summary,
-            "tags": tags, "is_pinned": is_pinned,
+            "tags": tags, "is_pinned": is_pinned, "base_revision": base_revision,
         }.items():
             if value is not None:
                 update_data[key] = value
@@ -2509,7 +2535,8 @@ def update_note(
         db.close()
 
 
-# ===================== 专注与修仙闭关 ==============
+# ===================== 专注与修仙闭关 =====================
+
 
 @mcp.tool()
 def start_focus_session(target_duration: int = 25, todo_id: Optional[str] = None) -> Any:
@@ -2517,12 +2544,12 @@ def start_focus_session(target_duration: int = 25, todo_id: Optional[str] = None
     db = SessionLocal()
     try:
         uid = _resolve_user_id(db)
-        todo_uuid = UUID(todo_id) if todo_id else None
+        payload = RetreatStartRequest(target_duration=target_duration, todo_id=UUID(todo_id) if todo_id else None)
         session = CultivationRetreatService.start_retreat(
             db=db,
             user_id=uid,
-            target_duration=target_duration,
-            todo_id=todo_uuid,
+            target_duration=payload.target_duration,
+            todo_id=payload.todo_id,
         )
         return _serialize(session)
     finally:
@@ -2572,10 +2599,12 @@ def abort_focus_session(session_id: str) -> Any:
         return _serialize(session)
     finally:
         db.close()
-# Register focused feature adapters while preserving existing public tool names.
-from app.mcp import daily, collaboration, progression
 
-for _module in (daily, collaboration, progression):
+
+# Register focused feature adapters while preserving existing public tool names.
+from app.mcp import daily, collaboration, progression, execution, retreat, management
+
+for _module in (daily, collaboration, progression, execution, retreat, management):
     _registered = _module.register(
         mcp, _resolve_user_id, _serialize, lambda: SessionLocal()
     )

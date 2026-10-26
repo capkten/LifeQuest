@@ -137,9 +137,15 @@ MCP 访问令牌用于连接 LifeQuest MCP 服务，不等同于登录接口返�
 
 #### DELETE /api/auth/mcp-tokens/{token_id}
 
-撤销当前用户的指定令牌。Profile 页面令牌列表中的“撤销”操作调用此接口；新连接以及重新认证时使用已撤销令牌的请求会被拒绝。已有会话的客户端需要在撤销后断开并重新连接。重复撤销保持幂等，撤销响应只返回元数据，不返回完整令牌。
+撤销当前用户的指定令牌。Profile 页面令牌列表中的“撤销”操作调用此接口；令牌撤销或到期后，已有会话下一次业务调用也会重新校验并拒绝访问；无需依赖断开重连。重复撤销保持幂等，撤销响应只返回元数据，不返回完整令牌。
 
-### SSE/HTTP 连接
+### Streamable HTTP 连接
+
+本分支新增标准 Streamable HTTP：启动 `python backend/mcp_server.py --transport streamable-http --host 127.0.0.1 --port 3001` 后，直连地址为 `http://127.0.0.1:3001/http`，API/Nginx 代理地址为 `/mcp/http`。每个 GET、POST、DELETE 请求必须携带 `Authorization: Bearer <lq_mcp_token>`，客户端还应按协议传递 `Mcp-Session-Id`、`MCP-Protocol-Version` 和 `Accept`。服务端启动时同时保留旧 SSE 路由；`--transport sse` 也提供新 HTTP 路由，无需修改现有进程管理配置。
+
+这是待合并能力，未在生产部署。工具覆盖、权限边界及重试说明见 [MCP 审计与连接指南](MCP.md)。HTTP 连接不会使用服务进程的 `LIFEQUEST_MCP_TOKEN` 授予远程请求权限。
+
+### SSE 兼容连接
 
 线上 SSE 地址为 `https://life.capkin.cn/mcp/sse`；本地通过 API 代理连接时使用 `http://127.0.0.1:8000/mcp/sse`。如果单独启动 MCP SSE 进程，则直接使用 `http://127.0.0.1:3001/sse`：
 
@@ -147,13 +153,15 @@ MCP 访问令牌用于连接 LifeQuest MCP 服务，不等同于登录接口返�
 python backend/mcp_server.py --transport sse --host 127.0.0.1 --port 3001
 ```
 
-SSE 请求必须携带 MCP 访问令牌，而不是 Web JWT：
+推荐 SSE 连接与消息请求均携带 MCP 访问令牌，而不是 Web JWT。使用请求头认证建立的会话，其后续消息也必须带同用户的有效令牌：
 
 ```text
 Authorization: Bearer <lq_mcp_token>
 ```
 
 消息请求由客户端根据 SSE 响应中的会话地址发送到同一服务的消息路径。线上和本地 API 代理使用 `/mcp/messages`（线上地址为 `https://life.capkin.cn/mcp/messages`）；直接连接本地 MCP 进程时使用 `/messages`。
+
+旧客户端仍可无请求头建立 SSE 会话，再调用 `login_with_token` 或密码 `login`；此模式依靠保密的会话 URL 维持认证，URL 不应写入日志或分享。推荐远程客户端使用请求头认证或 Streamable HTTP。
 
 ### stdio 连接
 

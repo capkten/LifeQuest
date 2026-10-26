@@ -789,6 +789,8 @@ class TodoService:
         task: Task,
         user_id: UUID,
         occurrence_date: date | None = None,
+        *,
+        commit: bool = True,
     ) -> Task:
         """Complete a task and award coins and experience to the user."""
         now = datetime.now(timezone.utc)
@@ -834,7 +836,10 @@ class TodoService:
                     quality=self._completion_quality(occurrence_deadline, now),
                 )
                 self._check_achievements(user)
-            self.db.commit()
+            if commit:
+                self.db.commit()
+            else:
+                self.db.flush()
             self.db.refresh(task)
             task.cultivation_reward = settlement
             task.occurrence_date = occurrence.occurrence_date
@@ -852,7 +857,10 @@ class TodoService:
                 raise HTTPException(status_code=409, detail="已取消的任务不能完成")
             if task.status != TaskStatus.COMPLETED:
                 raise HTTPException(status_code=409, detail="当前任务状态不能完成")
-            self.db.commit()
+            if commit:
+                self.db.commit()
+            else:
+                self.db.flush()
             return task
 
         user = self.user_repo.get_by_id(user_id)
@@ -871,7 +879,10 @@ class TodoService:
                 quality=self._completion_quality(task.deadline, now),
             )
             self._check_achievements(user)
-            self.db.commit()
+            if commit:
+                self.db.commit()
+            else:
+                self.db.flush()
 
         self.task_repo.db.refresh(task)
         task.cultivation_reward = settlement
