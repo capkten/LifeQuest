@@ -2,12 +2,12 @@
   <div class="finance-page">
     <div class="page-header">
       <div class="header-left">
+        <p class="page-subtitle">谁欠谁、还到哪一步，一目了然。</p>
         <button class="btn-back" @click="$router.push('/finance')" aria-label="返回">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </button>
-        <h2 class="page-title">借贷管理</h2>
       </div>
       <button class="btn-create" @click="openCreate">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -28,14 +28,13 @@
       </button>
     </div>
 
-    <div v-if="loading" class="loading-state">
-      <span class="loading-spinner"></span>
-    </div>
+    <AppState v-if="loading" state="loading" />
 
-    <div v-else-if="error" class="error-state">
-      <p>{{ error }}</p>
-      <button class="retry-btn" @click="fetchDebts">重试</button>
-    </div>
+    <AppState v-else-if="error" state="error" :title="error">
+      <template #actions>
+        <AppButton variant="secondary" @click="fetchDebts">重试</AppButton>
+      </template>
+    </AppState>
 
     <div v-else-if="debts.length === 0" class="empty-state">
       <div class="empty-icon">
@@ -270,6 +269,8 @@ import { financeService } from '../services/finance'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
 import { chinaDateKey, formatChinaDate, todayChinaDateKey } from '../utils/dateTime'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -488,7 +489,6 @@ onMounted(() => { fetchDebts() })
 .tab-btn--active { background: var(--color-card); color: var(--color-text); box-shadow: var(--shadow-sm); }
 
 /* States */
-.loading-state { display: flex; align-items: center; justify-content: center; min-height: 300px; }
 .loading-spinner {
   width: 32px; height: 32px; border: 3px solid var(--color-border);
   border-top-color: var(--color-primary); border-radius: 50%;
@@ -497,18 +497,6 @@ onMounted(() => { fetchDebts() })
 .loading-spinner--sm { width: 16px; height: 16px; border-width: 2px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.error-state {
-  display: flex; flex-direction: column; align-items: center;
-  justify-content: center; min-height: 300px; gap: var(--spacing-md);
-  color: var(--color-error); font-size: var(--font-size-sm);
-}
-.retry-btn {
-  padding: var(--spacing-xs) var(--spacing-md); font-size: var(--font-size-sm);
-  color: var(--color-primary); background: transparent;
-  border: 1px solid var(--color-primary); border-radius: var(--radius-md);
-  cursor: pointer; font-family: var(--font-family); transition: all 0.15s ease;
-}
-.retry-btn:hover { background: var(--color-primary); color: #fff; }
 
 .empty-state {
   display: flex; flex-direction: column; align-items: center;
@@ -821,13 +809,6 @@ onMounted(() => { fetchDebts() })
 }
 
 .empty-state,
-.error-state {
-  min-height: 280px;
-  padding: var(--spacing-xl);
-  border-radius: var(--surface-radius);
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px dashed var(--color-border);
-}
 
 .success-toast,
 .error-toast {

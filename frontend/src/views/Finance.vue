@@ -2,7 +2,7 @@
   <div class="finance-page">
     <div class="page-header">
       <div class="header-left">
-        <h2 class="page-title">记账</h2>
+        <p class="page-subtitle">记录每一笔进出，月底才看得清。</p>
       </div>
       <button class="btn-create" @click="openQuickAdd">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -19,12 +19,10 @@
       title="正在加载账本…"
     />
 
-    <AppState
-      v-else-if="error && !hasDashboardData"
+    <AppState v-else-if="error && !hasDashboardData"
       state="error"
       :title="error"
-      description="请检查网络后重试，已有记账数据不会丢失。"
-    >
+      description="请检查网络后重试，已有记账数据不会丢失。">
       <template #actions>
         <AppButton variant="secondary" @click="fetchDashboard">重试</AppButton>
       </template>

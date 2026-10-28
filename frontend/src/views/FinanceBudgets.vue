@@ -2,12 +2,12 @@
   <div class="finance-page">
     <div class="page-header">
       <div class="header-left">
+        <p class="page-subtitle">给每个分类设一条不能越过的线。</p>
         <button class="btn-back" @click="$router.push('/finance')" aria-label="返回">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </button>
-        <h2 class="page-title">预算管理</h2>
       </div>
       <button class="btn-create" @click="openCreate">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -43,14 +43,13 @@
       <span class="overview-percent">{{ overviewPercent }}%</span>
     </div>
 
-    <div v-if="loading && budgets.length === 0" class="loading-state">
-      <span class="loading-spinner"></span>
-    </div>
+    <AppState v-if="loading && budgets.length === 0" state="loading" />
 
-    <div v-else-if="error && budgets.length === 0" class="error-state">
-      <p>{{ error }}</p>
-      <button class="retry-btn" @click="fetchBudgets">重试</button>
-    </div>
+    <AppState v-else-if="error && budgets.length === 0" state="error" :title="error">
+      <template #actions>
+        <AppButton variant="secondary" @click="fetchBudgets">重试</AppButton>
+      </template>
+    </AppState>
 
     <div v-if="error && budgets.length > 0" class="inline-error" role="alert">
       <span>{{ error }}</span>
@@ -205,6 +204,8 @@ import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelPeriod } from '../utils/displayLabels'
 import { saveBudgetMutation } from '../services/budgetMutations'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -398,7 +399,6 @@ onMounted(() => { fetchBudgets() })
 .overview-percent { font-size: var(--font-size-xs); color: var(--color-text-tertiary); font-weight: 600; }
 
 /* States */
-.loading-state { display: flex; align-items: center; justify-content: center; min-height: 300px; }
 .loading-spinner {
   width: 32px; height: 32px; border: 3px solid var(--color-border);
   border-top-color: var(--color-primary); border-radius: 50%;
@@ -407,11 +407,6 @@ onMounted(() => { fetchBudgets() })
 .loading-spinner--sm { width: 16px; height: 16px; border-width: 2px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.error-state {
-  display: flex; flex-direction: column; align-items: center;
-  justify-content: center; min-height: 300px; gap: var(--spacing-md);
-  color: var(--color-error); font-size: var(--font-size-sm);
-}
 .inline-error {
   display: flex; align-items: center; justify-content: space-between;
   gap: var(--spacing-md); padding: var(--spacing-sm) var(--spacing-md);
@@ -701,13 +696,6 @@ select.form-input { appearance: auto; }
 }
 
 .empty-state,
-.error-state {
-  min-height: 280px;
-  padding: var(--spacing-xl);
-  border-radius: var(--surface-radius);
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px dashed var(--color-border);
-}
 
 .success-toast,
 .error-toast {

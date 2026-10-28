@@ -3,7 +3,6 @@
     <header class="page-header">
       <div>
         <span class="page-kicker">执行回顾</span>
-        <h1 class="page-title">周复盘</h1>
         <p class="page-subtitle">看清本周完成了什么，决定下一步做什么。</p>
       </div>
       <div class="page-actions">
@@ -23,16 +22,14 @@
       </div>
     </header>
 
-    <div v-if="loading && !review" class="loading-state" aria-live="polite">
-      <span class="loading-spinner"></span>
-      <span>正在整理本周数据...</span>
-    </div>
+    <AppState v-if="loading && !review" state="loading" />
 
     <template v-else>
-      <div v-if="error" class="error-state" role="alert">
-        <span>{{ error }}</span>
-        <button type="button" class="retry-btn" @click="loadReview">重试</button>
-      </div>
+      <AppState v-if="error" state="error" :title="error">
+        <template #actions>
+          <AppButton variant="secondary" @click="loadReview">重试</AppButton>
+        </template>
+      </AppState>
 
       <div v-if="review" class="review-content">
         <section class="review-period" aria-labelledby="review-period-title">
@@ -195,6 +192,8 @@
 import { onMounted, ref } from 'vue'
 import { reviewService } from '../services/review'
 import { getErrorMessage } from '../utils/errorMessage'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const review = ref(null)
 const loading = ref(true)
@@ -352,29 +351,8 @@ onMounted(loadReview)
 }
 
 .loading-state,
-.error-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-md);
-  min-height: 240px;
-  color: var(--color-text-secondary);
-}
 
-.error-state {
-  flex-wrap: wrap;
-  color: var(--color-error);
-}
 
-.retry-btn {
-  min-height: 36px;
-  padding: 0 var(--spacing-md);
-  border: 1px solid currentColor;
-  border-radius: var(--radius-md);
-  color: inherit;
-  background: transparent;
-  font: inherit;
-}
 
 .review-content {
   max-width: 1180px;

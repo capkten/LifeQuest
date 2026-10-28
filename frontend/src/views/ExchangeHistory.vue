@@ -10,7 +10,6 @@
           返回商城
         </router-link>
         <span class="history-kicker">奖励记录</span>
-        <h1 class="history-title">兑换历史</h1>
         <p class="history-subtitle">查看奖励兑换、状态变化与金币支出，保留原有历史记录与退款状态展示。</p>
       </div>
       <div class="history-hero-stats" v-if="!loading && !error && records.length">
@@ -29,9 +28,7 @@
       </div>
     </section>
 
-    <div v-if="loading" class="loading-state">
-      <span class="loading-spinner"></span>
-    </div>
+    <AppState v-if="loading" state="loading" />
 
     <div v-else-if="error" class="feedback-card feedback-card--error">
       <p>{{ error }}</p>
@@ -165,6 +162,7 @@ import { computed, ref, onMounted } from 'vue'
 import { shopService } from '../services/shop'
 import { labelExchangeStatus } from '../utils/displayLabels'
 import { getErrorMessage } from '../utils/errorMessage'
+import AppState from '../components/ui/AppState.vue'
 
 const records = ref([])
 const loading = ref(true)
@@ -602,11 +600,6 @@ onMounted(() => {
   border-color: rgba(14, 165, 233, 0.2);
 }
 
-.loading-state {
-  min-height: 280px;
-  display: grid;
-  place-items: center;
-}
 
 .loading-spinner {
   width: 32px;

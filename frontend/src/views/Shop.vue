@@ -83,12 +83,10 @@
 
     <AppState v-if="loading" state="loading" title="正在加载商品…" />
 
-    <AppState
-      v-else-if="error"
+    <AppState v-else-if="error"
       state="error"
       :title="error"
-      description="请检查网络后重试，已有商品不会丢失。"
-    >
+      description="请检查网络后重试，已有商品不会丢失。">
       <template #actions>
         <AppButton variant="secondary" @click="fetchItems">重试</AppButton>
       </template>

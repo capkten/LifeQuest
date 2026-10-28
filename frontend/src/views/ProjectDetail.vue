@@ -1,13 +1,12 @@
 <template>
   <div class="project-detail-page">
-    <div v-if="loading" class="loading-state">
-      <span class="loading-spinner"></span>
-    </div>
+    <AppState v-if="loading" state="loading" />
 
-    <div v-else-if="error" class="error-state">
-      <p>{{ error }}</p>
-      <button class="retry-btn" @click="fetchData(projectId)">重试</button>
-    </div>
+    <AppState v-else-if="error" state="error" :title="error">
+      <template #actions>
+        <AppButton variant="secondary" @click="fetchData(projectId)">重试</AppButton>
+      </template>
+    </AppState>
 
     <template v-else-if="project">
       <!-- Header -->
@@ -680,6 +679,8 @@ import { useAuthStore } from '../stores/auth'
 import { useCultivationStore } from '../stores/cultivation'
 import { labelPhaseStatus, labelProjectStatus } from '../utils/displayLabels'
 import { createMilestoneReachRequestState } from '../utils/milestoneReachState'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -2740,12 +2741,6 @@ onBeforeUnmount(() => {
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-20px); }
 
 /* Loading / Error */
-.loading-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-}
 
 .loading-spinner {
   width: 32px;
@@ -2762,16 +2757,6 @@ onBeforeUnmount(() => {
   to { transform: rotate(360deg); }
 }
 
-.error-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-  gap: var(--spacing-md);
-  color: var(--color-error);
-  font-size: var(--font-size-sm);
-}
 
 .retry-btn {
   padding: var(--spacing-xs) var(--spacing-md);

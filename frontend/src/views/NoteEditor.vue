@@ -10,7 +10,6 @@
         </button>
         <div>
           <p class="context-kicker">{{ contextLabel }}</p>
-          <h1 class="page-title">{{ isEditing ? '编辑笔记' : '新建笔记' }}</h1>
         </div>
       </div>
       <div class="header-actions">
@@ -33,15 +32,13 @@
       </div>
     </header>
 
-    <div v-if="loading" class="loading-state" aria-live="polite">
-      <div class="loading-spinner"></div>
-      <span>正在加载笔记...</span>
-    </div>
+    <AppState v-if="loading" state="loading" title="正在加载笔记..." />
 
-    <div v-else-if="loadError" class="error-state" role="alert">
-      <span>{{ loadError }}</span>
-      <button type="button" class="retry-btn" @click="loadRoute">重试</button>
-    </div>
+    <AppState v-else-if="loadError" state="error" :title="loadError">
+      <template #actions>
+        <AppButton variant="secondary" @click="loadRoute">重试</AppButton>
+      </template>
+    </AppState>
 
     <main v-else-if="hydrated" class="editor-body">
       <section class="editor-meta" aria-label="笔记详情">
@@ -150,6 +147,8 @@ import { noteService } from '../services/note'
 import { todoService } from '../services/todo'
 import { projectService } from '../services/project'
 import { getErrorMessage } from '../utils/errorMessage'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -672,7 +671,6 @@ onUnmounted(() => {
 .link-target-error { color: var(--color-warning-dark, var(--color-warning)); }
 .link-loading { display: flex; align-items: center; gap: 8px; }
 .loading-spinner--sm { width: 16px; height: 16px; border-width: 2px; }
-.loading-state { display: flex; flex: 1; align-items: center; justify-content: center; gap: var(--spacing-md); color: var(--color-text-secondary); }
 .loading-spinner { width: 28px; height: 28px; border: 3px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite; }
 .toast { position: fixed; z-index: 200; bottom: var(--spacing-xl); left: 50%; transform: translateX(-50%); padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); color: white; box-shadow: var(--shadow-lg); pointer-events: none; }
 .toast.success { background: var(--color-success-dark); }

@@ -13,7 +13,7 @@
           <line x1="3" y1="18" x2="21" y2="18" />
         </svg>
       </button>
-      <h2 class="page-title">{{ title }}</h2>
+      <h1 class="page-title">{{ title }}</h1>
     </div>
     <div class="header-right">
       <div class="user-dropdown" @click="toggleDropdown" @keydown.escape="dropdownOpen = false" @keydown.enter.prevent="toggleDropdown" @keydown.space.prevent="toggleDropdown" ref="dropdownRef" role="button" tabindex="0" :aria-expanded="dropdownOpen" aria-haspopup="true" aria-label="用户菜单">

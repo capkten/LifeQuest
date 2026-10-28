@@ -1,9 +1,13 @@
 <template>
   <div class="tribulations-page">
-    <header class="tribulations-header"><div><p class="cultivation-eyebrow">修炼 · 渡劫</p><h1>渡劫准备</h1><p>所有判定由服务器执行，先确认风险，再决定是否开始。</p></div></header>
+    <header class="tribulations-header"><div><p class="cultivation-eyebrow">修炼 · 渡劫</p><p>所有判定由服务器执行，先确认风险，再决定是否开始。</p></div></header>
     <Transition name="toast"><div v-if="errorToast" class="cultivation-state cultivation-state--error" role="alert" aria-live="polite">{{ errorToast }}</div></Transition>
-    <div v-if="loading && !preview" class="cultivation-state" aria-live="polite">正在读取渡劫状态...</div>
-    <div v-else-if="error && !preview" class="cultivation-state cultivation-state--error" role="alert"><span>{{ errorMessage }}</span><button type="button" class="cultivation-action" @click="load">重试</button></div>
+    <AppState v-if="loading && !preview" state="loading" />
+    <AppState v-else-if="error && !preview" state="error" :title="errorMessage">
+      <template #actions>
+        <AppButton variant="secondary" @click="load">重试</AppButton>
+      </template>
+    </AppState>
     <div v-else-if="!preview" class="cultivation-state" aria-live="polite">正在准备渡劫预览...</div>
     <template v-else>
       <section class="tribulations-layout">
@@ -30,6 +34,8 @@ import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelFromServer, labelRealm } from '../utils/displayLabels'
 import { ElMessageBox } from 'element-plus'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const preview = ref(null), overview = ref(null), result = ref(null), error = ref(null), loading = ref(false), attempting = ref(false), pillCount = ref(0)
 const { errorToast, showError } = useToast()

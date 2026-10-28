@@ -8,8 +8,7 @@
           </svg>
         </button>
         <div class="page-heading">
-          <h2 class="page-title">全部流水</h2>
-          <p class="page-subtitle">保留现有筛选、编辑、删除与转账记账行为，只调整信息层级与响应式呈现。</p>
+          <p class="page-subtitle">按账户、分类和时间筛出你要看的那几笔。</p>
         </div>
       </div>
       <button class="btn-create" @click="openCreate">
@@ -119,14 +118,13 @@
       <button type="button" class="retry-btn" @click="loadMore">重试加载更多</button>
     </div>
 
-    <div v-if="loading && !transactions.length" class="loading-state">
-      <span class="loading-spinner"></span>
-    </div>
+    <AppState v-if="loading && !transactions.length" state="loading" />
 
-    <div v-else-if="error && !transactions.length" class="error-state stitch-surface">
-      <p>{{ error }}</p>
-      <button class="retry-btn" @click="fetchTransactions">重试</button>
-    </div>
+    <AppState v-else-if="error && !transactions.length" state="error" :title="error">
+      <template #actions>
+        <AppButton variant="secondary" @click="fetchTransactions">重试</AppButton>
+      </template>
+    </AppState>
 
     <div v-else>
     <div v-if="error" class="inline-error" role="alert"><span>{{ error }}</span><button type="button" class="retry-btn" @click="fetchTransactions">重试</button></div>
@@ -141,13 +139,13 @@
       <p class="empty-text">开始记账后，这里会按日期展示最近交易。</p>
     </div>
 
-    <div v-else-if="transactions.length === 0 && supportLoading" class="loading-state stitch-surface" aria-live="polite">
-      <p>正在加载账户和分类，流水暂不可完整展示。</p>
-    </div>
+    <AppState v-else-if="transactions.length === 0 && supportLoading" state="loading" />
 
-    <div v-else-if="transactions.length === 0 && supportError" class="error-state stitch-surface" role="alert">
-      <p>支持数据加载失败，流水暂不可完整展示。</p>
-    </div>
+    <AppState v-else-if="transactions.length === 0 && supportError" state="error" :title="error">
+      <template #actions>
+        <AppButton variant="secondary" @click="">重试</AppButton>
+      </template>
+    </AppState>
 
     <section v-else class="transactions-section">
       <div class="section-heading">
@@ -353,6 +351,8 @@ import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelTransactionType } from '../utils/displayLabels'
 import { chinaDateKey, formatChinaDate, shiftDateKey, todayChinaDateKey } from '../utils/dateTime'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -1055,9 +1055,6 @@ onMounted(() => {
 }
 
 .empty-state,
-.error-state {
-  padding: var(--spacing-xl);
-}
 
 .empty-icon {
   width: 72px;

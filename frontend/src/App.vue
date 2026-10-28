@@ -203,6 +203,22 @@ button {
   font-family: var(--font-family);
 }
 
+/* Shared page intro: the app bar owns the title, pages own the context line. */
+.page-kicker {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--color-primary);
+}
+
+.page-subtitle {
+  margin-top: 2px;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
 /*
  * Numeric readouts: equal-width digits stop counters from shifting the layout
  * while they tick up, which is what makes the reward layer feel like a meter.

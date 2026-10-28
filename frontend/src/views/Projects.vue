@@ -2,7 +2,7 @@
   <div class="projects-page">
     <div class="page-header">
       <div class="header-left">
-        <h2 class="page-title">项目</h2>
+        <p class="page-subtitle">把长期目标拆成能推进的阶段。</p>
         <span class="item-count">{{ filteredProjects.length }} 个项目</span>
       </div>
       <button class="btn-create" @click="openCreateDialog">
@@ -42,12 +42,10 @@
 
     <AppState v-if="loading" state="loading" title="正在加载项目…" />
 
-    <AppState
-      v-else-if="error"
+    <AppState v-else-if="error"
       state="error"
       :title="error"
-      description="请检查网络后重试。"
-    >
+      description="请检查网络后重试。">
       <template #actions>
         <AppButton variant="secondary" @click="fetchProjects">重试</AppButton>
       </template>

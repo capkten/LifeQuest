@@ -1,10 +1,14 @@
 <template>
   <div class="world-page">
-    <header class="world-page__header"><div><p class="cultivation-eyebrow">凡界</p><h1>凡界地图</h1><p>选择节点查看进入条件与当前进度。</p></div></header>
-    <div v-if="loading" class="cultivation-state">正在读取地图...</div>
-    <div v-else-if="error" class="cultivation-state cultivation-state--error" role="alert"><span>地图暂时无法读取。</span><button type="button" class="cultivation-action" @click="load">重试</button></div>
+    <header class="world-page__header"><div><p class="cultivation-eyebrow">凡界</p><p>选择节点查看进入条件与当前进度。</p></div></header>
+    <AppState v-if="loading" state="loading" />
+    <AppState v-else-if="error" state="error" title="地图暂时无法读取。">
+      <template #actions>
+        <AppButton variant="secondary" @click="load">重试</AppButton>
+      </template>
+    </AppState>
     <div v-if="actionFeedback" class="cultivation-state cultivation-state--action" role="alert" aria-live="polite">{{ actionFeedback }}</div>
-    <div v-if="!loading && !error && !nodes.length" class="cultivation-state">暂无可探索节点。</div>
+    <AppState v-if="!loading && !error && !nodes.length" state="loading" />
     <section v-if="!loading && !error && nodes.length" class="world-layout">
       <div class="world-node-list" role="listbox" aria-label="世界节点">
         <MapNode v-for="node in nodes" :key="node.node_key" :node="node" :status="nodeStatus(node)" :locked="nodeStatus(node) === 'locked'" :selected="selectedNode?.node_key === node.node_key" @select="selectNode" />
@@ -29,6 +33,8 @@ import { cultivationService } from '../services/cultivation'
 import MapNode from '../components/cultivation/MapNode.vue'
 import { labelFromServer, labelRealm, labelStatus } from '../utils/displayLabels'
 import { getErrorMessage } from '../utils/errorMessage'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const store = useCultivationStore()
 const nodes = ref([])

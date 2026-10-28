@@ -1,6 +1,10 @@
 <template>
   <div class="calendar-page">
     <!-- Header -->
+    <div class="page-header">
+      <p class="page-subtitle">按月查看任务、习惯与截止日期，点日期看当天安排。</p>
+    </div>
+
     <div class="calendar-header">
       <div class="calendar-nav">
         <button class="nav-btn" @click="prevMonth" aria-label="上一月">

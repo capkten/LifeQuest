@@ -1,5 +1,5 @@
 <template>
-  <main class="immortal-page"><header><p>仙界循环</p><h1>仙界活动</h1></header><p v-if="error" role="alert">{{ error }}</p><button type="button" :disabled="running" @click="run">执行一次仙界修行</button><p v-if="message" role="status">{{ message }}</p></main>
+  <main class="immortal-page"><header><p class="page-kicker">仙界循环</p></header><p v-if="error" role="alert">{{ error }}</p><button type="button" :disabled="running" @click="run">执行一次仙界修行</button><p v-if="message" role="status">{{ message }}</p></main>
 </template>
 <script setup>
 import { ref } from 'vue'

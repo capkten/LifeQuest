@@ -11,17 +11,17 @@
     <header class="cultivation-page__header">
       <div>
         <p class="cultivation-eyebrow">修炼</p>
-        <h1>修炼总览</h1>
         <p>{{ realmLabel }} · 把今日行动转化为稳定的修为积累。</p>
       </div>
       <router-link class="cultivation-action" to="/todos">前往今日任务</router-link>
     </header>
 
-    <div v-if="loading" class="cultivation-state cultivation-state--loading" aria-live="polite">正在读取修炼状态...</div>
-    <div v-else-if="error" class="cultivation-state cultivation-state--error" role="alert">
-      <span>修炼状态暂时无法读取。</span>
-      <button type="button" class="cultivation-action" @click="load">重试</button>
-    </div>
+    <AppState v-if="loading" state="loading" title="正在读取修炼状态…" />
+    <AppState v-else-if="error" state="error" title="修炼状态暂时无法读取。">
+      <template #actions>
+        <AppButton variant="secondary" @click="load">重试</AppButton>
+      </template>
+    </AppState>
     <template v-else>
       <section class="cultivation-overview-grid">
         <div class="cultivation-primary-column">
@@ -71,6 +71,8 @@ import { getErrorMessage } from '../utils/errorMessage'
 import RealmProgress from '../components/cultivation/RealmProgress.vue'
 import ResourceSummary from '../components/cultivation/ResourceSummary.vue'
 import { labelFromServer, labelRealm } from '../utils/displayLabels'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const store = useCultivationStore()
 const { successToast, errorToast, showSuccess, showError } = useToast()

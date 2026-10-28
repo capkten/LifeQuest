@@ -1,14 +1,7 @@
 <template>
   <div class="stats-page">
     <div class="page-header">
-      <h1 class="page-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M18 20V10" />
-          <path d="M12 20V4" />
-          <path d="M6 20v-6" />
-        </svg>
-        数据统计
-      </h1>
+    <p class="page-subtitle">用数据看清节奏，不靠感觉。</p>
     </div>
 
     <AppState
@@ -17,12 +10,10 @@
       title="正在加载统计数据…"
     />
 
-    <AppState
-      v-else-if="error && !hasRenderableData"
+    <AppState v-else-if="error && !hasRenderableData"
       state="error"
       :title="error"
-      description="请检查网络后重试，已有统计不会丢失。"
-    >
+      description="请检查网络后重试，已有统计不会丢失。">
       <template #actions>
         <AppButton variant="secondary" @click="fetchAll">重试</AppButton>
       </template>

@@ -8,7 +8,7 @@
         <div v-if="errorToast" class="cultivation-toast cultivation-toast--error" role="alert" aria-live="polite">{{ errorToast }}</div>
       </Transition>
     </Teleport>
-    <header class="npcs-page__header"><div><p class="cultivation-eyebrow">人物关系</p><h1>人物关系</h1><p>记录固定核心人物、最近相遇与修炼变化。</p></div></header>
+    <header class="npcs-page__header"><div><p class="cultivation-eyebrow">人物关系</p><p>记录固定核心人物、最近相遇与修炼变化。</p></div></header>
     <form class="npc-meet cultivation-surface" @submit.prevent="meetNpc">
       <div class="cultivation-section-heading"><div><h2>遇见普通弟子</h2><p>选择宗门和人口槽位，记录一次真实相遇。</p></div></div>
       <div class="npc-meet__fields">
@@ -17,8 +17,12 @@
         <button type="submit" class="cultivation-action" :disabled="meeting || !sectKey">{{ meeting ? '记录中...' : '遇见' }}</button>
       </div>
     </form>
-    <div v-if="loading" class="cultivation-state">正在读取关系记录...</div>
-    <div v-else-if="error" class="cultivation-state cultivation-state--error" role="alert"><span>{{ errorMessage }}</span><button type="button" class="cultivation-action" @click="load">重试</button></div>
+    <AppState v-if="loading" state="loading" />
+    <AppState v-else-if="error" state="error" :title="errorMessage">
+      <template #actions>
+        <AppButton variant="secondary" @click="load">重试</AppButton>
+      </template>
+    </AppState>
     <template v-else>
       <section class="npc-population cultivation-surface" aria-labelledby="npc-population-title"><div class="cultivation-section-heading"><h2 id="npc-population-title">人口统计</h2><span>{{ totalCount }} 位记录</span></div><dl><div><dt>固定核心</dt><dd>{{ fixedCore.length }}</dd></div><div><dt>最近遇见</dt><dd>{{ recentlyMet.length }}</dd></div><div><dt>关系事件</dt><dd>{{ events.length }}</dd></div></dl></section>
       <section class="npc-groups">
@@ -37,6 +41,8 @@ import NpcTimeline from '../components/cultivation/NpcTimeline.vue'
 import { getErrorMessage } from '../utils/errorMessage'
 import { useToast } from '../composables/useToast'
 import { labelFromServer, labelNpcRole } from '../utils/displayLabels'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const relationship = ref({ fixed_core: [], recently_met: [], events: [] })
 const loading = ref(false)

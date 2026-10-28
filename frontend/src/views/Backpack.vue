@@ -2,7 +2,7 @@
   <div class="backpack-page">
     <div class="page-header">
       <div class="header-left">
-        <h2 class="page-title">背包</h2>
+        <p class="page-subtitle">任务和挑战得来的东西都放在这。</p>
         <span class="item-count">{{ filteredItems.length }} 件物品</span>
       </div>
       <router-link to="/backpack/history" class="btn-history">
@@ -47,12 +47,10 @@
 
     <AppState v-if="loading" state="loading" title="正在加载背包…" />
 
-    <AppState
-      v-else-if="error"
+    <AppState v-else-if="error"
       state="error"
       :title="error"
-      description="请检查网络后重试。"
-    >
+      description="请检查网络后重试。">
       <template #actions>
         <AppButton variant="secondary" @click="fetchAll">重试</AppButton>
       </template>

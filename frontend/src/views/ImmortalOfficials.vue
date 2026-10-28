@@ -1,6 +1,6 @@
 <template>
   <main class="immortal-page">
-    <header><p>仙界治理</p><h1>仙官委托</h1></header>
+    <header><p class="page-kicker">仙界治理</p></header>
     <p v-if="error" role="alert">{{ error }}</p>
     <section v-else-if="overview" class="official-card">
       <h2>当前可见仙官</h2>

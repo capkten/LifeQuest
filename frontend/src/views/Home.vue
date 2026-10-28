@@ -117,13 +117,12 @@
           <router-link to="/todos" class="section-link">查看全部</router-link>
         </div>
         <div class="section-body">
-          <div v-if="loadingTasks" class="loading-state">
-            <span class="loading-spinner"></span>
-          </div>
-          <div v-else-if="errorTasks" class="error-state">
-            <p>{{ errorTasks }}</p>
-            <button class="retry-btn" @click="fetchTasks">重试</button>
-          </div>
+          <AppState v-if="loadingTasks" state="loading" />
+          <AppState v-else-if="errorTasks" state="error" :title="errorTasks">
+            <template #actions>
+              <AppButton variant="secondary" @click="fetchTasks">重试</AppButton>
+            </template>
+          </AppState>
           <div v-else-if="recentTasks.length === 0" class="empty-state">
             <p>暂无任务，创建你的第一个任务吧！</p>
           </div>
@@ -150,13 +149,12 @@
           <router-link to="/todos" class="section-link">查看全部</router-link>
         </div>
         <div class="section-body">
-          <div v-if="loadingGoals" class="loading-state">
-            <span class="loading-spinner"></span>
-          </div>
-          <div v-else-if="errorGoals" class="error-state">
-            <p>{{ errorGoals }}</p>
-            <button class="retry-btn" @click="fetchGoals">重试</button>
-          </div>
+          <AppState v-if="loadingGoals" state="loading" />
+          <AppState v-else-if="errorGoals" state="error" :title="errorGoals">
+            <template #actions>
+              <AppButton variant="secondary" @click="fetchGoals">重试</AppButton>
+            </template>
+          </AppState>
           <div v-else-if="recentGoals.length === 0" class="empty-state">
             <p>暂无目标，设定你的第一个目标吧！</p>
           </div>
@@ -230,6 +228,8 @@ import TodayActionCenter from '../components/home/TodayActionCenter.vue'
 import TodayWorkbench from '../components/home/TodayWorkbench.vue'
 import AppCard from '../components/ui/AppCard.vue'
 import { useValuePulse } from '../composables/useValuePulse'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -1091,12 +1091,6 @@ onMounted(() => {
 
 .loading-state,
 .empty-state,
-.error-state {
-  min-height: 140px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
 
 .loading-spinner {
   width: 28px;
@@ -1118,22 +1112,7 @@ onMounted(() => {
   font-size: var(--font-size-sm);
 }
 
-.error-state {
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  color: var(--color-error);
-  font-size: var(--font-size-sm);
-}
 
-.retry-btn {
-  padding: var(--spacing-xs) var(--spacing-md);
-  border: 1px solid var(--color-primary);
-  border-radius: var(--radius-md);
-  color: var(--color-primary);
-  background: transparent;
-  cursor: pointer;
-  font-family: var(--font-family);
-}
 
 .section-link {
   font-size: var(--font-size-sm);

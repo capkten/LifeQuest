@@ -1,6 +1,6 @@
 <template>
   <main class="immortal-page">
-    <header><p>飞升之后</p><h1>仙界世界</h1><button type="button" @click="load">重试</button></header>
+    <header><p class="page-kicker">飞升之后</p><button type="button" @click="load">重试</button></header>
     <p v-if="error" role="alert">{{ error }}</p>
     <section v-else-if="overview" class="immortal-card">
       <h2>{{ overview.realm_key }} · 第 {{ overview.stage }} 阶</h2>

@@ -2,12 +2,12 @@
   <div class="finance-page">
     <div class="page-header">
       <div class="header-left">
+        <p class="page-subtitle">账户、余额与信用额度集中管理。</p>
         <button class="btn-back" @click="$router.push('/finance')" aria-label="返回">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </button>
-        <h2 class="page-title">账户管理</h2>
       </div>
       <div class="header-right">
         <button class="btn-secondary" @click="showTransferDialog = true">
@@ -35,14 +35,13 @@
       <span class="total-assets-value">{{ formatMoney(netAssets) }}</span>
     </div>
 
-    <div v-if="loading" class="loading-state">
-      <span class="loading-spinner"></span>
-    </div>
+    <AppState v-if="loading" state="loading" />
 
-    <div v-else-if="error" class="error-state">
-      <p>{{ error }}</p>
-      <button class="retry-btn" @click="fetchAccounts">重试</button>
-    </div>
+    <AppState v-else-if="error" state="error" :title="error">
+      <template #actions>
+        <AppButton variant="secondary" @click="fetchAccounts">重试</AppButton>
+      </template>
+    </AppState>
 
     <div v-else-if="accounts.length === 0" class="empty-state">
       <div class="empty-icon">
@@ -304,6 +303,8 @@ import { financeService } from '../services/finance'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelAccountType } from '../utils/displayLabels'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -590,7 +591,6 @@ onMounted(() => { fetchAccounts() })
 .total-assets-value { font-size: var(--font-size-2xl); font-weight: 700; }
 
 /* Loading / Error / Empty */
-.loading-state { display: flex; align-items: center; justify-content: center; min-height: 300px; }
 
 .loading-spinner {
   width: 32px; height: 32px;
@@ -600,19 +600,6 @@ onMounted(() => { fetchAccounts() })
 .loading-spinner--sm { width: 16px; height: 16px; border-width: 2px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.error-state {
-  display: flex; flex-direction: column; align-items: center;
-  justify-content: center; min-height: 300px; gap: var(--spacing-md);
-  color: var(--color-error); font-size: var(--font-size-sm);
-}
-.retry-btn {
-  padding: var(--spacing-xs) var(--spacing-md);
-  font-size: var(--font-size-sm); color: var(--color-primary);
-  background: transparent; border: 1px solid var(--color-primary);
-  border-radius: var(--radius-md); cursor: pointer;
-  font-family: var(--font-family); transition: all 0.15s ease;
-}
-.retry-btn:hover { background: var(--color-primary); color: #fff; }
 
 .empty-state {
   display: flex; flex-direction: column; align-items: center;
@@ -920,13 +907,6 @@ select.form-input { appearance: auto; }
 }
 
 .empty-state,
-.error-state {
-  min-height: 280px;
-  padding: var(--spacing-xl);
-  border-radius: var(--surface-radius);
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px dashed var(--color-border);
-}
 
 .success-toast,
 .error-toast {

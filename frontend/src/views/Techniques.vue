@@ -1,9 +1,13 @@
 <template>
   <div class="techniques-page">
-    <header><p class="cultivation-eyebrow">功法配置</p><h1>功法配置</h1><p>购买格子并配置已学会的功法。</p></header>
+    <header><p class="cultivation-eyebrow">功法配置</p><p>购买格子并配置已学会的功法。</p></header>
     <Transition name="toast"><div v-if="errorToast" class="cultivation-state cultivation-state--error" role="alert" aria-live="polite">{{ errorToast }}</div></Transition>
-    <div v-if="loading" class="cultivation-state">正在读取功法...</div>
-    <div v-else-if="error" class="cultivation-state cultivation-state--error" role="alert"><span>{{ error }}</span><button type="button" class="cultivation-action" :disabled="busy" @click="load">重试</button></div>
+    <AppState v-if="loading" state="loading" />
+    <AppState v-else-if="error" state="error" :title="error">
+      <template #actions>
+        <AppButton variant="secondary" @click="load">重试</AppButton>
+      </template>
+    </AppState>
     <template v-else>
       <TechniqueSlotGrid :slots="displaySlots" :busy="busy" @select="selectSlot" />
       <section class="techniques-library cultivation-surface" aria-labelledby="technique-library-title">
@@ -38,6 +42,8 @@ import { cultivationService } from '../services/cultivation'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelFromServer, labelRealm, labelSlotType, labelTechniqueType } from '../utils/displayLabels'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const slotTypes = ['main', 'auxiliary', 'mind', 'movement', 'body']
 const { errorToast, showError } = useToast()

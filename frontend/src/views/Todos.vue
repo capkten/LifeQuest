@@ -2,7 +2,7 @@
   <div class="todos-page">
     <div class="page-header">
       <div class="header-left">
-        <h2 class="page-title">待办</h2>
+        <p class="page-subtitle">先做今日到期的，再安排之后的。</p>
         <span class="item-count">{{ currentList.length }} {{ activeTab === 'habits' ? '个习惯' : activeTab === 'tasks' ? '个任务' : '个目标' }}</span>
       </div>
       <div class="header-actions-group">
@@ -90,14 +90,13 @@
       </button>
     </div>
 
-    <div v-if="loading" class="loading-state">
-      <span class="loading-spinner"></span>
-    </div>
+    <AppState v-if="loading" state="loading" />
 
-    <div v-else-if="error" class="error-state">
-      <p>{{ error }}</p>
-      <button class="retry-btn" @click="fetchAll">重试</button>
-    </div>
+    <AppState v-else-if="error" state="error" :title="error">
+      <template #actions>
+        <AppButton variant="secondary" @click="fetchAll">重试</AppButton>
+      </template>
+    </AppState>
 
     <div v-else-if="currentList.length === 0" class="empty-state">
       <div class="empty-icon">
@@ -857,6 +856,8 @@ import { getErrorMessage } from '../utils/errorMessage'
 import { labelDifficulty, labelFrequency, labelTaskStatus } from '../utils/displayLabels'
 import HabitHistoryDialog from '../components/HabitHistoryDialog.vue'
 import CultivationRetreatModal from '../components/retreat/CultivationRetreatModal.vue'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const showRetreatModal = ref(false)
 const retreatSelectedTodo = ref(null)
@@ -2063,12 +2064,6 @@ onMounted(() => {
 }
 
 /* Loading State */
-.loading-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-}
 
 .loading-spinner {
   width: 32px;
@@ -2090,16 +2085,6 @@ onMounted(() => {
 }
 
 /* Error State */
-.error-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-  gap: var(--spacing-md);
-  color: var(--color-error);
-  font-size: var(--font-size-sm);
-}
 
 .retry-btn {
   padding: var(--spacing-xs) var(--spacing-md);

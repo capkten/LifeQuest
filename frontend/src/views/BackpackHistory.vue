@@ -10,7 +10,6 @@
           返回背包
         </router-link>
         <span class="history-kicker">背包记录</span>
-        <h1 class="history-title">使用历史</h1>
         <p class="history-subtitle">集中查看背包物品的添加、使用、装备、卸下、丢弃与退款记录。</p>
       </div>
       <div class="history-hero-stats" v-if="!loading && !error && records.length">
@@ -29,9 +28,7 @@
       </div>
     </section>
 
-    <div v-if="loading" class="loading-state">
-      <span class="loading-spinner"></span>
-    </div>
+    <AppState v-if="loading" state="loading" />
 
     <div v-else-if="error" class="feedback-card feedback-card--error">
       <p>{{ error }}</p>
@@ -156,6 +153,7 @@ import { computed, ref, onMounted } from 'vue'
 import { backpackService } from '../services/backpack'
 import { labelActionType } from '../utils/displayLabels'
 import { getErrorMessage } from '../utils/errorMessage'
+import AppState from '../components/ui/AppState.vue'
 
 const records = ref([])
 const loading = ref(true)
@@ -521,11 +519,6 @@ onMounted(() => {
   border-color: rgba(14, 165, 233, 0.2);
 }
 
-.loading-state {
-  min-height: 280px;
-  display: grid;
-  place-items: center;
-}
 
 .loading-spinner {
   width: 32px;

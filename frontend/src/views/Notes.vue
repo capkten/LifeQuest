@@ -53,14 +53,13 @@
 
     <!-- Search Results -->
     <div v-if="isSearching">
-      <div v-if="searchLoading" class="loading-state">
-        <span class="loading-spinner"></span>
-      </div>
+      <AppState v-if="searchLoading" state="loading" />
 
-      <div v-else-if="searchError" class="error-state" role="alert">
-        <p>{{ searchError }}</p>
-        <button class="retry-btn" @click="performSearch(searchQuery.trim())">重试</button>
-      </div>
+      <AppState v-else-if="searchError" state="error" :title="searchError">
+        <template #actions>
+          <AppButton variant="secondary" @click="performSearch(searchQuery.trim())">重试</AppButton>
+        </template>
+      </AppState>
 
       <div v-else-if="searchResults.length === 0" class="empty-state">
         <div class="empty-icon">
@@ -105,7 +104,7 @@
     <template v-if="!isSearching">
       <div class="page-header">
       <div class="header-left">
-        <h2 class="page-title">笔记本</h2>
+        <p class="page-subtitle">所有想法都收在这里，随时找得到。</p>
         <span class="notebook-count">{{ notebooks.length }} 个笔记本</span>
       </div>
       <button class="btn-create" type="button" @click="openCreateDialog">
@@ -117,14 +116,13 @@
       </button>
     </div>
 
-    <div v-if="loading && !notebooks.length" class="loading-state">
-      <span class="loading-spinner"></span>
-    </div>
+    <AppState v-if="loading && !notebooks.length" state="loading" />
 
-    <div v-else-if="error && !notebooks.length" class="error-state">
-      <p>{{ error }}</p>
-      <button class="retry-btn" @click="fetchNotebooks">重试</button>
-    </div>
+    <AppState v-else-if="error && !notebooks.length" state="error" :title="error">
+      <template #actions>
+        <AppButton variant="secondary" @click="fetchNotebooks">重试</AppButton>
+      </template>
+    </AppState>
 
     <div v-else>
     <div v-if="error" class="inline-error" role="alert"><span>{{ error }}</span><button type="button" class="retry-btn" @click="fetchNotebooks">重试</button></div>
@@ -276,6 +274,8 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { noteService } from '../services/note'
 import { getErrorMessage } from '../utils/errorMessage'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const router = useRouter()
 const notebooks = ref([])
@@ -730,12 +730,6 @@ watch(discoveryFilters, fetchDiscovery, { deep: true })
 }
 
 /* Loading State */
-.loading-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-}
 
 .loading-spinner {
   width: 32px;
@@ -757,16 +751,6 @@ watch(discoveryFilters, fetchDiscovery, { deep: true })
 }
 
 /* Error State */
-.error-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-  gap: var(--spacing-md);
-  color: var(--color-error);
-  font-size: var(--font-size-sm);
-}
 
 .retry-btn {
   padding: var(--spacing-xs) var(--spacing-md);

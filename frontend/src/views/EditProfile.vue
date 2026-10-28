@@ -3,8 +3,7 @@
     <section class="profile-shell">
       <div class="profile-intro">
         <span class="profile-kicker">资料设置</span>
-        <h1 class="page-title">编辑资料</h1>
-        <p class="page-copy">更新头像、用户名与邮箱信息，保留现有头像解析、上传和资料保存行为。</p>
+        <p class="page-copy">更新头像、用户名与邮箱，改完保存即刻生效。</p>
       </div>
 
       <div class="profile-layout">

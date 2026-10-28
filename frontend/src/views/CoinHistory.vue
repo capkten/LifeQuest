@@ -1,7 +1,7 @@
 <template>
   <div class="coin-history-page">
     <div class="page-header">
-      <h2 class="page-title">金币明细</h2>
+    <p class="page-subtitle">每一笔金币收入与支出都在这里。</p>
     </div>
 
     <div class="summary-grid">
@@ -71,14 +71,13 @@
       </select>
     </div>
 
-    <div v-if="loading && !transactions.length" class="loading-state">
-      <span class="loading-spinner"></span>
-    </div>
+    <AppState v-if="loading && !transactions.length" state="loading" />
 
-    <div v-else-if="error && !transactions.length" class="error-state">
-      <p>{{ error }}</p>
-      <button class="retry-btn" @click="fetchHistory">重试</button>
-    </div>
+    <AppState v-else-if="error && !transactions.length" state="error" :title="error">
+      <template #actions>
+        <AppButton variant="secondary" @click="fetchHistory">重试</AppButton>
+      </template>
+    </AppState>
 
     <div v-else>
     <div v-if="error" class="inline-error" role="alert"><span>{{ error }}</span><button type="button" class="retry-btn" @click="fetchHistory">重试</button></div>
@@ -144,6 +143,8 @@ import {
 } from '../services/coinHistoryContract.js'
 import { labelSource } from '../utils/displayLabels'
 import { getErrorMessage } from '../utils/errorMessage'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const { user } = useUserStats()
 
@@ -366,12 +367,6 @@ onMounted(() => {
 }
 
 /* Loading/Error/Empty */
-.loading-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-}
 
 .loading-spinner {
   width: 32px;
@@ -386,16 +381,6 @@ onMounted(() => {
   to { transform: rotate(360deg); }
 }
 
-.error-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-  gap: var(--spacing-md);
-  color: var(--color-error);
-  font-size: var(--font-size-sm);
-}
 
 .retry-btn {
   padding: var(--spacing-xs) var(--spacing-md);
@@ -662,15 +647,6 @@ onMounted(() => {
 .transaction-item {
   padding: 1rem;
   border-radius: 16px;
-}
-
-.empty-state,
-.error-state {
-  min-height: 280px;
-  padding: var(--spacing-xl);
-  border-radius: var(--surface-radius);
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px dashed var(--color-border);
 }
 
 @media (max-width: 767px) {

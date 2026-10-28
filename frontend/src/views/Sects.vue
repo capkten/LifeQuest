@@ -8,7 +8,7 @@
         <div v-if="errorToast" class="cultivation-toast cultivation-toast--error" role="alert" aria-live="polite">{{ errorToast }}</div>
       </Transition>
     </Teleport>
-    <header><p class="cultivation-eyebrow">宗门对比</p><h1>宗门选择</h1><p>比较传承、任务偏好与入门条件。</p></header>
+    <header><p class="cultivation-eyebrow">宗门对比</p><p>比较传承、任务偏好与入门条件。</p></header>
     <section class="sects-filters cultivation-surface" aria-labelledby="sect-filter-title">
       <div class="cultivation-section-heading"><h2 id="sect-filter-title">比较筛选</h2><span>{{ sects.length }} 个结果</span></div>
       <div class="sects-filter-grid">
@@ -17,8 +17,12 @@
         <label>任务偏好<select v-model="filters.task_preference" @change="load"><option :value="null">全部偏好</option><option v-for="option in taskPreferenceOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
       </div>
     </section>
-    <div v-if="loading" class="cultivation-state">正在读取宗门...</div>
-    <div v-else-if="error" class="cultivation-state cultivation-state--error" role="alert"><span>{{ error }}</span><button type="button" class="cultivation-action" @click="load">重试</button></div>
+    <AppState v-if="loading" state="loading" />
+    <AppState v-else-if="error" state="error" :title="error">
+      <template #actions>
+        <AppButton variant="secondary" @click="load">重试</AppButton>
+      </template>
+    </AppState>
     <p v-if="!loading && !error && !sects.length" class="cultivation-state">暂无符合条件的宗门。</p>
     <section v-if="!loading && !error && sects.length" class="sect-list" aria-label="宗门比较结果">
       <article v-for="sect in sects" :key="sect.id || sect.sect_key" class="sect-card cultivation-surface" :class="{ 'sect-card--special': sect.kind === 'special' }">
@@ -57,6 +61,8 @@ import { createSequencedRequest } from './sects-request-state'
 import { getErrorMessage } from '../utils/errorMessage'
 import { useToast } from '../composables/useToast'
 import { labelFromServer, labelNpcRole, labelRealm, labelSectKind, labelStatus, labelTaskPreference } from '../utils/displayLabels'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const filters = reactive({ star: null, kind: null, task_preference: null })
 const taskPreferenceOptions = Array.from({ length: 10 }, (_, index) => {

@@ -32,7 +32,8 @@ test('mortal world is reachable and labeled consistently', async () => {
   assert.match(sidebar, /to="\/world"/)
   assert.match(sidebar, /凡界/)
   assert.doesNotMatch(sidebar, /cultivationUnlocked\s*&&\s*isAscended[^\n]*to="\/world"/)
-  assert.match(world, /凡界地图/)
+  // The app bar owns the page title; the view keeps the domain kicker instead.
+  assert.match(world, /cultivation-eyebrow">凡界</)
   assert.doesNotMatch(world, /仙界地图/)
 })
 
