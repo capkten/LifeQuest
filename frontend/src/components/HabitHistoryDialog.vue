@@ -392,7 +392,7 @@ onMounted(() => {
 .history-section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .history-section-heading h3 { margin: 0; font-size: 15px; }
 .history-blocked-reason { margin: -4px 0 0; color: var(--color-text-secondary); font-size: 12px; line-height: 1.5; }
-.rate-badge { flex: 0 0 auto; padding: 4px 8px; border-radius: 999px; color: var(--color-success); background: rgba(81, 207, 102, .12); font-size: 12px; font-weight: 800; }
+.rate-badge { flex: 0 0 auto; padding: 4px 8px; border-radius: var(--radius-pill); color: var(--color-success); background: rgba(81, 207, 102, .12); font-size: 12px; font-weight: 800; }
 .history-week-labels, .history-grid { display: grid; grid-template-columns: repeat(7, minmax(20px, 1fr)); gap: 5px; }
 .history-week-labels { margin-bottom: 5px; color: var(--color-text-tertiary); font-size: 10px; text-align: center; }
 .history-day { aspect-ratio: 1; min-width: 0; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-bg-secondary); }

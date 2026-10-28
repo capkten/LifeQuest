@@ -8,7 +8,7 @@
       </div>
       <div class="header-actions">
         <button type="button" class="retreat-trigger-btn" @click="openRetreatModal(null)">
-          🧘 闭关专注
+          <Sparkles class="retreat-icon" aria-hidden="true" /> 闭关专注
         </button>
         <button type="button" :disabled="busy || loading" @click="load()">{{ loading ? '刷新中…' : '刷新' }}</button>
       </div>
@@ -140,6 +140,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { Sparkles } from 'lucide-vue-next'
 import { todoService } from '../../services/todo'
 import { useAuthStore } from '../../stores/auth'
 import { useCultivationStore } from '../../stores/cultivation'
@@ -298,6 +299,17 @@ legend { font-size: 14px; font-weight: 600; padding: 0 0 12px; }
 }
 @media (max-width: 900px) { .focus-tasks { grid-template-columns: 1fr; } }
 @media (max-width: 600px) {
+  .workbench-header {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
   .task-groups { grid-template-columns: 1fr; gap: 12px; }
   .workbench-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .quick-task-form > div { flex: 1 1 100%; }
@@ -306,5 +318,11 @@ legend { font-size: 14px; font-weight: 600; padding: 0 0 12px; }
   .order-actions { display: flex; margin: 6px 0 0; }
   button, input:not([type=checkbox]), select, .focus-option { min-height: 48px; }
   input:not([type=checkbox]), select { font-size: 16px; }
+}
+
+.retreat-icon {
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
 }
 </style>

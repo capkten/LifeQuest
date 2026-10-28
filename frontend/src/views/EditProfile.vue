@@ -220,9 +220,6 @@ function goBack() {
 </script>
 
 <style scoped>
-.edit-profile-page {
-  padding: var(--page-padding-y) var(--page-padding-x);
-}
 
 .profile-shell {
   display: grid;
@@ -386,7 +383,7 @@ function goBack() {
 .preview-pill {
   min-height: 32px;
   padding: 0 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   display: inline-flex;
   align-items: center;
   background: rgba(14, 165, 233, 0.1);
@@ -490,7 +487,7 @@ function goBack() {
 .btn {
   min-height: 46px;
   padding: 0 20px;
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   border: 1px solid transparent;
   display: inline-flex;
   align-items: center;
@@ -532,7 +529,7 @@ function goBack() {
   transform: translateX(-50%);
   min-height: 44px;
   padding: 0 18px;
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -566,14 +563,11 @@ function goBack() {
 }
 
 @media (max-width: 767px) {
-  .edit-profile-page {
-    padding: var(--spacing-md);
-  }
 
   .profile-intro,
   .profile-preview,
   .form-card {
-    border-radius: 22px;
+    border-radius: var(--radius-card);
   }
 
   .section-heading,
@@ -595,8 +589,5 @@ function goBack() {
 }
 
 @media (min-width: 768px) {
-  .edit-profile-page {
-    padding: 0;
-  }
 }
 </style>

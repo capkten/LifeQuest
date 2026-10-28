@@ -40,31 +40,34 @@
       </div>
     </section>
 
-    <div v-if="loading" class="loading-state">
-      <span class="loading-spinner"></span>
-    </div>
+    <AppState v-if="loading" state="loading" title="正在加载项目…" />
 
-    <div v-else-if="error" class="error-state">
-      <p>{{ error }}</p>
-      <button class="retry-btn" @click="fetchProjects">重试</button>
-    </div>
+    <AppState
+      v-else-if="error"
+      state="error"
+      :title="error"
+      description="请检查网络后重试。"
+    >
+      <template #actions>
+        <AppButton variant="secondary" @click="fetchProjects">重试</AppButton>
+      </template>
+    </AppState>
 
-    <div v-else-if="filteredProjects.length === 0" class="empty-state">
-      <div class="empty-icon">
+    <AppState
+      v-else-if="filteredProjects.length === 0"
+      state="empty"
+      title="还没有项目"
+      description="还没有项目，创建第一个吧！"
+    >
+      <template #icon>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
         </svg>
-      </div>
-      <h3 class="empty-title">还没有项目</h3>
-      <p class="empty-text">还没有项目，创建第一个吧！</p>
-      <button class="btn-create" @click="openCreateDialog">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-        新建项目
-      </button>
-    </div>
+      </template>
+      <template #actions>
+        <AppButton @click="openCreateDialog">新建项目</AppButton>
+      </template>
+    </AppState>
 
     <div v-else class="projects-grid">
       <div
@@ -243,6 +246,8 @@ import { projectService } from '../services/project'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelProjectStatus } from '../utils/displayLabels'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const { errorToast, successToast, showError, showSuccess } = useToast()
 
@@ -416,7 +421,6 @@ onMounted(() => {
 
 <style scoped>
 .projects-page {
-  padding: var(--spacing-xl);
   width: 100%;
   overflow-x: clip;
 }
@@ -589,14 +593,7 @@ onMounted(() => {
   color: var(--color-primary-dark);
 }
 
-/* Loading / Error / Empty */
-.loading-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-}
-
+/* Loading spinner stays local: it is reused inside inline card actions. */
 .loading-spinner {
   width: 32px;
   height: 32px;
@@ -614,74 +611,6 @@ onMounted(() => {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
-}
-
-.error-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-  gap: var(--spacing-md);
-  color: var(--color-error);
-  font-size: var(--font-size-sm);
-}
-
-.retry-btn {
-  padding: var(--spacing-xs) var(--spacing-md);
-  font-size: var(--font-size-sm);
-  color: var(--color-primary);
-  background: transparent;
-  border: 1px solid var(--color-primary);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-family: var(--font-family);
-  transition: all 0.15s ease;
-}
-
-.retry-btn:hover {
-  background: var(--color-primary);
-  color: #fff;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 400px;
-  text-align: center;
-}
-
-.empty-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-tertiary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: var(--spacing-lg);
-}
-
-.empty-icon svg {
-  width: 36px;
-  height: 36px;
-  color: var(--color-text-tertiary);
-}
-
-.empty-title {
-  font-size: var(--font-size-lg);
-  font-weight: 600;
-  color: var(--color-text);
-  margin-bottom: var(--spacing-sm);
-}
-
-.empty-text {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-tertiary);
-  margin-bottom: var(--spacing-xl);
-  max-width: 320px;
 }
 
 /* Projects Grid */
@@ -1092,15 +1021,9 @@ onMounted(() => {
 
 /* Responsive */
 @media (max-width: 1199px) {
-  .projects-page {
-    padding: var(--spacing-lg);
-  }
 }
 
 @media (max-width: 767px) {
-  .projects-page {
-    padding: var(--spacing-md);
-  }
 
   .page-header {
     flex-direction: column;
@@ -1207,9 +1130,6 @@ onMounted(() => {
   }
 }
 @media (min-width: 768px) {
-  .projects-page {
-    padding: 0;
-  }
 
   .projects-grid {
     gap: 14px;

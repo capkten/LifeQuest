@@ -207,7 +207,6 @@ onMounted(() => {
 
 <style scoped>
 .history-page {
-  padding: var(--page-padding-y) var(--page-padding-x);
   display: grid;
   gap: 16px;
 }
@@ -430,7 +429,7 @@ onMounted(() => {
   gap: 6px;
   min-height: 36px;
   padding: 0 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: #fff;
   border: 1px solid rgba(29, 78, 216, 0.08);
   font-size: var(--font-size-sm);
@@ -445,7 +444,7 @@ onMounted(() => {
 .action-badge {
   min-height: 32px;
   padding: 0 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -501,7 +500,7 @@ onMounted(() => {
 .retry-btn {
   min-height: 44px;
   padding: 0 18px;
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -559,15 +558,12 @@ onMounted(() => {
 }
 
 @media (max-width: 767px) {
-  .history-page {
-    padding: var(--spacing-md);
-  }
 
   .history-hero,
   .timeline-card,
   .summary-card,
   .feedback-card {
-    border-radius: 22px;
+    border-radius: var(--radius-card);
   }
 
   .history-card {
@@ -580,8 +576,5 @@ onMounted(() => {
 }
 
 @media (min-width: 768px) {
-  .history-page {
-    padding: 0;
-  }
 }
 </style>

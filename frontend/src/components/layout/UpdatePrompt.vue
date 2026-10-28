@@ -62,7 +62,7 @@ onMounted(checkForUpdate)
 .update-copy { margin: 12px 0 20px; color: var(--color-text-secondary); }
 .update-error { margin: 0 0 16px; color: var(--color-danger, #dc2626); font-size: var(--font-size-sm); }
 .update-progress { margin: 0 0 20px; }
-.update-progress-track { overflow: hidden; height: 8px; border-radius: 999px; background: var(--color-bg-tertiary); }
+.update-progress-track { overflow: hidden; height: 8px; border-radius: var(--radius-pill); background: var(--color-bg-tertiary); }
 .update-progress-track span { display: block; height: 100%; border-radius: inherit; background: var(--color-primary); transition: width 220ms ease; }
 .update-progress-label { margin: 8px 0 0; color: var(--color-text-secondary); font-size: var(--font-size-sm); }
 .update-actions { display: flex; justify-content: flex-end; gap: 8px; }

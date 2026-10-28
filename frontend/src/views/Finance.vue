@@ -13,14 +13,22 @@
       </button>
     </div>
 
-    <div v-if="loading && !hasDashboardData" class="loading-state">
-      <span class="loading-spinner"></span>
-    </div>
+    <AppState
+      v-if="loading && !hasDashboardData"
+      state="loading"
+      title="正在加载账本…"
+    />
 
-    <div v-else-if="error && !hasDashboardData" class="error-state">
-      <p>{{ error }}</p>
-      <button class="retry-btn" @click="fetchDashboard">重试</button>
-    </div>
+    <AppState
+      v-else-if="error && !hasDashboardData"
+      state="error"
+      :title="error"
+      description="请检查网络后重试，已有记账数据不会丢失。"
+    >
+      <template #actions>
+        <AppButton variant="secondary" @click="fetchDashboard">重试</AppButton>
+      </template>
+    </AppState>
 
     <template v-else>
       <div v-if="error" class="inline-error" role="alert">
@@ -361,6 +369,8 @@ import { financeService } from '../services/finance'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
 import { formatChinaDate, todayChinaDateKey } from '../utils/dateTime'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
@@ -538,7 +548,6 @@ onMounted(() => {
 
 <style scoped>
 .finance-page {
-  padding: var(--spacing-xl);
   width: 100%;
 }
 
@@ -581,13 +590,6 @@ onMounted(() => {
 .btn-create svg { width: 18px; height: 18px; }
 
 /* Loading / Error / Empty */
-.loading-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-}
-
 .loading-spinner {
   width: 32px;
   height: 32px;
@@ -600,17 +602,6 @@ onMounted(() => {
 .loading-spinner--sm { width: 16px; height: 16px; border-width: 2px; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
-
-.error-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-  gap: var(--spacing-md);
-  color: var(--color-error);
-  font-size: var(--font-size-sm);
-}
 
 .retry-btn {
   padding: var(--spacing-xs) var(--spacing-md);
@@ -1209,6 +1200,18 @@ select.form-input {
   padding-top: var(--spacing-sm);
 }
 
+@media (max-width: 767px) {
+  /* Keep the save button above the on-screen keyboard inside the dialog. */
+  .dialog-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    padding: var(--spacing-sm) 0 calc(var(--spacing-sm) + var(--safe-area-bottom));
+    background: var(--color-card);
+    border-top: 1px solid var(--color-border);
+  }
+}
+
 .btn-secondary {
   padding: var(--spacing-sm) var(--spacing-lg);
   font-size: var(--font-size-sm);
@@ -1245,11 +1248,9 @@ select.form-input {
 
 /* Responsive */
 @media (max-width: 1199px) {
-  .finance-page { padding: var(--spacing-lg); }
 }
 
 @media (max-width: 767px) {
-  .finance-page { padding: var(--spacing-md); }
 
   .page-header {
     flex-direction: column;
@@ -1294,7 +1295,6 @@ select.form-input {
 /* Stitch refinement: consistent hierarchy and readable narrow-screen cards. */
 .finance-page {
   min-width: 0;
-  padding-bottom: calc(var(--spacing-xl) + var(--bottom-nav-height));
 }
 
 .page-header,
@@ -1370,9 +1370,6 @@ select.form-input {
 }
 
 @media (max-width: 767px) {
-  .finance-page {
-    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height) + env(safe-area-inset-bottom));
-  }
 
   .accounts-row {
     display: grid;

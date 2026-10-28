@@ -11,7 +11,15 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AppBadge: typeof import('./src/components/ui/AppBadge.vue')['default']
+    AppButton: typeof import('./src/components/ui/AppButton.vue')['default']
+    AppCard: typeof import('./src/components/ui/AppCard.vue')['default']
+    AppField: typeof import('./src/components/ui/AppField.vue')['default']
     AppLayout: typeof import('./src/components/layout/AppLayout.vue')['default']
+    AppList: typeof import('./src/components/ui/AppList.vue')['default']
+    AppSheet: typeof import('./src/components/ui/AppSheet.vue')['default']
+    AppState: typeof import('./src/components/ui/AppState.vue')['default']
+    AppTabs: typeof import('./src/components/ui/AppTabs.vue')['default']
     CollaborativeMarkdownEditor: typeof import('./src/components/notes/CollaborativeMarkdownEditor.vue')['default']
     CultivationRetreatModal: typeof import('./src/components/retreat/CultivationRetreatModal.vue')['default']
     CultivationStatusBar: typeof import('./src/components/cultivation/CultivationStatusBar.vue')['default']

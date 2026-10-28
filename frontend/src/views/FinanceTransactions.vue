@@ -629,7 +629,6 @@ onMounted(() => {
   display: grid;
   gap: var(--page-gap);
   width: 100%;
-  padding: var(--spacing-xl);
   overflow-x: clip;
 }
 
@@ -724,7 +723,7 @@ onMounted(() => {
   justify-content: center;
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   color: var(--color-text-secondary);
   cursor: pointer;
   transition: background var(--transition-base), border-color var(--transition-base), color var(--transition-base), transform var(--transition-base);
@@ -762,7 +761,7 @@ onMounted(() => {
   gap: var(--spacing-xs);
   padding: 0.75rem 1.05rem;
   border: none;
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   color: #fff;
   background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
   box-shadow: var(--shadow-sm);
@@ -784,7 +783,7 @@ onMounted(() => {
   border: 1px solid var(--color-border);
   background: var(--color-card);
   color: var(--color-text-secondary);
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   padding: 0.65rem 0.9rem;
   font-size: var(--font-size-sm);
   font-weight: 600;
@@ -805,7 +804,7 @@ onMounted(() => {
   gap: var(--spacing-xs);
   padding: 0.75rem 1rem;
   border: none;
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   background: var(--color-error);
   color: #fff;
   font-size: var(--font-size-sm);
@@ -904,7 +903,7 @@ onMounted(() => {
   display: grid;
   gap: 4px;
   padding: 0.9rem;
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   border: 1px solid rgba(168, 215, 232, 0.45);
   background: rgba(255, 255, 255, 0.72);
 }
@@ -948,7 +947,7 @@ onMounted(() => {
   min-height: 44px;
   padding: 0.75rem 0.9rem;
   border: 1px solid var(--color-border);
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-secondary);
   color: var(--color-text);
   font-family: var(--font-family);
@@ -1003,7 +1002,7 @@ onMounted(() => {
 .tx-icon {
   width: 40px;
   height: 40px;
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1063,7 +1062,7 @@ onMounted(() => {
 .empty-icon {
   width: 72px;
   height: 72px;
-  border-radius: 22px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-tertiary);
   display: flex;
   align-items: center;
@@ -1113,7 +1112,7 @@ onMounted(() => {
   width: min(100%, 520px);
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: 22px;
+  border-radius: var(--radius-card);
   box-shadow: var(--shadow-xl);
   overflow: hidden;
 }
@@ -1195,7 +1194,7 @@ onMounted(() => {
   align-items: center;
   gap: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-lg);
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   color: #fff;
   font-size: var(--font-size-sm);
   font-weight: 700;
@@ -1224,9 +1223,6 @@ onMounted(() => {
 }
 
 @media (max-width: 1199px) {
-  .finance-page {
-    padding: var(--spacing-lg);
-  }
 
   .finance-summary-grid {
     grid-template-columns: 1fr;
@@ -1234,10 +1230,6 @@ onMounted(() => {
 }
 
 @media (max-width: 767px) {
-  .finance-page {
-    padding: var(--spacing-md);
-    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height));
-  }
 
   .page-header,
   .header-left,
@@ -1392,9 +1384,6 @@ onMounted(() => {
 }
 
 @media (max-width: 767px) {
-  .finance-page {
-    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height) + env(safe-area-inset-bottom));
-  }
 
   .filter-bar {
     gap: 10px;

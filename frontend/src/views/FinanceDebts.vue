@@ -443,7 +443,6 @@ onMounted(() => { fetchDebts() })
 </script>
 
 <style scoped>
-.finance-page { padding: var(--spacing-xl); width: 100%; }
 
 .page-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -714,10 +713,9 @@ onMounted(() => { fetchDebts() })
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-20px); }
 
 /* Responsive */
-@media (max-width: 1199px) { .finance-page { padding: var(--spacing-lg); } }
+@media (max-width: 1199px) { }
 
 @media (max-width: 767px) {
-  .finance-page { padding: var(--spacing-md); }
   .page-header { flex-direction: column; align-items: flex-start; gap: var(--spacing-md); }
   .debt-details { grid-template-columns: repeat(2, 1fr); }
   .form-row { grid-template-columns: 1fr; }
@@ -728,7 +726,6 @@ onMounted(() => { fetchDebts() })
 .finance-page {
   display: grid;
   gap: var(--page-gap);
-  padding-bottom: calc(var(--spacing-xl) + var(--bottom-nav-height));
   overflow-x: clip;
 }
 
@@ -760,7 +757,7 @@ onMounted(() => { fetchDebts() })
 }
 
 .tab-btn {
-  border-radius: 14px;
+  border-radius: var(--radius-card);
 }
 
 .debts-list {
@@ -838,9 +835,6 @@ onMounted(() => { fetchDebts() })
 }
 
 @media (max-width: 767px) {
-  .finance-page {
-    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height));
-  }
 
   .btn-create {
     width: 100%;
@@ -933,9 +927,6 @@ onMounted(() => { fetchDebts() })
 }
 
 @media (max-width: 767px) {
-  .finance-page {
-    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height) + env(safe-area-inset-bottom));
-  }
 
   .debt-card {
     padding: 14px;

@@ -346,14 +346,14 @@ async function handleRegister() {
 
 @media (max-width: 767px) {
   .register-container {
-    align-items: flex-start;
-    padding: calc(var(--spacing-md) + var(--safe-area-top)) var(--spacing-md) calc(var(--spacing-md) + var(--safe-area-bottom));
+    align-items: center;
+    padding: calc(var(--spacing-lg) + var(--safe-area-top)) var(--spacing-md) calc(var(--spacing-lg) + var(--safe-area-bottom));
   }
 
   .register-card {
-    margin-top: 8vh;
+    width: 100%;
     padding: var(--spacing-xl);
-    border-radius: var(--surface-radius-sm);
+    border-radius: var(--surface-radius);
   }
 }
 </style>

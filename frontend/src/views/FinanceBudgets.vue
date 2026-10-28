@@ -336,7 +336,6 @@ onMounted(() => { fetchBudgets() })
 </script>
 
 <style scoped>
-.finance-page { padding: var(--spacing-xl); width: 100%; }
 
 .page-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -608,10 +607,9 @@ select.form-input { appearance: auto; }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-20px); }
 
 /* Responsive */
-@media (max-width: 1199px) { .finance-page { padding: var(--spacing-lg); } }
+@media (max-width: 1199px) { }
 
 @media (max-width: 767px) {
-  .finance-page { padding: var(--spacing-md); }
   .page-header { flex-direction: column; align-items: flex-start; gap: var(--spacing-md); }
   .overview-grid { grid-template-columns: 1fr; }
   .dialog { max-width: 100%; margin: var(--spacing-sm); }
@@ -621,7 +619,6 @@ select.form-input { appearance: auto; }
 .finance-page {
   display: grid;
   gap: var(--page-gap);
-  padding-bottom: calc(var(--spacing-xl) + var(--bottom-nav-height));
   overflow-x: clip;
 }
 
@@ -663,7 +660,7 @@ select.form-input { appearance: auto; }
 
 .overview-item {
   padding: 0.9rem 1rem;
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   background: rgba(255, 255, 255, 0.76);
   border: 1px solid rgba(168, 215, 232, 0.4);
 }
@@ -718,9 +715,6 @@ select.form-input { appearance: auto; }
 }
 
 @media (max-width: 767px) {
-  .finance-page {
-    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height));
-  }
 
   .btn-create {
     width: 100%;
@@ -804,9 +798,6 @@ select.form-input { appearance: auto; }
 }
 
 @media (max-width: 767px) {
-  .finance-page {
-    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height) + env(safe-area-inset-bottom));
-  }
 
   .budget-row {
     padding: 14px;

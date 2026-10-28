@@ -43,19 +43,19 @@
       <div class="hero-meta">
         <div class="hero-meta-item">
           <span class="hero-meta-label">等级</span>
-          <strong>等级 {{ user?.level || 1 }}</strong>
+          <strong class="metric-figure">等级 {{ user?.level || 1 }}</strong>
         </div>
         <div class="hero-meta-item">
           <span class="hero-meta-label">金币</span>
-          <strong>{{ user?.coins || 0 }}</strong>
+          <strong class="metric-figure" :class="{ 'metric-pulse': coinsPulsing }">{{ user?.coins || 0 }}</strong>
         </div>
         <div class="hero-meta-item">
           <span class="hero-meta-label">连续签到</span>
-          <strong>{{ checkinStatus?.streak || 0 }} 天</strong>
+          <strong class="metric-figure">{{ checkinStatus?.streak || 0 }} 天</strong>
         </div>
         <div class="hero-meta-item">
           <span class="hero-meta-label">今日待办</span>
-          <strong>{{ actionCenter?.summary?.open_count || 0 }}</strong>
+          <strong class="metric-figure">{{ actionCenter?.summary?.open_count || 0 }}</strong>
         </div>
       </div>
     </section>
@@ -79,7 +79,7 @@
     />
 
     <aside class="home-aside-actions">
-      <section class="quick-actions-card">
+      <AppCard class="quick-actions-card">
         <div class="aside-card-title">
           <span class="aside-card-kicker">专注行动</span>
           <h3>快速行动</h3>
@@ -101,7 +101,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
           </router-link>
         </div>
-      </section>
+      </AppCard>
     </aside>
 
     <div class="content-grid">
@@ -228,6 +228,8 @@ import { labelDifficulty } from '../utils/displayLabels'
 import CultivationStatusBar from '../components/cultivation/CultivationStatusBar.vue'
 import TodayActionCenter from '../components/home/TodayActionCenter.vue'
 import TodayWorkbench from '../components/home/TodayWorkbench.vue'
+import AppCard from '../components/ui/AppCard.vue'
+import { useValuePulse } from '../composables/useValuePulse'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -242,6 +244,9 @@ const {
   refreshCultivation
 } = useUserStats()
 const { successToast, errorToast, showSuccess, showError } = useToast()
+
+// Reward counters pulse briefly when they go up, so earning coins reads as an event.
+const { pulsing: coinsPulsing } = useValuePulse(computed(() => user.value?.coins ?? 0))
 
 const checkinStatus = ref(null)
 const checkinLoading = ref(false)
@@ -633,7 +638,6 @@ onMounted(() => {
   min-width: 0;
 }
 
-.quick-actions-card,
 .habit-progress-card {
   padding: var(--spacing-lg);
   background: var(--color-card);
@@ -1220,7 +1224,6 @@ onMounted(() => {
     max-width: none;
   }
 
-  .quick-actions-card,
   .habit-progress-card {
     padding: var(--spacing-md);
   }

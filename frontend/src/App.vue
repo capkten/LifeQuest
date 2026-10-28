@@ -8,8 +8,6 @@ import UpdatePrompt from './components/layout/UpdatePrompt.vue'
 </script>
 
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
-
 :root {
   --color-primary: #0284C7;
   --color-primary-light: #38BDF8;
@@ -52,8 +50,8 @@ import UpdatePrompt from './components/layout/UpdatePrompt.vue'
   --color-hero-end: #0284C7;
   --color-gold: #F59E0B;
   --color-purple: #8B5CF6;
-  --font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'DM Sans', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --font-family-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Space Grotesk', 'DM Sans', sans-serif;
+  --font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', Helvetica, Arial, sans-serif;
+  --font-family-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
   --font-size-base: 0.9375rem;
@@ -86,6 +84,9 @@ import UpdatePrompt from './components/layout/UpdatePrompt.vue'
   --bottom-nav-height: 64px;
   --surface-radius: 16px;
   --surface-radius-sm: 10px;
+  --radius-card: 16px;
+  --radius-control: 12px;
+  --radius-pill: 999px;
   --surface-padding: clamp(18px, 2vw, 26px);
   --touch-target-min: 44px;
   --touch-target-android: 48px;
@@ -183,8 +184,49 @@ a,
   -webkit-tap-highlight-color: transparent;
 }
 
+/*
+ * Tap feedback layer: the highlight colour is suppressed globally, so every
+ * interactive surface needs its own press state or taps feel unresponsive.
+ * Kept at :where() specificity so page styles can still override it.
+ */
+:where(button, [role='button'], a, .pressable):not(:disabled):not([aria-disabled='true']):active {
+  transform: scale(0.97);
+}
+
+@media (pointer: coarse) {
+  :where(button, [role='button'], a, .pressable):not(:disabled):not([aria-disabled='true']) {
+    transition: transform 120ms ease;
+  }
+}
+
 button {
   font-family: var(--font-family);
+}
+
+/*
+ * Numeric readouts: equal-width digits stop counters from shifting the layout
+ * while they tick up, which is what makes the reward layer feel like a meter.
+ */
+.metric-figure {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  letter-spacing: -0.01em;
+}
+
+.metric-pulse {
+  animation: metric-pulse 600ms ease;
+}
+
+@keyframes metric-pulse {
+  0% {
+    color: inherit;
+  }
+  35% {
+    color: var(--color-gold);
+  }
+  100% {
+    color: inherit;
+  }
 }
 
 .compact-section {
@@ -204,29 +246,33 @@ button {
   border: 0;
 }
 
-@media (min-width: 768px) {
-  :where(
-    .todos-page,
-    .shop-page,
-    .projects-page,
-    .profile-page,
-    .notes-page,
-    .calendar-page,
-    .finance-page,
-    .stats-page,
-    .backpack-page,
-    .history-page,
-    .coin-history-page,
-    .project-detail-page,
-    .edit-profile-page,
-    .note-editor-page,
-    .file-manager
-  ) {
-    width: 100%;
-    max-width: none !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
+/*
+ * Page roots never own their own gutter: the shell already applies
+ * --page-padding-x/y. Each page used to add another var(--spacing-md), which
+ * doubled the inset to 32px on a 375px screen and cost ~5% of the content
+ * width on every mobile page. One reset here replaces the scattered copies.
+ */
+:where(
+  .todos-page,
+  .shop-page,
+  .projects-page,
+  .profile-page,
+  .notes-page,
+  .calendar-page,
+  .finance-page,
+  .stats-page,
+  .backpack-page,
+  .history-page,
+  .coin-history-page,
+  .project-detail-page,
+  .edit-profile-page,
+  .note-editor-page,
+  .file-manager
+) {
+  width: 100%;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
 h1,
@@ -270,7 +316,7 @@ h3,
   .budgets-card,
   .transactions-card
 ) {
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   box-shadow: var(--shadow-sm);
 }
 

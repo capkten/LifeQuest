@@ -15,8 +15,7 @@
       <div class="page-header-main">
         <div class="header-left">
           <span class="shop-kicker">奖励商城</span>
-          <h2 class="page-title">商城</h2>
-          <span class="item-count">{{ filteredItems.length }} 件奖励可兑换</span>
+          <span class="shop-header-meta item-count">{{ filteredItems.length }} 件可兑换 · 金币换心愿</span>
         </div>
         <div class="balance-display">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -48,18 +47,13 @@
       </div>
     </div>
 
-    <nav v-if="items.length > 0" class="shop-categories" aria-label="商品分类">
-      <button
-        v-for="category in categoryOptions"
-        :key="category"
-        type="button"
-        class="shop-category"
-        :class="{ 'shop-category--active': activeCategory === category }"
-        @click="activeCategory = category"
-      >
-        {{ category === '全部' ? category : labelItemType(category) }}
-      </button>
-    </nav>
+    <AppTabs
+      v-if="items.length > 0"
+      class="shop-categories-tabs"
+      :model-value="activeCategory"
+      :items="categoryTabs"
+      @update:model-value="activeCategory = $event"
+    />
 
     <div v-if="items.length > 0" class="shop-toolbar">
       <label class="shop-search">
@@ -87,53 +81,60 @@
       </div>
     </div>
 
-    <div v-if="loading" class="loading-state">
-      <span class="loading-spinner"></span>
-    </div>
+    <AppState v-if="loading" state="loading" title="正在加载商品…" />
 
-    <div v-else-if="error" class="error-state">
-      <p>{{ error }}</p>
-      <button class="retry-btn" @click="fetchItems">重试</button>
-    </div>
+    <AppState
+      v-else-if="error"
+      state="error"
+      :title="error"
+      description="请检查网络后重试，已有商品不会丢失。"
+    >
+      <template #actions>
+        <AppButton variant="secondary" @click="fetchItems">重试</AppButton>
+      </template>
+    </AppState>
 
-    <div v-else-if="items.length === 0" class="empty-state">
-      <div class="empty-icon">
+    <AppState
+      v-else-if="items.length === 0"
+      state="empty"
+      title="商城暂无商品"
+      description="创建第一件商品来开始吧。"
+    >
+      <template #icon>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
           <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
           <line x1="3" y1="6" x2="21" y2="6" />
           <path d="M16 10a4 4 0 0 1-8 0" />
         </svg>
-      </div>
-      <h3 class="empty-title">商城暂无商品</h3>
-      <p class="empty-text">创建第一件商品来开始吧。</p>
-      <button class="btn-create" @click="showCreateDialog = true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-        创建商品
-      </button>
-    </div>
+      </template>
+      <template #actions>
+        <AppButton @click="showCreateDialog = true">创建商品</AppButton>
+      </template>
+    </AppState>
 
-    <div v-else-if="filteredItems.length === 0" class="empty-state empty-state--filtered">
-      <div class="empty-icon">
+    <AppState
+      v-else-if="filteredItems.length === 0"
+      state="empty"
+      compact
+      :title="searchQuery ? '没有找到匹配的奖励' : '这个分类还没有商品'"
+      :description="searchQuery ? '试试更短的关键词，或切换其他分类。' : '换个分类看看，或者创建一个新的商品。'"
+    >
+      <template #icon>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
           <circle cx="11" cy="11" r="7" />
           <path d="m20 20-4-4" />
         </svg>
-      </div>
-      <h3 class="empty-title">{{ searchQuery ? '没有找到匹配的奖励' : '这个分类还没有商品' }}</h3>
-      <p class="empty-text">{{ searchQuery ? '试试更短的关键词，或切换其他分类。' : '换个分类看看，或者创建一个新的商品。' }}</p>
-    </div>
+      </template>
+    </AppState>
 
-    <div v-else class="items-grid">
-      <div
+    <AppList v-else class="items-grid">
+      <li
         v-for="(item, index) in filteredItems"
         :key="item.id"
         class="item-card"
         :class="[`item-card--${getItemTheme(item.icon)}`, { 'item-card--featured': index === 0 }]"
       >
-        <span v-if="index === 0" class="item-card-featured">✨ 精选推荐</span>
+        <span v-if="index === 0" class="item-card-featured"><Sparkles class="featured-icon" aria-hidden="true" /> 精选推荐</span>
         <div class="item-card-top">
           <div class="item-card-icon" :class="`icon-theme--${getItemTheme(item.icon)}`">
             <component :is="resolveShopIcon(item.icon)" />
@@ -154,11 +155,9 @@
               </button>
             </div>
             <div class="item-card-tags">
-              <span v-if="item.category" class="item-tag item-tag--category">{{ labelItemType(item.category) }}</span>
-              <span v-if="item.stock === -1" class="item-tag item-tag--stock">无限</span>
-              <span v-else class="item-tag item-tag--stock" :class="{ 'item-tag--low-stock': item.stock <= 5 }">
-                余 {{ item.stock }}
-              </span>
+              <AppBadge v-if="item.category" tone="primary">{{ labelItemType(item.category) }}</AppBadge>
+              <AppBadge v-if="item.stock === -1" tone="success">无限</AppBadge>
+              <AppBadge v-else :tone="item.stock <= 5 ? 'warning' : 'neutral'">余 {{ item.stock }}</AppBadge>
             </div>
           </div>
         </div>
@@ -188,8 +187,8 @@
             <span v-else>立即兑换</span>
           </button>
         </div>
-      </div>
-    </div>
+      </li>
+    </AppList>
 
     <!-- Success Toast -->
     <Teleport to="body">
@@ -221,141 +220,152 @@
       </Transition>
     </Teleport>
 
-    <!-- Create/Edit Dialog -->
-    <Teleport to="body">
-      <div v-if="showCreateDialog" class="dialog-overlay" @click.self="cancelDialog">
-        <div
-          class="dialog"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="create-dialog-title"
-          @keydown="trapFocus"
-        >
-          <div class="dialog-header">
-            <h3 id="create-dialog-title" class="dialog-title">{{ dialogMode === 'edit' ? '编辑商品' : '新建商品' }}</h3>
-            <button class="dialog-close" @click="cancelDialog" aria-label="关闭对话框">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          </div>
-          <form class="dialog-body" @submit.prevent="dialogMode === 'edit' ? updateItem() : createItem()">
-            <div class="form-group">
-              <label class="form-label" for="item-name">商品名称</label>
+    <!-- Create/Edit Sheet -->
+    <AppSheet
+      v-model="showCreateDialog"
+      :title="dialogMode === 'edit' ? '编辑商品' : '新建商品'"
+      :pending="creating"
+    >
+      <form
+        id="shop-item-form"
+        class="shop-form"
+        @submit.prevent="dialogMode === 'edit' ? updateItem() : createItem()"
+      >
+        <AppField id="item-name" label="商品名称" required>
+          <template #control="{ id, ariaDescribedby }">
+            <input
+              :id="id"
+              ref="dialogNameInput"
+              v-model="form.name"
+              type="text"
+              placeholder="例如：喝一杯星巴克、周末去看一场电影"
+              required
+              maxlength="200"
+              :aria-describedby="ariaDescribedby"
+            />
+          </template>
+        </AppField>
+
+        <AppField id="item-description" label="商品描述（可选）">
+          <template #control="{ id, ariaDescribedby }">
+            <textarea
+              :id="id"
+              v-model="form.description"
+              rows="2"
+              placeholder="描述你的心愿奖励，给自己满满的期待感..."
+              :aria-describedby="ariaDescribedby"
+            ></textarea>
+          </template>
+        </AppField>
+
+        <div class="shop-form__row">
+          <AppField id="item-price" label="兑换价格（金币）" required>
+            <template #control="{ id, ariaDescribedby }">
               <input
-                id="item-name"
-                ref="dialogNameInput"
-                v-model="form.name"
-                type="text"
-                class="form-input"
-                placeholder="例如：喝一杯星巴克、周末去看一场电影"
-                required
-                maxlength="200"
-              />
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="item-description">商品描述（可选）</label>
-              <textarea
-                id="item-description"
-                v-model="form.description"
-                class="form-textarea"
-                placeholder="描述你的心愿奖励，给自己满满的期待感..."
-                rows="2"
-              ></textarea>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label" for="item-price">兑换价格（金币）</label>
-                <input
-                  id="item-price"
-                  v-model.number="form.coin_price"
-                  type="number"
-                  class="form-input"
-                  min="0"
-                  max="100000"
-                  required
-                />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="item-category">商品分类</label>
-                <input
-                  id="item-category"
-                  v-model="form.category"
-                  type="text"
-                  class="form-input"
-                  placeholder="例如：美食、娱乐、数码、休闲"
-                  maxlength="50"
-                />
-              </div>
-            </div>
-            <div class="form-group">
-              <div class="form-label-row">
-                <label class="form-label">商品图标 ({{ displayedIconOptions.length }}款可选)</label>
-                <div class="icon-cat-bar">
-                  <button
-                    v-for="cat in iconCategories"
-                    :key="cat.id"
-                    type="button"
-                    class="icon-cat-btn"
-                    :class="{ 'icon-cat-btn--active': selectedIconCategory === cat.id }"
-                    @click="selectedIconCategory = cat.id"
-                  >
-                    {{ cat.name }}
-                  </button>
-                </div>
-              </div>
-              <div class="icon-search-bar">
-                <input
-                  v-model="iconSearchQuery"
-                  type="text"
-                  class="form-input form-input--icon-search"
-                  placeholder="搜索图标（如：咖啡、游戏、电影、旅行、礼物、美食...）"
-                />
-              </div>
-              <div class="icon-grid">
-                <button
-                  v-for="option in displayedIconOptions"
-                  :key="option.value"
-                  type="button"
-                  class="icon-option"
-                  :class="[
-                    `icon-option--${option.theme}`,
-                    { 'icon-option--active': form.icon === option.value }
-                  ]"
-                  :title="option.label"
-                  @click="form.icon = option.value"
-                >
-                  <component :is="option.component" />
-                  <span class="icon-option-name">{{ option.label }}</span>
-                </button>
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="item-stock">库存数量</label>
-              <input
-                id="item-stock"
-                v-model.number="form.stock"
+                :id="id"
+                v-model.number="form.coin_price"
                 type="number"
-                class="form-input"
-                min="-1"
+                min="0"
                 max="100000"
                 required
+                :aria-describedby="ariaDescribedby"
               />
-              <span class="form-hint">填写 -1 表示无限库存，填写大于 0 的数字表示有限库存</span>
-            </div>
-            <div v-if="dialogError" class="dialog-error" role="alert">{{ dialogError }}</div>
-            <div class="dialog-actions">
-              <button type="button" class="btn-secondary" @click="cancelDialog">取消</button>
-              <button type="submit" class="btn-primary" :disabled="creating" :aria-disabled="!form.name.trim()">
-                <span v-if="creating" class="loading-spinner loading-spinner--sm"></span>
-                {{ creating ? (dialogMode === 'edit' ? '更新中...' : '创建中...') : (dialogMode === 'edit' ? '更新' : '创建') }}
+            </template>
+          </AppField>
+
+          <AppField id="item-category" label="商品分类">
+            <template #control="{ id, ariaDescribedby }">
+              <input
+                :id="id"
+                v-model="form.category"
+                type="text"
+                placeholder="例如：美食、娱乐、数码、休闲"
+                maxlength="50"
+                :aria-describedby="ariaDescribedby"
+              />
+            </template>
+          </AppField>
+        </div>
+
+        <div class="shop-form__group">
+        <div class="form-group">
+          <div class="form-label-row">
+            <label class="form-label">商品图标 ({{ displayedIconOptions.length }}款可选)</label>
+            <div class="icon-cat-bar">
+              <button
+                v-for="cat in iconCategories"
+                :key="cat.id"
+                type="button"
+                class="icon-cat-btn"
+                :class="{ 'icon-cat-btn--active': selectedIconCategory === cat.id }"
+                @click="selectedIconCategory = cat.id"
+              >
+                {{ cat.name }}
               </button>
             </div>
-          </form>
+          </div>
+          <div class="icon-search-bar">
+            <input
+              v-model="iconSearchQuery"
+              type="text"
+              class="form-input form-input--icon-search"
+              placeholder="搜索图标（如：咖啡、游戏、电影、旅行、礼物、美食...）"
+            />
+          </div>
+          <div class="icon-grid">
+            <button
+              v-for="option in displayedIconOptions"
+              :key="option.value"
+              type="button"
+              class="icon-option"
+              :class="[
+                `icon-option--${option.theme}`,
+                { 'icon-option--active': form.icon === option.value }
+              ]"
+              :title="option.label"
+              @click="form.icon = option.value"
+            >
+              <component :is="option.component" />
+              <span class="icon-option-name">{{ option.label }}</span>
+            </button>
+          </div>
         </div>
-      </div>
-    </Teleport>
+        </div>
+
+        <AppField
+          id="item-stock"
+          label="库存数量"
+          required
+          hint="填写 -1 表示无限库存，填写大于 0 的数字表示有限库存"
+        >
+          <template #control="{ id, ariaDescribedby }">
+            <input
+              :id="id"
+              v-model.number="form.stock"
+              type="number"
+              min="-1"
+              max="100000"
+              required
+              :aria-describedby="ariaDescribedby"
+            />
+          </template>
+        </AppField>
+
+        <p v-if="dialogError" class="dialog-error" role="alert">{{ dialogError }}</p>
+      </form>
+
+      <template #footer>
+        <AppButton variant="secondary" @click="cancelDialog">取消</AppButton>
+        <AppButton
+          native-type="submit"
+          form="shop-item-form"
+          :loading="creating"
+          :disabled="!form.name.trim()"
+        >
+          {{ dialogMode === 'edit' ? '更新' : '创建' }}
+        </AppButton>
+      </template>
+    </AppSheet>
 
     <!-- Delete Confirmation Dialog -->
     <Teleport to="body">
@@ -396,11 +406,19 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { Sparkles } from 'lucide-vue-next'
 import { useAuthStore } from '../stores/auth'
 import { shopService } from '../services/shop'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelItemType } from '../utils/displayLabels'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
+import AppTabs from '../components/ui/AppTabs.vue'
+import AppBadge from '../components/ui/AppBadge.vue'
+import AppSheet from '../components/ui/AppSheet.vue'
+import AppField from '../components/ui/AppField.vue'
+import AppList from '../components/ui/AppList.vue'
 import {
   iconCategories,
   iconOptions,
@@ -429,6 +447,11 @@ const categoryOptions = computed(() => [
   '全部',
   ...Array.from(new Set(items.value.map(item => item.category).filter(Boolean)))
 ])
+
+const categoryTabs = computed(() => categoryOptions.value.map((category) => ({
+  key: category,
+  label: category === '全部' ? category : labelItemType(category),
+})))
 
 const filteredItems = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
@@ -689,7 +712,6 @@ onMounted(() => {
 
 <style scoped>
 .shop-page {
-  padding: var(--page-padding-y) var(--page-padding-x);
   width: 100%;
 }
 
@@ -805,7 +827,7 @@ onMounted(() => {
   padding: 10px 14px;
   background: rgba(255, 217, 61, 0.12);
   border: 1px solid rgba(255, 217, 61, 0.3);
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-warning);
@@ -889,13 +911,6 @@ onMounted(() => {
 }
 
 /* Loading State */
-.loading-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-}
-
 .loading-spinner {
   width: 32px;
   height: 32px;
@@ -913,76 +928,6 @@ onMounted(() => {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
-}
-
-/* Error State */
-.error-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-  gap: var(--spacing-md);
-  color: var(--color-error);
-  font-size: var(--font-size-sm);
-}
-
-.retry-btn {
-  padding: var(--spacing-xs) var(--spacing-md);
-  font-size: var(--font-size-sm);
-  color: var(--color-primary);
-  background: transparent;
-  border: 1px solid var(--color-primary);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-family: var(--font-family);
-  transition: all 0.15s ease;
-}
-
-.retry-btn:hover {
-  background: var(--color-primary);
-  color: #fff;
-}
-
-/* Empty State */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 400px;
-  text-align: center;
-}
-
-.empty-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-tertiary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: var(--spacing-lg);
-}
-
-.empty-icon svg {
-  width: 36px;
-  height: 36px;
-  color: var(--color-text-tertiary);
-}
-
-.empty-title {
-  font-size: var(--font-size-lg);
-  font-weight: 600;
-  color: var(--color-text);
-  margin-bottom: var(--spacing-sm);
-}
-
-.empty-text {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-tertiary);
-  margin-bottom: var(--spacing-xl);
-  max-width: 320px;
 }
 
 /* Items Grid */
@@ -1035,7 +980,7 @@ onMounted(() => {
 .item-card-icon {
   width: 52px;
   height: 52px;
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1195,6 +1140,7 @@ onMounted(() => {
 }
 
 .item-price {
+  white-space: nowrap;
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
@@ -1522,7 +1468,7 @@ onMounted(() => {
 
 .icon-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
   gap: 8px;
   max-height: 240px;
   overflow-y: auto;
@@ -1692,9 +1638,6 @@ onMounted(() => {
 
 /* Responsive */
 @media (max-width: 1199px) {
-  .shop-page {
-    padding: var(--page-padding-y) var(--page-padding-x);
-  }
 }
 
 @media (min-width: 768px) {
@@ -1705,9 +1648,6 @@ onMounted(() => {
 }
 
 @media (max-width: 767px) {
-  .shop-page {
-    padding: 10px var(--spacing-md) 0;
-  }
 
   .shop-toolbar {
     display: grid;
@@ -1770,24 +1710,33 @@ onMounted(() => {
   }
 
   .page-header-main {
-    flex-direction: row;
     width: 100%;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
-    flex-wrap: nowrap;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
+  /*
+   * The wallet pill used to sit beside the title and squeeze "N 件奖励可兑换"
+   * into a two-line wrap, so the title block takes the first row on its own.
+   */
   .shop-page .header-left {
+    flex: 1 1 100%;
     min-width: 0;
-  }
-
-  .shop-page .page-title {
-    font-size: 1.25rem;
   }
 
   .shop-page .item-count {
     font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .shop-page .balance-display {
+    margin-left: auto;
+  }
+
+  .shop-page .page-title {
+    font-size: 1.25rem;
   }
 
   .shop-actions {
@@ -1899,10 +1848,6 @@ onMounted(() => {
   .icon-option {
     height: 40px;
   }
-
-  .empty-state--filtered {
-    min-height: 200px;
-  }
 }
 
 @media (min-width: 480px) and (max-width: 767px) {
@@ -1911,9 +1856,6 @@ onMounted(() => {
   }
 }
 @media (min-width: 768px) {
-  .shop-page {
-    padding: 0;
-  }
 
   .items-grid {
     gap: 14px;
@@ -1925,14 +1867,8 @@ onMounted(() => {
   }
 }
 
-.shop-categories {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.shop-categories-tabs {
   margin: 0 0 18px;
-  padding: 4px;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
 
 .shop-toolbar {
@@ -2062,39 +1998,6 @@ onMounted(() => {
   color: var(--color-accent-dark);
 }
 
-.shop-categories::-webkit-scrollbar {
-  display: none;
-}
-
-.shop-category {
-  min-height: 36px;
-  padding: 7px 14px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  white-space: nowrap;
-  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-}
-
-.shop-category:hover {
-  background: var(--color-bg-tertiary);
-  color: var(--color-text);
-}
-
-.shop-category--active {
-  border-color: rgba(14, 165, 233, 0.2);
-  background: var(--color-bg-tertiary);
-  color: var(--color-primary-dark);
-}
-
-.empty-state--filtered {
-  min-height: 280px;
-}
-
 @media (min-width: 1200px) {
   .items-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2154,7 +2057,7 @@ onMounted(() => {
   z-index: 1;
   padding: 3px 7px;
   border: 1px solid rgba(16, 185, 129, 0.25);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--color-card);
   color: var(--color-accent-dark);
   font-size: 10px;
@@ -2167,7 +2070,6 @@ onMounted(() => {
   overflow-wrap: anywhere;
 }
 
-.shop-category,
 .shop-search-clear,
 .btn-icon {
   min-height: 44px;
@@ -2209,10 +2111,6 @@ onMounted(() => {
     margin-left: auto;
   }
 
-  .shop-category {
-    min-height: 44px;
-  }
-
   .item-card-featured {
     top: 8px;
     left: 8px;
@@ -2225,6 +2123,46 @@ onMounted(() => {
   .btn-icon {
     width: 44px;
     height: 44px;
+  }
+}
+
+.featured-icon {
+  width: 11px;
+  height: 11px;
+  vertical-align: -1px;
+}
+
+/* Create/edit sheet form layout */
+.shop-form {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
+.shop-form__row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-md);
+}
+
+.shop-form__group {
+  display: grid;
+  gap: var(--spacing-sm);
+  /* Grid items default to min-width:auto, which let the icon picker push the
+     whole sheet wider than the viewport. */
+  min-width: 0;
+}
+
+.shop-form__group > * {
+  min-width: 0;
+}
+
+.app-sheet__body {
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  .shop-form__row {
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -12,43 +12,20 @@
 
     <!-- Bottom Navigation (mobile only) -->
     <nav class="bottom-nav" aria-label="主导航">
-      <router-link to="/" class="bottom-nav-item" active-class="bottom-nav-item--active">
+      <router-link
+        v-for="tab in tabs"
+        :key="tab.key"
+        :to="tab.to"
+        class="bottom-nav-item"
+        :class="{ 'bottom-nav-item--active': activeTab === tab.key }"
+        :aria-current="activeTab === tab.key ? 'page' : undefined"
+      >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z" />
-          <polyline points="9 22 9 12 15 12 15 22" />
+          <path v-for="(d, index) in tab.paths" :key="index" :d="d" />
+          <circle v-for="(c, index) in tab.circles || []" :key="`c${index}`" :cx="c[0]" :cy="c[1]" :r="c[2]" />
+          <line v-for="(l, index) in tab.lines || []" :key="`l${index}`" :x1="l[0]" :y1="l[1]" :x2="l[2]" :y2="l[3]" />
         </svg>
-        <span>首页</span>
-      </router-link>
-      <router-link to="/todos" class="bottom-nav-item" active-class="bottom-nav-item--active">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M9 11l3 3L22 4" />
-          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-        </svg>
-        <span>待办</span>
-      </router-link>
-      <router-link to="/notes" class="bottom-nav-item" active-class="bottom-nav-item--active">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-          <line x1="16" y1="13" x2="8" y2="13" />
-          <line x1="16" y1="17" x2="8" y2="17" />
-        </svg>
-        <span>笔记</span>
-      </router-link>
-      <router-link to="/shop" class="bottom-nav-item" active-class="bottom-nav-item--active">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-          <line x1="3" y1="6" x2="21" y2="6" />
-          <path d="M16 10a4 4 0 0 1-8 0" />
-        </svg>
-        <span>商城</span>
-      </router-link>
-      <router-link to="/cultivation" class="bottom-nav-item" active-class="bottom-nav-item--active">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-          <circle cx="12" cy="7" r="4" />
-        </svg>
-        <span>修炼</span>
+        <span>{{ tab.label }}</span>
       </router-link>
     </nav>
 
@@ -66,8 +43,11 @@ import { ref, computed, provide, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import Sidebar from './Sidebar.vue'
 import Header from './Header.vue'
+import { useAndroidBackButton } from '../../composables/useAndroidBackButton'
 
 const route = useRoute()
+
+useAndroidBackButton()
 
 const sidebarOpen = ref(false)
 const sidebarCollapsed = ref(false)
@@ -123,29 +103,59 @@ const isFullWidthRoute = computed(() => {
   return fullWidthNames.includes(route.name) || String(route.path).startsWith('/notes/')
 })
 
-const pageTitle = computed(() => {
-  const titles = {
-    Home: '首页',
-    Todos: '待办',
-    Tasks: '任务',
-    Goals: '目标',
-    Notes: '笔记',
-    NoteSync: '文件夹同步',
-    Calendar: '日历',
-    WeeklyReview: '周复盘',
-    NotebookFileManage: '笔记本',
-    Shop: '商城',
-    Backpack: '背包',
-    Profile: '个人',
-    Cultivation: '修炼',
-    World: '凡界',
-    Sects: '宗门',
-    Techniques: '功法',
-    Npcs: '人物关系',
-    Tribulations: '渡劫'
-  }
-  return titles[route.name] || 'LifeQuest'
+const tabs = [
+  {
+    key: 'home',
+    to: '/',
+    label: '首页',
+    paths: ['M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z', 'M9 22V12h6v10'],
+  },
+  {
+    key: 'todos',
+    to: '/todos',
+    label: '待办',
+    paths: ['M9 11l3 3L22 4', 'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'],
+  },
+  {
+    key: 'finance',
+    to: '/finance',
+    label: '记账',
+    paths: ['M2 6h20v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z', 'M2 10h20'],
+    circles: [[16, 16, 1.6]],
+  },
+  {
+    key: 'notes',
+    to: '/notes',
+    label: '笔记',
+    paths: ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6'],
+    lines: [[16, 13, 8, 13], [16, 17, 8, 17]],
+  },
+  {
+    key: 'profile',
+    to: '/profile',
+    label: '我的',
+    paths: ['M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'],
+    circles: [[12, 7, 4]],
+  },
+]
+
+// Routes sharing a tab's area keep that tab lit; anything else (商城、背包、
+// 修炼、项目…) leaves the bar neutral and relies on the header title.
+const TAB_ROUTE_DOMAINS = {
+  home: ['Home'],
+  todos: ['Todos'],
+  finance: ['Finance', 'FinanceAccounts', 'FinanceTransactions', 'FinanceBudgets', 'FinanceDebts'],
+  notes: ['Notes', 'NotebookWorkspace', 'NotebookWorkspaceView', 'NotebookWorkspaceEdit', 'NewNote', 'NewNoteInWorkspace', 'NoteEditor', 'NoteSync'],
+  profile: ['Profile', 'EditProfile'],
+}
+
+const activeTab = computed(() => {
+  const name = route.name
+  const match = Object.entries(TAB_ROUTE_DOMAINS).find(([, names]) => names.includes(name))
+  return match ? match[0] : null
 })
+
+const pageTitle = computed(() => route.meta?.title || 'LifeQuest')
 </script>
 
 <style scoped>
@@ -284,11 +294,28 @@ const pageTitle = computed(() => {
   border-radius: var(--radius-xl);
 }
 
-.bottom-nav-item:hover,
-.bottom-nav-item--active {
-  color: var(--color-primary-dark);
+.bottom-nav-item:active {
   background: var(--color-bg-tertiary);
-  transform: translateY(-1px);
+  transform: scale(0.97);
+}
+
+.bottom-nav-item--active,
+.bottom-nav-item--active:active {
+  color: var(--color-primary-dark);
+  background: rgba(14, 165, 233, 0.12);
+  transform: none;
+}
+
+@media (hover: hover) {
+  .bottom-nav-item:hover {
+    color: var(--color-text-secondary);
+    background: var(--color-bg-tertiary);
+  }
+
+  .bottom-nav-item--active:hover {
+    color: var(--color-primary-dark);
+    background: rgba(14, 165, 233, 0.12);
+  }
 }
 
 .bottom-nav-item svg {

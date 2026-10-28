@@ -533,7 +533,6 @@ onMounted(() => { fetchAccounts() })
 </script>
 
 <style scoped>
-.finance-page { padding: var(--spacing-xl); width: 100%; }
 
 .page-header {
   display: flex;
@@ -785,10 +784,9 @@ select.form-input { appearance: auto; }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-20px); }
 
 /* Responsive */
-@media (max-width: 1199px) { .finance-page { padding: var(--spacing-lg); } }
+@media (max-width: 1199px) { }
 
 @media (max-width: 767px) {
-  .finance-page { padding: var(--spacing-md); }
   .page-header { flex-direction: column; align-items: flex-start; gap: var(--spacing-md); }
   .header-right { width: 100%; }
   .account-row { flex-wrap: wrap; }
@@ -801,7 +799,6 @@ select.form-input { appearance: auto; }
 .finance-page {
   display: grid;
   gap: var(--page-gap);
-  padding-bottom: calc(var(--spacing-xl) + var(--bottom-nav-height));
   overflow-x: clip;
 }
 
@@ -829,7 +826,7 @@ select.form-input { appearance: auto; }
 
 .btn-back,
 .btn-icon {
-  border-radius: 14px;
+  border-radius: var(--radius-card);
 }
 
 .btn-create,
@@ -894,7 +891,7 @@ select.form-input { appearance: auto; }
 .account-row-icon {
   width: 44px;
   height: 44px;
-  border-radius: 14px;
+  border-radius: var(--radius-card);
 }
 
 .account-row-name {
@@ -937,9 +934,6 @@ select.form-input { appearance: auto; }
 }
 
 @media (max-width: 767px) {
-  .finance-page {
-    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height));
-  }
 
   .header-right {
     display: grid;
@@ -1028,9 +1022,6 @@ select.form-input { appearance: auto; }
 }
 
 @media (max-width: 767px) {
-  .finance-page {
-    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height) + env(safe-area-inset-bottom));
-  }
 
   .account-row {
     grid-template-columns: 44px minmax(0, 1fr);

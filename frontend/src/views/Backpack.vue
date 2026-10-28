@@ -45,35 +45,37 @@
       </button>
     </div>
 
-    <div v-if="loading" class="loading-state">
-      <span class="loading-spinner"></span>
-    </div>
+    <AppState v-if="loading" state="loading" title="正在加载背包…" />
 
-    <div v-else-if="error" class="error-state">
-      <p>{{ error }}</p>
-      <button class="retry-btn" @click="fetchAll">重试</button>
-    </div>
+    <AppState
+      v-else-if="error"
+      state="error"
+      :title="error"
+      description="请检查网络后重试。"
+    >
+      <template #actions>
+        <AppButton variant="secondary" @click="fetchAll">重试</AppButton>
+      </template>
+    </AppState>
 
-    <div v-else-if="filteredItems.length === 0" class="empty-state">
-      <div class="empty-icon">
+    <AppState
+      v-else-if="filteredItems.length === 0"
+      state="empty"
+      :title="activeFilter === 'all' ? '你的背包是空的' : '这个分类还没有物品'"
+      :description="activeFilter === 'all' ? '前往商城购买物品来填满你的背包吧。' : '切换其他分类，或前往商城获得新的物品。'"
+    >
+      <template #icon>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
           <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
           <path d="M16 7V5a4 4 0 0 0-8 0v2" />
           <line x1="12" y1="12" x2="12" y2="16" />
           <line x1="10" y1="14" x2="14" y2="14" />
         </svg>
-      </div>
-      <h3 class="empty-title">{{ activeFilter === 'all' ? '你的背包是空的' : '这个分类还没有物品' }}</h3>
-      <p class="empty-text">{{ activeFilter === 'all' ? '前往商城购买物品来填满你的背包吧。' : '切换其他分类，或前往商城获得新的物品。' }}</p>
-      <router-link to="/shop" class="btn-create">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-          <line x1="3" y1="6" x2="21" y2="6" />
-          <path d="M16 10a4 4 0 0 1-8 0" />
-        </svg>
-        前往商城
-      </router-link>
-    </div>
+      </template>
+      <template #actions>
+        <AppButton @click="$router.push('/shop')">前往商城</AppButton>
+      </template>
+    </AppState>
 
     <div v-else class="items-grid">
       <div
@@ -259,6 +261,8 @@ import { shopService } from '../services/shop'
 import { useToast } from '../composables/useToast'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelItemType } from '../utils/displayLabels'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const authStore = useAuthStore()
 const { successToast, errorToast, showSuccess, showError } = useToast()
@@ -456,7 +460,6 @@ onMounted(() => {
 
 <style scoped>
 .backpack-page {
-  padding: var(--spacing-xl);
   width: 100%;
 }
 
@@ -610,14 +613,7 @@ onMounted(() => {
   color: var(--color-warning);
 }
 
-/* Loading State */
-.loading-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-}
-
+/* Loading spinner stays local: inline card actions reuse it. */
 .loading-spinner {
   width: 32px;
   height: 32px;
@@ -635,76 +631,6 @@ onMounted(() => {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
-}
-
-/* Error State */
-.error-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-  gap: var(--spacing-md);
-  color: var(--color-error);
-  font-size: var(--font-size-sm);
-}
-
-.retry-btn {
-  padding: var(--spacing-xs) var(--spacing-md);
-  font-size: var(--font-size-sm);
-  color: var(--color-primary);
-  background: transparent;
-  border: 1px solid var(--color-primary);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-family: var(--font-family);
-  transition: all 0.15s ease;
-}
-
-.retry-btn:hover {
-  background: var(--color-primary);
-  color: #fff;
-}
-
-/* Empty State */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 400px;
-  text-align: center;
-}
-
-.empty-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-tertiary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: var(--spacing-lg);
-}
-
-.empty-icon svg {
-  width: 36px;
-  height: 36px;
-  color: var(--color-text-tertiary);
-}
-
-.empty-title {
-  font-size: var(--font-size-lg);
-  font-weight: 600;
-  color: var(--color-text);
-  margin-bottom: var(--spacing-sm);
-}
-
-.empty-text {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-tertiary);
-  margin-bottom: var(--spacing-xl);
-  max-width: 320px;
 }
 
 /* Items Grid */
@@ -1111,25 +1037,21 @@ onMounted(() => {
 
 /* Responsive */
 @media (max-width: 1199px) {
-  .backpack-page {
-    padding: var(--spacing-lg);
-  }
 }
 
 @media (max-width: 767px) {
-  .backpack-page {
-    padding: var(--spacing-md);
-  }
 
   .filter-tabs {
+    gap: 4px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     padding-bottom: var(--spacing-xs);
   }
 
   .tab-btn {
+    gap: 4px;
     white-space: nowrap;
-    padding: var(--spacing-xs) var(--spacing-md);
+    padding: var(--spacing-xs) 10px;
     font-size: var(--font-size-xs);
   }
 
@@ -1221,7 +1143,6 @@ onMounted(() => {
 .btn-action,
 .btn-history,
 .btn-create,
-.retry-btn,
 .btn-secondary,
 .btn-danger {
   min-height: 44px;

@@ -255,7 +255,7 @@ async function handleLogin() {
   height: 6px;
   margin: 13px 0 10px;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.14);
 }
 
@@ -379,14 +379,14 @@ async function handleLogin() {
 
 @media (max-width: 767px) {
   .login-container {
-    align-items: flex-start;
-    padding: calc(var(--spacing-md) + var(--safe-area-top)) var(--spacing-md) calc(var(--spacing-md) + var(--safe-area-bottom));
+    align-items: center;
+    padding: calc(var(--spacing-lg) + var(--safe-area-top)) var(--spacing-md) calc(var(--spacing-lg) + var(--safe-area-bottom));
   }
 
   .login-card {
-    margin-top: 8vh;
+    width: 100%;
     padding: var(--spacing-xl);
-    border-radius: var(--surface-radius-sm);
+    border-radius: var(--surface-radius);
   }
 }
 </style>
