@@ -5,7 +5,7 @@
   }">
     <div class="sidebar-header">
       <div class="logo-row">
-        <h1 class="logo">LifeQuest</h1>
+        <h1 class="logo">{{ isCollapsed ? 'LQ' : 'LifeQuest' }}</h1>
         <span v-if="!isCollapsed" class="logo-version">v{{ appVersion }}</span>
       </div>
       <p v-if="!isCollapsed" class="logo-subtitle">修行与生活</p>

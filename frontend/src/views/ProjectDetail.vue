@@ -1633,7 +1633,6 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .project-detail-page {
-  padding: var(--spacing-xl);
   width: 100%;
   overflow-x: hidden;
 }
@@ -2790,11 +2789,9 @@ onBeforeUnmount(() => {
 
 /* Responsive */
 @media (max-width: 1199px) {
-  .project-detail-page { padding: var(--spacing-lg); }
 }
 
 @media (max-width: 767px) {
-  .project-detail-page { padding: var(--spacing-md); }
 
   .detail-header-main {
     flex-direction: column;
@@ -2851,7 +2848,6 @@ onBeforeUnmount(() => {
 /* Stitch refinement: keep dense project views inside their own scroll regions. */
 .project-detail-page {
   min-width: 0;
-  padding-bottom: calc(var(--spacing-xl) + var(--bottom-nav-height));
 }
 
 .detail-header,
@@ -2947,9 +2943,6 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 767px) {
-  .project-detail-page {
-    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height));
-  }
 
   .detail-actions,
   .dialog-actions {

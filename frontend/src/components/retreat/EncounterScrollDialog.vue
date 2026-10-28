@@ -42,13 +42,13 @@
           <span class="rewards-label">【机缘造化奖励】</span>
           <div class="rewards-tags">
             <span v-if="encounter.reward_payload?.exp" class="reward-pill exp-pill">
-              ✨ 修为 +{{ encounter.reward_payload.exp }}
+              <Sparkles class="reward-icon" aria-hidden="true" /> 修为 +{{ encounter.reward_payload.exp }}
             </span>
             <span v-if="encounter.reward_payload?.coins" class="reward-pill coin-pill">
-              💎 灵石 +{{ encounter.reward_payload.coins }}
+              <Gem class="reward-icon" aria-hidden="true" /> 灵石 +{{ encounter.reward_payload.coins }}
             </span>
             <span v-if="encounter.reward_payload?.item_name" class="reward-pill item-pill">
-              🎁 获赠：{{ encounter.reward_payload.item_name }}
+              <Gift class="reward-icon" aria-hidden="true" /> 获赠：{{ encounter.reward_payload.item_name }}
             </span>
           </div>
         </div>
@@ -73,6 +73,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { Gem, Gift, Sparkles } from 'lucide-vue-next'
 
 const props = defineProps({
   modelValue: {
@@ -291,5 +292,11 @@ function handleClaim() {
 
 .claim-scroll-btn:active {
   transform: translateY(1px);
+}
+
+.reward-icon {
+  width: 13px;
+  height: 13px;
+  vertical-align: -2px;
 }
 </style>

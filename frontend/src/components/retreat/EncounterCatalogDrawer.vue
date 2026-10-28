@@ -55,7 +55,7 @@
           <!-- Locked Encounter -->
           <template v-else>
             <div class="card-header locked-header">
-              <span class="encounter-title locked-title">🔒 冥蒙幽微</span>
+              <span class="encounter-title locked-title"><Lock class="locked-icon" aria-hidden="true" /> 冥蒙幽微</span>
               <span class="rarity-badge locked-rarity">未知</span>
             </div>
             <p class="locked-hint">
@@ -71,6 +71,7 @@
 
 <script setup>
 import { computed, onMounted, watch } from 'vue'
+import { Lock } from 'lucide-vue-next'
 import { useCultivationRetreat } from '../../composables/useCultivationRetreat.js'
 
 const props = defineProps({
@@ -263,5 +264,11 @@ function rarityLabel(rarity) {
   color: #64748b;
   margin: 0;
   line-height: 1.5;
+}
+
+.locked-icon {
+  width: 15px;
+  height: 15px;
+  vertical-align: -2px;
 }
 </style>

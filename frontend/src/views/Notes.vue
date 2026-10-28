@@ -511,7 +511,6 @@ watch(discoveryFilters, fetchDiscovery, { deep: true })
 
 <style scoped>
 .notes-page {
-  padding: var(--page-padding-y) var(--page-padding-x);
   width: 100%;
 }
 
@@ -1153,15 +1152,9 @@ watch(discoveryFilters, fetchDiscovery, { deep: true })
 
 /* Responsive */
 @media (max-width: 1199px) {
-  .notes-page {
-    padding: var(--spacing-lg);
-  }
 }
 
 @media (max-width: 767px) {
-  .notes-page {
-    padding: var(--spacing-md);
-  }
 
   .search-input,
   .form-input,

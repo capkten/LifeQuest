@@ -11,14 +11,22 @@
       </h1>
     </div>
 
-    <div v-if="loading && !hasRenderableData" class="loading-state">
-      <span class="loading-spinner"></span>
-    </div>
+    <AppState
+      v-if="loading && !hasRenderableData"
+      state="loading"
+      title="正在加载统计数据…"
+    />
 
-    <div v-else-if="error && !hasRenderableData" class="error-state">
-      <p>{{ error }}</p>
-      <button class="retry-btn" @click="fetchAll">重试</button>
-    </div>
+    <AppState
+      v-else-if="error && !hasRenderableData"
+      state="error"
+      :title="error"
+      description="请检查网络后重试，已有统计不会丢失。"
+    >
+      <template #actions>
+        <AppButton variant="secondary" @click="fetchAll">重试</AppButton>
+      </template>
+    </AppState>
 
     <template v-else>
       <div v-if="error" class="inline-error" role="alert">
@@ -35,7 +43,7 @@
             </svg>
           </div>
           <div class="overview-info">
-            <span class="overview-value">{{ overview.total_tasks_completed }}</span>
+            <span class="overview-value metric-figure">{{ overview.total_tasks_completed }}</span>
             <span class="overview-label">完成任务</span>
           </div>
         </div>
@@ -47,7 +55,7 @@
             </svg>
           </div>
           <div class="overview-info">
-            <span class="overview-value">{{ overview.total_coins_earned }}</span>
+            <span class="overview-value metric-figure">{{ overview.total_coins_earned }}</span>
             <span class="overview-label">累计金币</span>
           </div>
         </div>
@@ -58,7 +66,7 @@
             </svg>
           </div>
           <div class="overview-info">
-            <span class="overview-value">{{ overview.total_exp }}</span>
+            <span class="overview-value metric-figure">{{ overview.total_exp }}</span>
             <span class="overview-label">累计经验</span>
           </div>
         </div>
@@ -69,7 +77,7 @@
             </svg>
           </div>
           <div class="overview-info">
-            <span class="overview-value">{{ overview.current_streak }}</span>
+            <span class="overview-value metric-figure">{{ overview.current_streak }}</span>
             <span class="overview-label">当前连续</span>
           </div>
         </div>
@@ -83,7 +91,7 @@
             </svg>
           </div>
           <div class="overview-info">
-            <span class="overview-value">{{ overview.days_active }}</span>
+            <span class="overview-value metric-figure">{{ overview.days_active }}</span>
             <span class="overview-label">活跃天数</span>
           </div>
         </div>
@@ -344,6 +352,8 @@ import { labelPeriod } from '../utils/displayLabels'
 import { ref, computed, onMounted } from 'vue'
 import { statsService } from '../services/stats'
 import { getErrorMessage } from '../utils/errorMessage'
+import AppState from '../components/ui/AppState.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const loading = ref(true)
 const error = ref(null)
@@ -680,7 +690,6 @@ onMounted(fetchAll)
 
 <style scoped>
 .stats-page {
-  padding: var(--spacing-xl);
   width: 100%;
 }
 
@@ -705,13 +714,6 @@ onMounted(fetchAll)
 }
 
 /* Loading / Error */
-.loading-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-}
-
 .loading-spinner {
   width: 32px;
   height: 32px;
@@ -723,17 +725,6 @@ onMounted(fetchAll)
 
 @keyframes spin {
   to { transform: rotate(360deg); }
-}
-
-.error-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-  gap: var(--spacing-md);
-  color: var(--color-error);
-  font-size: var(--font-size-base);
 }
 
 .retry-btn {
@@ -943,6 +934,9 @@ onMounted(fetchAll)
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
+  /* Anchors the absolutely positioned y-axis to the chart instead of the page. */
+  position: relative;
+  padding-left: 34px;
 }
 
 .bar-chart-y-axis {
@@ -1201,15 +1195,9 @@ onMounted(fetchAll)
 
 /* Responsive */
 @media (max-width: 1199px) {
-  .stats-page {
-    padding: var(--spacing-lg);
-  }
 }
 
 @media (max-width: 767px) {
-  .stats-page {
-    padding: var(--spacing-md);
-  }
 
   .overview-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -1338,25 +1326,26 @@ onMounted(fetchAll)
   min-width: 420px;
 }
 
-.error-state {
-  padding: var(--spacing-xl);
-  border-radius: var(--surface-radius);
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px dashed var(--color-border);
-}
-
 @media (max-width: 767px) {
-  .stats-page {
-    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height));
-  }
+  /* The shell already reserves the bottom navigation inset; adding it again
+     left a page-high band of dead space below the charts. */
 
   .chart-body {
     padding-right: 0;
   }
 
+  /* Bars flex to the container width; a forced 520px pushed the chart off-screen. */
   .bar-chart-bars,
   .line-chart {
-    min-width: 520px;
+    min-width: 0;
+  }
+
+  .bar-chart {
+    padding-left: 26px;
+  }
+
+  .bar-chart-y-axis {
+    width: 24px;
   }
 }
 

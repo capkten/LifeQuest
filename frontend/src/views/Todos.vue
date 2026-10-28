@@ -7,7 +7,7 @@
       </div>
       <div class="header-actions-group">
         <button class="btn-retreat" @click="openRetreatModal(null)">
-          🧘 闭关专注
+          <Sparkles class="retreat-icon" aria-hidden="true" /> 闭关专注
         </button>
         <button class="btn-create" @click="showCreateDialog = true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -297,7 +297,7 @@
             <div class="todo-card-actions">
               <div class="action-buttons">
                 <button class="action-btn action-btn--focus" @click="openRetreatModal(task)" aria-label="为此任务闭关专注" title="闭关专注">
-                  🧘
+                  <Sparkles class="retreat-icon" aria-hidden="true" />
                 </button>
                 <button class="action-btn action-btn--snooze" @click="openSnoozeDialog(task)" aria-label="延期任务" title="延期任务">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -847,6 +847,7 @@
 <script setup>
 import { chinaDateTimeInputToUtcIso, formatChinaDate, formatDateTimeInput } from '../utils/dateTime'
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { Sparkles } from 'lucide-vue-next'
 import { useRoute } from 'vue-router'
 import { todoService } from '../services/todo'
 import { projectService } from '../services/project'
@@ -1803,7 +1804,6 @@ onMounted(() => {
 }
 
 .todos-page {
-  padding: var(--page-padding-y) var(--page-padding-x);
   width: 100%;
   overflow-x: clip;
 }
@@ -3384,14 +3384,10 @@ onMounted(() => {
 
 /* Responsive */
 @media (max-width: 1199px) {
-  .todos-page {
-    padding: var(--spacing-md);
-  }
 }
 
 @media (max-width: 767px) {
   .todos-page {
-    padding: var(--spacing-md);
     overflow-x: clip;
   }
 
@@ -3449,14 +3445,19 @@ onMounted(() => {
     font-size: 10px;
   }
 
+  /*
+   * Narrow screens cannot fit four 44px action buttons beside the title
+   * without squeezing the title to one character per line, so the actions
+   * drop to their own row below the card content.
+   */
   .todo-card-header {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
   }
 
   .todo-card {
     padding: 12px 12px 10px;
-    border-radius: 14px;
+    border-radius: var(--radius-card);
   }
 
   .todo-card-title {
@@ -3465,8 +3466,8 @@ onMounted(() => {
   }
 
   .todo-card-actions {
-    width: auto;
-    align-items: flex-end;
+    width: 100%;
+    align-items: stretch;
   }
 
   .todo-card-main {
@@ -3490,6 +3491,8 @@ onMounted(() => {
 
   .action-buttons {
     flex-wrap: nowrap;
+    justify-content: flex-end;
+    gap: 8px;
   }
 
   .goal-progress-info {
@@ -3500,7 +3503,7 @@ onMounted(() => {
     align-items: center;
     gap: 8px;
     padding: 8px 10px;
-    border-radius: 14px;
+    border-radius: var(--radius-card);
   }
 
   .project-filter-label {
@@ -3583,8 +3586,18 @@ onMounted(() => {
   }
 
   .dialog-actions {
+    /*
+     * Pinned to the bottom of the scrolling dialog so the save button stays
+     * reachable while the on-screen keyboard is open.
+     */
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
     flex-direction: row;
     justify-content: flex-end;
+    padding: var(--spacing-sm) 0 calc(var(--spacing-sm) + var(--safe-area-bottom));
+    background: var(--color-card);
+    border-top: 1px solid var(--color-border);
   }
 
   .btn-secondary,
@@ -3603,9 +3616,6 @@ onMounted(() => {
   }
 }
 @media (min-width: 768px) {
-  .todos-page {
-    padding: 0;
-  }
 
   .todo-list {
     gap: 10px;
@@ -3649,5 +3659,18 @@ onMounted(() => {
 .action-btn--focus:hover {
   color: #38bdf8;
   transform: scale(1.1);
+}
+
+/* Lucide icon sizing for the retreat entry points. */
+.retreat-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  vertical-align: -2px;
+}
+
+.btn-retreat .retreat-icon {
+  width: 14px;
+  height: 14px;
 }
 </style>

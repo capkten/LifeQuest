@@ -218,7 +218,6 @@ onMounted(() => {
 
 <style scoped>
 .coin-history-page {
-  padding: var(--spacing-xl);
   width: 100%;
 }
 
@@ -570,15 +569,9 @@ onMounted(() => {
 
 /* Responsive */
 @media (max-width: 1199px) {
-  .coin-history-page {
-    padding: var(--spacing-lg);
-  }
 }
 
 @media (max-width: 767px) {
-  .coin-history-page {
-    padding: var(--spacing-md);
-  }
 
   .summary-grid {
     grid-template-columns: 1fr;
@@ -599,7 +592,6 @@ onMounted(() => {
 .coin-history-page {
   display: grid;
   gap: var(--page-gap);
-  padding-bottom: calc(var(--spacing-xl) + var(--bottom-nav-height));
   overflow-x: clip;
 }
 
@@ -682,9 +674,6 @@ onMounted(() => {
 }
 
 @media (max-width: 767px) {
-  .coin-history-page {
-    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height));
-  }
 
   .filter-group {
     width: 100%;

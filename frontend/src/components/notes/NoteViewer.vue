@@ -62,7 +62,7 @@
               {{ note.word_count }} 字
             </span>
             <span v-if="note.is_pinned" class="viewer-meta-item viewer-meta-item--pinned">
-              📌 已置顶
+              <Pin class="viewer-meta-icon" aria-hidden="true" /> 已置顶
             </span>
           </div>
           <div v-if="tagList.length" class="viewer-tags">
@@ -79,6 +79,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { Pin } from 'lucide-vue-next'
 import { getErrorMessage } from '../../utils/errorMessage'
 import { resolveNoteAttachmentUrls } from '../../services/note'
 
@@ -421,5 +422,11 @@ function formatDate(value) {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+.viewer-meta-icon {
+  width: 13px;
+  height: 13px;
+  vertical-align: -2px;
 }
 </style>

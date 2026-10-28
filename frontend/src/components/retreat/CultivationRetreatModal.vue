@@ -35,7 +35,7 @@
               class="icon-action-btn"
               @click="showCatalog = true; emit('open-catalog')"
             >
-              📜
+              <ScrollText class="icon-action-svg" aria-hidden="true" />
             </el-button>
           </el-tooltip>
         </div>
@@ -43,7 +43,7 @@
 
       <!-- Bound Todo Banner -->
       <div v-if="boundTodoTitle" class="bound-todo-card">
-        <span class="bound-icon">🎯</span>
+        <span class="bound-icon"><Target class="bound-icon-svg" aria-hidden="true" /></span>
         <div class="bound-info">
           <span class="bound-label">本轮闭关参悟事项</span>
           <span class="bound-name">{{ boundTodoTitle }}</span>
@@ -148,6 +148,7 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import { ScrollText, Target } from 'lucide-vue-next'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useCultivationRetreat } from '../../composables/useCultivationRetreat.js'
 import RetreatCountdownRing from './RetreatCountdownRing.vue'
@@ -447,5 +448,16 @@ async function handleAbort() {
 
 .abort-btn {
   width: 100%;
+}
+
+.icon-action-svg {
+  width: 18px;
+  height: 18px;
+}
+
+.bound-icon-svg {
+  width: 16px;
+  height: 16px;
+  vertical-align: -2px;
 }
 </style>

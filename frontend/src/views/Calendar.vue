@@ -622,7 +622,6 @@ onMounted(() => {
 
 <style scoped>
 .calendar-page {
-  padding: var(--spacing-xl);
   width: 100%;
   max-width: none;
   margin: 0;
@@ -1382,9 +1381,6 @@ onMounted(() => {
 
 /* Responsive */
 @media (max-width: 1199px) {
-  .calendar-page {
-    padding: var(--spacing-lg);
-  }
 
   .calendar-body {
     grid-template-columns: 1fr 300px;
@@ -1392,9 +1388,6 @@ onMounted(() => {
 }
 
 @media (max-width: 767px) {
-  .calendar-page {
-    padding: var(--spacing-md);
-  }
 
   .calendar-body {
     grid-template-columns: 1fr;
@@ -1464,7 +1457,7 @@ onMounted(() => {
 }
 
 .today-btn {
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   background: linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(29, 78, 216, 0.06));
 }
 
@@ -1495,7 +1488,7 @@ onMounted(() => {
 
 .detail-item,
 .detail-checkin {
-  border-radius: 14px;
+  border-radius: var(--radius-card);
 }
 
 .detail-empty,
@@ -1506,9 +1499,6 @@ onMounted(() => {
 }
 
 @media (max-width: 767px) {
-  .calendar-page {
-    padding-bottom: calc(var(--spacing-md) + var(--bottom-nav-height));
-  }
 
   .calendar-header,
   .calendar-nav {

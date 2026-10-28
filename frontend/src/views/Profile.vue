@@ -20,8 +20,8 @@
           <p v-if="user?.email" class="profile-email">{{ user.email }}</p>
 
           <div class="profile-meta">
-            <span class="profile-meta-pill">等级 {{ user?.level || 1 }}</span>
-            <span class="profile-meta-pill">{{ user?.coins || 0 }} 金币</span>
+            <span class="profile-meta-pill metric-figure">等级 {{ user?.level || 1 }}</span>
+            <span class="profile-meta-pill metric-figure">{{ user?.coins || 0 }} 金币</span>
             <span class="profile-meta-pill">{{ user?.experience || 0 }} 经验</span>
             <span class="profile-meta-pill">{{ unlockedAchievementsCount }} 个成就</span>
           </div>
@@ -39,7 +39,7 @@
           <span class="section-kicker">下一等级</span>
             <h2>经验进度</h2>
           </div>
-          <strong>{{ expPercent }}%</strong>
+          <strong class="metric-figure">{{ expPercent }}%</strong>
         </div>
         <div
           class="exp-bar"
@@ -798,7 +798,6 @@ async function revokeMcpToken() {
 
 <style scoped>
 .profile-page {
-  padding: var(--page-padding-y) var(--page-padding-x);
   display: grid;
   gap: 16px;
 }
@@ -892,11 +891,14 @@ async function revokeMcpToken() {
 .profile-title-badge {
   min-height: 32px;
   padding: 0 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   display: inline-flex;
   align-items: center;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
-  color: #fff;
+  gap: 4px;
+  /* Titles are achievements, so they carry the gold reward semantic. */
+  background: rgba(245, 158, 11, 0.16);
+  border: 1px solid rgba(245, 158, 11, 0.32);
+  color: var(--color-gold);
   font-size: var(--font-size-xs);
   font-weight: 700;
 }
@@ -927,7 +929,7 @@ async function revokeMcpToken() {
 .profile-meta-pill {
   min-height: 34px;
   padding: 0 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   display: inline-flex;
   align-items: center;
   background: rgba(255, 255, 255, 0.78);
@@ -949,7 +951,7 @@ async function revokeMcpToken() {
 .text-link {
   min-height: 44px;
   padding: 0 16px;
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1008,7 +1010,7 @@ async function revokeMcpToken() {
 
 .exp-bar {
   height: 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: rgba(148, 163, 184, 0.18);
   overflow: hidden;
 }
@@ -1225,7 +1227,7 @@ async function revokeMcpToken() {
   min-width: 112px;
   padding: 11px 14px;
   border: 1px solid rgba(14, 165, 233, 0.15);
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-tertiary);
   color: var(--color-text-secondary);
 }
@@ -1547,7 +1549,7 @@ async function revokeMcpToken() {
   gap: 5px;
   min-height: 24px;
   padding: 0 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: var(--font-size-xs);
   font-weight: 700;
 }
@@ -1589,7 +1591,7 @@ async function revokeMcpToken() {
   gap: 12px;
   padding: 18px;
   border: 1px dashed var(--color-border-strong);
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   background: var(--color-bg-secondary);
 }
 
@@ -1906,7 +1908,7 @@ async function revokeMcpToken() {
 .title-item-icon {
   width: 42px;
   height: 42px;
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   display: grid;
   place-items: center;
   background: #fff;
@@ -1951,7 +1953,7 @@ async function revokeMcpToken() {
   right: var(--spacing-lg);
   min-height: 44px;
   padding: 0 18px;
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -2012,14 +2014,11 @@ async function revokeMcpToken() {
 }
 
 @media (max-width: 767px) {
-  .profile-page {
-    padding: var(--spacing-md);
-  }
 
   .profile-hero,
   .surface-card,
   .attribute-card {
-    border-radius: 22px;
+    border-radius: var(--radius-card);
   }
 
   .profile-hero-main,
@@ -2085,8 +2084,5 @@ async function revokeMcpToken() {
 }
 
 @media (min-width: 768px) {
-  .profile-page {
-    padding: 0;
-  }
 }
 </style>
