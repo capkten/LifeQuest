@@ -8,13 +8,13 @@
       </template>
     </AppState>
     <div v-if="actionFeedback" class="cultivation-state cultivation-state--action" role="alert" aria-live="polite">{{ actionFeedback }}</div>
-    <AppState v-if="!loading && !error && !nodes.length" state="loading" />
+    <AppState v-if="!loading && !error && !nodes.length" state="empty" title="暂无可探索节点" description="继续修炼或推进前置节点后会在这里出现。" />
     <section v-if="!loading && !error && nodes.length" class="world-layout">
       <div class="world-node-list" role="listbox" aria-label="世界节点">
         <MapNode v-for="node in nodes" :key="node.node_key" :node="node" :status="nodeStatus(node)" :locked="nodeStatus(node) === 'locked'" :selected="selectedNode?.node_key === node.node_key" @select="selectNode" />
       </div>
       <article v-if="selectedNode" class="world-detail cultivation-surface" aria-labelledby="world-detail-title">
-        <div class="world-detail__status"><span aria-hidden="true">{{ statusIcon(nodeStatus(selectedNode)) }}</span>{{ statusLabel(nodeStatus(selectedNode), selectedNode) }}</div>
+        <div class="world-detail__status"><component :is="statusIcon(nodeStatus(selectedNode))" class="world-status-icon" aria-hidden="true" />{{ statusLabel(nodeStatus(selectedNode), selectedNode) }}</div>
         <h2 id="world-detail-title">{{ selectedNode.name }}</h2>
         <p>{{ selectedNode.description || '这个节点的详细记录尚未建立。' }}</p>
         <p v-if="nodeStatus(selectedNode) === 'locked'" class="world-detail__lock" role="status">{{ lockReasonLabel(selectedNode) }}</p>
@@ -35,6 +35,7 @@ import { labelFromServer, labelRealm, labelStatus } from '../utils/displayLabels
 import { getErrorMessage } from '../utils/errorMessage'
 import AppState from '../components/ui/AppState.vue'
 import AppButton from '../components/ui/AppButton.vue'
+import { Circle, CircleCheck, CircleDot, Lock } from 'lucide-vue-next'
 
 const store = useCultivationStore()
 const nodes = ref([])
@@ -85,7 +86,8 @@ function realmIndex(realm) {
   return index === -1 ? 0 : index
 }
 function statusLabel(status, node) { return labelFromServer(node, 'status_label', status, labelStatus) }
-function statusIcon(status) { return ({ current: '●', available: '○', completed: '✓', locked: '锁' })[status] || '○' }
+const STATUS_ICONS = { current: CircleDot, available: Circle, completed: CircleCheck, locked: Lock }
+function statusIcon(status) { return STATUS_ICONS[status] || Circle }
 function realmLabel(value) { return labelRealm(value) }
 function requiredRealmLabel(node) { return labelFromServer(node, 'required_realm_label', node?.required_realm, realmLabel) }
 function lockReasonLabel(node) {
