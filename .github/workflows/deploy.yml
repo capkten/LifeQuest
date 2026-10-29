@@ -131,11 +131,28 @@ jobs:
           # connection, so the updater keeps working either way.
           publish_android_assets() {
             local base="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download"
-            local asset_dir
+            local asset_dir expected release_version attempt
             asset_dir="$(mktemp -d)"
+            expected="$(tr -d '[:space:]' < VERSION)"
+            release_version=""
 
-            if ! curl -fsSL --max-time 60 "$base/latest.json" -o "$asset_dir/latest.json"; then
-              echo "Runner could not download the update manifest." >&2
+            # The Android release runs in parallel with this deployment; wait for
+            # it rather than publishing a manifest for the previous version.
+            for attempt in $(seq 1 12); do
+              if curl -fsSL --max-time 60 "$base/latest.json" -o "$asset_dir/latest.json"; then
+                release_version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("versionName", ""))' "$asset_dir/latest.json")"
+                if [[ "$release_version" == "$expected" ]]; then
+                  break
+                fi
+                echo "Android release is $release_version; waiting for $expected (attempt $attempt/12)."
+              else
+                echo "Could not fetch the update manifest yet (attempt $attempt/12)."
+              fi
+              sleep 30
+            done
+
+            if [[ "$release_version" != "$expected" ]]; then
+              echo "Android release $expected was not published in time; keeping the current update assets." >&2
               rm -rf "$asset_dir"
               return 1
             fi

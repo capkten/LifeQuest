@@ -177,6 +177,17 @@ publish_android_update() {
   fi
 
   if [[ -f "$update_dir/latest.json" ]]; then
+    # The Android release is built in parallel with this deployment, so the
+    # newest release may still describe the previous version. Publishing that
+    # would advertise an update we cannot serve yet.
+    release_version="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("versionName", ""))' "$update_dir/latest.json")"
+    expected_version="$(tr -d '[:space:]' < "$APP_DIR/VERSION")"
+
+    if [[ "$release_version" != "$expected_version" ]]; then
+      echo "Skipping Android update manifest publish: release is $release_version, repository version is $expected_version." >&2
+      return 0
+    fi
+
     "$PYTHON" - "$update_dir/latest.json" "$manifest_url" <<'PY'
 import json, sys
 
