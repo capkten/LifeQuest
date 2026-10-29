@@ -118,3 +118,14 @@ test('high-traffic dialog submit bars stay reachable on phones', async () => {
     assert.match(actions, /--safe-area-bottom/)
   }
 })
+
+test('the project card start action is styled in its own file', async () => {
+  const projects = await source('./Projects.vue')
+
+  // .btn-sm only existed inside ProjectDetail.vue, so the planning card's
+  // start button fell back to the browser default look.
+  assert.match(projects, /class="btn-sm project-start-action"/)
+  assert.match(projects, /^\.btn-sm \{/m)
+  assert.match(projects, /\.btn-sm \{[\s\S]*?background: var\(--color-primary\)/)
+  assert.match(projects, /\.project-start-action \{[\s\S]*?white-space: nowrap/)
+})

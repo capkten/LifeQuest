@@ -704,9 +704,49 @@ onMounted(() => {
   color: var(--color-text-tertiary);
 }
 
+/*
+ * .btn-sm was only ever defined inside ProjectDetail.vue, so the start button
+ * on a planning card rendered with the browser default look.
+ */
+.btn-sm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  min-height: 36px;
+  padding: 0 var(--spacing-sm);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: #fff;
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.btn-sm:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
+}
+
+.btn-sm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .project-start-action {
   flex-shrink: 0;
   white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  /* Keep the card header readable when the action sits beside the badge. */
+  .project-start-action {
+    min-height: 44px;
+    padding-inline: 12px;
+  }
 }
 
 /* Progress */
@@ -1077,14 +1117,24 @@ onMounted(() => {
     padding: var(--spacing-md);
   }
 
+  /* Name takes its own row; the status badge and the start action share the
+     next one instead of stacking into three separate lines. */
   .project-card-top {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--spacing-xs);
+  }
+
+  .project-card-info {
+    flex: 1 1 100%;
   }
 
   .status-badge {
-    align-self: flex-start;
+    align-self: center;
+  }
+
+  .project-start-action {
+    margin-left: auto;
   }
 
   .form-row {
