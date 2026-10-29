@@ -126,6 +126,40 @@ jobs:
             ssh "${SSH_ARGS[@]}" "$SERVER_USER@$SERVER_HOST" "$1"
           }
 
+          # The server tries GitHub itself; when that network path is blocked the
+          # runner downloads the release assets and pushes them over the same SSH
+          # connection, so the updater keeps working either way.
+          publish_android_assets() {
+            local base="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download"
+            local asset_dir
+            asset_dir="$(mktemp -d)"
+
+            if ! curl -fsSL --max-time 60 "$base/latest.json" -o "$asset_dir/latest.json"; then
+              echo "Runner could not download the update manifest." >&2
+              rm -rf "$asset_dir"
+              return 1
+            fi
+
+            if ! curl -fsSL --max-time 300 "$base/app-release.apk" -o "$asset_dir/app-release.apk"; then
+              echo "Runner could not download the update package." >&2
+              rm -rf "$asset_dir"
+              return 1
+            fi
+
+            python3 -c 'import json,sys; path=sys.argv[1]; manifest=json.load(open(path,encoding="utf-8")); manifest["downloadUrl"]="https://life.capkin.cn/app-release.apk"; json.dump(manifest, open(path,"w",encoding="utf-8"), ensure_ascii=False, indent=2)' "$asset_dir/latest.json"
+
+            if scp "${SSH_ARGS[@]}" "$asset_dir/latest.json" "$asset_dir/app-release.apk" \
+                 "$SERVER_USER@$SERVER_HOST:$APP_DIR/frontend/dist/"; then
+              echo "Android update assets published from the runner."
+              rm -rf "$asset_dir"
+              return 0
+            fi
+
+            echo "Runner could not upload the update assets." >&2
+            rm -rf "$asset_dir"
+            return 1
+          }
+
           run_ssh "cd '$APP_DIR' && git fetch origin main && git checkout main && git pull --ff-only origin main && systemd-run --user --unit='$DEPLOY_UNIT' --description='LifeQuest deployment' --setenv=HOME=/home/capkin --setenv=LIFEQUEST_SYSTEMD_SCOPE=user --setenv=LIFEQUEST_CONDA_PREFIX=/home/capkin/miniforge3/envs/lifequest --setenv=PATH=/home/capkin/miniforge3/envs/lifequest/bin:/usr/local/bin:/usr/bin bash '$APP_DIR/deploy/update-systemd.sh' '$APP_DIR'"
 
           for _ in {1..180}; do
@@ -135,6 +169,7 @@ jobs:
             if [[ "$unit_state" == "inactive" || "$unit_state" == "failed" ]]; then
               if [[ "$unit_result" == "success" ]]; then
                 echo "LifeQuest deployment completed successfully."
+                publish_android_assets || echo "Android update assets were not refreshed by the runner." >&2
                 exit 0
               fi
               echo "LifeQuest deployment failed (state=$unit_state result=$unit_result)." >&2

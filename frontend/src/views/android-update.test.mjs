@@ -45,3 +45,13 @@ test('deployment publishes the update manifest and package from our own origin',
 
   assert.match(workflow, /https:\/\/life\.capkin\.cn\/latest\.json/)
 })
+
+test('deployment keeps a runner-side fallback when the server cannot reach GitHub', async () => {
+  const workflow = await read('../../../.github/workflows/deploy.yml')
+
+  // Two independent paths: the server pulls from GitHub, and when that network
+  // path is blocked the runner downloads and pushes the assets over SSH.
+  assert.match(workflow, /publish_android_assets\(\)/)
+  assert.match(workflow, /scp "\$\{SSH_ARGS\[@\]\}"/)
+  assert.match(workflow, /publish_android_assets \|\| echo/)
+})
