@@ -4,7 +4,7 @@
       <div class="workspace-heading">
         <button
           type="button"
-          class="icon-button mobile-only"
+          class="icon-button icon-button--labeled mobile-only"
           aria-label="打开笔记目录"
           aria-controls="notes-directory-panel"
           :aria-expanded="treeOpen"
@@ -13,6 +13,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
             <path d="M4 6h16M4 12h16M4 18h16" />
           </svg>
+          <span>目录</span>
         </button>
         <div>
           <p class="workspace-kicker">笔记工作区</p>
@@ -1207,6 +1208,19 @@ onUnmounted(() => {
   color: var(--color-text-secondary);
   background: transparent;
   border: 0;
+}
+
+/* The in-page directory drawer needs to read differently from the shell
+   hamburger sitting right above it, so it carries a label and a border. */
+.icon-button--labeled {
+  width: auto;
+  min-height: 40px;
+  padding: 0 10px;
+  gap: 5px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
 }
 
 .mobile-only {

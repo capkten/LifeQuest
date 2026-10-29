@@ -2929,15 +2929,41 @@ onBeforeUnmount(() => {
 
 @media (max-width: 767px) {
 
-  .detail-actions,
   .dialog-actions {
     width: 100%;
   }
 
-  .detail-actions > *,
   .dialog-actions > * {
     flex: 1 1 0;
     justify-content: center;
+  }
+
+  /*
+   * Four actions sharing one row squeezed labels into one character per line,
+   * so the action bar becomes a 2x2 grid with single-line labels instead.
+   */
+  .detail-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: 8px;
+  }
+
+  .detail-actions > * {
+    width: 100%;
+    min-height: 44px;
+    padding-inline: 8px;
+    justify-content: center;
+    white-space: nowrap;
+    font-size: var(--font-size-xs);
+  }
+
+  .detail-meta-item {
+    min-width: 0;
+  }
+
+  .detail-meta-label {
+    white-space: nowrap;
   }
 
   .phase-header {
