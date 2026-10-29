@@ -656,7 +656,7 @@ onMounted(() => {
   }
 
   .filter-btn {
-    flex: 1 1 calc(50% - var(--spacing-xs));
+    flex: 1 1 0;
   }
 
   .filter-select {
