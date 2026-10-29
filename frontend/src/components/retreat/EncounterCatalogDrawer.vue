@@ -3,9 +3,10 @@
     :model-value="modelValue"
     @update:model-value="val => emit('update:modelValue', val)"
     title="万象机缘录 · 顿悟图鉴"
-    size="460px"
+    size="min(460px, 92vw)"
     direction="rtl"
     class="encounter-catalog-drawer"
+    :z-index="3000"
   >
     <div class="catalog-body">
       <!-- Progress Banner -->

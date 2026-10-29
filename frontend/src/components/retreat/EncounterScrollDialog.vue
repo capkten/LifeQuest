@@ -6,7 +6,8 @@
     :close-on-click-modal="false"
     :close-on-press-escape="false"
     class="encounter-scroll-dialog"
-    width="520px"
+    width="min(520px, 92vw)"
+    :z-index="3100"
     center
   >
     <div v-if="encounter" class="scroll-wrapper">

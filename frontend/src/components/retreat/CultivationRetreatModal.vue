@@ -7,7 +7,7 @@
     :close-on-press-escape="!isFocusing"
     class="cultivation-retreat-dialog"
     destroy-on-close
-    width="580px"
+    :width="dialogWidth"
     center
   >
     <div ref="modalContainer" class="retreat-modal-body" :class="{ 'fullscreen-mode': isFullscreen }">
@@ -25,7 +25,8 @@
               class="icon-action-btn"
               @click="toggleFullscreen"
             >
-              <i :class="isFullscreen ? 'el-icon-crop' : 'el-icon-full-screen'">⛶</i>
+              <Minimize2 v-if="isFullscreen" class="icon-action-svg" aria-hidden="true" />
+              <Maximize2 v-else class="icon-action-svg" aria-hidden="true" />
             </el-button>
           </el-tooltip>
           <el-tooltip content="机缘图鉴" placement="bottom">
@@ -56,7 +57,7 @@
           :remaining-seconds="remainingSeconds"
           :total-seconds="totalSeconds"
           :is-focusing="isFocusing"
-          :size="260"
+          :size="ringSize"
         />
       </div>
 
@@ -147,8 +148,8 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
-import { ScrollText, Target } from 'lucide-vue-next'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { Maximize2, Minimize2, ScrollText, Target } from 'lucide-vue-next'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useCultivationRetreat } from '../../composables/useCultivationRetreat.js'
 import RetreatCountdownRing from './RetreatCountdownRing.vue'
@@ -171,6 +172,19 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue', 'completed', 'aborted', 'open-catalog', 'encounter'])
+
+/*
+ * The panel used a fixed 580px width and a fixed 260px countdown ring, so on a
+ * phone it hung off the right edge. Both now follow the viewport.
+ */
+const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024)
+const dialogWidth = computed(() => (viewportWidth.value <= 767 ? '92vw' : '580px'))
+const ringSize = computed(() => Math.min(260, Math.max(168, viewportWidth.value - 150)))
+function syncViewport() {
+  viewportWidth.value = window.innerWidth
+}
+onMounted(() => window.addEventListener('resize', syncViewport))
+onUnmounted(() => window.removeEventListener('resize', syncViewport))
 
 const {
   activeRetreat,
@@ -459,5 +473,55 @@ async function handleAbort() {
   width: 16px;
   height: 16px;
   vertical-align: -2px;
+}
+
+@media (max-width: 767px) {
+  .retreat-modal-body {
+    padding: 16px;
+    gap: 14px;
+  }
+
+  /* Keep the title and the two icon actions on one row, and leave room for
+     the dialog's own close button in the corner. */
+  .retreat-header {
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: 8px;
+    padding-right: 34px;
+  }
+
+  .retreat-title-wrap {
+    min-width: 0;
+  }
+
+  .retreat-title {
+    font-size: 1rem;
+    line-height: 1.25;
+  }
+
+  .realm-badge {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .header-actions {
+    flex-shrink: 0;
+    gap: 6px;
+  }
+
+  .icon-action-btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    flex: 0 0 auto;
+  }
+
+  .duration-presets {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .preset-chip {
+    min-height: 52px;
+  }
 }
 </style>
