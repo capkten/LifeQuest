@@ -2,12 +2,12 @@
   <div class="finance-page">
     <div class="page-header">
       <div class="header-left">
-        <p class="page-subtitle">账户、余额与信用额度集中管理。</p>
         <button class="btn-back" @click="$router.push('/finance')" aria-label="返回">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </button>
+        <p class="page-subtitle">账户、余额与信用额度集中管理。</p>
       </div>
       <div class="header-right">
         <button class="btn-secondary" @click="showTransferDialog = true">
@@ -542,11 +542,14 @@ onMounted(() => { fetchAccounts() })
   margin-bottom: var(--spacing-lg);
 }
 
-.header-left { display: flex; align-items: center; gap: var(--spacing-md); }
+.header-left { display: flex; align-items: center; gap: var(--spacing-md);   display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
 .header-right { display: flex; align-items: center; gap: var(--spacing-sm); }
 
 .btn-back {
-  width: 36px; height: 36px;
+  width: 40px; height: 40px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   background: transparent; border: 1px solid var(--color-border);
   border-radius: var(--radius-md); cursor: pointer;

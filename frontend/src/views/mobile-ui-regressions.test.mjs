@@ -66,3 +66,14 @@ test('shared mobile state cards reduce excess empty space without losing separat
   assert.match(styles, /\.empty-state,\s*\.loading-state,\s*\.error-state[\s\S]*min-height:\s*180px/)
   assert.match(styles, /input,\s*textarea,\s*select[\s\S]*font-size:\s*16px/)
 })
+
+test('note editor stacks its header and meta grid on phones', async () => {
+  const editor = await source('./NoteEditor.vue')
+  const mobile = editor.match(/@media \(max-width: 767px\) \{[\s\S]*\n\}/)?.[0] || ''
+
+  assert.ok(mobile, 'note editor needs a phone media query')
+  assert.match(mobile, /\.editor-meta-grid \{[\s\S]*?grid-template-columns: 1fr/)
+  assert.match(mobile, /\.editor-header \{[\s\S]*?flex-direction: column/)
+  assert.match(mobile, /\.save-btn \{[\s\S]*?white-space: nowrap/)
+  assert.match(mobile, /\.execution-link-form \{[\s\S]*?flex-direction: column/)
+})

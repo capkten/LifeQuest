@@ -680,5 +680,82 @@ onUnmounted(() => {
 @keyframes pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .loading-spinner, .save-status--saving .save-status-dot, .collaboration-status--connecting .collaboration-status-dot, .collaboration-status--syncing .collaboration-status-dot { animation: none; } }
 @media (max-width: 960px) { .editor-meta { grid-template-columns: 1fr 1fr; } .field--title { grid-column: 1 / -1; } .pin-field { align-self: center; } }
-@media (max-width: 767px) { .note-editor-page { height: calc(100vh - var(--bottom-nav-height) - var(--header-height)); height: calc(100dvh - var(--bottom-nav-height) - var(--header-height)); padding-bottom: var(--safe-area-bottom); } .editor-header { align-items: flex-start; padding: var(--spacing-sm) var(--spacing-md); } .header-actions { flex-direction: column; align-items: flex-end; gap: var(--spacing-xs); } .save-status { font-size: var(--font-size-xs); } .editor-meta { grid-template-columns: 1fr; padding: var(--spacing-md); } .field--title { grid-column: auto; } .pin-field { justify-self: start; } .execution-links { padding: var(--spacing-md); } .execution-link-form { flex-wrap: wrap; } .execution-link-form .meta-input, .link-submit-btn { width: 100%; } }
+@media (max-width: 767px) {
+  .note-editor-page {
+    height: calc(100dvh - var(--bottom-nav-height) - var(--header-height));
+    padding-bottom: var(--safe-area-bottom);
+  }
+
+  /*
+   * The header used to keep its two-column desktop layout here, which squeezed
+   * the save button into one character per line and let the meta grid overflow
+   * the viewport. Both now stack on phones.
+   */
+  .editor-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  .header-left {
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .header-actions {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .save-btn {
+    white-space: nowrap;
+  }
+
+  .context-kicker {
+    max-width: 52vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .page-title {
+    font-size: var(--font-size-lg);
+  }
+
+  .editor-meta {
+    padding: var(--spacing-md);
+  }
+
+  .editor-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .field--title {
+    grid-column: auto;
+  }
+
+  .pin-field {
+    justify-self: start;
+  }
+
+  .execution-links {
+    padding: var(--spacing-md);
+  }
+
+  .execution-link-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .execution-link-form .meta-input,
+  .link-submit-btn {
+    width: 100%;
+  }
+}
 </style>
