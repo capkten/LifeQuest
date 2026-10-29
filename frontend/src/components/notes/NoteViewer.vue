@@ -415,6 +415,18 @@ function formatDate(value) {
 }
 
 @media (max-width: 767px) {
+  /* Three actions fit one row and the fourth dropped alone: use a 2x2 grid. */
+  .viewer-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .viewer-actions > * {
+    justify-content: center;
+    min-height: 44px;
+  }
+
   .viewer-article {
     padding: 24px 20px 60px;
   }

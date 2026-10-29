@@ -1227,8 +1227,9 @@ onMounted(fetchAll)
     height: 150px;
   }
 
+  /* 8px axis labels were unreadable on a phone. */
   .bar-label {
-    font-size: 8px;
+    font-size: 10px;
   }
 }
 
