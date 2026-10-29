@@ -113,7 +113,7 @@
               <div class="history-card-header">
                 <div>
                   <h3 class="history-card-name">{{ record.item_name || '未知物品' }}</h3>
-                  <p class="history-card-copy">保留原有动作类型与记录时间展示。</p>
+                  <p class="history-card-copy">按时间顺序记录物品的每一次使用、装备与丢弃。</p>
                 </div>
                 <span class="action-badge" :class="'action-badge--' + record.action_type">
                   {{ formatAction(record.action_type) }}

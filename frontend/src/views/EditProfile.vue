@@ -87,7 +87,7 @@
           <div class="tips-grid">
             <article class="tip-card">
               <span class="tip-card-label">头像</span>
-              <p>上传后会立即调用现有接口，并在当前页面显示解析后的头像地址。</p>
+              <p>建议使用正方形图片，保存后立即生效。</p>
             </article>
             <article class="tip-card">
               <span class="tip-card-label">保存</span>
@@ -291,7 +291,7 @@ function goBack() {
   width: min(100%, 220px);
   aspect-ratio: 1;
   margin: 0 auto;
-  border-radius: 32px;
+  border-radius: var(--radius-card);
   background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
   position: relative;
   cursor: pointer;
@@ -563,6 +563,12 @@ function goBack() {
 
 @media (max-width: 767px) {
 
+  /* A 220px avatar pushed the actual form below the fold on phones. */
+  .avatar-wrapper {
+    width: 132px;
+    border-radius: var(--radius-card);
+  }
+
   .profile-intro,
   .profile-preview,
   .form-card {
@@ -575,9 +581,16 @@ function goBack() {
     display: grid;
   }
 
-  .btn,
-  .text-button {
+  .btn {
     width: 100%;
+  }
+
+  /* The back link is a text action, not a form button: keep it inline. */
+  .text-button {
+    width: auto;
+    justify-self: start;
+    min-height: 44px;
+    align-self: flex-start;
   }
 
   .toast {

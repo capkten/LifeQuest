@@ -10,7 +10,7 @@
           返回商城
         </router-link>
         <span class="history-kicker">奖励记录</span>
-        <p class="history-subtitle">查看奖励兑换、状态变化与金币支出，保留原有历史记录与退款状态展示。</p>
+        <p class="history-subtitle">兑换过的奖励、状态变化和金币支出都记录在这里。</p>
       </div>
       <div class="history-hero-stats" v-if="!loading && !error && records.length">
         <div class="summary-chip">

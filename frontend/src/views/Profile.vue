@@ -89,7 +89,7 @@
           <div class="detail-card">
             <span class="detail-label">累计经验</span>
             <strong>{{ user?.experience || 0 }}</strong>
-            <p>经验条和等级保持现有计算逻辑。</p>
+            <p>距离下一等级还差多少经验，一目了然。</p>
           </div>
           <div class="detail-card">
             <span class="detail-label">累计金币</span>
@@ -122,7 +122,7 @@
           <div class="inventory-summary-card">
             <span>奖励与背包</span>
             <strong>继续管理你的道具收藏</strong>
-            <p>背包页会按物品类型分组，并保留使用、装备、丢弃和历史功能。</p>
+            <p>背包物品按类型分组，使用、装备与丢弃都在这里操作。</p>
           </div>
           <div class="inventory-actions">
             <router-link class="secondary-link" to="/backpack/history">使用历史</router-link>
