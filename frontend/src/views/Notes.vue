@@ -670,7 +670,29 @@ watch(discoveryFilters, fetchDiscovery, { deep: true })
 .discovery-card:hover, .discovery-card:focus-visible { border-color: var(--color-border-strong); background: #ffffff; box-shadow: var(--shadow-sm); transform: translateY(-1px); outline: none; }
 .discovery-card strong { overflow-wrap: anywhere; font-weight: 600; color: var(--color-text); }
 .discovery-card span, .discovery-card small, .discovery-muted { color: var(--color-text-secondary); overflow-wrap: anywhere; }
-@media (max-width: 767px) { .discovery-columns { grid-template-columns: 1fr; } .discovery-control { flex: 1 1 140px; max-width: none; } }
+@media (max-width: 767px) {
+  .discovery-columns { grid-template-columns: 1fr; }
+
+  /* Two controls per row; the tag field and the toggle own a full row each,
+     so the date range keeps equal widths instead of being squeezed. */
+  .discovery-toolbar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .discovery-control {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .discovery-toolbar > :nth-child(3),
+  .discovery-toolbar > .pin-filter,
+  .discovery-toolbar > .discovery-clear {
+    grid-column: 1 / -1;
+  }
+}
 
 .page-header {
   display: flex;
