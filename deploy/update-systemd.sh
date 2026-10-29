@@ -151,6 +151,55 @@ export PATH="$NPM_DIR:$PATH"
 "$NPM_BIN" ci --registry="$NPM_REGISTRY"
 NPM_CONFIG_UPDATE_NOTIFIER=false "$NPM_BIN" run build
 
+# Publish the Android update manifest and package from our own origin: GitHub
+# release assets are slow or unreachable on some networks, which made the
+# in-app updater fail. Both stay optional so an unreachable source never fails
+# a deployment.
+publish_android_update() {
+  local update_dir="$APP_DIR/frontend/android-update"
+  local base="${LIFEQUEST_ANDROID_UPDATE_BASE:-https://github.com/capkten/LifeQuest/releases/latest/download}"
+  local manifest_url="${LIFEQUEST_PUBLIC_ORIGIN:-https://life.capkin.cn}"
+
+  mkdir -p "$update_dir"
+
+  if curl -fsSL --max-time 60 "$base/latest.json" -o "$update_dir/latest.json.new"; then
+    mv -f "$update_dir/latest.json.new" "$update_dir/latest.json"
+  else
+    rm -f "$update_dir/latest.json.new"
+    echo "Skipping Android update manifest refresh (source unreachable)." >&2
+  fi
+
+  if curl -fsSL --max-time 300 "$base/app-release.apk" -o "$update_dir/app-release.apk.new"; then
+    mv -f "$update_dir/app-release.apk.new" "$update_dir/app-release.apk"
+  else
+    rm -f "$update_dir/app-release.apk.new"
+    echo "Skipping Android update package refresh (source unreachable)." >&2
+  fi
+
+  if [[ -f "$update_dir/latest.json" ]]; then
+    "$PYTHON" - "$update_dir/latest.json" "$manifest_url" <<'PY'
+import json, sys
+
+path, origin = sys.argv[1], sys.argv[2].rstrip('/')
+with open(path, encoding='utf-8') as handle:
+    manifest = json.load(handle)
+
+manifest['downloadUrl'] = f'{origin}/app-release.apk'
+manifest.setdefault('releaseUrl', manifest.get('releaseUrl', ''))
+
+with open(path, 'w', encoding='utf-8') as handle:
+    json.dump(manifest, handle, ensure_ascii=False, indent=2)
+PY
+    cp -f "$update_dir/latest.json" "$APP_DIR/frontend/dist/latest.json"
+  fi
+
+  if [[ -f "$update_dir/app-release.apk" ]]; then
+    cp -f "$update_dir/app-release.apk" "$APP_DIR/frontend/dist/app-release.apk"
+  fi
+}
+
+publish_android_update || echo "Android update assets were not refreshed; keeping the previous build." >&2
+
 restart_service
 
 for _ in {1..30}; do

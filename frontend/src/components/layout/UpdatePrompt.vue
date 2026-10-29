@@ -34,7 +34,6 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
 import { registerPlugin } from '@capacitor/core'
 import { useAppUpdate } from '../../composables/useAppUpdate'
 
@@ -50,8 +49,6 @@ const {
   startUpdate,
   openGithubDownload,
 } = useAppUpdate(AppUpdater)
-
-onMounted(checkForUpdate)
 </script>
 
 <style scoped>

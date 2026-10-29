@@ -1554,6 +1554,28 @@ if os.path.isdir(_frontend_dist):
 
     from fastapi.responses import FileResponse, JSONResponse
 
+    # Android in-app updates are served from our own origin. GitHub release
+    # assets are slow or unreachable from some networks and do not send CORS
+    # headers, which made both the manifest check and the APK download fail.
+    _android_update_manifest = os.path.join(_frontend_dist, "latest.json")
+    _android_update_apk = os.path.join(_frontend_dist, "app-release.apk")
+
+    @app.get("/latest.json", include_in_schema=False)
+    def android_update_manifest():
+        if os.path.isfile(_android_update_manifest):
+            return FileResponse(_android_update_manifest, media_type="application/json")
+        return JSONResponse(status_code=404, content={"detail": "update manifest unavailable"})
+
+    @app.get("/app-release.apk", include_in_schema=False)
+    def android_update_apk():
+        if os.path.isfile(_android_update_apk):
+            return FileResponse(
+                _android_update_apk,
+                media_type="application/vnd.android.package-archive",
+                filename="app-release.apk",
+            )
+        return JSONResponse(status_code=404, content={"detail": "update package unavailable"})
+
     @app.exception_handler(404)
     async def spa_fallback(request: Request, exc):
         """Serve index.html for unmatched GET requests (SPA client-side routing)."""
