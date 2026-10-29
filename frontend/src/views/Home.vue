@@ -304,12 +304,17 @@ async function doCheckin() {
     const coins = result.reward_coins || 0
     const exp = result.reward_exp || 0
     showSuccess(`签到成功！获得 ${coins} 金币、${exp} 经验值`)
-    await refreshActionRewards()
   } catch (e) {
     showError(getErrorMessage(e))
   } finally {
     checkinLoading.value = false
   }
+
+  /*
+   * Rewards refreshes run after the check-in settles and never reject: a
+   * failing refresh must not report a successful check-in as a failure.
+   */
+  await Promise.allSettled([authStore.fetchUser(), loadCultivation(), fetchActionCenter()])
 }
 
 async function fetchGoals() {

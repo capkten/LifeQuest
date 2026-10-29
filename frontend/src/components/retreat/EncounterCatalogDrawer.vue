@@ -181,9 +181,10 @@ function rarityLabel(rarity) {
 }
 
 .encounter-card.is-locked {
-  opacity: 0.55;
-  background: rgba(15, 23, 42, 0.4);
-  border-style: dashed;
+  /* Blanket opacity made the locked copy unreadable on dark; dim the surface
+     instead and keep the text at a legible contrast. */
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px dashed rgba(148, 163, 184, 0.35);
 }
 
 .card-header {
@@ -257,12 +258,12 @@ function rarityLabel(rarity) {
 }
 
 .locked-title {
-  color: #64748b;
+  color: #cbd5e1;
 }
 
 .locked-hint {
   font-size: 0.8rem;
-  color: #64748b;
+  color: #94a3b8;
   margin: 0;
   line-height: 1.5;
 }
