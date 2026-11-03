@@ -160,11 +160,11 @@ async function handleLogin() {
   padding: 40px;
   overflow: hidden;
   position: relative;
-  border: 1px solid rgba(125, 211, 252, 0.25);
+  border: 1px solid rgba(110, 231, 183, 0.24);
   border-radius: 28px;
   background:
-    radial-gradient(circle at 90% 10%, rgba(110, 231, 183, 0.35), transparent 28%),
-    linear-gradient(145deg, #123b5d 0%, #0a6c94 58%, #0ea5e9 100%);
+    radial-gradient(circle at 90% 10%, rgba(110, 231, 183, 0.34), transparent 32%),
+    linear-gradient(145deg, #06281C 0%, #0B5340 58%, #0F8A67 100%);
   color: #fff;
   box-shadow: var(--shadow-xl);
 }

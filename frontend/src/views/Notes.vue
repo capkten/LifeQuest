@@ -45,7 +45,7 @@
         <span>{{ discoveryError }}</span>
         <button type="button" class="retry-btn" @click="fetchDiscovery">重试</button>
       </div>
-      <div class="discovery-columns">
+      <div v-if="hasDiscoveryContent" class="discovery-columns">
         <section class="discovery-section"><div class="section-heading"><h3>最近打开</h3><span>{{ recentNotes.length }}</span></div><p v-if="recentLoading" class="discovery-muted">加载中…</p><p v-else-if="!recentNotes.length" class="discovery-muted">还没有最近打开的笔记</p><button v-for="note in recentNotes" :key="`recent-${note.id}`" type="button" class="discovery-card" @click="openNote(note)"><strong>{{ note.name }}</strong><span>{{ note.summary || note.path || '笔记' }}</span><small>{{ note.word_count || 0 }} 字 · {{ formatDiscoveryDate(note.last_opened_at || note.updated_at) }}</small></button></section>
         <section class="discovery-section"><div class="section-heading"><h3>置顶笔记</h3><span>{{ pinnedNotes.length }}</span></div><p v-if="discoveryLoading" class="discovery-muted">加载中…</p><p v-else-if="!pinnedNotes.length" class="discovery-muted">暂无置顶笔记</p><button v-for="note in pinnedNotes" :key="`pinned-${note.id}`" type="button" class="discovery-card" @click="openNote(note)"><strong>{{ note.name }}</strong><span>{{ note.summary || note.path || '笔记' }}</span><small>{{ note.tags || '无标签' }} · {{ formatDiscoveryDate(note.updated_at) }}</small></button></section>
       </div>
@@ -300,6 +300,16 @@ let discoveryRequestId = 0
 const discoveryFilters = ref({ sort: 'updated', notebook_id: '', tag: '', pinned: false, updated_after: '', updated_before: '' })
 const hasDiscoveryFilters = computed(() => discoveryFilters.value.notebook_id || discoveryFilters.value.tag || discoveryFilters.value.pinned || discoveryFilters.value.updated_after || discoveryFilters.value.updated_before || discoveryFilters.value.sort !== 'updated')
 
+// The discovery columns are only worth their vertical space once there is
+// something in them, or while they are still loading / failing.
+const hasDiscoveryContent = computed(() => Boolean(
+  recentNotes.value.length
+  || pinnedNotes.value.length
+  || recentLoading.value
+  || discoveryLoading.value
+  || discoveryError.value,
+))
+
 const showDialog = ref(false)
 const creating = ref(false)
 const dialogError = ref(null)
@@ -533,23 +543,23 @@ watch(discoveryFilters, fetchDiscovery, { deep: true })
 
 .search-input {
   width: 100%;
-  min-height: 48px;
-  padding: var(--spacing-sm) var(--spacing-xl) var(--spacing-sm) calc(var(--spacing-md) + 28px);
-  font-size: var(--font-size-sm);
+  min-height: 52px;
+  padding: 12px var(--spacing-xl) 12px calc(var(--spacing-md) + 28px);
+  font-size: var(--font-size-base);
   font-family: var(--font-family);
   color: var(--color-text);
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius);
-  box-shadow: var(--shadow-sm);
+  background: #FFFFFF;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 14px 30px -26px rgba(15, 23, 42, 0.4);
   outline: none;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: box-shadow 0.18s ease;
   box-sizing: border-box;
 }
 
 .search-input:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15), var(--shadow-md);
+  border-color: transparent;
+  box-shadow: 0 0 0 3px rgba(12, 122, 91, 0.16), 0 14px 30px -26px rgba(15, 23, 42, 0.4);
 }
 
 .search-input::placeholder {
@@ -657,19 +667,19 @@ watch(discoveryFilters, fetchDiscovery, { deep: true })
 
 /* Discovery Panel */
 .discovery-panel { margin-bottom: var(--spacing-xl); }
-.discovery-toolbar { display: flex; flex-wrap: wrap; gap: var(--spacing-sm); margin-bottom: var(--spacing-lg); }
-.discovery-control { min-height: 44px; max-width: 220px; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-card); color: var(--color-text); font: inherit; box-shadow: var(--shadow-sm); }
-.pin-filter, .discovery-clear { min-height: 44px; display: inline-flex; align-items: center; gap: var(--spacing-xs); padding: var(--spacing-sm) var(--spacing-md); border-radius: var(--radius-lg); font-weight: 600; }
-.discovery-clear { border: 1px solid var(--color-border); background: var(--color-card); color: var(--color-primary); cursor: pointer; box-shadow: var(--shadow-sm); }
+.discovery-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: var(--spacing-lg); }
+.discovery-control { min-height: 44px; max-width: 220px; padding: 10px 14px; border: 0; border-radius: 999px; background: var(--home-soft); color: var(--color-text); font: inherit; box-shadow: none; }
+.pin-filter, .discovery-clear { min-height: 44px; display: inline-flex; align-items: center; gap: var(--spacing-xs); padding: 10px 16px; border-radius: 999px; font-weight: 600; color: var(--home-ink-tertiary); }
+.discovery-clear { border: 0; background: var(--home-soft); color: var(--rank-1-accent); cursor: pointer; box-shadow: none; }
 .discovery-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--spacing-lg); }
-.discovery-section { min-width: 0; padding: clamp(18px, 2vw, 24px); background: var(--color-card); border: 1px solid var(--color-border); border-radius: var(--surface-radius); box-shadow: var(--shadow-sm); }
+.discovery-section { min-width: 0; padding: clamp(18px, 2vw, 24px); background: #FFFFFF; border: 0; border-radius: 22px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px -30px rgba(15, 23, 42, 0.35); }
 .section-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-md); }
-.section-heading h3 { margin: 0; font-size: var(--font-size-lg); font-weight: 700; color: var(--color-text); }
-.section-heading span { color: var(--color-text-tertiary); font-size: var(--font-size-sm); }
-.discovery-card { display: flex; flex-direction: column; align-items: flex-start; width: 100%; min-height: 72px; gap: 6px; margin-top: var(--spacing-sm); padding: 12px 16px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface-low); color: var(--color-text); text-align: left; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
-.discovery-card:hover, .discovery-card:focus-visible { border-color: var(--color-border-strong); background: #ffffff; box-shadow: var(--shadow-sm); transform: translateY(-1px); outline: none; }
+.section-heading h3 { margin: 0; font-size: var(--font-size-lg); font-weight: 700; color: var(--color-text); letter-spacing: -0.01em; }
+.section-heading span { color: var(--home-ink-tertiary); font-size: var(--font-size-sm); background: var(--home-soft); padding: 2px 9px; border-radius: 999px; }
+.discovery-card { display: flex; flex-direction: column; align-items: flex-start; width: 100%; min-height: 64px; gap: 4px; margin-top: 6px; padding: 12px 14px; border: 0; border-radius: 14px; background: var(--home-soft); color: var(--color-text); text-align: left; cursor: pointer; transition: background 0.15s ease; }
+.discovery-card:hover, .discovery-card:focus-visible { background: var(--rank-1-bg); box-shadow: none; transform: none; outline: 2px solid var(--rank-1-accent); outline-offset: -2px; }
 .discovery-card strong { overflow-wrap: anywhere; font-weight: 600; color: var(--color-text); }
-.discovery-card span, .discovery-card small, .discovery-muted { color: var(--color-text-secondary); overflow-wrap: anywhere; }
+.discovery-card span, .discovery-card small, .discovery-muted { color: var(--home-ink-tertiary); overflow-wrap: anywhere; }
 @media (max-width: 767px) {
   .discovery-columns { grid-template-columns: 1fr; }
 
@@ -724,13 +734,13 @@ watch(discoveryFilters, fetchDiscovery, { deep: true })
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-lg);
+  padding: 10px var(--spacing-lg);
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: #fff;
-  background: var(--color-primary);
+  background: var(--rank-1-accent);
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: 999px;
   cursor: pointer;
   font-family: var(--font-family);
   transition: background 0.15s ease;
@@ -738,7 +748,7 @@ watch(discoveryFilters, fetchDiscovery, { deep: true })
 }
 
 .btn-create:hover {
-  background: var(--color-primary-dark);
+  background: #0A6B50;
 }
 
 .btn-create:disabled {
@@ -844,15 +854,15 @@ watch(discoveryFilters, fetchDiscovery, { deep: true })
   display: flex;
   align-items: flex-start;
   gap: var(--spacing-lg);
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius);
+  background: #FFFFFF;
+  border: 0;
+  border-radius: 20px;
   padding: var(--spacing-lg);
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px -30px rgba(15, 23, 42, 0.35);
   font: inherit;
   text-align: left;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: box-shadow 0.18s ease;
 }
 
 .notebook-delete-btn {
@@ -888,16 +898,16 @@ watch(discoveryFilters, fetchDiscovery, { deep: true })
 }
 
 .notebook-card:hover {
-  border-color: var(--color-border-strong);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
+  border-color: transparent;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 22px 44px -30px rgba(15, 23, 42, 0.45);
+  transform: none;
 }
 
 .notebook-icon {
   width: 48px;
   height: 48px;
   border-radius: var(--radius-xl);
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.16) 0%, rgba(14, 165, 233, 0.06) 100%);
+  background: var(--rank-1-bg);
   display: flex;
   align-items: center;
   justify-content: center;

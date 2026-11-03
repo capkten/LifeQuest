@@ -324,30 +324,32 @@ onMounted(() => {
 }
 
 .filter-btn {
-  padding: var(--spacing-xs) var(--spacing-md);
+  padding: 7px 16px;
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--color-text-secondary);
   background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  border-radius: 999px;
   cursor: pointer;
   font-family: var(--font-family);
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .filter-btn:hover {
-  background: var(--color-bg-tertiary);
+  background: rgba(255, 255, 255, 0.65);
+  color: var(--color-text);
 }
 
 .filter-btn--active {
-  background: var(--color-primary);
-  color: #fff;
-  border-color: var(--color-primary);
+  background: #FFFFFF;
+  color: var(--rank-1-accent);
+  border-color: transparent;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
 .filter-btn--active:hover {
-  background: var(--color-primary-dark);
+  background: #FFFFFF;
 }
 
 .filter-select {
@@ -596,9 +598,7 @@ onMounted(() => {
 }
 
 .summary-card--balance {
-  background:
-    linear-gradient(135deg, rgba(14, 165, 233, 0.12), rgba(29, 78, 216, 0.06)),
-    var(--color-card);
+  background: linear-gradient(120deg, #FFFFFF 0%, var(--rank-1-bg) 100%);
 }
 
 .summary-value {
@@ -607,11 +607,11 @@ onMounted(() => {
 
 .filter-bar {
   margin-bottom: 0;
-  padding: clamp(1rem, 0.85rem + 0.3vw, 1.2rem);
-  border-radius: var(--surface-radius-sm);
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-sm);
+  padding: 5px;
+  border-radius: 999px;
+  background: var(--home-soft);
+  border: 0;
+  box-shadow: none;
 }
 
 .filter-group {
@@ -629,11 +629,11 @@ onMounted(() => {
 }
 
 .transaction-group {
-  padding: clamp(1rem, 0.85rem + 0.3vw, 1.25rem);
-  border-radius: var(--surface-radius-sm);
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-sm);
+  padding: clamp(18px, 2.2vw, 26px);
+  border-radius: 22px;
+  background: #FFFFFF;
+  border: 0;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px -30px rgba(15, 23, 42, 0.35);
 }
 
 .group-date {

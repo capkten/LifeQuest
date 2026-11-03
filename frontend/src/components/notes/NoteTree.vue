@@ -564,10 +564,10 @@ function emitMobile(eventName, payload) {
 }
 
 .note-tree__item--selected > .note-tree__row {
-  background: #E0F2FE;
-  color: #0369A1;
+  background: var(--rank-1-chip);
+  color: var(--rank-1-accent);
   font-weight: 600;
-  box-shadow: inset 3px 0 0 #0284C7;
+  box-shadow: none;
 }
 
 .note-tree__label {
@@ -627,16 +627,26 @@ function emitMobile(eventName, payload) {
 }
 
 .note-tree__name {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* Actions float over the row on hover so the title keeps the full width. */
 .note-tree__actions {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
-  flex: 0 0 auto;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.92) 22%);
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.15s ease;
 }
 
@@ -647,6 +657,7 @@ function emitMobile(eventName, payload) {
 .note-tree__row:hover .note-tree__actions,
 .note-tree__row:focus-within .note-tree__actions {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .note-tree__action {

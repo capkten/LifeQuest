@@ -746,7 +746,7 @@ onMounted(() => {
 }
 
 .day-cell:hover {
-  background: var(--color-bg-tertiary);
+  background: var(--home-soft);
 }
 
 .day-cell--other {
@@ -770,9 +770,8 @@ onMounted(() => {
 }
 
 .day-cell--selected {
-  background: var(--color-primary);
-  background: rgba(14, 165, 233, 0.08);
-  border-radius: var(--radius-md);
+  background: var(--rank-1-chip);
+  border-radius: 12px;
 }
 
 .day-number {
@@ -1449,10 +1448,10 @@ onMounted(() => {
 .calendar-header {
   margin-bottom: 0;
   padding: clamp(1rem, 0.9rem + 0.25vw, 1.25rem);
-  border-radius: var(--surface-radius);
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-sm);
+  border-radius: 22px;
+  background: #FFFFFF;
+  border: 0;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px -30px rgba(15, 23, 42, 0.35);
 }
 
 .nav-btn,
@@ -1461,8 +1460,10 @@ onMounted(() => {
 }
 
 .today-btn {
-  border-radius: var(--radius-card);
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(29, 78, 216, 0.06));
+  border-radius: 999px;
+  background: var(--rank-1-bg);
+  color: var(--rank-1-accent);
+  border-color: transparent;
 }
 
 .calendar-body {
@@ -1472,8 +1473,9 @@ onMounted(() => {
 
 .calendar-grid-wrapper,
 .day-detail {
-  border-radius: var(--surface-radius);
-  box-shadow: var(--shadow-sm);
+  border-radius: 22px;
+  border: 0;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px -30px rgba(15, 23, 42, 0.35);
 }
 
 .calendar-grid-wrapper {
@@ -1497,9 +1499,9 @@ onMounted(() => {
 
 .detail-empty,
 .detail-placeholder {
-  border: 1px dashed var(--color-border);
-  border-radius: 16px;
-  background: rgba(248, 250, 255, 0.8);
+  border: 0;
+  border-radius: 18px;
+  background: var(--home-soft);
 }
 
 @media (max-width: 767px) {

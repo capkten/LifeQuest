@@ -620,16 +620,22 @@ test('ProjectDetail converts every caught error before showing it', async () => 
   }
 })
 
-test('Home task and goal catches are treated as visible errors', async () => {
+test('Home error catches are treated as visible errors', async () => {
   const source = await readFile(new URL('./Home.vue', import.meta.url), 'utf8')
   const visibleHomeCatches = readCatchBlocks(source)
     .filter(({ body }) => hasVisibleError(body))
-    .filter(({ body }) => /errorTasks|errorGoals/.test(body))
 
-  assert.equal(visibleHomeCatches.length, 2, 'Home task and goal errors must be scanned')
+  assert.ok(
+    visibleHomeCatches.length >= 3,
+    'Home must surface its check-in, page and completion failures instead of swallowing them',
+  )
   for (const { caughtName, body } of visibleHomeCatches) {
-    assert.match(body, new RegExp(`getErrorMessage\\(\\s*${caughtName}\\s*\\)`))
+    assert.match(body, new RegExp(`getErrorMessage\\(\\s*${caughtName}\\s*[,)]`))
   }
+
+  // The old tasks/goals panels were folded into the workbench and the habit
+  // section, so home no longer owns a second copy of those fetches.
+  assert.doesNotMatch(source, /fetchTasks|fetchGoals|errorTasks|errorGoals/)
 })
 
 test('visible errors in task 4 page catches use the caught error converter', async () => {

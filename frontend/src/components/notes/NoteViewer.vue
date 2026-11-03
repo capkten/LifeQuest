@@ -323,10 +323,10 @@ function formatDate(value) {
 
 .viewer-content :deep(blockquote) {
   margin: 1.2em 0;
-  padding: 10px 18px;
-  border-left: 3px solid var(--color-primary);
-  background: var(--color-surface-low);
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: 12px 18px;
+  border-left: 0;
+  background: var(--rank-1-bg);
+  border-radius: 14px;
   color: var(--color-text-secondary);
 }
 

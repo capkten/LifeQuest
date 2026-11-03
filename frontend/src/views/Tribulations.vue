@@ -101,20 +101,22 @@ onBeforeUnmount(() => previewController?.abort())
 .cultivation-eyebrow { color: var(--color-primary-dark) !important; font-size: 11px; font-weight: 800; letter-spacing: .14em; }
 .tribulations-layout { display: grid; grid-template-columns: minmax(0, 7fr) minmax(280px, 5fr); gap: var(--page-gap); align-items: start; }
 .tribulations-main, .tribulations-side { display: grid; gap: var(--page-gap); min-width: 0; }
-.tribulation-surface { display: grid; gap: var(--spacing-md); padding: var(--surface-padding); border: 1px solid var(--color-border); border-radius: var(--surface-radius); background: var(--color-card); box-shadow: var(--shadow-sm); }
+.tribulation-surface { display: grid; gap: 12px; padding: clamp(18px, 2.2vw, 26px); border: 0; border-radius: 22px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px -30px rgba(15, 23, 42, 0.35); }
 .tribulation-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-.tribulation-heading h2 { margin: 0; color: var(--color-text); font-size: 1.05rem; }
-.tribulation-heading strong { color: var(--color-primary-dark); }
-.tribulation-warning, .tribulation-help { margin: 0; color: var(--color-text-secondary); line-height: 1.7; }
-.readiness-list { display: grid; gap: 12px; margin: 0; }
-.readiness-list div { display: flex; justify-content: space-between; gap: 12px; }
-.readiness-list dt { color: var(--color-text-secondary); }
-.readiness-list dd { margin: 0; color: var(--color-text); font-weight: 700; }
-label { color: var(--color-text); font-weight: 600; }
-input { min-height: var(--touch-target-min); padding: 9px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text); background: var(--color-card); font: inherit; }
-.tribulation-result { display: grid; gap: 5px; padding: var(--surface-padding); border-left: 4px solid var(--color-primary); background: var(--color-card); box-shadow: var(--shadow-sm); }
-.tribulation-result--success { border-left-color: var(--color-success); }
-.tribulation-result--failure { border-left-color: var(--color-warning); }
-.tribulation-result span, .tribulation-result small { color: var(--color-text-secondary); }
+.tribulation-heading h2 { margin: 0; color: var(--color-text); font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+.tribulation-heading strong { color: var(--rank-1-accent); font-variant-numeric: tabular-nums; }
+.tribulation-warning, .tribulation-help { margin: 0; color: var(--home-ink-tertiary); line-height: 1.7; }
+.readiness-list { display: grid; gap: 0; margin: 0; }
+.readiness-list div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--home-hairline); }
+.readiness-list div:last-child { border-bottom: 0; }
+.readiness-list dt { color: var(--home-ink-tertiary); }
+.readiness-list dd { margin: 0; color: var(--color-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+label { color: var(--color-text); font-weight: 600; font-size: 13.5px; }
+input { min-height: var(--touch-target-min); padding: 9px 14px; border: 0; border-radius: 12px; color: var(--color-text); background: var(--home-soft); font: inherit; }
+input:focus { background: #FFFFFF; box-shadow: 0 0 0 3px rgba(12, 122, 91, 0.16); outline: none; }
+.tribulation-result { display: grid; gap: 5px; padding: 20px 22px; border: 0; border-radius: 18px; background: var(--rank-1-bg); box-shadow: none; }
+.tribulation-result--success { background: var(--rank-1-bg); }
+.tribulation-result--failure { background: #FDF3E4; }
+.tribulation-result span, .tribulation-result small { color: var(--home-ink-tertiary); }
 @media (max-width: 767px) { .tribulations-layout { grid-template-columns: 1fr; } }
 </style>

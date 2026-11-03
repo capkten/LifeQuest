@@ -2,18 +2,18 @@
   <section class="today-action-center" aria-labelledby="today-action-title">
     <header class="today-action-header">
       <div>
-        <span class="today-action-kicker">今日行动</span>
-        <h2 id="today-action-title">先完成最重要的一件事</h2>
+        <span class="today-action-kicker">每日节奏</span>
+        <h2 id="today-action-title">习惯与日程</h2>
         <p v-if="data" class="today-action-summary">
-          {{ data.summary.open_count }} 个待处理事项，{{ data.summary.completed_count }} 个事项已完成
+          {{ data.summary.habit_completed_count }}/{{ data.summary.habit_due_count }} 个习惯已完成
         </p>
       </div>
-      <router-link to="/todos" class="today-action-link">管理待办</router-link>
+      <router-link to="/todos" class="today-action-link">管理习惯</router-link>
     </header>
 
     <div v-if="loading && !data" class="today-action-state" aria-live="polite">
       <span class="loading-spinner"></span>
-      <span>正在整理今天的行动...</span>
+      <span>正在整理今天的习惯…</span>
     </div>
 
     <div v-else-if="error && !data" class="today-action-state today-action-state--error" role="alert">
@@ -22,96 +22,12 @@
     </div>
 
     <template v-else-if="data">
-      <div class="today-action-metrics" aria-label="今日行动统计">
-        <div class="today-action-metric">
-          <strong>{{ data.summary.open_count }}</strong>
-          <span>待处理</span>
-        </div>
-        <div class="today-action-metric today-action-metric--danger">
-          <strong>{{ data.summary.overdue_count }}</strong>
-          <span>已逾期</span>
-        </div>
-        <div class="today-action-metric today-action-metric--success">
-          <strong>{{ data.summary.habit_completed_count }}/{{ data.summary.habit_due_count }}</strong>
-          <span>习惯完成</span>
-        </div>
-      </div>
-
       <div v-if="error" class="today-action-inline-error" role="alert" aria-live="polite">
         <span>{{ errorText }}</span>
         <button type="button" @click="$emit('retry')">重新加载</button>
       </div>
 
-      <div v-if="data.next_action" class="today-next-action">
-        <div>
-          <span class="today-next-action-label">下一步</span>
-          <strong>{{ data.next_action.title }}</strong>
-        </div>
-        <button
-          type="button"
-          class="today-next-action-button"
-          :disabled="data.next_action.action === 'complete' && completingKey !== null"
-          @click="handleItem(data.next_action)"
-        >
-          {{ data.next_action.action === 'complete' ? '完成' : '查看' }}
-        </button>
-      </div>
-
       <div v-if="hasActions" class="today-action-sections">
-        <section v-if="data.sections.overdue.length" class="today-action-group" aria-labelledby="overdue-actions-title">
-          <div class="today-action-group-heading">
-            <h3 id="overdue-actions-title">逾期事项</h3>
-            <span>{{ data.sections.overdue.length }}</span>
-          </div>
-          <div class="today-action-list">
-            <article v-for="item in data.sections.overdue" :key="itemKey(item)" class="today-action-item today-action-item--overdue">
-              <button
-                v-if="item.action === 'complete'"
-                type="button"
-                class="today-action-check"
-                :disabled="completingKey !== null"
-                :aria-label="`完成 ${item.title}`"
-                @click="handleItem(item)"
-              >
-                <span v-if="isCompleting(item)" class="loading-spinner loading-spinner--sm"></span>
-                <span v-else aria-hidden="true"></span>
-              </button>
-              <div class="today-action-item-copy">
-                <strong>{{ item.title }}</strong>
-                <span>{{ itemMeta(item) }}</span>
-              </div>
-              <button v-if="item.action === 'open'" type="button" class="today-action-item-open" @click="handleItem(item)">查看</button>
-            </article>
-          </div>
-        </section>
-
-        <section v-if="data.sections.today.length" class="today-action-group" aria-labelledby="today-actions-title">
-          <div class="today-action-group-heading">
-            <h3 id="today-actions-title">今天安排</h3>
-            <span>{{ data.sections.today.length }}</span>
-          </div>
-          <div class="today-action-list">
-            <article v-for="item in data.sections.today" :key="itemKey(item)" class="today-action-item">
-              <button
-                v-if="item.action === 'complete'"
-                type="button"
-                class="today-action-check"
-                :disabled="completingKey !== null"
-                :aria-label="`完成 ${item.title}`"
-                @click="handleItem(item)"
-              >
-                <span v-if="isCompleting(item)" class="loading-spinner loading-spinner--sm"></span>
-                <span v-else aria-hidden="true"></span>
-              </button>
-              <div class="today-action-item-copy">
-                <strong>{{ item.title }}</strong>
-                <span>{{ itemMeta(item) }}</span>
-              </div>
-              <button v-if="item.action === 'open'" type="button" class="today-action-item-open" @click="handleItem(item)">查看</button>
-            </article>
-          </div>
-        </section>
-
         <section v-if="data.sections.habits.length" class="today-action-group" aria-labelledby="habit-actions-title">
           <div class="today-action-group-heading">
             <h3 id="habit-actions-title">今日习惯</h3>
@@ -163,9 +79,9 @@
       </div>
 
       <div v-else class="today-action-empty">
-        <strong>今天没有需要处理的事项</strong>
-        <span>为自己安排一个小目标，保持行动节奏。</span>
-        <router-link to="/todos" class="today-action-empty-link">创建任务</router-link>
+        <strong>今天没有到点的习惯</strong>
+        <span>给自己安排一个每日节奏，进度会自己累积。</span>
+        <router-link to="/todos" class="today-action-empty-link">创建习惯</router-link>
       </div>
     </template>
   </section>
@@ -207,359 +123,292 @@ function handleItem(item) {
     emit('open', item)
   }
 }
-
-function itemMeta(item) {
-  const labels = []
-  if (item.overdue) labels.push('已逾期')
-  if (item.priority) labels.push(item.priority === 'urgent' ? '紧急' : item.priority === 'high' ? '高优先级' : '')
-  if (item.deadline) {
-    const deadline = new Date(item.deadline)
-    if (!Number.isNaN(deadline.getTime())) labels.push(`截止 ${deadline.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`)
-  }
-  return labels.filter(Boolean).join(' · ') || '立即行动'
-}
 </script>
 
 <style scoped>
 .today-action-center {
-  padding: var(--surface-padding);
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius);
-  background: var(--color-card);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  padding: clamp(18px, 2.4vw, 32px);
+  border: 0;
+  border-radius: 26px;
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px -28px rgba(15, 23, 42, 0.35);
 }
 
 .today-action-header,
 .today-action-group-heading,
 .today-action-item,
-.today-next-action {
+.today-action-state,
+.today-action-inline-error {
   display: flex;
   align-items: center;
 }
 
-.today-action-header,
-.today-action-group-heading,
-.today-next-action {
+.today-action-header {
   justify-content: space-between;
-  gap: var(--spacing-md);
-}
-
-.today-action-kicker,
-.today-next-action-label {
-  display: block;
-  color: var(--color-primary-dark);
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  gap: 16px;
+  align-items: flex-start;
 }
 
 .today-action-header h2 {
-  margin: 4px 0 0;
-  color: var(--color-text);
-  font-size: var(--font-size-xl);
+  margin: 0 0 6px;
+  font-size: clamp(19px, 2.6vw, 22px);
+  letter-spacing: -0.01em;
+}
+
+.today-action-kicker {
+  display: inline-block;
+  margin-bottom: 6px;
+  color: var(--rank-1-accent);
+  font-size: 11.5px;
   font-weight: 700;
-  line-height: 1.25;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.06em;
 }
 
 .today-action-summary {
-  margin: 6px 0 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
+  margin: 0;
+  color: var(--home-ink-tertiary);
+  font-size: 13px;
 }
 
-.today-action-link,
-.today-action-empty-link {
-  color: var(--color-primary-dark);
-  font-size: var(--font-size-sm);
-  font-weight: 700;
-  white-space: nowrap;
-  transition: color 0.15s ease;
-}
-
-.today-action-link:hover,
-.today-action-empty-link:hover {
-  color: var(--color-primary);
-}
-
-.today-action-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin: var(--spacing-lg) 0;
-}
-
-.today-action-metric {
-  display: grid;
-  gap: 3px;
-  padding: 10px 14px;
-  border-left: 3px solid var(--color-primary);
-  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
-  background: var(--color-bg-tertiary);
-  border-top: 1px solid var(--color-border);
-  border-right: 1px solid var(--color-border);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.today-action-metric strong {
-  color: var(--color-text);
-  font-size: var(--font-size-lg);
-  font-weight: 700;
-}
-
-.today-action-metric span {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-}
-
-.today-action-metric--danger {
-  border-left-color: var(--color-error);
-  background: rgba(239, 68, 68, 0.06);
-  border-color: rgba(239, 68, 68, 0.15);
-}
-
-.today-action-metric--danger strong {
-  color: var(--color-error-dark);
-}
-
-.today-action-metric--success {
-  border-left-color: var(--color-accent);
-  background: rgba(16, 185, 129, 0.06);
-  border-color: rgba(16, 185, 129, 0.15);
-}
-
-.today-action-metric--success strong {
-  color: var(--color-accent-dark);
-}
-
-.today-action-inline-error,
-.today-action-state--error {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--color-error-dark);
-  background: rgba(239, 68, 68, 0.08);
-  border-radius: var(--radius-md);
-}
-
-.today-action-inline-error {
-  padding: 8px 12px;
-  margin-bottom: var(--spacing-md);
-  font-size: var(--font-size-sm);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-}
-
-.today-action-inline-error button {
-  border: 0;
-  color: inherit;
-  background: transparent;
-  font-weight: 700;
-  cursor: pointer;
+.today-action-link {
+  color: var(--rank-1-accent);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
   white-space: nowrap;
 }
 
 .today-action-state {
-  display: flex;
-  min-height: 100px;
-  align-items: center;
-  justify-content: center;
   gap: 10px;
-  color: var(--color-text-secondary);
+  color: var(--home-ink-tertiary);
+  font-size: 13.5px;
+  padding: 18px 0;
 }
 
 .today-action-state--error {
-  min-height: 100px;
-  padding: 14px;
-  border-radius: var(--radius-lg);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  flex-direction: column;
+  align-items: flex-start;
+  color: #b42318;
 }
 
-.today-action-state--error p { margin: 0; }
-
-.today-next-action {
-  padding: 12px 16px;
-  margin-bottom: var(--spacing-lg);
-  border: 1px solid rgba(14, 165, 233, 0.25);
-  border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.08) 0%, rgba(16, 185, 129, 0.06) 100%);
+.today-action-state--error p {
+  margin: 0 0 10px;
 }
 
-.today-next-action strong {
-  display: block;
-  margin-top: 3px;
+.retry-btn {
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--home-hairline);
+  background: #FFFFFF;
   color: var(--color-text);
-  font-size: var(--font-size-base);
-  font-weight: 700;
-}
-
-.today-next-action-button {
-  min-width: 72px;
-  min-height: 38px;
-  padding: 6px 14px;
-  border: 1px solid var(--color-primary);
-  border-radius: var(--radius-md);
-  color: #ffffff;
-  background: var(--color-primary);
-  font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 2px 8px rgba(14, 165, 233, 0.25);
 }
 
-.today-next-action-button:hover:not(:disabled) {
-  background: var(--color-primary-dark);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.35);
+.retry-btn:focus-visible,
+.today-action-item-open:focus-visible,
+.today-action-check:focus-visible,
+.today-action-inline-error button:focus-visible {
+  outline: 2px solid var(--rank-1-accent);
+  outline-offset: 3px;
 }
 
-.today-next-action-button:disabled { cursor: wait; opacity: 0.65; }
+.today-action-inline-error {
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #FEF3F2;
+  color: #b42318;
+  font-size: 13px;
+}
 
-.today-action-sections { display: grid; gap: var(--spacing-lg); }
+.today-action-inline-error button {
+  min-height: 40px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(180, 35, 24, 0.25);
+  background: #FFFFFF;
+  color: #b42318;
+  cursor: pointer;
+}
+
+.today-action-sections {
+  display: grid;
+  gap: 4px;
+  margin-top: 20px;
+}
+
+.today-action-group {
+  padding: 18px 0 6px;
+  border-top: 1px solid var(--home-hairline);
+}
 
 .today-action-group-heading {
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-color);
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
 }
 
 .today-action-group-heading h3 {
   margin: 0;
-  color: #17324d;
-  font-size: var(--font-size-sm);
+  font-size: 15px;
+  font-weight: 650;
 }
 
 .today-action-group-heading span {
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
+  color: var(--home-ink-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  background: var(--home-soft);
+  padding: 2px 9px;
+  border-radius: 999px;
 }
 
-.today-action-list { display: grid; gap: 8px; margin-top: 10px; }
+.today-action-list {
+  display: grid;
+}
 
 .today-action-item {
-  display: flex;
-  align-items: center;
-  min-height: 56px;
-  gap: 12px;
-  padding: 10px 14px;
-  border-radius: var(--radius-lg);
-  background: var(--color-surface-low);
-  border: 1px solid var(--color-border);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--home-hairline);
+  min-width: 0;
+  color: var(--color-text);
 }
 
-.today-action-item:hover {
-  background: #ffffff;
-  border-color: var(--color-border-strong);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
-}
-
-.today-action-item--overdue {
-  border-left: 3px solid var(--color-error);
-  color: var(--color-error-dark);
-}
-.today-action-item--done { opacity: 0.7; }
-
-.today-action-check,
-.today-action-symbol {
-  flex: 0 0 32px;
-  width: 32px;
-  height: 32px;
+.today-action-item:last-child {
+  border-bottom: 0;
 }
 
 .today-action-check {
   display: grid;
   place-items: center;
-  padding: 0;
-  border: 1.5px solid var(--color-border-strong);
-  border-radius: 50%;
-  color: #ffffff;
-  background: #ffffff;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid var(--home-hairline);
+  background: #FFFFFF;
+  color: var(--rank-1-accent);
+  font-size: 18px;
   cursor: pointer;
-  transition: all 0.15s ease;
 }
 
-.today-action-check:hover:not(:disabled) {
-  border-color: var(--color-primary);
-  background: rgba(14, 165, 233, 0.1);
+.today-action-check > span:not(.loading-spinner) {
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
 }
-
-.today-action-check > span[aria-hidden="true"] { width: 8px; height: 8px; border-radius: 50%; background: var(--color-text-tertiary); }
-.today-action-check:disabled { cursor: wait; opacity: 0.65; }
 
 .today-action-check--done {
+  border-color: transparent;
+  background: var(--rank-1-chip);
+  color: var(--rank-1-accent);
+}
+
+.today-action-item-copy {
   display: grid;
-  place-items: center;
-  border: 1.5px solid var(--color-success);
-  background: rgba(34, 197, 94, 0.12);
-  border-radius: 50%;
-  color: var(--color-success-dark);
-  font-size: 16px;
-  font-weight: 700;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.today-action-item-copy strong {
+  font-weight: 600;
+  font-size: 14.5px;
+  overflow-wrap: anywhere;
+}
+
+.today-action-item-copy span {
+  color: var(--home-ink-tertiary);
+  font-size: 12.5px;
+}
+
+.today-action-item--done .today-action-item-copy strong {
+  color: var(--color-text-secondary);
 }
 
 .today-action-symbol {
   display: grid;
   place-items: center;
-  color: var(--color-primary-dark);
-  font-size: 20px;
-  border-radius: var(--radius-md);
-  background: rgba(14, 165, 233, 0.08);
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  font-size: 16px;
 }
 
-.today-action-item-copy { min-width: 0; flex: 1; }
-
-.today-action-item-copy strong,
-.today-action-item-copy span {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.today-action-symbol--goal {
+  background: var(--rank-3-chip);
+  color: var(--rank-3-accent);
 }
-
-.today-action-item-copy strong { color: var(--color-text); font-size: var(--font-size-sm); font-weight: 600; }
-.today-action-item-copy span { margin-top: 2px; color: var(--color-text-secondary); font-size: var(--font-size-xs); }
 
 .today-action-item-open {
-  min-height: 34px;
-  padding: 4px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-primary-dark);
-  background: #ffffff;
-  font-size: var(--font-size-xs);
-  font-weight: 600;
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--home-hairline);
+  background: #FFFFFF;
+  color: var(--color-text);
+  font-size: 13px;
   cursor: pointer;
-  transition: all 0.15s ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-}
-
-.today-action-item-open:hover {
-  background: var(--color-surface-low);
-  border-color: var(--color-primary);
-  color: var(--color-primary);
 }
 
 .today-action-empty {
   display: grid;
-  justify-items: start;
   gap: 6px;
-  padding: 22px 0 4px;
-  color: var(--text-secondary);
+  justify-items: start;
+  margin-top: 20px;
+  padding: 24px;
+  border-radius: 18px;
+  background: var(--home-soft);
+  color: var(--home-ink-tertiary);
+  font-size: 13.5px;
 }
 
-.today-action-empty strong { color: #17324d; }
+.today-action-empty strong {
+  color: var(--color-text);
+  font-size: 15px;
+}
+
+.today-action-empty-link {
+  margin-top: 6px;
+  color: var(--rank-1-accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(15, 138, 103, 0.25);
+  border-top-color: var(--rank-1-accent);
+  border-radius: 50%;
+  animation: ac-spin 0.8s linear infinite;
+}
+
+.loading-spinner--sm {
+  width: 14px;
+  height: 14px;
+}
+
+@keyframes ac-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner { animation: none; }
+}
 
 @media (max-width: 600px) {
-  .today-action-center { padding: 16px; }
-  .today-action-header { align-items: flex-start; }
-  .today-action-header h2 { font-size: var(--font-size-lg); }
-  .today-action-metrics { gap: 6px; }
-  .today-action-metric { padding: 9px 8px; }
-  .today-action-metric strong { font-size: var(--font-size-md); }
-  .today-action-inline-error { align-items: flex-start; flex-direction: column; }
+  .today-action-center { border-radius: 20px; }
+  .today-action-header { flex-wrap: wrap; }
+  .today-action-check,
+  .today-action-symbol { flex-basis: 44px; width: 44px; height: 44px; }
+  .today-action-item-open { min-height: 48px; }
 }
 </style>

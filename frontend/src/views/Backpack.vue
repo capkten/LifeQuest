@@ -543,38 +543,42 @@ onMounted(() => {
 
 /* Filter Tabs */
 .filter-tabs {
-  display: flex;
-  gap: var(--spacing-sm);
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
   margin-bottom: var(--spacing-xl);
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: 0;
+  border-bottom: 0;
+  padding: 5px;
+  background: var(--home-soft);
+  border-radius: 999px;
 }
 
 .tab-btn {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-lg);
+  padding: 8px 16px;
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--color-text-secondary);
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-radius: 999px;
   cursor: pointer;
   font-family: var(--font-family);
-  transition: color 0.15s ease, border-color 0.15s ease;
-  margin-bottom: -1px;
-  text-transform: capitalize;
+  transition: color 0.15s ease, background 0.15s ease;
+  margin-bottom: 0;
 }
 
 .tab-btn:hover {
   color: var(--color-text);
+  background: rgba(255, 255, 255, 0.6);
 }
 
 .tab-btn--active {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
+  color: var(--rank-1-accent);
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
 .tab-count {
@@ -587,28 +591,16 @@ onMounted(() => {
 }
 
 .tab-count--all {
-  background: var(--color-bg-tertiary);
-  color: var(--color-text-tertiary);
+  background: rgba(15, 23, 42, 0.05);
+  color: var(--home-ink-tertiary);
 }
 
-.tab-count--consumable {
-  background: rgba(255, 107, 107, 0.12);
-  color: var(--color-error);
-}
-
-.tab-count--gear {
-  background: rgba(14, 165, 233, 0.12);
-  color: var(--color-secondary);
-}
-
-.tab-count--collectible {
-  background: rgba(14, 165, 233, 0.12);
-  color: var(--color-primary);
-}
-
+.tab-count--consumable,
+.tab-count--gear,
+.tab-count--collectible,
 .tab-count--quest {
-  background: rgba(255, 217, 61, 0.12);
-  color: var(--color-warning);
+  background: rgba(15, 23, 42, 0.05);
+  color: var(--home-ink-tertiary);
 }
 
 /* Loading spinner stays local: inline card actions reuse it. */
@@ -1094,15 +1086,16 @@ onMounted(() => {
   align-items: end;
   gap: 4px 12px;
   min-width: 0;
-  padding: 16px 18px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-card);
+  padding: 16px 20px;
+  border: 0;
+  border-radius: 20px;
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px -30px rgba(15, 23, 42, 0.35);
 }
 
 .inventory-summary-card--primary {
-  border-color: rgba(14, 165, 233, 0.28);
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.1), var(--color-card));
+  border-color: transparent;
+  background: linear-gradient(120deg, #FFFFFF 0%, var(--rank-1-bg) 100%);
 }
 
 .inventory-summary-label,

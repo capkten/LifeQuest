@@ -44,18 +44,18 @@ function signed(value) { return Number(value) > 0 ? `+${value}` : value }
 </script>
 
 <style scoped>
-.tribulation-probability { display: grid; gap: var(--spacing-md); }
+.tribulation-probability { display: grid; gap: 14px; min-width: 0; padding: clamp(18px, 2.2vw, 26px); }
 .tribulation-section-heading { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
-.tribulation-eyebrow { margin: 0 0 4px; color: var(--color-primary-dark); font-size: 11px; font-weight: 800; letter-spacing: .14em; }
-.tribulation-section-heading h2 { margin: 0; color: var(--color-text); font-size: 1.1rem; }
-.tribulation-target { color: var(--color-text-secondary); font-size: var(--font-size-sm); }
-.tribulation-probability-value { display: grid; gap: 2px; padding: 18px; border: 1px solid var(--color-border); background: var(--color-bg-secondary); text-align: center; }
-.tribulation-probability-value strong { color: var(--color-primary-dark); font-size: 2.2rem; line-height: 1; }
-.tribulation-probability-value span, .tribulation-loading { color: var(--color-text-secondary); }
-.tribulation-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 0; }
-.tribulation-details div { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px; }
-.tribulation-details dt { color: var(--color-text-secondary); }
-.tribulation-details dd { margin: 0; color: var(--color-text); font-weight: 700; text-align: right; }
+.tribulation-eyebrow { margin: 0 0 4px; color: var(--rank-1-accent); font-size: 11.5px; font-weight: 700; letter-spacing: .06em; }
+.tribulation-section-heading h2 { margin: 0; color: var(--color-text); font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+.tribulation-target { color: var(--home-ink-tertiary); font-size: var(--font-size-sm); }
+.tribulation-probability-value { display: grid; gap: 2px; padding: 18px; border: 0; border-radius: 18px; background: var(--rank-1-bg); text-align: center; }
+.tribulation-probability-value strong { color: var(--rank-1-accent); font-size: 2.4rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.tribulation-probability-value span, .tribulation-loading { color: var(--home-ink-tertiary); }
+.tribulation-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; margin: 0; min-width: 0; }
+.tribulation-details div { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--home-hairline); padding-bottom: 8px; min-width: 0; }
+.tribulation-details dt { color: var(--home-ink-tertiary); min-width: 0; }
+.tribulation-details dd { margin: 0; color: var(--color-text); font-weight: 650; text-align: right; min-width: 0; overflow-wrap: anywhere; }
 .tribulation-submit { width: 100%; }
 .tribulation-spinner { width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; display: inline-block; vertical-align: -2px; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

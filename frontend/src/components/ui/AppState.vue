@@ -62,10 +62,10 @@ const defaultTitle = computed(() => DEFAULT_TITLES[props.state] || DEFAULT_TITLE
   gap: var(--spacing-xs);
   min-height: 180px;
   padding: var(--spacing-xl) var(--spacing-lg);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-card);
-  background: var(--color-card);
-  color: var(--color-text-secondary);
+  border: 0;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--home-ink-tertiary);
   text-align: center;
 }
 
@@ -76,14 +76,27 @@ const defaultTitle = computed(() => DEFAULT_TITLES[props.state] || DEFAULT_TITLE
 }
 
 .app-state--error {
-  border-color: rgba(239, 68, 68, 0.32);
-  background: rgba(239, 68, 68, 0.04);
+  border-color: transparent;
+  background: #FEF3F2;
+}
+
+.app-state__icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--home-soft);
+}
+
+.app-state--error .app-state__icon {
+  background: rgba(239, 68, 68, 0.1);
 }
 
 .app-state__icon svg {
-  width: 28px;
-  height: 28px;
-  color: var(--color-text-tertiary);
+  width: 26px;
+  height: 26px;
+  color: var(--home-ink-tertiary);
 }
 
 .app-state--error .app-state__icon svg {
@@ -93,15 +106,15 @@ const defaultTitle = computed(() => DEFAULT_TITLES[props.state] || DEFAULT_TITLE
 .app-state__spinner {
   width: 22px;
   height: 22px;
-  border: 2px solid var(--color-border);
-  border-top-color: var(--color-primary);
+  border: 2px solid var(--home-soft);
+  border-top-color: var(--rank-1-accent);
   border-radius: var(--radius-full);
   animation: app-state-spin 700ms linear infinite;
 }
 
 .app-state__title {
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: 650;
   color: var(--color-text);
 }
 
@@ -109,7 +122,7 @@ const defaultTitle = computed(() => DEFAULT_TITLES[props.state] || DEFAULT_TITLE
   max-width: 34ch;
   font-size: var(--font-size-xs);
   line-height: 1.6;
-  color: var(--color-text-secondary);
+  color: var(--home-ink-tertiary);
 }
 
 .app-state__actions {

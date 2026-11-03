@@ -179,7 +179,7 @@ async function handleRegister() {
   justify-content: center;
   gap: 32px;
   background:
-    radial-gradient(circle at 18% 20%, rgba(14, 165, 233, 0.2), transparent 30%),
+    radial-gradient(circle at 18% 20%, rgba(12, 122, 91, 0.16), transparent 34%),
     radial-gradient(circle at 82% 78%, rgba(16, 185, 129, 0.12), transparent 28%),
     var(--color-bg);
   padding: max(var(--spacing-xl), var(--safe-area-top)) var(--spacing-xl) max(var(--spacing-xl), var(--safe-area-bottom));

@@ -213,10 +213,10 @@ onMounted(() => {
 .timeline-card,
 .summary-card,
 .feedback-card {
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius);
-  box-shadow: var(--shadow-sm);
+  background: #FFFFFF;
+  border: 0;
+  border-radius: 22px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px -30px rgba(15, 23, 42, 0.35);
 }
 
 .history-hero {

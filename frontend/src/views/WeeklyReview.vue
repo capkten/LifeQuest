@@ -362,15 +362,15 @@ onMounted(loadReview)
 .review-period,
 .review-section,
 .summary-item {
-  border: 1px solid var(--color-border);
-  background: var(--color-card);
-  border-radius: var(--surface-radius);
-  box-shadow: var(--shadow-sm);
+  border: 0;
+  background: #FFFFFF;
+  border-radius: 22px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px -30px rgba(15, 23, 42, 0.35);
 }
 
 .review-period {
-  padding: var(--spacing-lg) var(--spacing-xl);
-  border-left: 4px solid var(--color-primary);
+  padding: clamp(18px, 2.2vw, 26px) clamp(20px, 2.4vw, 30px);
+  border-left: 0;
 }
 
 .review-period h2 {
@@ -403,22 +403,22 @@ onMounted(loadReview)
 
 .summary-item {
   display: flex;
-  min-height: 128px;
+  min-height: 116px;
   flex-direction: column;
   justify-content: space-between;
-  padding: var(--spacing-lg);
-  border-top: 3px solid var(--color-border);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: clamp(16px, 2vw, 22px);
+  border-top: 0;
+  transition: box-shadow 0.18s ease;
 }
 
 .summary-item:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--color-border-strong);
+  transform: none;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 22px 44px -30px rgba(15, 23, 42, 0.45);
+  border-color: transparent;
 }
 
-.summary-item--accent { border-top-color: var(--color-primary); }
-.summary-item--warning { border-top-color: var(--color-secondary); }
+.summary-item--accent { border-top-color: transparent; }
+.summary-item--warning { border-top-color: transparent; }
 
 .summary-label {
   color: var(--color-text-secondary);
@@ -479,16 +479,18 @@ onMounted(loadReview)
 
 .reward-item {
   display: flex;
-  min-height: 72px;
+  min-height: 68px;
   flex-direction: column;
   justify-content: space-between;
-  padding: var(--spacing-sm);
-  border: 1px solid var(--color-border-light, var(--color-border));
-  background: var(--color-surface-low);
+  gap: 2px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--home-soft);
 }
 
-.reward-item span { color: var(--color-text-secondary); font-size: var(--font-size-xs); }
-.reward-item strong { color: var(--color-text); font-size: var(--font-size-lg); }
+.reward-item span { color: var(--home-ink-tertiary); font-size: 11.5px; }
+.reward-item strong { color: var(--color-text); font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; }
 
 .review-list,
 .suggestion-list {

@@ -493,33 +493,32 @@ onMounted(() => {
   gap: var(--spacing-lg);
   margin-bottom: var(--spacing-lg);
   padding: clamp(20px, 2.5vw, 28px);
-  background:
-    radial-gradient(circle at 86% 18%, rgba(56, 189, 248, 0.28), transparent 36%),
-    linear-gradient(135deg, #0F172A 0%, #1E293B 52%, #0369A1 100%);
-  border-radius: var(--surface-radius);
-  color: #fff;
-  box-shadow: var(--shadow-md);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(120deg, #FFFFFF 0%, #FBFEFC 100%);
+  border-radius: 22px;
+  color: var(--color-text);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px -30px rgba(15, 23, 42, 0.35);
+  border: 0;
 }
 
 .project-summary-kicker {
   display: block;
   margin-bottom: 6px;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
+  color: var(--rank-1-accent);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
 }
 
 .project-summary-card h3 {
-  color: #fff;
+  color: var(--color-text);
   font-size: var(--font-size-xl);
   font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .project-summary-copy {
   margin-top: 6px;
-  color: rgba(255, 255, 255, 0.84);
+  color: var(--home-ink-tertiary);
   font-size: var(--font-size-sm);
   line-height: 1.5;
 }
@@ -533,19 +532,19 @@ onMounted(() => {
 
 .project-summary-stats span {
   min-width: 92px;
-  padding: 10px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(8px);
-  color: rgba(255, 255, 255, 0.82);
+  padding: 8px 16px;
+  border: 0;
+  border-left: 1px solid var(--home-hairline);
+  border-radius: 0;
+  background: transparent;
+  color: var(--home-ink-tertiary);
   font-size: var(--font-size-xs);
   text-align: center;
 }
 
 .project-summary-stats strong {
   display: block;
-  color: #fff;
+  color: var(--color-text);
   font-family: var(--font-family-display);
   font-size: var(--font-size-xl);
 }

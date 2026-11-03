@@ -21,6 +21,15 @@
 }
 
 /* Cultivation shared surfaces reserve space for server-backed states. */
+.cultivation-npc-timeline > h2,
+.cultivation-technique-slot-grid > h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
 .cultivation-status-bar,
 .cultivation-realm-progress,
 .cultivation-resource-summary,
@@ -38,10 +47,10 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   min-height: 112px;
-  background: linear-gradient(135deg, #FFFFFF 0%, rgba(240, 249, 255, 0.8) 100%);
-  border: 1px solid rgba(14, 165, 233, 0.18);
-  border-radius: var(--surface-radius);
-  box-shadow: var(--shadow-sm);
+  background: #FFFFFF;
+  border: 0;
+  border-radius: 22px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px -30px rgba(15, 23, 42, 0.35);
 }
 
 .cultivation-status-bar__metrics,
@@ -63,11 +72,11 @@
   align-items: center;
   gap: 4px;
   padding: 6px 12px;
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-tertiary);
-  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--home-soft);
+  border: 0;
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+  color: var(--home-ink-tertiary);
 }
 
 .cultivation-section-heading span,
@@ -96,17 +105,17 @@
 }
 
 .cultivation-progress-track {
-  height: 10px;
+  height: 8px;
   overflow: hidden;
-  border-radius: var(--radius-full);
-  background: var(--color-bg-tertiary);
+  border-radius: 999px;
+  background: #E6EFEC;
 }
 
 .cultivation-progress-track span {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
+  background: linear-gradient(90deg, #12B886, #38D9A9);
   transition: width var(--transition-base);
 }
 
@@ -156,12 +165,12 @@
 
 .cultivation-action {
   min-height: var(--touch-target-min);
-  border: 1px solid var(--color-primary);
-  border-radius: var(--radius-md);
-  padding: 0.625rem 1rem;
-  background: var(--color-primary);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.625rem 1.25rem;
+  background: var(--rank-1-accent);
   color: #fff;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .cultivation-action:hover:not(:disabled),
@@ -172,6 +181,22 @@
 .cultivation-action:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.cultivation-action--compact {
+  min-height: 40px;
+  padding: 4px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--rank-1-accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cultivation-action--compact:hover:not(:disabled),
+.cultivation-action--compact:focus-visible:not(:disabled) {
+  background: var(--rank-1-bg);
 }
 
 .cultivation-action[aria-disabled='true'],
@@ -195,34 +220,62 @@
 .cultivation-slot-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-auto-rows: minmax(112px, 1fr);
-  gap: var(--spacing-sm);
-  min-height: 112px;
+  grid-auto-rows: minmax(84px, auto);
+  gap: 8px;
+  min-height: 84px;
 }
 
 .cultivation-slot,
 .cultivation-map-node {
   min-width: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-card);
+  border: 0;
+  border-radius: 16px;
+  background: #FFFFFF;
   color: var(--color-text);
   text-align: left;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 12px 26px -24px rgba(15, 23, 42, 0.32);
 }
 
 .cultivation-slot {
   display: grid;
   align-content: center;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-sm);
+  gap: 4px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--home-soft);
+  box-shadow: none;
+}
+
+.cultivation-slot__type {
+  color: var(--home-ink-tertiary);
+  font-size: 11.5px;
+}
+
+.cultivation-slot strong {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.cultivation-slot--next {
+  background: var(--rank-1-bg);
+}
+
+.cultivation-slot--next strong {
+  color: var(--rank-1-accent);
+}
+
+.cultivation-slot__conflict {
+  color: var(--color-error);
+  font-size: 11.5px;
+  font-weight: 600;
 }
 
 .cultivation-slot:hover,
 .cultivation-slot:focus-visible,
 .cultivation-map-node:hover,
 .cultivation-map-node:focus-visible {
-  border-color: var(--color-primary);
-  background: var(--color-bg-tertiary);
+  border-color: transparent;
+  background: var(--rank-1-bg);
 }
 
 .cultivation-slot:disabled {
@@ -232,14 +285,58 @@
 
 .cultivation-map-node {
   display: grid;
-  gap: var(--spacing-2xs);
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 10px;
   width: 100%;
-  min-height: 96px;
-  padding: var(--spacing-md);
+  min-height: 0;
+  padding: 12px 14px;
+}
+
+.cultivation-map-node__icon {
+  grid-row: 1 / span 3;
+  align-self: start;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--home-soft);
+  color: var(--rank-1-accent);
+}
+
+.cultivation-map-node__icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.cultivation-map-node > small {
+  grid-column: 2;
+}
+
+.cultivation-map-node--selected {
+  background: var(--rank-1-bg);
+}
+
+.cultivation-map-node small {
+  color: var(--home-ink-tertiary);
+  font-size: 11.5px;
 }
 
 .cultivation-map-node__name {
-  font-weight: 700;
+  font-weight: 650;
+  font-size: 14px;
+}
+
+.cultivation-map-node__copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cultivation-map-node__copy > span:not(.cultivation-map-node__name) {
+  color: var(--home-ink-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .cultivation-reward-toast {
@@ -362,25 +459,25 @@
 :where(.todos-page, .projects-page, .shop-page, .finance-page) .btn-primary,
 :where(.finance-page) .accounts-empty-action {
   min-height: var(--touch-target-min) !important;
-  border-radius: 10px !important;
-  background: var(--color-primary) !important;
-  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.18);
+  border-radius: 999px !important;
+  background: var(--rank-1-accent) !important;
+  box-shadow: 0 8px 18px -12px rgba(15, 138, 103, 0.7);
   transition: background var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base);
 }
 
 :where(.todos-page, .projects-page, .shop-page, .finance-page) .btn-create:hover,
 :where(.todos-page, .projects-page, .shop-page, .finance-page) .btn-primary:hover,
 :where(.finance-page) .accounts-empty-action:hover {
-  background: var(--color-primary-dark) !important;
-  box-shadow: 0 8px 20px rgba(14, 165, 233, 0.22);
+  background: #0B7357 !important;
+  box-shadow: 0 10px 22px -12px rgba(15, 138, 103, 0.75);
   transform: translateY(-1px);
 }
 
 :where(.todos-page, .projects-page) .tabs,
 :where(.projects-page) .filter-tabs,
 :where(.shop-page) .shop-categories {
-  border-color: var(--color-border) !important;
-  background: rgba(255, 255, 255, 0.78) !important;
+  border-color: transparent !important;
+  background: var(--home-soft) !important;
 }
 
 :where(.todos-page, .projects-page) .tab-btn,
@@ -390,9 +487,10 @@
 
 :where(.todos-page, .projects-page) .tab-btn--active,
 :where(.shop-page) .shop-category--active {
-  color: var(--color-primary-dark) !important;
-  background: var(--color-bg-tertiary) !important;
-  border-color: var(--color-primary) !important;
+  color: var(--rank-1-accent) !important;
+  background: #FFFFFF !important;
+  border-color: transparent !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08) !important;
 }
 
 :where(
@@ -409,26 +507,55 @@
   .stats-page,
   .project-detail-page
 ) :where(.todo-card, .project-card, .item-card, .account-card, .summary-card, .stats-section, .achievement-card, .history-card, .notebook-card, .calendar-body, .chart-section, .transactions-card, .budgets-card, .overview-card) {
-  border-color: var(--color-border) !important;
-  border-radius: var(--surface-radius) !important;
-  box-shadow: var(--shadow-sm) !important;
+  border-color: transparent !important;
+  border-radius: 20px !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 16px 34px -28px rgba(15, 23, 42, 0.32) !important;
 }
 
 :where(.todos-page, .projects-page, .shop-page, .finance-page, .notes-page) :where(.todo-card, .project-card, .item-card, .account-card, .notebook-card, .history-card) {
-  transition: border-color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base) !important;
+  transition: box-shadow var(--transition-base) !important;
 }
 
 :where(.todos-page, .projects-page, .shop-page, .finance-page, .notes-page) :where(.todo-card, .project-card, .item-card, .account-card, .notebook-card, .history-card):hover {
-  border-color: var(--color-border-strong) !important;
-  box-shadow: var(--shadow-md) !important;
-  transform: translateY(-2px);
+  border-color: transparent !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 20px 40px -28px rgba(15, 23, 42, 0.42) !important;
+  transform: none;
 }
 
-:where(.todos-page, .projects-page, .shop-page, .finance-page, .notes-page) :where(.empty-state, .loading-state, .error-state) {
+/* A flush list inside one surface: rows divide by hairline, not by their own card. */
+:where(.todos-page) .todo-list .todo-card {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  border-bottom: 1px solid var(--home-hairline) !important;
+}
+
+:where(.todos-page) .todo-list .todo-card:last-child {
+  border-bottom: 0 !important;
+}
+
+:where(.todos-page) .todo-list .todo-card:hover {
+  box-shadow: none !important;
+}
+
+:where(
+  .todos-page,
+  .projects-page,
+  .shop-page,
+  .finance-page,
+  .notes-page,
+  .backpack-page,
+  .history-page,
+  .calendar-page,
+  .stats-page,
+  .profile-page,
+  .coin-history-page,
+  .file-manager
+) :where(.empty-state, .loading-state, .error-state) {
   min-height: 260px;
-  border: 1px dashed var(--color-border-strong);
-  border-radius: var(--surface-radius);
-  background: var(--color-surface-low);
+  border: 0 !important;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.62) !important;
+  box-shadow: none !important;
 }
 
 :where(.todos-page, .projects-page, .shop-page, .finance-page, .notes-page) :where(.empty-title, .section-title, .summary-title, .dialog-title) {
@@ -436,15 +563,16 @@
   letter-spacing: -0.02em;
 }
 
-:where(.todos-page, .projects-page, .shop-page, .finance-page, .notes-page, .file-manager) :where(.form-input, .form-textarea, .form-select, select, input, textarea) {
-  border-color: var(--color-border) !important;
-  border-radius: 10px !important;
-  background: var(--color-card) !important;
+:where(.todos-page, .projects-page, .shop-page, .finance-page, .notes-page, .file-manager, .coin-history-page, .history-page, .backpack-page, .calendar-page, .stats-page, .profile-page, .edit-profile-page, .project-detail-page) :where(.form-input, .form-textarea, .form-select, select, input, textarea) {
+  border-color: transparent !important;
+  border-radius: 12px !important;
+  background: var(--home-soft) !important;
 }
 
-:where(.todos-page, .projects-page, .shop-page, .finance-page, .notes-page, .file-manager) :where(.form-input, .form-textarea, .form-select, select, input, textarea):focus {
-  border-color: var(--color-primary) !important;
-  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.14) !important;
+:where(.todos-page, .projects-page, .shop-page, .finance-page, .notes-page, .file-manager, .coin-history-page, .history-page, .backpack-page, .calendar-page, .stats-page, .profile-page, .edit-profile-page, .project-detail-page) :where(.form-input, .form-textarea, .form-select, select, input, textarea):focus {
+  border-color: transparent !important;
+  background: #FFFFFF !important;
+  box-shadow: 0 0 0 3px rgba(12, 122, 91, 0.16) !important;
   outline: none;
 }
 
@@ -651,3 +779,30 @@
 .encounter-catalog-drawer .el-drawer__body {
   padding: 16px 20px 24px;
 }
+
+/* Immortal (仙) surfaces: the same borderless language as the cultivation pages. */
+.immortal-page { display: grid; gap: var(--page-gap); width: 100%; }
+.immortal-header { display: grid; gap: 4px; }
+.immortal-kicker { margin: 0; color: var(--rank-1-accent); font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; }
+.immortal-header h1 { margin: 0; font-size: clamp(1.15rem, 1rem + 0.4vw, 1.45rem); font-weight: 700; letter-spacing: -0.01em; color: var(--color-text); }
+.immortal-header p:not(.immortal-kicker) { margin: 0; color: var(--home-ink-tertiary); font-size: var(--font-size-sm); }
+.immortal-surface { display: grid; gap: 14px; padding: clamp(18px, 2.2vw, 26px); border: 0; border-radius: 22px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px -30px rgba(15, 23, 42, 0.35); }
+.immortal-surface h2 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -0.01em; color: var(--color-text); }
+.immortal-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.immortal-figures > div { display: grid; gap: 2px; padding: 12px 16px; border-radius: 14px; background: var(--home-soft); }
+.immortal-figures span { color: var(--home-ink-tertiary); font-size: 11.5px; }
+.immortal-figures strong { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--color-text); }
+.immortal-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.immortal-list > li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--home-hairline); }
+.immortal-list > li:last-child { border-bottom: 0; }
+.immortal-list small { color: var(--home-ink-tertiary); font-size: 12px; }
+.immortal-primary { min-height: 44px; padding: 10px 20px; border: 0; border-radius: 999px; background: var(--rank-1-accent); color: #FFFFFF; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.immortal-primary:hover:not(:disabled) { background: #0A6B50; }
+.immortal-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+.immortal-primary:focus-visible, .immortal-link:focus-visible { outline: 2px solid var(--rank-1-accent); outline-offset: 3px; }
+.immortal-link { color: var(--rank-1-accent); font-weight: 600; font-size: 13.5px; text-decoration: none; }
+.immortal-muted { margin: 0; color: var(--home-ink-tertiary); font-size: 13.5px; line-height: 1.6; }
+.immortal-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.immortal-goal { display: grid; gap: 6px; }
+.immortal-goal-track { height: 6px; border-radius: 999px; background: #E6EFEC; overflow: hidden; }
+.immortal-goal-track span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #12B886, #38D9A9); }

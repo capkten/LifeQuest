@@ -4,48 +4,67 @@
       <div>
         <p class="eyebrow">先行动，再成长</p>
         <h2 id="workbench-heading">今日工作台</h2>
-        <p class="muted">{{ data?.date || '正在获取日期' }} · 中国时间 · 今天最重要的事，从这里开始</p>
+        <p class="muted">{{ data?.date || '正在获取日期' }} · 中国时间</p>
       </div>
       <div class="header-actions">
         <button type="button" class="retreat-trigger-btn" @click="openRetreatModal(null)">
           <Sparkles class="retreat-icon" aria-hidden="true" /> 闭关专注
         </button>
-        <button type="button" :disabled="busy || loading" @click="load()">{{ loading ? '刷新中…' : '刷新' }}</button>
+        <button type="button" class="ghost-button" :disabled="busy || loading" @click="load()">{{ loading ? '刷新中…' : '刷新' }}</button>
       </div>
     </header>
 
     <div v-if="data" class="workbench-metrics" aria-label="今日行动进展">
-      <div><strong>{{ data.summary.completed_today }}</strong><span>今日已完成</span></div>
-      <div><strong>{{ data.summary.today }}</strong><span>今日到期</span></div>
-      <div><strong>{{ data.summary.overdue }}</strong><span>逾期待处理</span></div>
-      <div><strong>{{ data.summary.focus_completed }}/{{ data.focus_tasks.length }}</strong><span>今日重点进展</span></div>
+      <div class="workbench-metric">
+        <span class="metric-glyph metric-glyph--done" aria-hidden="true"></span>
+        <strong class="metric-figure">{{ data.summary.completed_today }}</strong>
+        <span class="workbench-metric-label">今日已完成</span>
+      </div>
+      <div class="workbench-metric">
+        <span class="metric-glyph metric-glyph--due" aria-hidden="true"></span>
+        <strong class="metric-figure">{{ data.summary.today }}</strong>
+        <span class="workbench-metric-label">今日到期</span>
+      </div>
+      <div class="workbench-metric">
+        <span class="metric-glyph metric-glyph--late" aria-hidden="true"></span>
+        <strong class="metric-figure">{{ data.summary.overdue }}</strong>
+        <span class="workbench-metric-label">逾期待处理</span>
+      </div>
+      <div class="workbench-metric">
+        <span class="metric-glyph metric-glyph--focus" aria-hidden="true"></span>
+        <strong class="metric-figure">{{ focusProgress }}</strong>
+        <span class="workbench-metric-label">今日重点进展</span>
+      </div>
     </div>
 
     <form class="quick-task-form" @submit.prevent="createTask">
-      <div class="title-field">
-        <label for="workbench-task-title">快速新增任务</label>
-        <input id="workbench-task-title" ref="titleInput" v-model="draft.title" type="text" maxlength="200"
-          placeholder="写下下一步要做的事…" autocomplete="off" :disabled="busy" required />
-      </div>
-      <div>
-        <label for="workbench-task-schedule">截止时间</label>
-        <select id="workbench-task-schedule" v-model="draft.schedule" :disabled="busy">
-          <option value="today">今天结束前</option>
-          <option value="unscheduled">暂不安排时间</option>
-          <option value="date">指定日期</option>
-        </select>
-      </div>
-      <div v-if="draft.schedule === 'date'">
-        <label for="workbench-task-date">截止日期（中国时间）</label>
+      <label class="sr-only" for="workbench-task-title">新任务的标题</label>
+      <input id="workbench-task-title" ref="titleInput" v-model="draft.title" type="text" maxlength="200"
+        placeholder="写下下一步要做的事…" autocomplete="off" :disabled="busy" required />
+      <label class="sr-only" for="workbench-task-schedule">截止时间</label>
+      <select id="workbench-task-schedule" v-model="draft.schedule" :disabled="busy">
+        <option value="today">今天结束前</option>
+        <option value="unscheduled">暂不安排时间</option>
+        <option value="date">指定日期</option>
+      </select>
+      <template v-if="draft.schedule === 'date'">
+        <label class="sr-only" for="workbench-task-date">截止日期（中国时间）</label>
         <input id="workbench-task-date" v-model="draft.due_date" type="date" :disabled="busy" required />
-      </div>
+      </template>
       <button class="primary-button" type="submit" :disabled="busy || !draft.title.trim()">
         {{ pendingAction === 'create' ? '创建中…' : '添加任务' }}
       </button>
     </form>
 
+    <Transition name="reward">
+      <p v-if="rewardFlash" class="reward-flash" role="status" aria-live="polite">
+        <span class="reward-flash-mark" aria-hidden="true">✦</span>
+        本次结算 {{ rewardFlash.text }}
+      </p>
+    </Transition>
+
     <p v-if="actionError" class="message error-message" role="alert">{{ actionError }}</p>
-    <p v-if="feedback" class="message success-message" role="status">{{ feedback }}</p>
+    <p v-if="feedback && !rewardFlash" class="message success-message" role="status">{{ feedback }}</p>
     <p v-if="warning" class="message warning-message" role="status">{{ warning }}</p>
     <div v-if="loadError" class="message error-message" role="alert">
       {{ loadError }}<span v-if="data"> 当前保留上次加载的内容。</span>
@@ -58,20 +77,32 @@
         <div class="section-heading">
           <div>
             <h3 id="focus-heading">今天最重要的三件事</h3>
-            <p class="muted">最多选择三项，完成后会保留在这里。次日重新选择，不改变任务原有优先级。</p>
+            <p class="muted">最多三项。次日重新选择，不改变任务原有优先级。</p>
           </div>
-          <button v-if="!editingFocus" ref="focusTrigger" type="button" :disabled="busy"
-            :aria-expanded="editingFocus" aria-controls="focus-editor" @click="openFocus">
-            {{ data.focus_tasks.length ? '调整重点' : '选择重点' }}
-          </button>
+          <button v-if="!editingFocus && data.focus_tasks.length" ref="focusTrigger" type="button" :disabled="busy"
+            :aria-expanded="editingFocus" aria-controls="focus-editor" @click="openFocus">调整重点</button>
         </div>
-        <div v-if="data.focus_tasks.length" class="focus-tasks">
-          <div v-for="(task, index) in data.focus_tasks" :key="task.id" class="focus-task-card">
-            <span class="focus-rank">重点 {{ index + 1 }}</span>
-            <WorkbenchTaskRow :task="task" :busy="busy" :pending="pendingAction === `complete:${task.id}`" @complete="completeTask" />
+        <div class="focus-tasks">
+          <div
+            v-for="rank in 3"
+            :key="rank"
+            class="focus-task-card"
+            :class="`focus-task-card--${rank}`"
+          >
+            <span class="focus-rank"><i aria-hidden="true">{{ rank }}</i>重点</span>
+            <WorkbenchTaskRow
+              v-if="data.focus_tasks[rank - 1]"
+              :task="data.focus_tasks[rank - 1]"
+              :busy="busy"
+              :pending="pendingAction === `complete:${data.focus_tasks[rank - 1].id}`"
+              :flash="rewardFlash?.id === data.focus_tasks[rank - 1].id ? rewardFlash.text : ''"
+              @complete="handleComplete"
+            />
+            <button v-else type="button" class="focus-slot-empty" :disabled="busy" @click="openFocus">
+              <span aria-hidden="true">＋</span>选择重点
+            </button>
           </div>
         </div>
-        <p v-else class="focus-empty">今天还没有选择重点。从下方任务中挑选最值得完成的三件事，也可以先快速新增。</p>
 
         <form v-if="editingFocus" id="focus-editor" class="focus-editor" @submit.prevent="saveFocus" @keydown.esc.prevent="closeFocus">
           <fieldset :disabled="busy">
@@ -112,7 +143,8 @@
             <span class="group-count">{{ data.task_groups[group.key].length }}</span>
           </div>
           <WorkbenchTaskRow v-for="task in data.task_groups[group.key].slice(0, expandedGroups[group.key] ? undefined : 5)"
-            :key="task.id" :task="task" :busy="busy" :pending="pendingAction === `complete:${task.id}`" @complete="completeTask" />
+            :key="task.id" :task="task" :busy="busy" :pending="pendingAction === `complete:${task.id}`"
+            :flash="rewardFlash?.id === task.id ? rewardFlash.text : ''" @complete="handleComplete" />
           <p v-if="!data.task_groups[group.key].length" class="muted group-empty">{{ group.empty }}</p>
           <button v-if="data.task_groups[group.key].length > 5" class="more-button" type="button"
             :aria-expanded="Boolean(expandedGroups[group.key])" @click="expandedGroups[group.key] = !expandedGroups[group.key]">
@@ -121,7 +153,7 @@
         </section>
       </div>
       <footer class="workbench-footer">
-        <span class="muted">完成任务会使用与待办、项目页一致的奖励结算。</span>
+        <span class="muted">完成任务会即时结算修为与灵石。</span>
         <router-link to="/todos">管理全部待办 →</router-link>
       </footer>
     </template>
@@ -145,6 +177,7 @@ import { todoService } from '../../services/todo'
 import { useAuthStore } from '../../stores/auth'
 import { useCultivationStore } from '../../stores/cultivation'
 import { todayChinaDateKey } from '../../utils/dateTime'
+import { labelFromServer, labelResource } from '../../utils/displayLabels'
 import { useDailyWorkbench } from '../../composables/useDailyWorkbench'
 import WorkbenchTaskRow from './WorkbenchTaskRow.vue'
 import CultivationRetreatModal from '../retreat/CultivationRetreatModal.vue'
@@ -175,6 +208,11 @@ const focusSearchInput = ref(null)
 const focusSearch = ref('')
 const expandedGroups = ref({})
 const busy = computed(() => pendingAction.value !== null)
+const focusProgress = computed(() => {
+  if (!data.value) return '0'
+  const total = data.value.focus_tasks.length
+  return total ? `${data.value.summary.focus_completed}/${total}` : '未选'
+})
 const candidates = computed(() => [...new Map([
   ...(data.value?.focus_tasks || []),
   ...Object.values(data.value?.task_groups || {}).flat()
@@ -190,6 +228,42 @@ const taskGroups = [
   { key: 'upcoming', label: '稍后到期', empty: '暂无未来到期的任务。' }
 ]
 let dayTimer = null
+
+/*
+ * The reward for a completion is only ever the difference between two
+ * authoritative cultivation snapshots, so the flash can never invent a number
+ * the server did not settle.
+ */
+const rewardFlash = ref(null)
+let flashTimer = null
+
+function snapshotResources() {
+  const overview = cultivationStore.overview
+  return {
+    cultivation: Number(overview?.cultivation ?? 0),
+    spiritStones: Number(overview?.spirit_stones ?? 0)
+  }
+}
+
+function flashReward(taskId, before) {
+  const after = snapshotResources()
+  const parts = []
+  const cultivationGain = after.cultivation - before.cultivation
+  const stoneGain = after.spiritStones - before.spiritStones
+  if (cultivationGain > 0) parts.push(`+${cultivationGain} ${labelFromServer(cultivationStore.overview, 'cultivation_label', 'cultivation', labelResource)}`)
+  if (stoneGain > 0) parts.push(`+${stoneGain} ${labelFromServer(cultivationStore.overview, 'spirit_stones_label', 'spirit_stones', labelResource)}`)
+  if (!parts.length) return
+  rewardFlash.value = { id: taskId, text: parts.join(' · ') }
+  clearTimeout(flashTimer)
+  flashTimer = setTimeout(() => { rewardFlash.value = null }, 3600)
+}
+
+async function handleComplete(task) {
+  if (!task) return
+  const before = snapshotResources()
+  const completed = await completeTask(task)
+  if (completed) flashReward(task.id, before)
+}
 
 watch(editingFocus, async (editing, previous) => {
   if (previous && !editing) {
@@ -227,6 +301,7 @@ onMounted(() => {
 onUnmounted(() => {
   dispose()
   clearInterval(dayTimer)
+  clearTimeout(flashTimer)
   window.removeEventListener('focus', refreshVisible)
   document.removeEventListener('visibilitychange', refreshVisible)
 })
@@ -235,94 +310,228 @@ defineExpose({ focusQuickAdd: () => titleInput.value?.focus() })
 </script>
 
 <style scoped>
-.today-workbench { padding: clamp(16px, 3vw, 28px); color: var(--color-text); background: var(--color-card); border: 1px solid var(--color-border); border-radius: var(--surface-radius); box-shadow: var(--shadow-sm); margin-bottom: var(--spacing-md); min-width: 0; }
+.today-workbench {
+  padding: clamp(18px, 2.4vw, 32px);
+  color: var(--color-text);
+  background: #FFFFFF;
+  border: 0;
+  border-radius: 26px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px -28px rgba(15, 23, 42, 0.35);
+  margin-bottom: var(--page-gap);
+  min-width: 0;
+}
 .workbench-header, .section-heading, .workbench-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .workbench-header { align-items: flex-start; }
-.eyebrow { margin: 0 0 6px; color: var(--color-primary); font-size: 12px; font-weight: 700; letter-spacing: .08em; }
-h2 { margin: 0 0 8px; font-size: clamp(22px, 4vw, 28px); }
-h3 { margin: 0; font-size: 16px; }
-.muted { color: var(--color-text-secondary); font-size: 13px; line-height: 1.6; margin: 6px 0; }
+.eyebrow { margin: 0 0 6px; color: var(--rank-1-accent); font-size: 11.5px; font-weight: 700; letter-spacing: .06em; }
+h2 { margin: 0 0 6px; font-size: clamp(21px, 3.2vw, 26px); letter-spacing: -0.01em; }
+h3 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -0.005em; }
+.muted { color: var(--home-ink-tertiary); font-size: 13px; line-height: 1.6; margin: 4px 0 0; }
 button, input, select { font: inherit; }
-button { border: 1px solid var(--color-border); background: var(--color-card); color: var(--color-text); min-height: 44px; padding: 8px 14px; border-radius: 10px; cursor: pointer; flex-shrink: 0; }
+button {
+  border: 1px solid var(--home-hairline);
+  background: #FFFFFF;
+  color: var(--color-text);
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+button:hover:not(:disabled) { background: var(--home-soft); }
 button:disabled { opacity: .55; cursor: not-allowed; }
-button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
-input:not([type=checkbox]), select { box-sizing: border-box; width: 100%; min-height: 44px; min-width: 0; border: 1px solid var(--color-border); border-radius: 10px; padding: 10px 12px; background: var(--color-card); color: var(--color-text); }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--rank-1-accent); outline-offset: 3px; }
+.ghost-button { background: transparent; border-color: transparent; color: var(--home-ink-tertiary); }
+input:not([type=checkbox]), select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: var(--home-soft);
+  color: var(--color-text);
+  transition: background 160ms ease, border-color 160ms ease;
+}
+input:not([type=checkbox]):focus, select:focus { background: #FFFFFF; border-color: rgba(15, 138, 103, 0.35); }
 label { display: block; font-size: 13px; margin-bottom: 6px; }
-.primary-button { background: var(--color-primary); color: white; border-color: var(--color-primary); }
-.workbench-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 20px 0; }
-.workbench-metrics > div { background: var(--color-bg); border-radius: 12px; padding: 14px; display: grid; gap: 4px; }
-.workbench-metrics strong { font-size: 24px; }
-.workbench-metrics span { color: var(--color-text-secondary); font-size: 12px; }
-.quick-task-form { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding: 16px 0; border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
-.title-field { flex: 1 1 250px; }
-.message { font-size: 14px; line-height: 1.7; padding: 12px; border-radius: 10px; background: var(--color-bg); overflow-wrap: anywhere; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.primary-button { background: var(--rank-1-accent); color: #FFFFFF; border-color: transparent; font-weight: 600; }
+.primary-button:hover:not(:disabled) { background: #0B7357; }
+
+.workbench-metrics {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin: 22px 0 18px;
+  padding: 4px 0;
+}
+.workbench-metric {
+  flex: 1 1 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  padding: 4px 18px;
+  min-height: 46px;
+  border-left: 1px solid var(--home-hairline);
+}
+.workbench-metric:first-child { padding-left: 0; border-left: 0; }
+.workbench-metric .metric-figure { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; }
+.workbench-metric-label { width: 100%; color: var(--home-ink-tertiary); font-size: 12px; }
+.metric-glyph { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; align-self: center; }
+.metric-glyph--done { background: var(--rank-1-chip); box-shadow: inset 0 0 0 1px rgba(15, 138, 103, .28); }
+.metric-glyph--due { background: var(--rank-2-chip); box-shadow: inset 0 0 0 1px rgba(169, 105, 15, .26); }
+.metric-glyph--late { background: #FBE0DE; box-shadow: inset 0 0 0 1px rgba(180, 35, 24, .24); }
+.metric-glyph--focus { background: var(--rank-3-chip); box-shadow: inset 0 0 0 1px rgba(158, 68, 121, .24); }
+
+.quick-task-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 16px;
+  background: var(--home-soft);
+}
+.quick-task-form > input:not([type=date]) { flex: 1 1 260px; background: transparent; }
+.quick-task-form > select { flex: 0 0 auto; width: auto; min-width: 132px; background: #FFFFFF; }
+.quick-task-form > input[type=date] { flex: 0 0 auto; width: auto; background: #FFFFFF; }
+.quick-task-form > input:not([type=date]):focus { background: #FFFFFF; }
+.quick-task-form > .primary-button { margin-left: auto; }
+.message { font-size: 13.5px; line-height: 1.7; padding: 10px 12px; border-radius: 12px; background: var(--home-soft); overflow-wrap: anywhere; }
 .error-message { color: #b42318; }
 .success-message { color: #157347; }
 .warning-message { color: #855400; }
 .message button { margin-left: 10px; }
-.focus-section { margin: 24px 0; }
-.focus-tasks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
-.focus-task-card { border: 1px solid var(--color-border); border-radius: 12px; padding: 12px; background: var(--color-bg); min-width: 0; }
-.focus-rank { color: var(--color-primary); font-size: 12px; font-weight: 700; }
-.focus-empty { color: var(--color-text-secondary); font-size: 14px; padding: 18px; border: 1px dashed var(--color-border); border-radius: 12px; line-height: 1.7; }
-.focus-editor { padding: 16px; margin-top: 16px; border: 1px solid var(--color-border); border-radius: 12px; }
+
+.reward-flash {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 12px 0 0;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--rank-1-bg);
+  color: var(--rank-1-accent);
+  font-size: 13px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.reward-flash-mark { font-size: 12px; }
+.reward-enter-active, .reward-leave-active { transition: opacity 220ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1); }
+.reward-enter-from, .reward-leave-to { opacity: 0; transform: translateY(-4px); }
+
+.focus-section { margin: 26px 0 8px; }
+.focus-tasks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.focus-task-card {
+  border: 0;
+  border-radius: 18px;
+  padding: 14px 16px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.focus-task-card--1 { background: var(--rank-1-bg); }
+.focus-task-card--2 { background: var(--rank-2-bg); }
+.focus-task-card--3 { background: var(--rank-3-bg); }
+.focus-task-card--1 .focus-rank { color: var(--rank-1-accent); }
+.focus-task-card--2 .focus-rank { color: var(--rank-2-accent); }
+.focus-task-card--3 .focus-rank { color: var(--rank-3-accent); }
+.focus-rank { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 700; letter-spacing: .02em; }
+.focus-rank i {
+  font-style: normal;
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.75);
+  font-size: 11px;
+}
+.focus-slot-empty {
+  min-height: 52px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px dashed rgba(15, 23, 42, 0.12);
+  color: var(--home-ink-tertiary);
+  width: 100%;
+  font-size: 13px;
+}
+.focus-editor { padding: 18px; margin-top: 16px; border-radius: 18px; background: var(--home-soft); }
 fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 legend { font-size: 14px; font-weight: 600; padding: 0 0 12px; }
-.draft-order { padding-left: 24px; }
+.draft-order { padding-left: 22px; }
 .draft-order li { margin-bottom: 8px; }
 .draft-order li > span { overflow-wrap: anywhere; }
 .order-actions { display: inline-flex; gap: 6px; margin-left: 10px; }
 .order-actions button { min-width: 44px; }
 .focus-options { max-height: 260px; overflow-y: auto; margin: 12px 0; }
 .focus-option { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; overflow-wrap: anywhere; }
-.focus-option input { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--color-primary); }
-.focus-option small { color: var(--color-text-secondary); }
+.focus-option input { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--rank-1-accent); }
+.focus-option small { color: var(--home-ink-tertiary); }
 .editor-actions { display: flex; justify-content: flex-end; gap: 10px; }
-.task-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
-.task-group { padding: 16px; border: 1px solid var(--color-border); border-radius: 12px; min-width: 0; }
-.group-count { font-size: 13px; background: var(--color-bg); padding: 4px 10px; border-radius: 20px; }
-.group-empty { padding: 16px 0; }
-.more-button { width: 100%; color: var(--color-primary); }
-.workbench-footer { margin-top: 18px; }
-.workbench-footer a { color: var(--color-primary); font-size: 14px; flex-shrink: 0; }
-.header-actions { display: flex; align-items: center; gap: 8px; }
+
+.task-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 40px; margin-top: 20px; }
+.task-group { padding: 18px 0 6px; border-top: 1px solid var(--home-hairline); min-width: 0; }
+.task-group .section-heading { margin-bottom: 6px; }
+.group-count { font-size: 12px; color: var(--home-ink-tertiary); background: var(--home-soft); padding: 2px 9px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+.group-empty { padding: 10px 0; }
+.more-button { width: 100%; color: var(--rank-1-accent); background: transparent; border-color: transparent; margin-top: 4px; }
+.workbench-footer { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--home-hairline); }
+.workbench-footer a { color: var(--rank-1-accent); font-size: 13.5px; font-weight: 600; flex-shrink: 0; }
+.header-actions { display: flex; align-items: center; gap: 6px; }
 .retreat-trigger-btn {
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.15), rgba(79, 209, 197, 0.15));
-  border: 1px solid rgba(56, 189, 248, 0.3);
-  color: var(--color-primary);
+  background: var(--rank-1-bg);
+  border: 1px solid transparent;
+  color: var(--rank-1-accent);
   font-weight: 600;
-  border-radius: 10px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
-.retreat-trigger-btn:hover {
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(79, 209, 197, 0.25));
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
-}
+.retreat-trigger-btn:hover:not(:disabled) { background: var(--rank-1-chip); }
+
 @media (max-width: 900px) { .focus-tasks { grid-template-columns: 1fr; } }
 @media (max-width: 600px) {
-  .workbench-header {
-    flex-wrap: wrap;
-    align-items: flex-start;
-  }
-
-  .header-actions {
-    width: 100%;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-  }
-
-  .task-groups { grid-template-columns: 1fr; gap: 12px; }
-  .workbench-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .quick-task-form > div { flex: 1 1 100%; }
-  .quick-task-form > button { width: 100%; }
+  .today-workbench { border-radius: 20px; padding: 16px; }
+  .workbench-header { flex-wrap: nowrap; align-items: flex-start; gap: 8px; }
+  .workbench-header h2 { font-size: 20px; }
+  .header-actions { width: auto; gap: 4px; flex-wrap: nowrap; }
+  .header-actions button { padding: 6px 10px; font-size: 12.5px; }
+  .task-groups { grid-template-columns: 1fr; gap: 2px; }
+  .task-group { padding: 14px 0 4px; }
+  .workbench-metrics { flex-wrap: nowrap; gap: 0; margin: 16px 0 12px; }
+  .workbench-metric { flex: 1 1 0; padding: 0 8px; min-width: 0; }
+  .workbench-metric:first-child { border-left: 0; padding-left: 0; }
+  .workbench-metric .metric-figure { font-size: 18px; }
+  .workbench-metric-label { font-size: 10.5px; white-space: nowrap; }
+  .metric-glyph { display: none; }
+  .quick-task-form { padding: 8px; gap: 6px; flex-wrap: wrap; }
+  .quick-task-form > input:not([type=date]) { flex: 1 1 auto; background: #FFFFFF; padding: 10px 12px; }
+  .quick-task-form > select { flex: 0 0 auto; width: auto; min-width: 0; max-width: 116px; padding: 10px 6px; }
+  .quick-task-form > input[type=date] { flex: 1 1 100%; }
+  .quick-task-form > .primary-button { flex: 0 0 auto; width: auto; margin-left: 0; padding: 10px 16px; }
+  .focus-task-card { padding: 10px 12px; gap: 4px; border-radius: 14px; }
+  .focus-rank { font-size: 11px; }
+  .focus-slot-empty { min-height: 44px; }
   .section-heading, .workbench-footer { align-items: flex-start; flex-wrap: wrap; }
   .order-actions { display: flex; margin: 6px 0 0; }
   button, input:not([type=checkbox]), select, .focus-option { min-height: 48px; }
   input:not([type=checkbox]), select { font-size: 16px; }
 }
 
-.retreat-icon {
-  width: 14px;
-  height: 14px;
-  vertical-align: -2px;
-}
+.retreat-icon { width: 14px; height: 14px; vertical-align: -2px; }
 </style>

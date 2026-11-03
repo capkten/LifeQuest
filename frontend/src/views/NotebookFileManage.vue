@@ -875,14 +875,14 @@ onUnmounted(() => {
 .workspace-layout {
   flex: 1;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 300px minmax(0, 1fr);
   min-height: calc(100vh - 160px);
   min-height: calc(100dvh - 160px);
-  margin-top: 8px;
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius);
-  box-shadow: var(--shadow-sm);
+  margin-top: 12px;
+  background: #FFFFFF;
+  border: 0;
+  border-radius: 22px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 20px 44px -32px rgba(15, 23, 42, 0.35);
   overflow: hidden;
 }
 
@@ -892,8 +892,8 @@ onUnmounted(() => {
   min-width: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--color-surface-low);
-  border-right: 1px solid var(--color-border);
+  background: var(--home-soft);
+  border-right: 1px solid var(--home-hairline);
 }
 
 .directory-header {

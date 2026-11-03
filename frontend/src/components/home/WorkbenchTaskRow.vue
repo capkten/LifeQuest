@@ -13,7 +13,8 @@
     </button>
     <div class="task-copy">
       <span class="task-title">{{ task.title }}</span>
-      <small v-if="task.deadline">{{ deadlineLabel }}</small>
+      <small v-if="flash" class="task-reward" role="status">{{ flash }}</small>
+      <small v-else-if="task.deadline">{{ deadlineLabel }}</small>
       <small v-else>未设置截止时间</small>
     </div>
     <span v-if="task.status === 'completed'" class="status-label">已完成</span>
@@ -28,7 +29,8 @@ import { formatChinaDateTime } from '../../utils/dateTime'
 const props = defineProps({
   task: { type: Object, required: true },
   busy: { type: Boolean, default: false },
-  pending: { type: Boolean, default: false }
+  pending: { type: Boolean, default: false },
+  flash: { type: String, default: '' }
 })
 defineEmits(['complete'])
 
@@ -49,6 +51,8 @@ const deadlineLabel = computed(() => {
 .task-copy { display: grid; gap: 4px; flex: 1; min-width: 0; }
 .task-title { color: var(--color-text); overflow-wrap: anywhere; font-weight: 600; line-height: 1.5; }
 .task-copy small { color: var(--color-text-secondary); font-size: 12px; }
+.task-reward { color: var(--rank-1-accent) !important; font-weight: 700; animation: reward-in 320ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes reward-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 .status-label { color: var(--color-text-secondary); font-size: 12px; flex-shrink: 0; }
 .is-complete .task-title { text-decoration: line-through; color: var(--color-text-secondary); }
 .is-complete .complete-task { background: var(--color-bg); }

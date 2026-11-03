@@ -772,7 +772,7 @@ onMounted(fetchAll)
 }
 
 .overview-card--tasks .overview-icon {
-  background: rgba(14, 165, 233, 0.14);
+  background: var(--rank-1-bg);
 }
 .overview-card--tasks .overview-icon svg {
   color: var(--color-primary);

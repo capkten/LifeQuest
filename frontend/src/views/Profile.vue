@@ -806,22 +806,22 @@ async function revokeMcpToken() {
 .profile-hero,
 .surface-card,
 .attribute-card {
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius);
-  background: var(--color-card);
-  box-shadow: var(--shadow-sm);
+  border: 0;
+  border-radius: 20px;
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 16px 34px -28px rgba(15, 23, 42, 0.32);
 }
 
 .profile-hero {
-  padding: var(--surface-padding);
+  padding: clamp(20px, 2.4vw, 30px);
   display: grid;
-  gap: 16px;
+  gap: 18px;
   background:
-    radial-gradient(circle at top right, rgba(2, 132, 199, 0.08), transparent 40%),
-    linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius);
-  box-shadow: var(--shadow-sm);
+    radial-gradient(circle at 92% 0%, rgba(12, 122, 91, 0.09), transparent 42%),
+    linear-gradient(135deg, #FFFFFF 0%, #F6FCF9 100%);
+  border: 0;
+  border-radius: 24px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 20px 44px -30px rgba(15, 23, 42, 0.35);
 }
 
 .profile-hero-main {
@@ -981,10 +981,10 @@ async function revokeMcpToken() {
 }
 
 .profile-progress-card {
-  padding: 18px;
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.86);
-  border: 1px solid rgba(14, 165, 233, 0.12);
+  padding: 18px 20px;
+  border-radius: 18px;
+  background: var(--home-soft);
+  border: 0;
   display: grid;
   gap: 12px;
 }
@@ -2085,5 +2085,17 @@ async function revokeMcpToken() {
 }
 
 @media (min-width: 768px) {
+}
+
+/* Card headings share one scale so the hero does not shout over its sections. */
+.attribute-card h2,
+.surface-card h2,
+.profile-progress-card h2,
+.profile-hero h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
 }
 </style>

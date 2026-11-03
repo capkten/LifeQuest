@@ -45,7 +45,7 @@ test('mobile editor and calendar layouts have dynamic viewport fallbacks', async
 
 test('Home daily empty state offers a next action', async () => {
   const actionCenter = await source('../components/home/TodayActionCenter.vue')
-  assert.match(actionCenter, /class="today-action-empty"[\s\S]*to="\/todos"[\s\S]*创建任务/)
+  assert.match(actionCenter, /class="today-action-empty"[\s\S]*to="\/todos"[\s\S]*创建习惯/)
 })
 
 test('shared mobile overrides keep controls readable and touchable across pages', async () => {

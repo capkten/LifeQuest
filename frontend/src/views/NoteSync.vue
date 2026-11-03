@@ -268,8 +268,8 @@ onMounted(loadNotebook)
 .status-pill--error { color: #b23b3b; border-color: rgba(178, 59, 59, .25); background: rgba(178, 59, 59, .06); }
 .status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .desktop-notice, .sync-panel, .sync-error { border: 1px solid var(--color-border); background: var(--color-surface); }
-.desktop-notice { display: flex; align-items: flex-start; gap: 14px; margin-top: 22px; padding: 16px 18px; border-left: 3px solid #1d7b9e; }
-.notice-icon, .sync-state-icon { color: #1d7b9e; flex: 0 0 auto; width: 24px; height: 24px; }
+.desktop-notice { display: flex; align-items: flex-start; gap: 14px; margin-top: 22px; padding: 16px 18px; border: 0; border-radius: 16px; background: var(--rank-1-bg); }
+.notice-icon, .sync-state-icon { color: var(--rank-1-accent); flex: 0 0 auto; width: 24px; height: 24px; }
 .notice-icon svg, .sync-state-icon svg { display: block; width: 100%; height: 100%; }
 .desktop-notice strong { display: block; margin-bottom: 4px; }
 .desktop-notice p { margin: 0; color: var(--color-text-muted); font-size: .88rem; line-height: 1.6; }

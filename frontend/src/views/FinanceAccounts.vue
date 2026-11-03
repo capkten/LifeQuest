@@ -830,25 +830,28 @@ select.form-input { appearance: auto; }
 }
 
 .total-assets {
-  padding: clamp(1rem, 0.8rem + 0.6vw, 1.6rem);
-  border-radius: var(--surface-radius);
-  background:
-    linear-gradient(135deg, rgba(14, 165, 233, 0.92), rgba(29, 78, 216, 0.92)),
-    var(--color-card);
-  box-shadow: var(--shadow-md);
+  padding: clamp(20px, 2.2vw, 28px) clamp(22px, 2.6vw, 32px);
+  border-radius: 22px;
+  background: linear-gradient(120deg, #FFFFFF 0%, var(--rank-1-chip) 100%);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px -30px rgba(15, 23, 42, 0.35);
   margin-bottom: 0;
   flex-wrap: wrap;
+  gap: 10px 18px;
+  color: var(--color-text);
 }
 
 .total-assets-label {
-  font-size: var(--font-size-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: 12px;
+  color: var(--home-ink-tertiary);
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .total-assets-value {
   font-size: clamp(2rem, 1.6rem + 1vw, 2.8rem);
   line-height: 1;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
 }
 
 .accounts-list {

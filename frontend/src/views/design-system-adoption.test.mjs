@@ -28,11 +28,16 @@ test('shop item grid renders through the shared list primitive', async () => {
   assert.match(shop, /<\/AppList>/)
 })
 
-test('home quick actions use the shared card surface', async () => {
+test('home quick actions sit on the single identity band', async () => {
   const home = await source('./Home.vue')
 
-  assert.match(home, /import AppCard from '\.\.\/components\/ui\/AppCard\.vue'/)
-  assert.match(home, /<AppCard class="quick-actions-card">/)
+  // Quick actions are chips on the identity band instead of a second card
+  // competing with the workbench, so home stays one flowing surface.
+  assert.match(home, /class="identity-chips"/)
+  assert.match(home, /todayWorkbench\?\.focusQuickAdd\(\)/)
+  assert.match(home, /to="\/projects"/)
+  assert.match(home, /to="\/finance"/)
+  assert.doesNotMatch(home, /class="quick-actions-card"/)
 })
 
 test('numeric readouts share one tabular figure treatment', async () => {

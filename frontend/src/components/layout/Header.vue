@@ -113,7 +113,7 @@ onUnmounted(() => {
   padding: 0 var(--page-padding-x);
   padding-top: var(--safe-area-top);
   background: rgba(255, 255, 255, 0.82);
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--home-hairline);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   position: sticky;

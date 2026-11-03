@@ -9,10 +9,10 @@ import UpdatePrompt from './components/layout/UpdatePrompt.vue'
 
 <style>
 :root {
-  --color-primary: #0284C7;
-  --color-primary-light: #38BDF8;
-  --color-primary-dark: #0369A1;
-  --color-secondary: #2563EB;
+  --color-primary: #0C7A5B;
+  --color-primary-light: #38D9A9;
+  --color-primary-dark: #0A6B50;
+  --color-secondary: #0E7490;
   --color-secondary-light: #60A5FA;
   --color-secondary-dark: #1D4ED8;
   --color-accent: #10B981;
@@ -27,7 +27,7 @@ import UpdatePrompt from './components/layout/UpdatePrompt.vue'
   --color-error: #EF4444;
   --color-error-light: #FECACA;
   --color-error-dark: #DC2626;
-  --color-bg: #F8FAFC;
+  --color-bg: #F5F9F7;
   --color-bg-secondary: #FFFFFF;
   --color-bg-tertiary: #F1F5F9;
   --color-bg-elevated: #FFFFFF;
@@ -105,6 +105,24 @@ import UpdatePrompt from './components/layout/UpdatePrompt.vue'
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-bounce: 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Home 2.0: breathable mint canvas and the three pastel focus ranks.
+     Home-scoped so the rest of the app keeps its slate palette. */
+  --home-canvas: #F4FAF8;
+  --home-canvas-wash: radial-gradient(1100px 520px at 12% -10%, #E7F5EF 0%, rgba(231, 245, 239, 0) 62%),
+    radial-gradient(900px 460px at 92% 4%, #EAF3FB 0%, rgba(234, 243, 251, 0) 58%);
+  --home-hairline: rgba(15, 23, 42, 0.07);
+  --home-soft: #F3F7F6;
+  --home-ink-tertiary: #64748B;
+  --rank-1-bg: linear-gradient(135deg, #F1FBF6 0%, #E4F5EE 100%);
+  --rank-1-chip: #D5EFE3;
+  --rank-1-accent: #0C7A5B;
+  --rank-2-bg: linear-gradient(135deg, #FEFAF1 0%, #FCEFDC 100%);
+  --rank-2-chip: #F8E4C4;
+  --rank-2-accent: #A9690F;
+  --rank-3-bg: linear-gradient(135deg, #FDF4F9 0%, #F7E9F2 100%);
+  --rank-3-chip: #F2DCEA;
+  --rank-3-accent: #9E4479;
 }
 
 * {
@@ -145,9 +163,9 @@ body {
 
 .stitch-surface {
   background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius);
-  box-shadow: var(--shadow-sm);
+  border: 0;
+  border-radius: 20px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 16px 34px -28px rgba(15, 23, 42, 0.32);
 }
 
 .stitch-pill {
@@ -156,8 +174,8 @@ body {
   min-height: 28px;
   padding: 4px 10px;
   border-radius: var(--radius-full);
-  background: var(--color-bg-tertiary);
-  color: var(--color-primary-dark);
+  background: var(--home-soft);
+  color: var(--rank-1-accent);
   font-size: var(--font-size-xs);
   font-weight: 600;
   white-space: nowrap;

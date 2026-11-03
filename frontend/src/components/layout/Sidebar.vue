@@ -267,8 +267,8 @@ const isHomeActive = computed(() => route.path === '/')
   z-index: 50;
   display: flex;
   flex-direction: column;
-  background: var(--color-bg);
-  border-right: 1px solid var(--color-border);
+  background: #FFFFFF;
+  border-right: 1px solid var(--home-hairline);
   transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   padding: 16px 10px;
 }
@@ -326,18 +326,17 @@ const isHomeActive = computed(() => route.path === '/')
   align-items: center;
   gap: 10px;
   padding: 10px;
-  background: #FFFFFF;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  margin-bottom: 12px;
+  background: var(--home-soft);
+  border: 0;
+  border-radius: 14px;
+  margin-bottom: 10px;
 }
 
 .user-avatar {
   width: 38px;
   height: 38px;
   border-radius: var(--radius-full);
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+  background: linear-gradient(135deg, #12B886, #0F8A67);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -391,10 +390,9 @@ const isHomeActive = computed(() => route.path === '/')
   align-items: center;
   gap: 1px;
   padding: 6px 4px;
-  background: #FFFFFF;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
 }
 
 .stat-icon {
@@ -444,7 +442,7 @@ const isHomeActive = computed(() => route.path === '/')
 
 .exp-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
+  background: linear-gradient(90deg, #12B886, #38D9A9);
   border-radius: var(--radius-full);
   transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -461,12 +459,11 @@ const isHomeActive = computed(() => route.path === '/')
 }
 
 .nav-section-label {
-  padding: 10px 8px 3px;
-  color: var(--color-text-tertiary);
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  padding: 12px 8px 4px;
+  color: #8A99A8;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .sidebar-nav::-webkit-scrollbar {
@@ -477,13 +474,13 @@ const isHomeActive = computed(() => route.path === '/')
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 36px;
+  min-height: 38px;
   padding: 6px 10px;
-  border-radius: var(--radius-md);
+  border-radius: 10px;
   color: var(--color-text-secondary);
   font-size: 13.5px;
   font-weight: 500;
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background 0.15s ease, color 0.15s ease;
   text-decoration: none;
   white-space: nowrap;
 }
@@ -495,21 +492,21 @@ const isHomeActive = computed(() => route.path === '/')
 }
 
 .nav-item:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--home-soft);
   color: var(--color-text);
 }
 
 .nav-item--active {
-  background: #FFFFFF;
-  color: var(--color-primary);
-  font-weight: 600;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
-  border: 1px solid rgba(0, 0, 0, 0.04);
+  background: var(--rank-1-bg);
+  color: var(--rank-1-accent);
+  font-weight: 650;
+  box-shadow: none;
+  border: 0;
 }
 
 .nav-item--active:hover {
-  background: #FFFFFF;
-  color: var(--color-primary-dark);
+  background: var(--rank-1-chip);
+  color: var(--rank-1-accent);
 }
 
 .nav-item svg {
@@ -525,6 +522,10 @@ const isHomeActive = computed(() => route.path === '/')
     box-shadow: none;
     z-index: 100;
     width: var(--sidebar-width);
+  }
+
+  .nav-item {
+    min-height: 44px;
   }
 
   .sidebar--open {

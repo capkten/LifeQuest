@@ -1,25 +1,51 @@
 <template>
   <div class="home-page">
     <TodayWorkbench ref="todayWorkbench" class="home-workbench" @changed="refreshHomeTasks" />
+
+    <div v-if="pageError" class="home-error" role="alert">
+      <span>{{ pageError }}</span>
+      <button type="button" @click="reloadPage">重试</button>
+    </div>
+
     <section class="hero-card">
-      <div class="hero-main">
-        <div class="hero-copy">
-          <p class="hero-eyebrow">LifeQuest</p>
-          <h1 class="welcome-title">欢迎回来，{{ user?.username || '冒险者' }}！</h1>
-          <p class="welcome-subtitle">先处理今天最重要的事项，别让首屏只停留在展示。</p>
-          <p class="hero-status">
-            {{ checkinStatus?.checked_in ? `今日已签到，连续 ${checkinStatus?.streak || 0} 天` : `当前连续签到 ${checkinStatus?.streak || 0} 天` }}
-          </p>
-          <div class="hero-progress" aria-label="经验值进度">
-            <div class="hero-progress-label">
-              <span>升级所需经验 {{ (user?.level || 1) + 1 }}</span>
-              <strong>{{ expPercent }}%</strong>
-            </div>
-            <div class="hero-progress-track">
-              <span :style="{ width: expPercent + '%' }"></span>
-            </div>
+      <div class="identity-head">
+        <p class="identity-eyebrow">{{ realmLine }}</p>
+        <div
+          class="identity-progress"
+          role="progressbar"
+          :aria-valuenow="progressPercent"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-label="progressLabel"
+        >
+          <span class="identity-progress-name">{{ progressLabel }}</span>
+          <div class="identity-progress-track">
+            <span :style="{ width: progressPercent + '%' }"></span>
           </div>
+          <span class="identity-progress-value">{{ progressPercent }}%</span>
         </div>
+      </div>
+
+      <div class="identity-metrics">
+        <div class="identity-metric">
+          <span class="identity-metric-label">境界</span>
+          <strong class="metric-figure">{{ realmText }}</strong>
+        </div>
+        <div class="identity-metric">
+          <span class="identity-metric-label">{{ stoneLabel }}</span>
+          <strong class="metric-figure" :class="{ 'metric-pulse': coinsPulsing }">{{ stoneValue }}</strong>
+        </div>
+        <div class="identity-metric">
+          <span class="identity-metric-label">连续签到</span>
+          <strong class="metric-figure">{{ checkinStatus?.streak || 0 }} 天</strong>
+        </div>
+        <div class="identity-metric">
+          <span class="identity-metric-label">今日待办</span>
+          <strong class="metric-figure">{{ actionCenter?.summary?.open_count || 0 }}</strong>
+        </div>
+      </div>
+
+      <div class="identity-actions">
         <button
           v-if="!checkinStatus?.checked_in"
           class="checkin-btn"
@@ -30,7 +56,7 @@
             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
             <polyline points="22 4 12 14.01 9 11.01" />
           </svg>
-          {{ checkinLoading ? '签到中...' : '立即签到' }}
+          {{ checkinLoading ? '签到中…' : '立即签到' }}
         </button>
         <div v-else class="checkin-done-badge">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -38,37 +64,16 @@
           </svg>
           今日已签到
         </div>
-      </div>
-
-      <div class="hero-meta">
-        <div class="hero-meta-item">
-          <span class="hero-meta-label">等级</span>
-          <strong class="metric-figure">等级 {{ user?.level || 1 }}</strong>
-        </div>
-        <div class="hero-meta-item">
-          <span class="hero-meta-label">金币</span>
-          <strong class="metric-figure" :class="{ 'metric-pulse': coinsPulsing }">{{ user?.coins || 0 }}</strong>
-        </div>
-        <div class="hero-meta-item">
-          <span class="hero-meta-label">连续签到</span>
-          <strong class="metric-figure">{{ checkinStatus?.streak || 0 }} 天</strong>
-        </div>
-        <div class="hero-meta-item">
-          <span class="hero-meta-label">今日待办</span>
-          <strong class="metric-figure">{{ actionCenter?.summary?.open_count || 0 }}</strong>
+        <div class="identity-chips">
+          <button type="button" class="identity-chip" @click="todayWorkbench?.focusQuickAdd()">＋ 任务</button>
+          <router-link to="/projects" class="identity-chip">◇ 项目</router-link>
+          <router-link to="/finance" class="identity-chip">¥ 记账</router-link>
         </div>
       </div>
     </section>
 
-    <CultivationStatusBar
-      class="home-cultivation"
-      :overview="cultivationOverview"
-      :loading="cultivationLoading"
-      :error="cultivationError"
-      @retry="loadCultivation"
-    />
-
     <TodayActionCenter
+      class="home-habits"
       :data="actionCenter"
       :loading="actionCenterLoading"
       :error="actionCenterError"
@@ -78,121 +83,8 @@
       @retry="fetchActionCenter"
     />
 
-    <aside class="home-aside-actions">
-      <AppCard class="quick-actions-card">
-        <div class="aside-card-title">
-          <span class="aside-card-kicker">专注行动</span>
-          <h3>快速行动</h3>
-        </div>
-        <div class="quick-actions-list">
-          <button type="button" class="quick-action-item" @click="todayWorkbench?.focusQuickAdd()">
-            <span class="quick-action-icon quick-action-icon--primary">+</span>
-            <span>创建任务</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-          </button>
-          <router-link to="/projects" class="quick-action-item">
-            <span class="quick-action-icon quick-action-icon--secondary">◇</span>
-            <span>新建项目</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-          </router-link>
-          <router-link to="/finance" class="quick-action-item">
-            <span class="quick-action-icon quick-action-icon--accent">¥</span>
-            <span>记录账目</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-          </router-link>
-        </div>
-      </AppCard>
-    </aside>
-
-    <div class="content-grid">
-      <div class="content-section">
-        <div class="section-header">
-          <h3 class="section-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path d="M9 11l3 3L22 4" />
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-            </svg>
-            最近任务
-          </h3>
-          <router-link to="/todos" class="section-link">查看全部</router-link>
-        </div>
-        <div class="section-body">
-          <AppState v-if="loadingTasks" state="loading" />
-          <AppState v-else-if="errorTasks" state="error" :title="errorTasks">
-            <template #actions>
-              <AppButton variant="secondary" @click="fetchTasks">重试</AppButton>
-            </template>
-          </AppState>
-          <div v-else-if="recentTasks.length === 0" class="empty-state">
-            <p>暂无任务，创建你的第一个任务吧！</p>
-          </div>
-          <div v-else class="task-list">
-            <div v-for="task in recentTasks" :key="task.id" class="task-item">
-              <span class="task-status" :class="'task-status--' + task.status"></span>
-              <span class="task-title">{{ task.title }}</span>
-              <span class="task-difficulty" :class="'task-difficulty--' + task.difficulty">{{ labelDifficulty(task.difficulty) }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="content-section">
-        <div class="section-header">
-          <h3 class="section-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <circle cx="12" cy="12" r="10" />
-              <circle cx="12" cy="12" r="6" />
-              <circle cx="12" cy="12" r="2" />
-            </svg>
-            最近目标
-          </h3>
-          <router-link to="/todos" class="section-link">查看全部</router-link>
-        </div>
-        <div class="section-body">
-          <AppState v-if="loadingGoals" state="loading" />
-          <AppState v-else-if="errorGoals" state="error" :title="errorGoals">
-            <template #actions>
-              <AppButton variant="secondary" @click="fetchGoals">重试</AppButton>
-            </template>
-          </AppState>
-          <div v-else-if="recentGoals.length === 0" class="empty-state">
-            <p>暂无目标，设定你的第一个目标吧！</p>
-          </div>
-          <div v-else class="goal-list">
-            <div v-for="goal in recentGoals" :key="goal.id" class="goal-item">
-              <div class="goal-info">
-                <span class="goal-title">{{ goal.title }}</span>
-                <span class="goal-progress-text">{{ Math.round(goal.progress || 0) }}%</span>
-              </div>
-              <div class="goal-progress-bar">
-                <div class="goal-progress-fill" :style="{ width: Math.round(goal.progress || 0) + '%' }"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <section class="habit-progress-card">
-      <div class="habit-progress-heading">
-        <div>
-          <span class="aside-card-kicker">每日节奏</span>
-          <h3>习惯进度</h3>
-        </div>
-        <strong>{{ habitProgress }}%</strong>
-      </div>
-      <div class="habit-progress-ring" :style="{ '--progress': habitProgress + '%' }">
-        <div class="habit-progress-ring-inner">
-          <strong>{{ habitProgress }}%</strong>
-          <span>完成</span>
-        </div>
-      </div>
-      <p v-if="actionCenter?.summary?.habit_due_count">今日完成 {{ actionCenter.summary.habit_completed_count }} / {{ actionCenter.summary.habit_due_count }} 个习惯</p>
-      <p v-else>创建习惯，建立自己的每日节奏。</p>
-    </section>
-
     <Transition name="toast">
-      <div v-if="successToast" class="toast toast--success">
+      <div v-if="successToast" class="toast toast--success" role="status" aria-live="polite">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M20 6L9 17l-5-5" />
         </svg>
@@ -200,7 +92,7 @@
       </div>
     </Transition>
     <Transition name="toast">
-      <div v-if="errorToast" class="toast toast--error">
+      <div v-if="errorToast" class="toast toast--error" role="alert" aria-live="assertive">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <circle cx="12" cy="12" r="10" />
           <line x1="15" y1="9" x2="9" y2="15" />
@@ -213,7 +105,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { todoService } from '../services/todo'
@@ -221,15 +113,11 @@ import { checkinService } from '../services/checkin'
 import { useActionCenter } from '../composables/useActionCenter'
 import { useToast } from '../composables/useToast'
 import { useUserStats } from '../composables/useUserStats'
-import { getErrorMessage } from '../utils/errorMessage'
-import { labelDifficulty } from '../utils/displayLabels'
-import CultivationStatusBar from '../components/cultivation/CultivationStatusBar.vue'
-import TodayActionCenter from '../components/home/TodayActionCenter.vue'
-import TodayWorkbench from '../components/home/TodayWorkbench.vue'
-import AppCard from '../components/ui/AppCard.vue'
 import { useValuePulse } from '../composables/useValuePulse'
-import AppState from '../components/ui/AppState.vue'
-import AppButton from '../components/ui/AppButton.vue'
+import { getErrorMessage } from '../utils/errorMessage'
+import { labelFromServer, labelRealm, labelResource } from '../utils/displayLabels'
+import TodayWorkbench from '../components/home/TodayWorkbench.vue'
+import TodayActionCenter from '../components/home/TodayActionCenter.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -237,26 +125,19 @@ const todayWorkbench = ref(null)
 const user = computed(() => authStore.user)
 const {
   expPercent,
+  cultivationPercent,
   cultivationOverview,
-  cultivationLoading,
-  cultivationError,
-  loadCultivation,
-  refreshCultivation
+  loadCultivation
 } = useUserStats()
 const { successToast, errorToast, showSuccess, showError } = useToast()
 
-// Reward counters pulse briefly when they go up, so earning coins reads as an event.
+// Reward counters pulse briefly when they go up, so earning reads as an event.
 const { pulsing: coinsPulsing } = useValuePulse(computed(() => user.value?.coins ?? 0))
 
+const pageError = ref(null)
 const checkinStatus = ref(null)
 const checkinLoading = ref(false)
 
-const tasks = ref([])
-const goals = ref([])
-const loadingTasks = ref(true)
-const loadingGoals = ref(true)
-const errorTasks = ref(null)
-const errorGoals = ref(null)
 const {
   data: actionCenter,
   loading: actionCenterLoading,
@@ -266,31 +147,37 @@ const {
   complete: completeAction,
 } = useActionCenter()
 
-const recentTasks = computed(() => tasks.value.slice(0, 5))
-const recentGoals = computed(() => goals.value.slice(0, 5))
-const habitProgress = computed(() => {
-  const summary = actionCenter.value?.summary
-  if (!summary?.habit_due_count) return 0
-  return Math.round((summary.habit_completed_count / summary.habit_due_count) * 100)
+const realmText = computed(() => labelFromServer(
+  cultivationOverview.value,
+  'realm_label',
+  cultivationOverview.value?.realm_key,
+  labelRealm
+))
+const realmLine = computed(() => {
+  const overview = cultivationOverview.value
+  if (!overview) return '修行与生活'
+  return `${realmText.value} · 第 ${overview.minor_stage ?? 1} 阶段`
 })
-
-async function fetchTasks() {
-  loadingTasks.value = true
-  errorTasks.value = null
-  try {
-    tasks.value = await todoService.getTasks()
-  } catch (e) {
-    errorTasks.value = getErrorMessage(e)
-  } finally {
-    loadingTasks.value = false
-  }
-}
+const stoneLabel = computed(() => labelFromServer(
+  cultivationOverview.value,
+  'spirit_stones_label',
+  'spirit_stones',
+  labelResource
+))
+const stoneValue = computed(() => cultivationOverview.value
+  ? cultivationOverview.value.spirit_stones
+  : (user.value?.coins || 0))
+const progressPercent = computed(() => cultivationOverview.value
+  ? cultivationPercent.value
+  : expPercent.value)
+const progressLabel = computed(() => cultivationOverview.value ? '修为进度' : '经验值进度')
 
 async function fetchCheckinStatus() {
+  pageError.value = null
   try {
     checkinStatus.value = await checkinService.getStatus()
   } catch (e) {
-    showError(getErrorMessage(e))
+    pageError.value = getErrorMessage(e, '签到状态暂时无法读取。')
   }
 }
 
@@ -317,18 +204,6 @@ async function doCheckin() {
   await Promise.allSettled([authStore.fetchUser(), loadCultivation(), fetchActionCenter()])
 }
 
-async function fetchGoals() {
-  loadingGoals.value = true
-  errorGoals.value = null
-  try {
-    goals.value = await todoService.getGoals()
-  } catch (e) {
-    errorGoals.value = getErrorMessage(e)
-  } finally {
-    loadingGoals.value = false
-  }
-}
-
 async function handleActionComplete(item) {
   try {
     await completeAction(item)
@@ -345,7 +220,11 @@ function handleActionOpen() {
 }
 
 function refreshHomeTasks() {
-  return Promise.allSettled([fetchTasks(), fetchActionCenter?.() ?? Promise.resolve()])
+  return Promise.allSettled([fetchActionCenter?.() ?? Promise.resolve()])
+}
+
+function reloadPage() {
+  return Promise.allSettled([fetchCheckinStatus(), loadCultivation(), fetchActionCenter?.() ?? Promise.resolve()])
 }
 
 function dailyHabitBlockReason(habit) {
@@ -376,753 +255,236 @@ async function completeDailyHabit(habit) {
 onMounted(() => {
   loadCultivation().catch((e) => showError(getErrorMessage(e)))
   fetchCheckinStatus()
-  fetchTasks()
-  fetchGoals()
   fetchActionCenter().catch(() => {})
 })
 </script>
 
 <style scoped>
 .home-page {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  gap: var(--page-gap);
   width: 100%;
+  min-height: calc(100dvh - var(--header-height) - (var(--page-padding-y) * 2));
 }
 
-@media (min-width: 1200px) {
-  .home-page {
-    display: grid;
-    grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.8fr);
-    gap: var(--page-gap);
-    align-items: start;
-  }
-
-  .hero-card {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    margin-bottom: 0;
-  }
-
-  .home-workbench {
-    grid-column: 1 / -1;
-    grid-row: 1;
-    margin-bottom: 0;
-  }
-
-  .cultivation-status-bar,
-  .home-cultivation {
-    grid-column: 1 / -1;
-    grid-row: 3;
-  }
-
-  .today-action-center {
-    grid-column: 1;
-    grid-row: 4;
-    margin-bottom: 0;
-  }
-
-  .home-aside-actions {
-    grid-column: 2;
-    grid-row: 4;
-  }
-
-  .content-grid {
-    display: contents;
-  }
-
-  .content-grid .content-section:first-child {
-    grid-column: 1;
-    grid-row: 5;
-  }
-
-  .content-grid .content-section:last-child {
-    grid-column: 2;
-    grid-row: 5;
-  }
-
-  .habit-progress-card {
-    grid-column: 2;
-    grid-row: 6;
-  }
+.home-page::before {
+  content: '';
+  position: absolute;
+  inset: calc(var(--page-padding-y) * -1) calc(var(--page-padding-x) * -1);
+  background: var(--home-canvas-wash), var(--home-canvas);
+  z-index: -1;
+  pointer-events: none;
 }
 
 .hero-card {
-  padding: clamp(20px, 2.5vw, 32px);
-  border-radius: var(--surface-radius);
-  color: #fff;
-  background:
-    radial-gradient(circle at 86% 18%, rgba(56, 189, 248, 0.28), transparent 36%),
-    radial-gradient(circle at 14% 88%, rgba(16, 185, 129, 0.2), transparent 32%),
-    linear-gradient(135deg, #0F172A 0%, #1E293B 52%, #0369A1 100%);
-  box-shadow: var(--shadow-md);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.hero-main {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: var(--spacing-lg);
+  flex-wrap: wrap;
+  gap: 14px clamp(20px, 4vw, 56px);
+  padding: clamp(14px, 1.8vw, 20px) clamp(18px, 2.4vw, 28px);
+  border: 0;
+  border-radius: 20px;
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.96) 0%, rgba(250, 254, 252, 0.96) 100%);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 14px 34px -26px rgba(15, 23, 42, 0.32);
 }
 
-.hero-copy {
+.identity-head {
+  display: grid;
+  gap: 8px;
+  min-width: 200px;
+  max-width: 320px;
+  flex: 0 1 260px;
+}
+
+.identity-eyebrow {
+  margin: 0;
+  color: var(--rank-1-accent);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.identity-progress {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
+}
+
+.identity-progress-name {
+  color: var(--home-ink-tertiary);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.identity-progress-track {
+  flex: 1;
+  min-width: 60px;
+  height: 5px;
+  border-radius: 999px;
+  background: #E6EFEC;
+  overflow: hidden;
+}
+
+.identity-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #12B886 0%, #38D9A9 100%);
+  transition: width 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.identity-progress-value {
+  color: var(--home-ink-tertiary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.identity-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: 0;
+}
+
+.identity-metric {
+  display: grid;
+  gap: 2px;
+  padding: 0 clamp(10px, 1.4vw, 16px);
+  border-left: 1px solid var(--home-hairline);
   min-width: 0;
 }
 
-.hero-eyebrow {
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.75);
+.identity-metric:first-child {
+  border-left: 0;
+  padding-left: 0;
 }
 
-.welcome-title {
-  font-size: var(--font-size-2xl);
-  font-weight: 700;
-  color: #fff;
-  line-height: 1.2;
+.identity-metric-label {
+  color: var(--home-ink-tertiary);
+  font-size: 11px;
 }
 
-.welcome-subtitle {
-  font-size: var(--font-size-base);
-  color: rgba(255, 255, 255, 0.82);
+.identity-metric .metric-figure {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
-.hero-status {
-  font-size: var(--font-size-sm);
-  color: rgba(255, 255, 255, 0.88);
-}
-
-.hero-progress {
-  display: grid;
-  gap: 6px;
-  max-width: 420px;
-  margin-top: 4px;
-}
-
-.hero-progress-label {
+.identity-actions {
   display: flex;
-  justify-content: space-between;
-  gap: var(--spacing-sm);
-  color: rgba(255, 255, 255, 0.76);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.hero-progress-label strong {
-  color: #fff;
-  letter-spacing: 0;
-}
-
-.hero-progress-track {
-  height: 7px;
-  overflow: hidden;
-  border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.hero-progress-track span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #c9e6ff, #6ffbbe);
-  transition: width 300ms ease;
-}
-
-.hero-meta {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: center;
   gap: 10px;
 }
 
-.hero-meta-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-width: 0;
-  padding: 10px 12px;
-  border-radius: var(--surface-radius-sm);
-  background: rgba(255, 255, 255, 0.14);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  color: #fff;
-  text-align: center;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.hero-meta-item:hover {
-  background: rgba(255, 255, 255, 0.22);
-  transform: translateY(-2px);
-}
-
-.hero-meta-item strong {
-  font-size: var(--font-size-base);
-  font-weight: 700;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-.hero-meta-label {
-  font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.82);
-  line-height: 1.2;
-  white-space: nowrap;
-  font-weight: 500;
-}
-
-.checkin-btn,
-.checkin-done-badge {
+.checkin-btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: var(--spacing-sm);
-  min-height: var(--touch-target-min);
-  padding: 10px 18px;
-  border-radius: var(--radius-xl);
-  font-size: var(--font-size-sm);
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.checkin-btn {
-  color: var(--color-primary-dark);
-  background: #fff;
-  border: none;
+  gap: 7px;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--rank-1-accent);
+  color: #FFFFFF;
+  font-size: 13.5px;
+  font-weight: 600;
   cursor: pointer;
-  font-family: var(--font-family);
-  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+  white-space: nowrap;
+  transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 160ms ease;
 }
 
-.checkin-btn:hover {
-  transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-}
-
-.checkin-btn:active {
-  transform: translateY(0) scale(0.98);
+.checkin-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px -12px rgba(15, 138, 103, 0.65);
 }
 
 .checkin-btn:disabled {
-  opacity: 0.72;
+  opacity: 0.6;
   cursor: not-allowed;
-  transform: none;
 }
 
-.checkin-btn svg,
-.checkin-done-badge svg {
+.checkin-btn svg {
   width: 16px;
   height: 16px;
 }
 
 .checkin-done-badge {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.daily-card,
-.content-section {
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-}
-
-.daily-card {
-  margin-bottom: var(--spacing-md);
-}
-
-.home-aside-actions {
-  min-width: 0;
-}
-
-.habit-progress-card {
-  padding: var(--spacing-lg);
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius);
-  box-shadow: var(--shadow-sm);
-}
-
-.aside-card-title,
-.habit-progress-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-md);
-}
-
-.aside-card-title h3,
-.habit-progress-heading h3 {
-  margin-top: 3px;
-  font-size: var(--font-size-xl);
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.aside-card-kicker {
-  display: block;
-  color: var(--color-text-tertiary);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  line-height: 1;
-}
-
-.quick-actions-list {
-  display: grid;
-  gap: var(--spacing-sm);
-}
-
-.quick-action-item {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--spacing-sm);
-  min-height: 56px;
-  padding: 8px 12px;
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  text-decoration: none;
-  transition: background-color var(--transition-base), border-color var(--transition-base), transform var(--transition-base);
-}
-
-.quick-action-item:hover {
-  color: var(--color-text);
-  background: var(--color-surface-low);
-  border-color: var(--color-border-strong);
-  transform: translateY(-1px);
-}
-
-.quick-action-item > svg {
-  width: 17px;
-  height: 17px;
-  color: var(--color-text-tertiary);
-}
-
-.quick-action-icon {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-md);
-  font-family: var(--font-family-display);
-  font-size: 20px;
+  gap: 7px;
+  min-height: 40px;
+  padding: 8px 15px;
+  border-radius: 999px;
+  background: var(--rank-1-chip);
+  color: var(--rank-1-accent);
   font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
-.quick-action-icon--primary {
-  color: var(--color-primary-dark);
-  background: var(--color-bg-tertiary);
+.checkin-done-badge svg {
+  width: 16px;
+  height: 16px;
 }
 
-.quick-action-icon--secondary {
-  color: var(--color-secondary);
-  background: var(--color-surface-variant);
+.identity-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
-.quick-action-icon--accent {
-  color: var(--color-accent-dark);
-  background: rgba(16, 185, 129, 0.14);
-}
-
-.habit-progress-card {
-  text-align: center;
-}
-
-.habit-progress-heading {
-  text-align: left;
-}
-
-.habit-progress-heading > strong {
-  color: var(--color-primary-dark);
-  font-family: var(--font-family-display);
-  font-size: var(--font-size-xl);
-}
-
-.habit-progress-ring {
-  display: grid;
-  place-items: center;
-  width: 148px;
-  height: 148px;
-  margin: var(--spacing-lg) auto;
-  border-radius: 50%;
-  background: conic-gradient(var(--color-secondary) var(--progress), var(--color-bg-tertiary) 0);
-}
-
-.habit-progress-ring-inner {
-  display: grid;
-  place-items: center;
-  align-content: center;
-  width: 116px;
-  height: 116px;
-  border-radius: 50%;
-  background: var(--color-card);
-}
-
-.habit-progress-ring-inner strong {
-  color: var(--color-text);
-  font-family: var(--font-family-display);
-  font-size: 1.75rem;
-  line-height: 1;
-}
-
-.habit-progress-ring-inner span,
-.habit-progress-card > p {
+.identity-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--home-hairline);
+  background: transparent;
   color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-}
-
-.daily-header,
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-md);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.daily-header-left,
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.daily-header-left svg,
-.section-title svg,
-.daily-group-title svg {
-  width: 18px;
-  height: 18px;
-  color: var(--color-primary);
-  flex-shrink: 0;
-}
-
-.daily-title,
-.section-title {
-  font-size: var(--font-size-base);
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.daily-overview {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-tertiary);
-}
-
-.daily-body,
-.section-body {
-  padding: var(--spacing-md);
-}
-
-.daily-groups {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-lg);
-}
-
-.daily-group-title {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-sm);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.daily-list,
-.task-list,
-.goal-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.daily-item,
-.task-item,
-.goal-item {
-  min-width: 0;
-  padding: 12px 16px;
-  margin-bottom: 8px;
-  border-radius: var(--radius-lg);
-  background: var(--color-surface-low);
-  border: 1px solid var(--color-border);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.daily-item:last-child,
-.task-item:last-child,
-.goal-item:last-child {
-  margin-bottom: 0;
-}
-
-.daily-item:hover,
-.task-item:hover,
-.goal-item:hover {
-  background: #ffffff;
-  border-color: var(--color-border-strong);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
-}
-
-.daily-item {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
-  align-items: center;
-  gap: 12px;
-}
-
-.daily-item--done {
-  opacity: 0.6;
-}
-
-.daily-item--link {
+  font-size: 12.5px;
   text-decoration: none;
-  color: inherit;
   cursor: pointer;
+  white-space: nowrap;
+  transition: background 160ms ease, color 160ms ease;
 }
 
-.daily-item--goal {
-  grid-template-columns: minmax(0, 1fr) 132px;
-}
-
-.daily-check-btn {
-  width: var(--touch-target-min);
-  height: var(--touch-target-min);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--color-text-tertiary);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: color 0.15s ease;
-}
-
-.daily-check-btn:hover:not(:disabled) {
-  color: var(--color-primary);
-}
-
-.daily-check-btn--done {
-  color: var(--color-success);
-  cursor: default;
-}
-
-.daily-check-btn svg {
-  width: 20px;
-  height: 20px;
-}
-
-.daily-item-title,
-.task-title {
-  min-width: 0;
+.identity-chip:hover {
+  background: var(--home-soft);
   color: var(--color-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-weight: 600;
 }
 
-.daily-item-title {
-  font-size: var(--font-size-sm);
+.identity-chip:focus-visible,
+.checkin-btn:focus-visible {
+  outline: 2px solid var(--rank-1-accent);
+  outline-offset: 3px;
 }
 
-.daily-item-title--done {
-  color: var(--color-text-tertiary);
-  text-decoration: line-through;
-}
-
-.task-item {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-}
-
-.task-status {
-  width: 10px;
-  height: 10px;
-  border-radius: var(--radius-full);
-  flex-shrink: 0;
-}
-
-.task-status--pending {
-  background: var(--color-text-tertiary);
-}
-
-.task-status--in_progress {
-  background: var(--color-secondary);
-}
-
-.task-status--completed {
-  background: var(--color-success);
-}
-
-.task-status--cancelled {
-  background: var(--color-error);
-}
-
-.task-title {
-  font-size: var(--font-size-sm);
-}
-
-.task-difficulty,
-.daily-overdue {
-  flex-shrink: 0;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-}
-
-.task-difficulty {
-  text-transform: capitalize;
-}
-
-.task-difficulty--easy {
-  background: rgba(81, 207, 102, 0.15);
-  color: var(--color-success);
-}
-
-.task-difficulty--medium {
-  background: rgba(255, 217, 61, 0.15);
-  color: var(--color-warning);
-}
-
-.task-difficulty--hard {
-  background: rgba(255, 107, 107, 0.15);
-  color: var(--color-error);
-}
-
-.daily-streak {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  font-size: var(--font-size-xs);
-  color: var(--color-warning);
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.daily-weekly-progress {
-  font-size: var(--font-size-xs);
-  color: var(--color-secondary);
-  font-weight: 600;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.daily-habit-lock {
-  min-width: 0;
-  color: var(--color-error);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.daily-streak svg {
-  width: 14px;
-  height: 14px;
-}
-
-.daily-overdue {
-  background: rgba(255, 107, 107, 0.15);
-  color: var(--color-error);
-}
-
-.goal-info {
+.home-error {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: var(--spacing-xs);
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: #FEF3F2;
+  color: #b42318;
+  font-size: 13.5px;
 }
 
-.goal-title {
-  min-width: 0;
-  font-size: var(--font-size-sm);
-  color: var(--color-text);
-}
-
-.goal-progress-text,
-.daily-goal-pct {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-tertiary);
-  font-weight: 600;
-}
-
-.goal-progress-bar,
-.daily-goal-bar {
-  height: 6px;
-  background: var(--color-bg-tertiary);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-}
-
-.goal-progress-fill,
-.daily-goal-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
-  border-radius: var(--radius-full);
-  transition: width 0.5s ease;
-}
-
-.daily-goal-progress {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  min-width: 132px;
-}
-
-.daily-goal-bar {
-  flex: 1;
-}
-
-.loading-state,
-.empty-state,
-
-.loading-spinner {
-  width: 28px;
-  height: 28px;
-  border: 3px solid var(--color-border);
-  border-top-color: var(--color-primary);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.empty-state {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-sm);
-}
-
-
-
-.section-link {
-  font-size: var(--font-size-sm);
-  color: var(--color-primary);
-  font-weight: 500;
+.home-error button {
+  min-height: 40px;
+  padding: 6px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(180, 35, 24, 0.25);
+  background: #FFFFFF;
+  color: #b42318;
+  cursor: pointer;
 }
 
 .toast {
@@ -1133,12 +495,12 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-md) var(--spacing-lg);
-  border-radius: var(--radius-lg);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: #fff;
-  box-shadow: var(--shadow-xl);
+  padding: 12px 18px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #FFFFFF;
+  box-shadow: var(--shadow-lg);
 }
 
 .toast svg {
@@ -1148,124 +510,105 @@ onMounted(() => {
 }
 
 .toast--success {
-  background: var(--color-success);
+  background: var(--rank-1-accent);
 }
 
 .toast--error {
-  background: var(--color-error);
+  background: #B42318;
 }
 
 .toast-enter-active,
 .toast-leave-active {
-  transition: all 0.3s ease;
+  transition: opacity 180ms ease, transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .toast-enter-from,
 .toast-leave-to {
   opacity: 0;
-  transform: translateX(30px);
+  transform: translateY(-8px);
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1080px) {
   .hero-card {
-    padding: 14px;
-    border-radius: var(--surface-radius-sm);
+    justify-content: flex-start;
   }
 
-  .hero-main {
-    flex-direction: column;
-    align-items: stretch;
+  .identity-head {
+    flex: 1 1 200px;
   }
 
-  .hero-meta {
+  .identity-metrics {
+    flex: 1 1 100%;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--home-hairline);
   }
 
-  .hero-meta-item {
-    gap: 2px;
-    padding: 8px 4px;
+  .identity-metric:first-child {
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .hero-card {
+    gap: 12px;
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .identity-head {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .identity-metrics {
+    gap: 10px 0;
+  }
+
+  .identity-metric {
+    padding: 0 10px;
+  }
+
+  .identity-metric:nth-child(3) {
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .identity-actions {
+    flex: 1 1 100%;
+    justify-content: space-between;
+    gap: 8px;
   }
 
   .checkin-btn,
   .checkin-done-badge {
-    width: 100%;
+    flex: 1 1 auto;
+    justify-content: center;
+    min-height: 44px;
   }
 
-  .hero-meta-item strong {
-    font-size: 13px;
+  .identity-chips {
+    flex: 0 0 auto;
   }
 
-  .hero-meta-label {
-    font-size: 10px;
-  }
-
-  .hero-status {
-    font-size: 12px;
-  }
-
-  .hero-progress {
-    max-width: none;
-  }
-
-  .habit-progress-card {
-    padding: var(--spacing-md);
-  }
-
-  .daily-card {
-    margin-bottom: 12px;
-  }
-
-  .section-header,
-  .daily-header {
-    flex-wrap: wrap;
-  }
-
-  .section-link {
-    width: 100%;
-  }
-
-  .daily-overview {
-    font-size: 10px;
-  }
-
-  .daily-item {
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-  }
-
-  .daily-item--goal {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .daily-streak,
-  .daily-weekly-progress,
-  .daily-habit-lock,
-  .daily-overdue,
-  .task-difficulty {
-    margin-left: 44px;
-  }
-
-  .daily-goal-progress {
-    min-width: 100%;
-    grid-column: 1 / -1;
+  .identity-chip {
+    min-height: 44px;
+    padding: 6px 10px;
   }
 
   .toast {
-    top: var(--spacing-md);
+    top: calc(var(--header-height) + 10px);
     left: var(--spacing-md);
     right: var(--spacing-md);
   }
 }
 
-@media (min-width: 1200px) {
-  .daily-body,
-  .section-body {
-    padding: var(--spacing-sm) var(--spacing-md);
-  }
-
-  .daily-groups {
-    gap: var(--spacing-md);
+@media (prefers-reduced-motion: reduce) {
+  .identity-progress-track span,
+  .checkin-btn,
+  .toast-enter-active,
+  .toast-leave-active {
+    transition: none;
   }
 }
 </style>

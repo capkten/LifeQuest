@@ -758,23 +758,29 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
-  padding: 14px 18px;
-  border-radius: var(--radius-lg);
-  background: var(--color-surface-low);
-  border: 1px solid var(--color-border);
-  transition: all 0.15s ease;
+  padding: 10px 18px;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--home-hairline);
+  transition: none;
+}
+
+.summary-item:first-child {
+  border-left: 0;
+  padding-left: 0;
 }
 
 .summary-item:hover {
-  background: #FFFFFF;
-  border-color: var(--color-border-strong);
-  box-shadow: var(--shadow-sm);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .summary-item svg { width: 22px; height: 22px; flex-shrink: 0; }
 .summary-item--income svg { color: var(--color-success); }
 .summary-item--expense svg { color: var(--color-error); }
-.summary-item--net svg { color: var(--color-primary); }
+.summary-item--net svg { color: var(--rank-1-accent); }
 
 .summary-item-info { display: flex; flex-direction: column; gap: 2px; }
 .summary-item-label { font-size: 11px; font-weight: 500; color: var(--color-text-secondary); }

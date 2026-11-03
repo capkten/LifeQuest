@@ -183,11 +183,44 @@ const linkProjects = ref([])
 const isEditing = computed(() => !!noteId.value)
 const collaborationBusy = computed(() => isEditing.value && ['connecting', 'syncing'].includes(collaboration.status.value))
 const canSave = computed(() => canEdit.value && !collaborationBusy.value)
+// Breadcrumbs show names; the raw ids stay only as a last-resort fallback so the
+// header never prints a UUID when the readable name is simply still loading.
+const notebookName = ref('')
+const folderName = ref('')
 const contextLabel = computed(() => {
-  if (notebookId.value && folderId.value) return `笔记本 ${notebookId.value} / 文件夹 ${folderId.value}`
-  if (notebookId.value) return `笔记本 ${notebookId.value}`
+  if (notebookName.value && folderName.value) return `${notebookName.value} / ${folderName.value}`
+  if (notebookName.value) return notebookName.value
+  if (folderName.value) return folderName.value
+  if (notebookId.value) return '正在读取笔记本…'
   return '笔记'
 })
+
+async function loadContextNames() {
+  if (!notebookId.value) return
+  try {
+    const notebook = await noteService.getNotebook(notebookId.value)
+    notebookName.value = notebook?.name || ''
+  } catch (error) {
+    notebookName.value = ''
+  }
+  if (!folderId.value) return
+  try {
+    const nodes = await noteService.getTree(notebookId.value)
+    folderName.value = findFolderName(nodes, folderId.value)
+  } catch (error) {
+    folderName.value = ''
+  }
+}
+
+function findFolderName(nodes, targetId) {
+  if (!Array.isArray(nodes)) return ''
+  for (const node of nodes) {
+    if (node?.id === targetId) return node.name || ''
+    const nested = findFolderName(node?.children, targetId)
+    if (nested) return nested
+  }
+  return ''
+}
 const linkTargetOptions = computed(() => {
   if (linkKind.value === 'project') return linkProjects.value
   if (linkKind.value === 'goal') return linkGoals.value
@@ -495,7 +528,10 @@ watch(() => collaboration.status.value, (nextStatus, previousStatus) => {
 })
 watch(() => [route.name, route.params.id, route.params.noteId, route.params.notebookId, route.query.parent_id, route.query.folder_id], loadRoute, { immediate: true })
 
-onMounted(() => window.addEventListener('beforeunload', handleBeforeUnload))
+onMounted(() => {
+  window.addEventListener('beforeunload', handleBeforeUnload)
+  loadContextNames()
+})
 onUnmounted(() => {
   autosave.cancel()
   collaboration.disconnect()

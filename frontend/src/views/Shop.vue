@@ -721,13 +721,11 @@ onMounted(() => {
   margin-bottom: 18px;
   padding: 22px 24px;
   overflow: hidden;
-  border: 1px solid rgba(14, 165, 233, 0.18);
-  border-radius: 16px;
-  background:
-    radial-gradient(circle at 90% 0%, rgba(110, 231, 183, 0.34), transparent 28%),
-    linear-gradient(120deg, #123b5d 0%, #0a6c94 66%, #0ea5e9 100%);
-  color: #fff;
-  box-shadow: var(--shadow-md);
+  border: 0;
+  border-radius: 22px;
+  background: linear-gradient(120deg, #FFFFFF 0%, #FBFEFC 100%);
+  color: var(--color-text);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px -30px rgba(15, 23, 42, 0.35);
 }
 
 .shop-hero-copy {
@@ -737,23 +735,24 @@ onMounted(() => {
 .shop-hero-kicker {
   display: block;
   margin-bottom: 8px;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
+  color: var(--rank-1-accent);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
 }
 
 .shop-hero h1 {
   margin: 0;
-  color: #fff;
+  color: var(--color-text);
   font-family: var(--font-family-display);
-  font-size: clamp(1.15rem, 1rem + 0.45vw, 1.65rem);
+  font-size: clamp(1.15rem, 1rem + 0.45vw, 1.55rem);
   line-height: 1.2;
+  letter-spacing: -0.01em;
 }
 
 .shop-hero p {
   margin-top: 7px;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--home-ink-tertiary);
   font-size: var(--font-size-sm);
 }
 
@@ -764,17 +763,18 @@ onMounted(() => {
   align-items: flex-end;
   gap: 2px;
   padding-left: 20px;
-  border-left: 1px solid rgba(255, 255, 255, 0.25);
-  color: rgba(255, 255, 255, 0.78);
+  border-left: 1px solid var(--home-hairline);
+  color: var(--home-ink-tertiary);
   font-size: var(--font-size-xs);
   text-align: right;
 }
 
 .shop-hero-summary strong {
-  color: #fff;
+  color: var(--color-text);
   font-family: var(--font-family-display);
   font-size: 1.8rem;
   line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .page-header {

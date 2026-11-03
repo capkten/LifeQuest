@@ -264,10 +264,10 @@ onMounted(() => {
 .timeline-card,
 .summary-card,
 .feedback-card {
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius);
-  box-shadow: var(--shadow-sm);
+  background: #FFFFFF;
+  border: 0;
+  border-radius: 22px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px -30px rgba(15, 23, 42, 0.35);
 }
 
 .history-hero {
@@ -277,8 +277,9 @@ onMounted(() => {
   justify-content: space-between;
   gap: 16px;
   background:
-    radial-gradient(circle at top right, rgba(14, 165, 233, 0.18), transparent 28%),
-    linear-gradient(135deg, #ffffff 0%, #eef8fb 100%);
+    radial-gradient(circle at 92% 0%, rgba(12, 122, 91, 0.12), transparent 42%),
+    linear-gradient(135deg, #FFFFFF 0%, #F3FAF6 100%);
+  border-radius: 24px;
 }
 
 .history-hero-main {

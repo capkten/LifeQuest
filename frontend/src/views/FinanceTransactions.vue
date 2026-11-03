@@ -67,7 +67,7 @@
       <article class="summary-panel stitch-surface">
         <div class="summary-panel__header">
           <div>
-            <div class="summary-panel__eyebrow">最近流水</div>
+            <div class="summary-panel__eyebrow">条件筛选</div>
             <h3 class="summary-panel__title">筛选与范围</h3>
           </div>
           <span class="summary-panel__meta">{{ activeFilterCount === 0 ? '当前查看全部' : `已启用 ${activeFilterCount} 个筛选` }}</span>
@@ -829,16 +829,16 @@ onMounted(() => {
 }
 
 .summary-panel--primary {
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.12), rgba(29, 78, 216, 0.06)), var(--color-card);
+  background: linear-gradient(120deg, #FFFFFF 0%, var(--rank-1-bg) 100%);
 }
 
 .summary-panel__eyebrow,
 .section-eyebrow {
-  font-size: var(--font-size-xs);
+  font-size: 11.5px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-text-tertiary);
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: var(--home-ink-tertiary);
 }
 
 .summary-panel__hero {
@@ -902,14 +902,15 @@ onMounted(() => {
 .summary-stat {
   display: grid;
   gap: 4px;
-  padding: 0.9rem;
-  border-radius: var(--radius-card);
-  border: 1px solid rgba(168, 215, 232, 0.45);
-  background: rgba(255, 255, 255, 0.72);
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 0;
+  background: var(--home-soft);
 }
 
 .summary-stat__value {
-  font-size: var(--font-size-lg);
+  font-size: 17px;
+  font-weight: 650;
   color: var(--color-text);
 }
 

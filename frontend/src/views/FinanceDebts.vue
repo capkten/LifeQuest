@@ -536,7 +536,7 @@ onMounted(() => { fetchDebts() })
   font-size: var(--font-size-xs); font-weight: 500;
   padding: 2px 10px; border-radius: var(--radius-full);
 }
-.debt-status--active { background: rgba(14, 165, 233, 0.12); color: var(--color-primary-dark); }
+.debt-status--active { background: var(--rank-1-bg); color: var(--rank-1-accent); }
 .debt-status--settled { background: rgba(81, 207, 102, 0.12); color: var(--color-success); }
 
 .debt-actions { display: flex; gap: 4px; }
@@ -744,7 +744,7 @@ onMounted(() => { fetchDebts() })
   margin-bottom: 0;
   padding: 6px;
   border-radius: 18px;
-  background: rgba(14, 165, 233, 0.08);
+  background: var(--home-soft);
 }
 
 .tab-btn {
@@ -895,7 +895,7 @@ onMounted(() => { fetchDebts() })
 .tab-btn:focus-visible,
 .dialog-close:focus-visible,
 .form-input:focus-visible {
-  outline: 3px solid rgba(14, 165, 233, 0.35);
+  outline: 3px solid rgba(12, 122, 91, 0.28);
   outline-offset: 2px;
 }
 

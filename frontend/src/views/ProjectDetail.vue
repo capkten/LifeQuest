@@ -1777,30 +1777,41 @@ onBeforeUnmount(() => {
 .detail-meta {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-md);
+  gap: 0;
+  margin-bottom: var(--spacing-lg);
+  padding: 4px 0;
+  border-radius: 18px;
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 16px 34px -28px rgba(15, 23, 42, 0.32);
 }
 
 .detail-meta-item {
-  padding: var(--spacing-sm) var(--spacing-md);
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius-sm);
+  padding: 12px 20px;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--home-hairline);
+  border-radius: 0;
+}
+
+.detail-meta-item:first-child {
+  border-left: 0;
 }
 
 .detail-meta-label {
   display: block;
-  margin-bottom: 4px;
-  color: var(--color-text-tertiary);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  margin-bottom: 2px;
+  color: var(--home-ink-tertiary);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .detail-meta-item strong {
   color: var(--color-text);
   font-family: var(--font-family-display);
-  font-size: var(--font-size-lg);
+  font-size: 20px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
 }
 
 .progress-info {
@@ -1810,9 +1821,9 @@ onBeforeUnmount(() => {
 }
 
 .progress-bar-lg {
-  height: 8px;
-  background: var(--color-bg-tertiary);
-  border-radius: var(--radius-full);
+  height: 6px;
+  background: #E6EFEC;
+  border-radius: 999px;
   overflow: hidden;
 }
 
@@ -1837,11 +1848,11 @@ onBeforeUnmount(() => {
 
 .project-linked-notes {
   display: grid;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-md) 0;
-  margin-bottom: var(--spacing-xl);
-  border-top: 1px solid var(--color-border);
-  border-bottom: 1px solid var(--color-border);
+  gap: 8px;
+  padding: 12px 0;
+  margin-bottom: var(--spacing-md);
+  border-top: 1px solid var(--home-hairline);
+  border-bottom: 1px solid var(--home-hairline);
 }
 
 .project-linked-notes-header,
@@ -1934,9 +1945,12 @@ onBeforeUnmount(() => {
 
 /* View Toggle */
 .view-toggle {
-  display: flex;
-  gap: var(--spacing-xs);
+  display: inline-flex;
+  gap: 4px;
   margin-bottom: var(--spacing-xl);
+  padding: 5px;
+  border-radius: 999px;
+  background: var(--home-soft);
   flex-wrap: wrap;
 }
 
@@ -1944,16 +1958,16 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
-  padding: var(--spacing-sm) var(--spacing-lg);
+  padding: 7px 16px;
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--color-text-secondary);
   background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  border-radius: 999px;
   cursor: pointer;
   font-family: var(--font-family);
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .view-btn svg {
@@ -1962,19 +1976,21 @@ onBeforeUnmount(() => {
 }
 
 .view-btn:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.65);
+  color: var(--color-text);
 }
 
 .view-btn--active {
-  background: var(--color-primary);
-  color: #fff;
-  border-color: var(--color-primary);
+  background: #FFFFFF;
+  color: var(--rank-1-accent);
+  border-color: transparent;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
 .view-btn--active:hover {
-  background: var(--color-primary-dark);
-  color: #fff;
+  background: #FFFFFF;
+  color: var(--rank-1-accent);
 }
 
 /* Status Badge */
@@ -2169,11 +2185,11 @@ onBeforeUnmount(() => {
 .task-card {
   display: flex;
   align-items: center;
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: 12px 14px;
   margin-bottom: var(--spacing-xs);
-  background: var(--color-bg-secondary);
-  border-radius: var(--radius-md);
-  border-left: 3px solid var(--color-border);
+  background: var(--home-soft);
+  border-radius: 14px;
+  border-left: 0;
   transition: opacity 0.2s ease;
 }
 
@@ -2348,8 +2364,9 @@ onBeforeUnmount(() => {
   font-weight: 500;
   color: var(--color-text-tertiary);
   background: transparent;
-  border: 2px dashed var(--color-border);
-  border-radius: var(--radius-lg);
+  border: 1px dashed rgba(15, 23, 42, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.6);
   cursor: pointer;
   font-family: var(--font-family);
   transition: all 0.15s ease;
@@ -2404,11 +2421,11 @@ onBeforeUnmount(() => {
 }
 
 .kanban-card {
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-left: 3px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-sm) var(--spacing-md);
+  background: #FFFFFF;
+  border: 0;
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 22px -20px rgba(15, 23, 42, 0.35);
   cursor: grab;
   transition: box-shadow 0.15s ease, opacity 0.15s ease;
 }

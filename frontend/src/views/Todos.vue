@@ -1843,13 +1843,13 @@ onMounted(() => {
   justify-content: center;
   gap: var(--spacing-sm);
   min-height: 44px;
-  padding: 10px 14px;
+  padding: 10px 18px;
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: #fff;
-  background: var(--color-primary);
+  background: var(--rank-1-accent);
   border: none;
-  border-radius: 12px;
+  border-radius: 999px;
   cursor: pointer;
   font-family: var(--font-family);
   transition: background 0.15s ease, transform 0.15s ease;
@@ -1857,7 +1857,7 @@ onMounted(() => {
 }
 
 .btn-create:hover {
-  background: var(--color-primary-dark);
+  background: #0B7357;
   transform: translateY(-1px);
 }
 
@@ -1873,16 +1873,21 @@ onMounted(() => {
 
 /* Tabs */
 .tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: var(--spacing-md);
-  padding: 8px;
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius);
-  box-shadow: var(--shadow-sm);
-  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: var(--spacing-lg);
+  padding: 5px;
+  background: var(--home-soft);
+  border: 0;
+  border-radius: 999px;
+  box-shadow: none;
+  max-width: 100%;
+}
+
+.tabs .tab-btn {
+  flex: 0 1 auto;
+  width: auto;
 }
 
 .todo-progress-card {
@@ -1890,12 +1895,12 @@ onMounted(() => {
   grid-template-columns: minmax(120px, auto) minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--spacing-md);
-  margin-bottom: var(--spacing-md);
-  padding: var(--spacing-md) var(--spacing-lg);
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius);
-  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--spacing-lg);
+  padding: 0 4px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .todo-progress-copy {
@@ -1919,16 +1924,17 @@ onMounted(() => {
 }
 
 .todo-progress-track {
-  height: 8px;
+  height: 6px;
   overflow: hidden;
   border-radius: var(--radius-full);
-  background: var(--color-bg-tertiary);
+  background: #E6EFEC;
 }
 
 .todo-progress-track span {
   display: block;
   height: 100%;
   border-radius: inherit;
+  background: linear-gradient(90deg, #12B886, #38D9A9);
   background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
   transition: width 300ms ease;
 }
@@ -1985,27 +1991,27 @@ onMounted(() => {
   width: 100%;
   min-width: 0;
   min-height: 44px;
-  padding: 10px 16px;
+  padding: 8px 14px;
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-text-secondary);
   background: transparent;
   border: none;
-  border-radius: var(--radius-lg);
+  border-radius: 999px;
   cursor: pointer;
   font-family: var(--font-family);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .tab-btn:hover {
-  color: var(--color-primary);
-  background: var(--color-surface-low);
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.6);
 }
 
 .tab-btn--active {
-  color: #fff;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
-  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+  color: var(--rank-1-accent);
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
 .tab-icon {
@@ -2034,33 +2040,33 @@ onMounted(() => {
 }
 
 .tab-count--habits {
-  background: rgba(255, 107, 107, 0.12);
-  color: var(--color-error);
+  background: rgba(15, 23, 42, 0.05);
+  color: var(--home-ink-tertiary);
 }
 
 .tab-btn--active .tab-count--habits {
-  background: rgba(255, 255, 255, 0.25);
-  color: #fff;
+  background: var(--home-soft);
+  color: var(--rank-1-accent);
 }
 
 .tab-count--tasks {
-  background: rgba(14, 165, 233, 0.12);
-  color: var(--color-secondary);
+  background: rgba(15, 23, 42, 0.05);
+  color: var(--home-ink-tertiary);
 }
 
 .tab-btn--active .tab-count--tasks {
-  background: rgba(255, 255, 255, 0.25);
-  color: #fff;
+  background: var(--home-soft);
+  color: var(--rank-1-accent);
 }
 
 .tab-count--goals {
-  background: rgba(14, 165, 233, 0.12);
-  color: var(--color-primary);
+  background: rgba(15, 23, 42, 0.05);
+  color: var(--home-ink-tertiary);
 }
 
 .tab-btn--active .tab-count--goals {
-  background: rgba(255, 255, 255, 0.25);
-  color: #fff;
+  background: var(--home-soft);
+  color: var(--rank-1-accent);
 }
 
 /* Loading State */
@@ -2148,29 +2154,35 @@ onMounted(() => {
 .todo-list {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 0;
+  padding: 4px clamp(14px, 2vw, 24px);
+  background: #FFFFFF;
+  border-radius: 22px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 18px 40px -30px rgba(15, 23, 42, 0.35);
 }
 
 .todo-card {
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-left: 4px solid var(--color-border);
-  border-radius: var(--surface-radius);
-  padding: 16px 20px;
-  box-shadow: var(--shadow-sm);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--home-hairline);
+  border-radius: 0;
+  padding: 16px 0;
+  box-shadow: none;
+  transition: background 0.15s ease;
+}
+
+.todo-card:last-child {
+  border-bottom: 0;
 }
 
 .todo-card:hover {
-  border-color: var(--color-border-strong);
-  border-left-color: var(--color-primary);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
+  background: transparent;
+  box-shadow: none;
+  transform: none;
 }
 
 .todo-card--completed {
-  border-left-color: var(--color-success);
-  opacity: 0.75;
+  opacity: 0.72;
 }
 
 .todo-card--completed:hover {
@@ -2290,24 +2302,24 @@ onMounted(() => {
   justify-self: start;
   min-height: 32px;
   padding: 4px 8px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text-secondary);
-  background: var(--color-bg-secondary);
+  border: 0;
+  border-radius: 999px;
+  color: var(--home-ink-tertiary);
+  background: transparent;
   cursor: pointer;
   font: inherit;
   font-size: 12px;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease;
 }
 
 .linked-notes-toggle:hover:not(:disabled),
 .linked-notes-toggle:focus-visible,
 .linked-notes-retry:hover,
 .linked-notes-retry:focus-visible {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-  background: var(--color-card);
-  outline: 2px solid var(--color-primary-light);
+  border-color: transparent;
+  color: var(--rank-1-accent);
+  background: var(--home-soft);
+  outline: 2px solid var(--rank-1-accent);
   outline-offset: 2px;
 }
 
@@ -2509,7 +2521,7 @@ onMounted(() => {
 /* Subtask Section */
 .subtask-divider {
   margin-top: 10px;
-  border-top: 1px dashed var(--color-border);
+  border-top: 1px solid var(--home-hairline);
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -2756,9 +2768,9 @@ onMounted(() => {
 
 /* Footer Stats */
 .todo-card-footer {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--color-border);
+  margin-top: 6px;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .todo-card-stats {
@@ -3153,12 +3165,17 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg-tertiary);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
   cursor: pointer;
-  color: var(--color-text-tertiary);
-  transition: all 0.15s ease;
+  color: var(--home-ink-tertiary);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.action-btn:hover {
+  background: var(--home-soft);
+  color: var(--color-text);
 }
 
 .action-btn svg {
@@ -3278,11 +3295,11 @@ onMounted(() => {
   gap: 16px;
   margin-bottom: var(--spacing-md);
   min-width: 0;
-  padding: 12px 18px;
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--surface-radius);
-  box-shadow: var(--shadow-sm);
+  padding: 4px 2px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .project-filter-label {
@@ -3325,10 +3342,10 @@ onMounted(() => {
 }
 
 .project-filter-btn--active {
-  color: #ffffff;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+  color: var(--rank-1-accent);
+  background: var(--rank-1-chip);
   border-color: transparent;
-  box-shadow: 0 2px 8px rgba(14, 165, 233, 0.25);
+  box-shadow: none;
 }
 
 .project-filter-count {
@@ -3344,8 +3361,8 @@ onMounted(() => {
 }
 
 .project-filter-btn--active .project-filter-count {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.25);
+  color: var(--rank-1-accent);
+  background: rgba(255, 255, 255, 0.75);
 }
 
 /* Project Tag */
@@ -3622,20 +3639,20 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.12), rgba(79, 209, 197, 0.12));
-  color: var(--color-primary);
-  border: 1px solid rgba(56, 189, 248, 0.3);
-  padding: 8px 14px;
-  border-radius: var(--radius-md, 8px);
+  background: var(--rank-1-bg);
+  color: var(--rank-1-accent);
+  border: 1px solid transparent;
+  padding: 8px 16px;
+  border-radius: 999px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.15s ease;
 }
 
 .btn-retreat:hover {
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(79, 209, 197, 0.2));
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+  background: var(--rank-1-chip);
+  box-shadow: none;
 }
 
 .action-btn--focus {
