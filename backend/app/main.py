@@ -971,15 +971,31 @@ def _migrate_columns(database_engine=None):
             completion_cols = {c["name"] for c in inspector.get_columns("habit_completions")}
         except (KeyError, NoSuchTableError):
             completion_cols = None
+        # Older databases name the day column completed_date; the model reads
+        # completed_on, so the column has to be renamed before anything queries it.
+        if (
+            completion_cols is not None
+            and "completed_on" not in completion_cols
+            and "completed_date" in completion_cols
+        ):
+            conn.execute(text(
+                "ALTER TABLE habit_completions RENAME COLUMN completed_date TO completed_on"
+            ))
+            completion_cols = (completion_cols - {"completed_date"}) | {"completed_on"}
+            logger.info("Migration: renamed habit_completions.completed_date to completed_on")
         if completion_cols is not None:
             if "completed_at" not in completion_cols:
                 conn.execute(text("ALTER TABLE habit_completions ADD COLUMN completed_at DATETIME"))
                 logger.info("Migration: added habit_completions.completed_at")
-            completed_at_fallback = (
-                "COALESCE(completed_at, created_at, completed_on)"
-                if "created_at" in completion_cols
-                else "COALESCE(completed_at, completed_on)"
-            )
+            # The fallback chain must only reference columns that actually exist:
+            # legacy databases lack completed_on/created_at, and a fresh table is
+            # created straight from the modern model.
+            fallback_columns = ["completed_at"]
+            if "created_at" in completion_cols:
+                fallback_columns.append("created_at")
+            if "completed_on" in completion_cols:
+                fallback_columns.append("completed_on")
+            completed_at_fallback = f"COALESCE({', '.join(fallback_columns)})"
             conn.execute(text(
                 f"UPDATE habit_completions SET completed_at = {completed_at_fallback} "
                 "WHERE completed_at IS NULL"
@@ -989,6 +1005,19 @@ def _migrate_columns(database_engine=None):
                 conn.execute(text("ALTER TABLE habit_completions ADD COLUMN note VARCHAR(500)"))
             if "is_makeup" not in completion_cols:
                 conn.execute(text("ALTER TABLE habit_completions ADD COLUMN is_makeup BOOLEAN NOT NULL DEFAULT 0"))
+            # The model scopes completions by user_id; older tables only carried habit_id.
+            if "user_id" not in completion_cols:
+                conn.execute(text("ALTER TABLE habit_completions ADD COLUMN user_id CHAR(32)"))
+                conn.execute(text(
+                    "UPDATE habit_completions SET user_id = ("
+                    "SELECT user_id FROM habits WHERE habits.id = habit_completions.habit_id"
+                    ") WHERE user_id IS NULL"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_habit_completions_user_id "
+                    "ON habit_completions (user_id)"
+                ))
+                logger.info("Migration: added and backfilled habit_completions.user_id")
             live_inspector = inspect(conn)
             if not _has_unique_definition(
                 live_inspector,
