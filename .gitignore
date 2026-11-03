@@ -62,6 +62,9 @@ backend/uploads/
 data/
 .worktrees/
 
+# Deployment artifacts written into the checkout by deploy/update-systemd.sh
+frontend/android-update/
+
 # Android signing material
 frontend/android/key.properties
 frontend/android/release.keystore
