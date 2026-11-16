@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.timezone import as_utc
 
@@ -24,6 +24,9 @@ class RetreatResponse(BaseRetreatSchema):
     id: UUID
     user_id: UUID
     todo_id: Optional[UUID] = None
+    todo_title: Optional[str] = None
+    companion_snapshot: Optional[Dict[str, str]] = None
+    mark_todo_complete: bool = False
     target_duration: int
     actual_duration: int
     status: str
@@ -31,9 +34,19 @@ class RetreatResponse(BaseRetreatSchema):
     ended_at: Optional[datetime] = None
     exp_gained: int
     coins_gained: int
+    rule_version: Optional[str] = None
+    qi_gained: Optional[int] = None
+    settlement_id: Optional[UUID] = None
+    settlement_result: Optional[Dict[str, Any]] = None
+    return_summary: Optional[Dict[str, Any]] = None
     encounter_id: Optional[str] = None
     encounter_result: Optional[Dict[str, Any]] = None
     created_at: datetime
+
+    @field_validator('started_at', 'ended_at', 'created_at')
+    @classmethod
+    def utc_timestamps(cls, value):
+        return as_utc(value) if value is not None else None
 
 
 class EncounterCatalogItem(BaseModel):

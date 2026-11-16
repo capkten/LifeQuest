@@ -1740,6 +1740,7 @@ class CultivationService:
         start, end = day_bounds_utc(self._utc_today())
         return self.db.query(CultivationLog.id).filter(
             CultivationLog.user_id == user_id,
+            CultivationLog.source.notin_(("retreat", "retreat_omen", "retreat_encounter")),
             CultivationLog.created_at >= start,
             CultivationLog.created_at < end,
         ).count()
@@ -1747,6 +1748,8 @@ class CultivationService:
     @staticmethod
     def _resource_deltas(source: str, content_star: int, quality: float, aptitude_allowed: bool):
         source_value = CultivationService._source_value(source)
+        if source_value in ("retreat_omen", "retreat_encounter") or (source_value == "retreat" and content_star == 0):
+            return 0, 0, 0, 0
         rule = CULTIVATION_RESOURCE_RULES.get(
             source_value,
             {"merit": 0, "contribution": 0, "mind_state_delta": 0},
@@ -1757,7 +1760,7 @@ class CultivationService:
         mind_state_delta = rule["mind_state_delta"] * star
         if quality < 1.0 and mind_state_delta == 0:
             mind_state_delta = -1
-        aptitude_points = star if aptitude_allowed else 0
+        aptitude_points = star if aptitude_allowed and source_value != "retreat" else 0
         return merit, contribution, mind_state_delta, aptitude_points
 
     def settle_todo_reward(
@@ -1771,6 +1774,7 @@ class CultivationService:
         source_key: str | None = None,
         content_star: int = 1,
         apply_legacy_user_rewards: bool = True,
+        fixed_spirit_stones: int | None = None,
     ) -> RewardSettlement:
         if not source_key:
             return self._settle_todo_reward_in_session(
@@ -1783,6 +1787,7 @@ class CultivationService:
                 None,
                 content_star,
                 apply_legacy_user_rewards,
+                fixed_spirit_stones,
             )
         for attempt in range(SOURCE_KEY_RETRY_COUNT):
             try:
@@ -1796,6 +1801,7 @@ class CultivationService:
                     source_key,
                     content_star,
                     apply_legacy_user_rewards,
+                    fixed_spirit_stones,
                 )
             except IntegrityError:
                 self.db.expire_all()
@@ -1840,6 +1846,7 @@ class CultivationService:
         source_key: str | None,
         content_star: int,
         apply_legacy_user_rewards: bool,
+        fixed_spirit_stones: int | None = None,
     ) -> RewardSettlement:
         try:
             difficulty_factor = DIFFICULTY_FACTORS[difficulty]
@@ -1886,7 +1893,16 @@ class CultivationService:
                 * previous_efficiency
                 * quality
             ))
-            stones = max(1, math.floor(cultivation * 0.6))
+            if self._source_value(source) == "retreat":
+                # B-rule conversion is exact, independent of profile efficiency.
+                cultivation = max(0, math.floor(base_exp))
+                stones = math.floor(cultivation * 0.6)
+            elif self._source_value(source) in ("retreat_omen", "retreat_encounter"):
+                # These are frozen auxiliary amounts, never efficiency-amplified.
+                cultivation = max(0, math.floor(base_exp))
+                stones = max(0, int(fixed_spirit_stones or 0))
+            else:
+                stones = max(1, math.floor(cultivation * 0.6))
             log = CultivationLog(
                 user_id=user_id,
                 source=source,

@@ -59,7 +59,6 @@ test('weekly review is reachable from the authenticated shell', async () => {
 
   assert.match(router, /path: 'review'/)
   assert.match(router, /WeeklyReview/)
-  assert.match(sidebar, /to="\/review"/)
   assert.match(sidebar, /周复盘/)
   assert.match(router, /name: 'WeeklyReview'[\s\S]{0,120}title: '周复盘'/)
   assert.match(layout, /route\.meta\?\.title/)

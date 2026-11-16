@@ -73,9 +73,10 @@
             @click="selectedDuration = mins"
           >
             {{ mins }} 分钟
-            <span class="preset-exp">+{{ mins * 10 }} 修为</span>
+            <span class="preset-exp">最多 {{ mins }} 灵气</span>
           </button>
         </div>
+        <p class="section-label">每分钟 1 灵气，每日最多 240。完成绑定待办时转化 50% 修为，其余转化 25%。</p>
       </div>
 
       <!-- Focus In Progress Info -->
@@ -254,7 +255,9 @@ async function handleComplete() {
     const res = await completeRetreat({
       markTodoComplete: markTodoComplete.value,
     })
-    ElMessage.success(`出关大吉！斩获修为 +${res.exp_gained}，灵石 +${res.coins_gained}`)
+    const qiText = res.qi_gained == null ? '' : `${res.qi_gained} 灵气 → `
+    const capText = res.settlement_result?.daily_qi_cap_reached ? '，今日灵气已满' : ''
+    ElMessage.success(`收功：${qiText}修为 +${res.exp_gained}，灵石 +${res.coins_gained}${capText}`)
     emit('completed', res)
     if (res.encounter_result) {
       currentEncounter.value = res.encounter_result
@@ -274,7 +277,9 @@ function handleEncounterClaim(enc) {
 async function handleAbort() {
   try {
     await ElMessageBox.confirm(
-      '心神未固而强行破关，可能无法获得全部修行机缘，确定中止吗？',
+      activeRetreat.value?.rule_version === 'b_v1'
+        ? '提前结束会按已过整分钟结算灵气，不会完成绑定待办。现在收功吗？'
+        : '确定中止本次闭关吗？',
       '破关确认',
       {
         confirmButtonText: '确定中止',
@@ -283,7 +288,10 @@ async function handleAbort() {
       }
     )
     const res = await abortRetreat()
-    ElMessage.warning('闭关已中止')
+    const capText = res.settlement_result?.daily_qi_cap_reached ? '，今日灵气已满' : ''
+    ElMessage.success(res.qi_gained == null
+      ? '闭关已中止'
+      : `收功：${res.qi_gained} 灵气 → 修为 +${res.exp_gained}，灵石 +${res.coins_gained}${capText}`)
     emit('aborted', res)
     emit('update:modelValue', false)
   } catch (action) {

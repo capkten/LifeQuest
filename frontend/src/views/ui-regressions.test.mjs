@@ -179,17 +179,6 @@ test('sect business locks remain clickable so blocked reasons can be shown', asy
   assert.doesNotMatch(source, /:aria-disabled="busyId !== null \|\| sect\./)
 })
 
-test('sidebar places accounting directly below home', async () => {
-  const source = await readFile(new URL('../components/layout/Sidebar.vue', import.meta.url), 'utf8')
-  const homeIndex = source.indexOf('to="/"')
-  const financeIndex = source.indexOf('to="/finance"')
-  const todosIndex = source.indexOf('to="/todos"')
-
-  assert.ok(homeIndex >= 0, 'home navigation must remain present')
-  assert.ok(financeIndex > homeIndex, 'accounting must follow home')
-  assert.ok(financeIndex < todosIndex, 'accounting must be directly below home')
-})
-
 test('sidebar displays the application version beside the LifeQuest brand', async () => {
   const [sidebar, viteConfig] = await Promise.all([
     readFile(new URL('../components/layout/Sidebar.vue', import.meta.url), 'utf8'),
@@ -377,13 +366,12 @@ test('todo habit completion uses the server completed_today field for all lock s
 })
 
 test('daily habit consumers compare optional server state fields explicitly', async () => {
-  const [service, home, todos] = await Promise.all([
+  const [service, todos] = await Promise.all([
     readFile(new URL('../services/todo.js', viewsDirectory), 'utf8'),
-    readFile(new URL('./Home.vue', viewsDirectory), 'utf8'),
     readFile(new URL('./Todos.vue', viewsDirectory), 'utf8'),
   ])
 
-  for (const [file, source] of [['Home.vue', home], ['Todos.vue', todos]]) {
+  for (const [file, source] of [['Todos.vue', todos]]) {
     assert.match(source, /habit\.paused_today === true/, `${file} must check paused_today explicitly`)
     assert.match(source, /habit\.is_active === false/, `${file} must check is_active explicitly`)
     assert.match(source, /habit\.excused_today === true/, `${file} must check excused_today explicitly`)
@@ -495,28 +483,23 @@ test('subtask completion uses the settlement endpoint', async () => {
   assert.doesNotMatch(service, /api\.put\(`\/todos\/subtasks\/\$\{subtaskId\}`\s*,\s*\{ is_completed: true \}\)/)
 })
 
-test('home action center keeps request failures separate from the legitimate empty state', async () => {
-  const [home, actionCenter, composable] = await Promise.all([
-    readFile(new URL('./Home.vue', viewsDirectory), 'utf8'),
+test('action center keeps request failures separate from the legitimate empty state', async () => {
+  const [actionCenter, composable] = await Promise.all([
     readFile(new URL('../components/home/TodayActionCenter.vue', import.meta.url), 'utf8'),
     readFile(new URL('../composables/useActionCenter.js', import.meta.url), 'utf8'),
   ])
-
-  assert.match(home, /TodayActionCenter/)
   assert.match(actionCenter, /v-else-if="error && !data"[\s\S]*role="alert"[\s\S]*重试/)
   assert.match(actionCenter, /v-if="error"[\s\S]*today-action-inline-error/)
   assert.match(composable, /if \(currentRequestId === requestId\) error\.value = cause/)
-  assert.doesNotMatch(home, /todoService\.getDailySummary\(\)/)
 })
 
 test('habit entry points respect all server lock fields and non-retryable refresh failures', async () => {
-  const [todos, home, history] = await Promise.all([
+  const [todos, history] = await Promise.all([
     readFile(new URL('./Todos.vue', viewsDirectory), 'utf8'),
-    readFile(new URL('./Home.vue', viewsDirectory), 'utf8'),
     readFile(new URL('../components/HabitHistoryDialog.vue', import.meta.url), 'utf8'),
   ])
 
-  for (const source of [todos, home]) {
+  for (const source of [todos]) {
     assert.match(source, /completed_today/)
     assert.match(source, /paused_today/)
     assert.match(source, /excused_today/)
@@ -1188,7 +1171,7 @@ test('MCP copy and revoke actions cannot start while the other action is pending
   assert.strictEqual(reduceMcpTokenState(state, { type: 'revoke-start' }), state)
 })
 
-test('TodayWorkbench and Todos integrate cultivation retreat focus triggers and modal', async () => {
+test('TodayWorkbench and Todos retain focus triggers', async () => {
   const [workbenchSource, todosSource] = await Promise.all([
     readFile(new URL('../components/home/TodayWorkbench.vue', import.meta.url), 'utf8'),
     readFile(new URL('./Todos.vue', import.meta.url), 'utf8'),
@@ -1197,7 +1180,6 @@ test('TodayWorkbench and Todos integrate cultivation retreat focus triggers and 
   assert.match(workbenchSource, /CultivationRetreatModal/, 'TodayWorkbench missing CultivationRetreatModal')
   assert.match(workbenchSource, /闭关|入定|retreat/i, 'TodayWorkbench missing retreat trigger')
 
-  assert.match(todosSource, /CultivationRetreatModal/, 'Todos missing CultivationRetreatModal')
   assert.match(todosSource, /闭关|入定|action-btn--focus/i, 'Todos missing retreat trigger')
 })
 

@@ -90,8 +90,9 @@ def test_retreat_api_complete_with_todo(client, auth_headers, user, db_session):
     assert comp_res.status_code == 200
     comp_data = comp_res.json()
     assert comp_data["status"] == "completed"
-    assert comp_data["exp_gained"] >= 250
-    assert comp_data["coins_gained"] >= 125
+    assert comp_data["exp_gained"] == 12
+    assert comp_data["coins_gained"] == 7
+    assert comp_data["qi_gained"] == 25
 
     # Verify task status is completed
     db_session.refresh(task)

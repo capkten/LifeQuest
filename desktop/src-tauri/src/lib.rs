@@ -5,6 +5,7 @@ pub mod sync;
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             commands::select_sync_folder,
             commands::preview_sync,

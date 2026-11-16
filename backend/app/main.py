@@ -20,7 +20,7 @@ from app import models  # noqa: F401  # Register all ORM models before create_al
 from app.timezone import local_date
 from app.services.note import NoteService
 from app.api import auth, users, notes, note_sync, todos, shop, backpack, achievements, checkin, titles, coins, calendar, stats, finance, projects, cultivation, immortal, action_center, review, cultivation_retreat
-from app.api import mcp_oauth
+from app.api import mcp_oauth, cave
 from app.oauth_config import get_oauth_config
 
 get_oauth_config()  # Reject invalid enabled OAuth configuration before startup.
@@ -926,6 +926,53 @@ def _migrate_columns(database_engine=None):
                         f"ALTER TABLE cultivation_profiles ADD COLUMN {column_name} {column_definition}"
                     ))
 
+        # NULL rule versions preserve both settled and active legacy sessions.
+        # New sessions opt into B explicitly; no historical rewards are changed.
+        try:
+            retreat_cols = {c["name"] for c in inspector.get_columns("cultivation_retreats")}
+        except (KeyError, NoSuchTableError):
+            retreat_cols = None
+        if retreat_cols is not None:
+            for column_name, column_definition in {
+                "rule_version": "VARCHAR(20)",
+                "qi_gained": "INTEGER",
+                "settlement_id": f"{uuid_type} REFERENCES cultivation_logs(id)",
+                "settlement_result": "JSON",
+                "mark_todo_complete": "BOOLEAN NOT NULL DEFAULT FALSE",
+                "todo_title": "VARCHAR(500)",
+                "companion_snapshot": "JSON",
+                "return_summary": "JSON",
+                "return_acknowledged_at": "DATETIME",
+            }.items():
+                if column_name not in retreat_cols:
+                    conn.execute(text(
+                        f"ALTER TABLE cultivation_retreats ADD COLUMN {column_name} {column_definition}"
+                    ))
+
+        try:
+            daily_cols = {c["name"] for c in inspector.get_columns("cave_daily_states")}
+        except (KeyError, NoSuchTableError):
+            daily_cols = None
+        if daily_cols is not None:
+            for column_name, column_definition in {
+                "offline_note_key": "VARCHAR(80)",
+                "offline_note": "JSON",
+            }.items():
+                if column_name not in daily_cols:
+                    conn.execute(text(f"ALTER TABLE cave_daily_states ADD COLUMN {column_name} {column_definition}"))
+
+        try:
+            event_cols = {c["name"] for c in inspector.get_columns("cave_events")}
+        except (KeyError, NoSuchTableError):
+            event_cols = None
+        if event_cols is not None:
+            for column_name, column_definition in {
+                "session_id": uuid_type,
+                "facts": "JSON",
+            }.items():
+                if column_name not in event_cols:
+                    conn.execute(text(f"ALTER TABLE cave_events ADD COLUMN {column_name} {column_definition}"))
+
         # create_all handles fresh databases; this text DDL also supports a
         # legacy database and the lightweight migration connections used by
         # the existing startup tests.
@@ -1468,6 +1515,7 @@ app.include_router(projects.router)
 app.include_router(cultivation.router)
 app.include_router(immortal.router)
 app.include_router(cultivation_retreat.router)
+app.include_router(cave.router)
 
 # MCP SSE server — subprocess on internal port, proxied through explicit routes.
 _mcp_process = None

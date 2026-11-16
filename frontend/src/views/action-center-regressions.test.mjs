@@ -98,14 +98,6 @@ test('action center passes the recurring occurrence date to task completion', as
   assert.deepEqual(completionArgs, [['task-1', '2026-08-30']])
 })
 
-test('home uses the action center instead of a second daily summary request', async () => {
-  const source = await readFile(new URL('./Home.vue', import.meta.url), 'utf8')
-
-  assert.match(source, /TodayActionCenter/)
-  assert.match(source, /useActionCenter/)
-  assert.doesNotMatch(source, /todoService\.getDailySummary\(\)/)
-})
-
 test('action center keys recurring occurrences by date', async () => {
   const source = await readFile(new URL('../components/home/TodayActionCenter.vue', import.meta.url), 'utf8')
 

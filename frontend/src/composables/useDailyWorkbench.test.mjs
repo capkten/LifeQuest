@@ -286,11 +286,8 @@ test('leaving the page invalidates pending results and skips refresh callbacks',
   assert.equal(state.pendingAction.value, 'complete:first')
 })
 
-test('workbench appears before game information and keeps mobile controls accessible', async () => {
-  const home = await readFile(new URL('../views/Home.vue', import.meta.url), 'utf8')
+test('workbench keeps mobile controls accessible', async () => {
   const component = await readFile(new URL('../components/home/TodayWorkbench.vue', import.meta.url), 'utf8')
-  assert.ok(home.indexOf('<TodayWorkbench') < home.indexOf('<section class="hero-card">'))
-  assert.match(home, /@changed="refreshHomeTasks"/)
   assert.match(component, /role="alert"/)
   assert.match(component, /fieldset :disabled="busy"/)
   assert.match(component, /@keydown\.esc\.prevent="closeFocus"/)

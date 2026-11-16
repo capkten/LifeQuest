@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String, Text, Uuid
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text, Uuid
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -17,6 +17,9 @@ class CultivationRetreat(Base):
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     user_id = Column(Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     todo_id = Column(Uuid, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+    todo_title = Column(String(500), nullable=True)
+    companion_snapshot = Column(JSON, nullable=True)
+    mark_todo_complete = Column(Boolean, default=False, nullable=False)
 
     target_duration = Column(Integer, nullable=False)
     actual_duration = Column(Integer, default=0, nullable=False)
@@ -27,6 +30,14 @@ class CultivationRetreat(Base):
 
     exp_gained = Column(Integer, default=0, nullable=False)
     coins_gained = Column(Integer, default=0, nullable=False)
+
+    # NULL identifies sessions created before the B rule; never backfill them.
+    rule_version = Column(String(20), nullable=True)
+    qi_gained = Column(Integer, nullable=True)
+    settlement_id = Column(Uuid, ForeignKey("cultivation_logs.id"), nullable=True)
+    settlement_result = Column(JSON, nullable=True)
+    return_summary = Column(JSON, nullable=True)
+    return_acknowledged_at = Column(DateTime, nullable=True)
 
     encounter_id = Column(String(50), nullable=True)
     encounter_result = Column(JSON, nullable=True)

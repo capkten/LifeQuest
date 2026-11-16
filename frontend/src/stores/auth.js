@@ -5,6 +5,7 @@ import router from '../router'
 import { useCultivationStore } from './cultivation'
 import { registerAuthCleanup } from '../services/authSession'
 import { safeLoginRedirect } from '../services/mcpOAuthState'
+import { defaultCavePersistence } from '../services/cavePersistence.js'
 
 let refreshPromise = null
 let logoutPromise = null
@@ -17,6 +18,12 @@ export const useAuthStore = defineStore('auth', () => {
   const cultivationStore = useCultivationStore()
 
   function clearAuthState() {
+    let cachedUserId
+    try {
+      cachedUserId = JSON.parse(localStorage.getItem('cave:auth-user'))?.id
+      localStorage.removeItem('cave:auth-user')
+    } catch {}
+    for (const id of new Set([user.value?.id, cachedUserId].filter(Boolean))) defaultCavePersistence.clear(id).catch(() => {})
     cultivationStore.clear()
     clearTokens()
     user.value = null
@@ -89,14 +96,32 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  function cachedCaveUser() {
+    try {
+      const cached = JSON.parse(localStorage.getItem('cave:auth-user'))
+      const payload = localStorage.getItem('token')?.split('.')[1]
+      const subject = payload && JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/'))).sub
+      return cached?.id && cached.id === subject ? cached : null
+    } catch { return null }
+  }
+
   async function fetchUser() {
+    const tokenAtStart = token.value
     try {
       const userData = await authService.getCurrentUser()
+      if (token.value !== tokenAtStart) return
       if (user.value?.id && user.value.id !== userData.id) {
         cultivationStore.clear()
       }
       user.value = userData
+      try { localStorage.setItem('cave:auth-user', JSON.stringify(userData)) } catch {}
     } catch (error) {
+      if (token.value !== tokenAtStart) throw error
+      const cached = !error.response && ['ERR_NETWORK', 'ECONNABORTED', 'ETIMEDOUT'].includes(error.code) && cachedCaveUser()
+      if (cached) {
+        user.value = cached
+        return
+      }
       logout()
       throw error
     }

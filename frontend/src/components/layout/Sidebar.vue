@@ -74,142 +74,14 @@
       </div>
     </div>
 
-    <nav class="sidebar-nav">
-      <span v-if="!isCollapsed" class="nav-section-label">规划</span>
-      <router-link to="/" class="nav-item" :class="{ 'nav-item--active': isHomeActive }" :title="isCollapsed ? '首页' : ''">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z" />
-          <polyline points="9 22 9 12 15 12 15 22" />
-        </svg>
-        <span v-if="!isCollapsed">首页</span>
-      </router-link>
-      <router-link to="/finance" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '记账' : ''">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <rect x="2" y="4" width="20" height="16" rx="2" />
-          <path d="M2 10h20" />
-          <circle cx="12" cy="15" r="2" />
-        </svg>
-        <span v-if="!isCollapsed">记账</span>
-      </router-link>
-      <router-link to="/todos" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '待办' : ''">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M9 11l3 3L22 4" />
-          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-        </svg>
-        <span v-if="!isCollapsed">待办</span>
-      </router-link>
-      <router-link to="/projects" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '项目' : ''">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-        </svg>
-        <span v-if="!isCollapsed">项目</span>
-      </router-link>
-      <router-link to="/calendar" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '日历' : ''">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-          <line x1="16" y1="2" x2="16" y2="6" />
-          <line x1="8" y1="2" x2="8" y2="6" />
-          <line x1="3" y1="10" x2="21" y2="10" />
-        </svg>
-        <span v-if="!isCollapsed">日历</span>
-      </router-link>
-      <router-link to="/notes" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '笔记' : ''">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-          <line x1="16" y1="13" x2="8" y2="13" />
-          <line x1="16" y1="17" x2="8" y2="17" />
-          <polyline points="10 9 9 9 8 9" />
-        </svg>
-        <span v-if="!isCollapsed">笔记</span>
-      </router-link>
-      <span v-if="!isCollapsed && cultivationUnlocked" class="nav-section-label">修炼</span>
-      <router-link v-if="cultivationUnlocked" to="/cultivation" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '修炼' : ''">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M12 3v18M5 8h14M7 16h10" />
-        </svg>
-        <span v-if="!isCollapsed">修炼</span>
-      </router-link>
-      <router-link v-if="cultivationUnlocked" to="/world" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '凡界' : ''">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
-        </svg>
-        <span v-if="!isCollapsed">凡界</span>
-      </router-link>
-      <router-link v-if="cultivationUnlocked" to="/sects" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '宗门' : ''">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6" />
-        </svg>
-        <span v-if="!isCollapsed">宗门</span>
-      </router-link>
-      <router-link v-if="cultivationUnlocked" to="/techniques" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '功法' : ''">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M4 5a3 3 0 0 1 3-3h13v18H7a3 3 0 0 0-3 3z" /><path d="M7 2v18" />
-        </svg>
-        <span v-if="!isCollapsed">功法</span>
-      </router-link>
-      <router-link v-if="cultivationUnlocked" to="/npcs" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? (isAscended ? '仙官' : '凡界 NPC') : ''">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <circle cx="12" cy="7" r="4" /><path d="M4 21a8 8 0 0 1 16 0" />
-        </svg>
-        <span v-if="!isCollapsed">{{ isAscended ? '仙官' : '凡界 NPC' }}</span>
-      </router-link>
-      <router-link v-if="cultivationUnlocked" to="/tribulations" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '渡劫' : ''">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-        </svg>
-        <span v-if="!isCollapsed">渡劫</span>
-      </router-link>
-      <router-link v-if="isAscended" to="/immortal/world" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '仙界' : ''">
-        <span v-if="!isCollapsed">仙界</span>
-      </router-link>
-      <router-link v-if="isAscended" to="/immortal/activities" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '仙界活动' : ''">
-        <span v-if="!isCollapsed">仙界活动</span>
-      </router-link>
-      <router-link v-if="isAscended" to="/immortal/officials" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '仙官委托' : ''">
-        <span v-if="!isCollapsed">仙官委托</span>
-      </router-link>
-      <span v-if="!isCollapsed" class="nav-section-label">奖励</span>
-      <router-link to="/shop" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '商城' : ''">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-          <line x1="3" y1="6" x2="21" y2="6" />
-          <path d="M16 10a4 4 0 0 1-8 0" />
-        </svg>
-        <span v-if="!isCollapsed">商城</span>
-      </router-link>
-      <router-link to="/backpack" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '背包' : ''">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-          <path d="M16 7V5a4 4 0 0 0-8 0v2" />
-          <line x1="12" y1="12" x2="12" y2="16" />
-          <line x1="10" y1="14" x2="14" y2="14" />
-        </svg>
-        <span v-if="!isCollapsed">背包</span>
-      </router-link>
-      <span v-if="!isCollapsed" class="nav-section-label">洞察</span>
-      <router-link to="/stats" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '统计' : ''">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M18 20V10" />
-          <path d="M12 20V4" />
-          <path d="M6 20v-6" />
-        </svg>
-        <span v-if="!isCollapsed">统计</span>
-      </router-link>
-      <router-link to="/review" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '周复盘' : ''">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
-          <path d="M8 7h8M8 11h8M8 15h5" />
-        </svg>
-        <span v-if="!isCollapsed">周复盘</span>
-      </router-link>
-      <router-link to="/profile" class="nav-item" active-class="nav-item--active" :title="isCollapsed ? '个人' : ''">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-          <circle cx="12" cy="7" r="4" />
-        </svg>
-        <span v-if="!isCollapsed">个人</span>
-      </router-link>
+    <nav class="sidebar-nav" aria-label="侧边导航">
+      <template v-for="group in navigationGroups" :key="group.label">
+        <span v-if="!isCollapsed" class="nav-section-label">{{ group.label }}</span>
+        <router-link v-for="item in group.items" :key="item.to" :to="item.to" class="nav-item" :class="{ 'nav-item--active': item.to === '/' ? isHomeActive : route.path.startsWith(item.to) }" :title="isCollapsed ? item.label : ''">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path :d="item.icon" /></svg>
+          <span v-if="!isCollapsed">{{ item.label }}</span>
+        </router-link>
+      </template>
     </nav>
   </aside>
 </template>
@@ -244,8 +116,32 @@ const {
   loadCultivation
 } = useUserStats()
 const avatarSrc = useResolvedImage(computed(() => user.value?.avatar))
-const cultivationUnlocked = computed(() => Boolean(cultivationOverview.value && cultivationOverview.value.unlocked !== false))
 const isAscended = computed(() => cultivationOverview.value?.ascended === true)
+const navigationGroups = computed(() => [
+  { label: '洞府', items: [{ to: '/', label: '洞府', icon: 'M3 10 12 3l9 7v11H3ZM9 21v-8h6v8' }] },
+  { label: '执行', items: [{ to: '/todos', label: '待办', icon: 'm4 12 5 5L20 6M3 3h7M3 21h18' }] },
+  { label: '成长', items: [
+    { to: '/cave/growth', label: '成长', icon: 'M12 21V9M12 15C5 15 3 10 3 4c7 0 9 4 9 11ZM12 11c0-6 3-9 9-9 0 6-3 9-9 9Z' },
+    { to: '/sects', label: '宗门', icon: 'M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6' },
+    { to: '/techniques', label: '功法', icon: 'M4 5a3 3 0 0 1 3-3h13v18H7a3 3 0 0 0-3 3ZM7 2v18' },
+    { to: '/world', label: '凡界', icon: 'm2 20 7-15 5 9 3-5 5 11Z' },
+    { to: '/tribulations', label: '渡劫', icon: 'M13 2 3 14h9l-1 8 10-12h-9l1-8Z' },
+    { to: '/npcs', label: '人物', icon: 'M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM4 21a8 8 0 0 1 16 0' },
+    ...(isAscended.value ? [{ to: '/immortal/world', label: '仙界', icon: 'M12 2 2 12l10 10 10-10Z' }] : []),
+  ] },
+  { label: '更多', items: [
+    { to: '/finance', label: '财务', icon: 'M3 5h18v15H3ZM3 10h18M15 15h3' },
+    { to: '/notes', label: '笔记', icon: 'M4 3h16v18H4ZM8 8h8M8 12h8M8 16h5' },
+    { to: '/projects', label: '项目', icon: 'M3 5h7l2 3h9v13H3Z' },
+    { to: '/calendar', label: '日历', icon: 'M3 5h18v16H3ZM3 10h18M8 2v6M16 2v6' },
+    { to: '/stats', label: '统计', icon: 'M5 20v-6M12 20V4M19 20V9' },
+    { to: '/review', label: '周复盘', icon: 'M4 3h16v18H4ZM8 8h8M8 13h8' },
+    { to: '/shop', label: '商城', icon: 'M3 7h18v14H3ZM3 7l3-5h12l3 5M8 11a4 4 0 0 0 8 0' },
+    { to: '/backpack', label: '背包', icon: 'M3 7h18v14H3ZM8 7V4h8v3M9 14h6' },
+    { to: '/cave/settings', label: '洞府设置', icon: 'M4 5h16M4 12h16M4 19h16M8 2v6M16 9v6M8 16v6' },
+    { to: '/profile', label: '个人资料', icon: 'M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM4 21a8 8 0 0 1 16 0' },
+  ] },
+])
 
 onMounted(() => {
   if (!cultivationOverview.value) {

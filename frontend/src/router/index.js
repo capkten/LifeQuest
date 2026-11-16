@@ -32,7 +32,49 @@ const routes = [
         path: '',
         name: 'Home',
         component: () => import('../views/Home.vue'),
-        meta: { title: '首页' }
+        meta: { title: '洞府' }
+      },
+      {
+        path: 'cave/session/:id',
+        name: 'CaveSession',
+        component: () => import('../views/CaveSession.vue'),
+        meta: { title: '入定' }
+      },
+      {
+        path: 'cave/return/:id',
+        name: 'CaveReturn',
+        component: () => import('../views/CaveReturn.vue'),
+        meta: { title: '归来' }
+      },
+      {
+        path: 'cave/growth',
+        name: 'CaveGrowth',
+        component: () => import('../views/CaveGrowth.vue'),
+        meta: { title: '成长' }
+      },
+      {
+        path: 'cave/codex',
+        name: 'CaveCodex',
+        component: () => import('../views/CaveCodex.vue'),
+        meta: { title: '图鉴' }
+      },
+      {
+        path: 'cave/companions',
+        name: 'CaveCompanions',
+        component: () => import('../views/CaveCompanions.vue'),
+        meta: { title: '伙伴' }
+      },
+      {
+        path: 'cave/letters/:id?',
+        name: 'CaveLetters',
+        component: () => import('../views/CaveLetters.vue'),
+        meta: { title: '同门书信' }
+      },
+      {
+        path: 'cave/settings',
+        name: 'CaveSettings',
+        component: () => import('../views/CaveSettings.vue'),
+        meta: { title: '洞府设置' }
       },
       {
         path: 'notes',

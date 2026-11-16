@@ -52,27 +52,23 @@ def test_retreat_history_and_catalog_are_user_scoped(retreat_tools):
             tools["get_focus_session_history"](**kwargs)
 
 
-def test_focus_settlement_server_clock_replay_and_ownership(retreat_tools, monkeypatch):
+def test_focus_settlement_server_clock_replay_and_ownership(retreat_tools):
     tools, db, owner_id, other_id = retreat_tools
     from app.models.coin_transaction import CoinTransaction
-    from app.services.encounter_engine import EncounterEngine
-    monkeypatch.setattr(EncounterEngine, "roll_encounter", lambda **kwargs: None)
     session = mcp_server.start_focus_session(25)
     aborted = mcp_server.complete_focus_session(session["id"])
     assert aborted["status"] == "aborted" and aborted["coins_gained"] == 0
     experience = db.get(User, owner_id).experience
-    with pytest.raises(HTTPException):
-        mcp_server.complete_focus_session(session["id"])
+    assert mcp_server.complete_focus_session(session["id"]) == aborted
     assert db.get(User, owner_id).experience == experience
     session = mcp_server.start_focus_session(25)
     db.get(CultivationRetreat, UUID(session["id"])).started_at = datetime.now(timezone.utc) - timedelta(minutes=25)
     db.commit()
     finished = mcp_server.complete_focus_session(session["id"])
-    assert finished["status"] == "completed" and finished["coins_gained"] == 125
-    assert db.query(CoinTransaction).filter_by(user_id=owner_id, source_id=session["id"]).count() == 1
-    with pytest.raises(HTTPException):
-        mcp_server.complete_focus_session(session["id"])
-    assert db.query(CoinTransaction).filter_by(user_id=owner_id, source_id=session["id"]).count() == 1
+    assert finished["status"] == "completed" and finished["coins_gained"] == 3
+    assert db.query(CoinTransaction).filter_by(user_id=owner_id, source='retreat', source_id=session["id"]).count() == 1
+    assert mcp_server.complete_focus_session(session["id"]) == finished
+    assert db.query(CoinTransaction).filter_by(user_id=owner_id, source='retreat', source_id=session["id"]).count() == 1
     assert len(tools["get_focus_session_history"]()) == 2
     mcp_server._auth_user_id.set(other_id)
     assert tools["get_focus_session_history"]() == []
@@ -100,9 +96,7 @@ def test_linked_task_uses_normal_rewards_and_failure_rolls_back_focus(retreat_to
     _, db, owner_id, _ = retreat_tools
     from app.models.todo import Task, TaskStatus
     from app.models.coin_transaction import CoinTransaction
-    from app.services.encounter_engine import EncounterEngine
     from app.services.todo import TodoService
-    monkeypatch.setattr(EncounterEngine, "roll_encounter", lambda **kwargs: None)
     task = mcp_server.create_task("linked focus")
     started = mcp_server.start_focus_session(25, task["id"])
     db.get(CultivationRetreat, UUID(started["id"])).started_at = datetime.now(timezone.utc) - timedelta(minutes=25)
@@ -119,25 +113,25 @@ def test_linked_task_uses_normal_rewards_and_failure_rolls_back_focus(retreat_to
     assert db.get(CultivationRetreat, UUID(started["id"])).status == "active"
     assert db.get(User, owner_id).coins == before_coins
     monkeypatch.setattr(TodoService, "complete_task", original)
-    mcp_server.complete_focus_session(started["id"], True)
+    receipt = mcp_server.complete_focus_session(started["id"], True)
+    assert receipt['encounter_result']['rarity'] == 'common'
+    encounter_stones = receipt['return_summary']['encounter_reward']['spirit_stones']
     assert db.get(Task, UUID(task["id"])).status == TaskStatus.COMPLETED
-    assert db.get(User, owner_id).coins == before_coins + 125 + task["coins_reward"]
-    assert db.get(User, owner_id).total_coins_earned == before_earned + 125 + task["coins_reward"]
+    assert db.get(User, owner_id).coins == before_coins + 7 + task["coins_reward"] + encounter_stones
+    assert db.get(User, owner_id).total_coins_earned == before_earned + 7 + task["coins_reward"] + encounter_stones
     assert db.query(CoinTransaction).filter_by(user_id=owner_id, source="task").count() == 1
 
 
-def test_concurrent_focus_settlement_rewards_once(tmp_path, monkeypatch):
+def test_concurrent_focus_settlement_rewards_once(tmp_path):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     from app.models.coin_transaction import CoinTransaction
     from app.services.cultivation_retreat import CultivationRetreatService
-    from app.services.encounter_engine import EncounterEngine
     engine = create_engine(f"sqlite:///{tmp_path / 'concurrent.db'}", connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
     sessions = sessionmaker(bind=engine)
-    monkeypatch.setattr(EncounterEngine, "roll_encounter", lambda **kwargs: None)
     with sessions() as db:
         user = User(username=uuid4().hex, email=f"{uuid4().hex}@example.com", password_hash="hashed")
         db.add(user)
@@ -158,10 +152,13 @@ def test_concurrent_focus_settlement_rewards_once(tmp_path, monkeypatch):
     try:
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = list(pool.map(lambda _: settle(), range(2)))
-        assert sorted(str(result) for result in results) == ["404", "completed"]
+        assert results == ["completed", "completed"]
         with sessions() as db:
-            assert db.get(User, user_id).coins == 125
-            assert db.get(User, user_id).total_coins_earned == 125
-            assert db.query(CoinTransaction).filter_by(user_id=user_id).count() == 1
+            receipt = db.get(CultivationRetreat, retreat_id)
+            encounter_stones = receipt.return_summary['encounter_reward']['spirit_stones']
+            assert db.get(User, user_id).coins == 3 + encounter_stones
+            assert db.get(User, user_id).total_coins_earned == 3 + encounter_stones
+            assert db.query(CoinTransaction).filter_by(user_id=user_id, source='retreat').count() == 1
+            assert receipt.encounter_result['rarity'] == 'common'
     finally:
         engine.dispose()

@@ -1,12 +1,13 @@
 {
   "name": "lifequest-frontend",
-  "version": "1.19.0",
+  "version": "1.21.0",
   "private": true,
   "type": "module",
   "scripts": {
     "sync:version": "node ../scripts/sync-version.mjs",
     "check:version": "node ../scripts/check-version.mjs",
     "test": "node --test src/*/*.test.mjs",
+    "test:browser": "node --test e2e/*.test.mjs",
     "prebuild": "node ../scripts/sync-version.mjs",
     "prebuild:android": "node ../scripts/sync-version.mjs",
     "dev": "vite",
@@ -20,6 +21,8 @@
     "@capacitor/app": "^8.1.1",
     "@capacitor/browser": "^8.0.4",
     "@capacitor/core": "^8.4.0",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/local-notifications": "8.0.2",
     "@element-plus/icons-vue": "^2.3.2",
     "@kangc/v-md-editor": "^2.3.18",
     "axios": "^1.6.2",

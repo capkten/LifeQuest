@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.repositories.user import UserRepository
@@ -18,7 +19,7 @@ from app.models.user import User
 from app.schemas.cultivation_retreat import EncounterCatalogItem
 from app.services.encounter_engine import EncounterEngine
 from datetime import datetime, timezone
-from app.timezone import as_utc
+from app.timezone import as_utc, day_bounds_utc, local_date
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -44,6 +45,9 @@ class CultivationRetreatService:
         user_id: UUID,
         target_duration: int,
         todo_id: Optional[UUID] = None,
+        *,
+        commit: bool = True,
+        mark_todo_complete: bool = False,
     ) -> CultivationRetreat:
         payload = RetreatStartRequest(target_duration=target_duration, todo_id=todo_id)
         target_duration, todo_id = payload.target_duration, payload.todo_id
@@ -72,16 +76,25 @@ class CultivationRetreatService:
                     detail="Task not found or not owned by user",
                 )
 
+        from app.services.cave_companions import CaveCompanionService
+
         retreat = CultivationRetreat(
             user_id=user_id,
+            companion_snapshot=CaveCompanionService(db).active_snapshot(user_id),
             todo_id=todo_id,
+            todo_title=task.title if todo_id else None,
+            mark_todo_complete=mark_todo_complete,
             target_duration=target_duration,
             started_at=utc_now(),
             status="active",
+            rule_version="b_v1",
         )
         db.add(retreat)
-        db.commit()
-        db.refresh(retreat)
+        if commit:
+            db.commit()
+            db.refresh(retreat)
+        else:
+            db.flush()
         return retreat
 
     @staticmethod
@@ -97,7 +110,7 @@ class CultivationRetreatService:
 
     @staticmethod
     @rollback_retreat_on_error
-    def abort_retreat(db: Session, user_id: UUID, retreat_id: UUID) -> CultivationRetreat:
+    def abort_retreat(db: Session, user_id: UUID, retreat_id: UUID, *, commit: bool = True) -> CultivationRetreat:
         UserRepository(db).lock(user_id)
         claimed = db.query(CultivationRetreat).filter(
             CultivationRetreat.id == retreat_id,
@@ -105,6 +118,16 @@ class CultivationRetreatService:
             CultivationRetreat.status == "active",
         ).update({CultivationRetreat.status: "settling"}, synchronize_session=False)
         if claimed != 1:
+            settled = db.query(CultivationRetreat).populate_existing().filter(
+                CultivationRetreat.id == retreat_id,
+                CultivationRetreat.user_id == user_id,
+                CultivationRetreat.status.in_(("completed", "aborted")),
+            ).first()
+            if settled is not None:
+                if commit:
+                    db.commit()
+                    db.refresh(settled)
+                return settled
             raise HTTPException(status_code=404, detail="Active retreat not found")
         retreat = (
             db.query(CultivationRetreat).populate_existing()
@@ -120,12 +143,18 @@ class CultivationRetreatService:
                 detail="Active retreat not found",
             )
 
+        if retreat.rule_version == "b_v1":
+            return CultivationRetreatService._settle_b_retreat(db, user_id, retreat, abort=True, commit=commit)
+
         now = utc_now()
         retreat.status = "aborted"
         retreat.ended_at = now
         retreat.actual_duration = max(0, int((now - as_utc(retreat.started_at)).total_seconds() / 60))
-        db.commit()
-        db.refresh(retreat)
+        if commit:
+            db.commit()
+            db.refresh(retreat)
+        else:
+            db.flush()
         return retreat
 
     @staticmethod
@@ -136,6 +165,8 @@ class CultivationRetreatService:
         retreat_id: UUID,
         mark_todo_complete: bool = False,
         force_encounter: bool = False,
+        *,
+        commit: bool = True,
     ) -> CultivationRetreat:
         UserRepository(db).lock(user_id)
         claimed = db.query(CultivationRetreat).filter(
@@ -144,6 +175,16 @@ class CultivationRetreatService:
             CultivationRetreat.status == "active",
         ).update({CultivationRetreat.status: "settling"}, synchronize_session=False)
         if claimed != 1:
+            settled = db.query(CultivationRetreat).populate_existing().filter(
+                CultivationRetreat.id == retreat_id,
+                CultivationRetreat.user_id == user_id,
+                CultivationRetreat.status.in_(("completed", "aborted")),
+            ).first()
+            if settled is not None:
+                if commit:
+                    db.commit()
+                    db.refresh(settled)
+                return settled
             raise HTTPException(status_code=404, detail="Active retreat not found")
         retreat = (
             db.query(CultivationRetreat).populate_existing()
@@ -157,6 +198,11 @@ class CultivationRetreatService:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Active retreat not found",
+            )
+
+        if retreat.rule_version == "b_v1":
+            return CultivationRetreatService._settle_b_retreat(
+                db, user_id, retreat, mark_todo_complete=mark_todo_complete, commit=commit,
             )
 
         now = utc_now()
@@ -269,8 +315,83 @@ class CultivationRetreatService:
             task = todo_service.get_task_for_user(retreat.todo_id, user_id)
             todo_service.complete_task(task, user_id, commit=False)
 
-        db.commit()
-        db.refresh(retreat)
+        if commit:
+            db.commit()
+            db.refresh(retreat)
+        else:
+            db.flush()
+        return retreat
+
+    @staticmethod
+    def _settle_b_retreat(
+        db: Session, user_id: UUID, retreat: CultivationRetreat,
+        mark_todo_complete: bool = False, abort: bool = False, commit: bool = True,
+    ) -> CultivationRetreat:
+        from app.services.cultivation import CultivationService
+
+        now = utc_now()
+        elapsed_seconds = max(0, (now - as_utc(retreat.started_at)).total_seconds())
+        elapsed = int(elapsed_seconds / 60)
+        retreat.actual_duration = elapsed
+        retreat.ended_at = now
+        early = abort or elapsed_seconds < retreat.target_duration * 60 * 0.8
+        retreat.status = "aborted" if early else "completed"
+        start, end = day_bounds_utc(local_date(now))
+        daily_qi = db.query(func.coalesce(func.sum(CultivationRetreat.qi_gained), 0)).filter(
+            CultivationRetreat.user_id == user_id,
+            CultivationRetreat.id != retreat.id,
+            CultivationRetreat.ended_at >= start,
+            CultivationRetreat.ended_at < end,
+        ).scalar()
+        retreat.qi_gained = min(elapsed, retreat.target_duration, max(0, 240 - daily_qi))
+        daily_qi_total = daily_qi + retreat.qi_gained
+        task_reward = None
+        task_previously_completed = False
+        if not early and mark_todo_complete and retreat.todo_id:
+            from app.services.todo import TodoService
+            todo_service = TodoService(db)
+            task = todo_service.get_task_for_user(retreat.todo_id, user_id)
+            task.cultivation_reward = None
+            todo_service.complete_task(task, user_id, commit=False)
+            task_reward = task.cultivation_reward
+            if task_reward is not None and task_reward._already_settled:
+                task_reward = None
+            task_previously_completed = task_reward is None
+        task_completed = task_reward is not None
+        source_key = f"retreat:{retreat.id}"
+        reward = CultivationService(db).settle_todo_reward(
+            user_id, "retreat", retreat.qi_gained // (2 if task_completed else 4),
+            "medium", source_key=source_key,
+            # Zero credited qi produces a zero-delta settlement, including resources.
+            content_star=1 if retreat.qi_gained > 0 else 0,
+        )
+        retreat.exp_gained = reward.cultivation
+        retreat.coins_gained = reward.spirit_stones
+        retreat.settlement_id = reward.log_id
+        retreat.settlement_result = {
+            "source": "retreat",
+            "source_key": source_key,
+            "conversion_rate": 0.5 if task_completed else 0.25,
+            "daily_qi_total": daily_qi_total,
+            "daily_qi_cap_reached": daily_qi_total >= 240,
+            "task_completed": task_completed,
+            "task_previously_completed": task_previously_completed,
+            "retreat_reward": reward.model_dump(mode="json"),
+            "task_reward": task_reward.model_dump(mode="json") if task_reward else None,
+        }
+        if retreat.coins_gained > 0:
+            db.add(CoinTransaction(
+                user_id=user_id, amount=retreat.coins_gained,
+                type=CoinType.EARN.value, source="retreat", source_id=str(retreat.id),
+                description=f"闭关入定收益 ({retreat.qi_gained}灵气)",
+            ))
+        from app.services.retreat_return import freeze_return
+        retreat.return_summary = freeze_return(db, retreat)
+        if commit:
+            db.commit()
+            db.refresh(retreat)
+        else:
+            db.flush()
         return retreat
 
     @staticmethod

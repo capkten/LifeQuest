@@ -1,5 +1,13 @@
 """Canonical Chinese content for system-generated cultivation records."""
 
+# The first positive-qi settlement adds floor(base cultivation / 10), separately.
+CAVE_FORTUNES = (
+    {'key': 'steady', 'title': '一寸有一寸的欢喜', 'text': '只照看眼前这一件事。', 'multiplier': 1.1},
+    {'key': 'begin', 'title': '起身便是好时辰', 'text': '不必等万事俱备，先走一小步。', 'multiplier': 1.1},
+    {'key': 'quiet', 'title': '静处自有回响', 'text': '给自己一段不被打扰的时间。', 'multiplier': 1.1},
+)
+
+
 REALM_LABELS = {
     "qi_refining": "炼气期",
     "foundation": "筑基期",
@@ -22,6 +30,9 @@ SOURCE_LABELS = {
     "milestone": "里程碑",
     "trial_objective": "试炼目标",
     "checkin": "签到",
+    "retreat": "闭关",
+    "retreat_omen": "今日签加成",
+    "retreat_encounter": "入定奇遇",
     "npc": "NPC事件",
     "shop": "商店",
     "achievement": "成就",
@@ -70,6 +81,7 @@ CULTIVATION_RESOURCE_RULES = {
     "milestone": {"merit": 8, "contribution": 20, "mind_state_delta": 0},
     "trial_objective": {"merit": 12, "contribution": 30, "mind_state_delta": 0},
     "checkin": {"merit": 1, "contribution": 0, "mind_state_delta": 1},
+    "retreat": {"merit": 2, "contribution": 0, "mind_state_delta": 1},
     "npc": {"merit": 2, "contribution": 5, "mind_state_delta": 1},
 }
 

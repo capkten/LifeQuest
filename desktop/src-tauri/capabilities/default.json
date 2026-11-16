@@ -4,6 +4,9 @@
   "description": "Least-privilege desktop capabilities",
   "windows": ["main"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "notification:allow-notify"
   ]
 }

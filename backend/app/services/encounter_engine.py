@@ -125,7 +125,7 @@ def calculate_encounter_probability(duration_minutes: int, streak_days: int) -> 
 
 class EncounterEngine:
     @staticmethod
-    def seed_events(db: Session) -> None:
+    def seed_events(db: Session, *, commit: bool = True) -> None:
         """Seed default encounter events if not already present."""
         existing_ids = {e.id for e in db.query(EncounterEvent.id).all()}
         new_events = []
@@ -135,7 +135,10 @@ class EncounterEngine:
 
         if new_events:
             db.add_all(new_events)
-            db.commit()
+            if commit:
+                db.commit()
+            else:
+                db.flush()
 
     @staticmethod
     def roll_encounter(
@@ -145,6 +148,7 @@ class EncounterEngine:
         duration_minutes: int = 25,
         streak_days: int = 0,
         force_hit: bool = False,
+        rarity: Optional[str] = None,
     ) -> Optional[EncounterEvent]:
         """
         Determine if a random encounter occurs and pick an eligible event.
@@ -155,11 +159,10 @@ class EncounterEngine:
         if not hit:
             return None
 
-        candidates = (
-            db.query(EncounterEvent)
-            .filter(EncounterEvent.min_realm_level <= max(1, realm_level))
-            .all()
-        )
+        query = db.query(EncounterEvent).filter(EncounterEvent.min_realm_level <= max(1, realm_level))
+        if rarity is not None:
+            query = query.filter(EncounterEvent.rarity == rarity)
+        candidates = query.all()
         if not candidates:
             return None
 

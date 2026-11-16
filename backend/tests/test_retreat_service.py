@@ -46,7 +46,7 @@ def test_retreat_lifecycle_and_conflict(client, db_session, user):
     assert CultivationRetreatService.get_active_retreat(db_session, user.id) is None
 
 
-def test_retreat_completion_and_anti_cheat(client, db_session, user):
+def test_legacy_retreat_completion_and_anti_cheat(client, db_session, user):
     EncounterEngine.seed_events(db_session)
 
     # Start 25 minute retreat
@@ -59,6 +59,7 @@ def test_retreat_completion_and_anti_cheat(client, db_session, user):
     # Case A: Too early (< 80% of target duration, e.g. 5 minutes in)
     # Mock started_at to be only 5 minutes ago
     retreat.started_at = utc_now() - timedelta(minutes=5)
+    retreat.rule_version = None  # A session already active before the B-rule migration.
     db_session.commit()
 
     completed_early = CultivationRetreatService.complete_retreat(
@@ -77,6 +78,7 @@ def test_retreat_completion_and_anti_cheat(client, db_session, user):
         target_duration=25,
     )
     retreat2.started_at = utc_now() - timedelta(minutes=26)
+    retreat2.rule_version = None
     db_session.commit()
 
     completed_ok = CultivationRetreatService.complete_retreat(

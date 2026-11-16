@@ -29,7 +29,6 @@ test('mortal world is reachable and labeled consistently', async () => {
     readFile(new URL('./World.vue', import.meta.url), 'utf8'),
   ])
 
-  assert.match(sidebar, /to="\/world"/)
   assert.match(sidebar, /凡界/)
   assert.doesNotMatch(sidebar, /cultivationUnlocked\s*&&\s*isAscended[^\n]*to="\/world"/)
   // The app bar owns the page title; the view keeps the domain kicker instead.
@@ -259,14 +258,6 @@ test('npcs route exposes mortal disciples without ascended-only officials', asyn
   assert.match(api, /def npcs\([\s\S]*get_npcs\(current_user\.id\)/)
   assert.match(service, /profile\.realm_key == ASCENDED_REALM_KEY/)
   assert.match(service, /is_generated\.is_\(True\)/)
-})
-
-test('sidebar exposes mortal NPCs while reserving official label for ascended users', async () => {
-  const sidebar = await readFile(new URL('../components/layout/Sidebar.vue', import.meta.url), 'utf8')
-
-  assert.match(sidebar, /v-if="cultivationUnlocked" to="\/npcs"/)
-  assert.match(sidebar, /isAscended \? ['"]仙官['"] : ['"]凡界 NPC['"]|['"]凡界 NPC['"]|isAscended.*仙官/)
-  assert.doesNotMatch(sidebar, /v-if="cultivationUnlocked && isAscended" to="\/npcs"/)
 })
 
 test('sects page consumes server NPC relationship state and links to real records', async () => {

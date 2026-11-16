@@ -10,6 +10,7 @@ from app.models.task_schedule import TaskSchedule, TaskOccurrence
 from app.models.habit_pause import HabitPauseInterval
 from app.models.habit_leave import HabitLeaveInterval
 from app.models.daily_workbench import DailyFocusPlan, WorkbenchTaskRequest
+from app.models.cave import CaveRequest, CaveEvent, CaveDailyState
 from app.models.shop import ShopItem, ExchangeHistory, ExchangeStatus
 from app.models.backpack import (
     BackpackItem, ItemType, ItemStatus,
@@ -42,6 +43,7 @@ __all__ = [
     "NoteSyncChange", "NoteSyncOperation", "NoteSyncConflict",
     "TaskNoteLink", "GoalNoteLink", "ProjectNoteLink",
     "Habit", "HabitCompletion", "HabitPauseInterval", "HabitLeaveInterval", "DailyFocusPlan", "WorkbenchTaskRequest",
+    "CaveDailyState", "CaveRequest", "CaveEvent",
     "Task", "Goal", "Subtask",
     "TaskSchedule", "TaskOccurrence",
     "ShopItem", "ExchangeHistory", "ExchangeStatus",

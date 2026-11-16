@@ -6,8 +6,8 @@
         <span class="item-count">{{ currentList.length }} {{ activeTab === 'habits' ? '个习惯' : activeTab === 'tasks' ? '个任务' : '个目标' }}</span>
       </div>
       <div class="header-actions-group">
-        <button class="btn-retreat" @click="openRetreatModal(null)">
-          <Sparkles class="retreat-icon" aria-hidden="true" /> 闭关专注
+        <button class="btn-retreat" @click="prepareCaveSession(null)">
+          <Sparkles class="retreat-icon" aria-hidden="true" /> 入定
         </button>
         <button class="btn-create" @click="showCreateDialog = true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -239,6 +239,7 @@
 
       <!-- Tasks List -->
       <template v-if="activeTab === 'tasks'">
+        <p v-if="taskCompletionOffline" class="text-secondary" role="status">请联网后再完成任务；离线不会排队完成任务。</p>
         <div
           v-for="task in visibleTasks"
           :key="task.id"
@@ -250,7 +251,7 @@
               <button
                 class="complete-btn"
                 :class="{ 'complete-btn--done': task.status === 'completed' }"
-                :disabled="completingId === task.id"
+                :disabled="completingId === task.id || taskCompletionOffline"
                 :aria-disabled="task.status === 'completed'"
                 @click="completeTask(task)"
                 :aria-label="'完成 ' + task.title"
@@ -295,7 +296,7 @@
             </div>
             <div class="todo-card-actions">
               <div class="action-buttons">
-                <button class="action-btn action-btn--focus" @click="openRetreatModal(task)" aria-label="为此任务闭关专注" title="闭关专注">
+                <button class="action-btn action-btn--focus" @click="prepareCaveSession(task)" aria-label="为此任务入定" title="入定">
                   <Sparkles class="retreat-icon" aria-hidden="true" />
                 </button>
                 <button class="action-btn action-btn--snooze" @click="openSnoozeDialog(task)" aria-label="延期任务" title="延期任务">
@@ -834,20 +835,14 @@
       @updated="updateHabitFromHistory"
     />
 
-    <!-- Cultivation Retreat Modal -->
-    <CultivationRetreatModal
-      v-model="showRetreatModal"
-      :todo-item="retreatSelectedTodo"
-      @completed="handleRetreatCompleted"
-    />
   </div>
 </template>
 
 <script setup>
 import { chinaDateTimeInputToUtcIso, formatChinaDate, formatDateTimeInput } from '../utils/dateTime'
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, inject, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { Sparkles } from 'lucide-vue-next'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { todoService } from '../services/todo'
 import { projectService } from '../services/project'
 import { useAuthStore } from '../stores/auth'
@@ -855,20 +850,16 @@ import { useCultivationStore } from '../stores/cultivation'
 import { getErrorMessage } from '../utils/errorMessage'
 import { labelDifficulty, labelFrequency, labelTaskStatus } from '../utils/displayLabels'
 import HabitHistoryDialog from '../components/HabitHistoryDialog.vue'
-import CultivationRetreatModal from '../components/retreat/CultivationRetreatModal.vue'
 import AppState from '../components/ui/AppState.vue'
 import AppButton from '../components/ui/AppButton.vue'
 
-const showRetreatModal = ref(false)
-const retreatSelectedTodo = ref(null)
+const cave = inject('cave')
+const taskCompletionOffline = computed(() => cave.offline.value)
+const router = useRouter()
 
-function openRetreatModal(todo = null) {
-  retreatSelectedTodo.value = todo
-  showRetreatModal.value = true
-}
-
-function handleRetreatCompleted() {
-  loadData()
+function prepareCaveSession(todo = null) {
+  if (cave.activeSession.value) router.push(`/cave/session/${cave.activeSession.value.id}`)
+  else cave.prepareSession(todo)
 }
 
 const authStore = useAuthStore()
@@ -1445,6 +1436,7 @@ async function completeHabitFromHistory(completionData) {
 }
 
 async function completeTask(task) {
+  if (taskCompletionOffline.value) { explainBlocked('请联网后再完成任务。'); return }
   if (task.status === 'completed') { explainBlocked('该任务已经完成，无需重复提交。'); return }
   if (completingId.value) { explainBlocked('已有其他待办正在提交，请等待完成后再试。'); return }
   beginCompletion(task.id)

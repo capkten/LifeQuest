@@ -466,17 +466,9 @@ test('transaction mutation keeps failed edit data and distinguishes edit from cr
   assert.equal(created.feedback, '记账成功！')
 })
 
-test('home habit flow consumes server state, completes, pauses, and resumes', async () => {
+test('habit API adapters preserve completion, pause, and resume state', async () => {
   const todoService = await loadNamedSource('../services/todo.js', 'todoService', { api: contractApi })
-  const [source, todosSource] = await Promise.all([
-    readFile(new URL('./Home.vue', import.meta.url), 'utf8'),
-    readFile(new URL('./Todos.vue', import.meta.url), 'utf8'),
-  ])
-  const blockReasonSource = source.match(/function dailyHabitBlockReason\(habit\) \{[\s\S]*?\n\}/)?.[0]
-  assert.ok(blockReasonSource, 'Home must keep its server-state lock helper available')
-  const dailyHabitBlockReason = new Function(`${blockReasonSource}; return dailyHabitBlockReason`)()
-  assert.match(source, /TodayActionCenter|todoService\.getDailySummary\(\)/)
-  assert.match(source, /todoService\.completeHabit\(habit\.id\)/)
+  const todosSource = await readFile(new URL('./Todos.vue', import.meta.url), 'utf8')
   assert.match(todosSource, /todoService\.pauseHabit\(habit\.id\)/)
   assert.match(todosSource, /todoService\.resumeHabit\(habit\.id\)/)
 
@@ -501,22 +493,18 @@ test('home habit flow consumes server state, completes, pauses, and resumes', as
     assert.equal(initial.habits[0].is_active, true)
     assert.equal(initial.habits[0].paused_today, false)
     assert.equal(initial.habits[0].scheduled_today, true)
-    assert.equal(dailyHabitBlockReason(initial.habits[0]), '')
 
     const completed = await todoService.completeHabit(habit.id)
     assert.equal(completed.completed_today, true)
-    assert.match(dailyHabitBlockReason(completed), /已经完成/)
 
     habit = { ...habit, completed_today: false }
     const paused = await todoService.pauseHabit(habit.id)
     assert.equal(paused.is_active, false)
     assert.equal(paused.paused_today, true)
-    assert.match(dailyHabitBlockReason(paused), /暂停/)
 
     const resumed = await todoService.resumeHabit(habit.id)
     assert.equal(resumed.is_active, true)
     assert.equal(resumed.paused_today, false)
-    assert.equal(dailyHabitBlockReason(resumed), '')
     assert.deepEqual(calls.map(call => call.path), [
       '/todos/daily',
       '/todos/habits/habit-1/complete',

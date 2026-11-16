@@ -1,0 +1,10 @@
+.cave-page { --cave-accent: #397b67; color: #24443d; width: 100%; }
+.cave-page button, .cave-page input, .cave-page select { font-family: inherit; }
+.cave-page p { line-height: 1.7; }
+.cave-muted { color: #536d62; font-size: 14px; }
+.cave-button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 12px 24px; border: 0; border-radius: 10px; background: #397b67; color: #fff; font-family: inherit; font-size: 16px; font-weight: 500; text-decoration: none; cursor: pointer; }
+.cave-link { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 8px; border: 0; background: none; color: #397b67; font-family: inherit; font-size: 14px; text-decoration: none; cursor: pointer; }
+.cave-choice { min-height: 48px; padding: 10px 12px; border: 0; border-radius: 8px; color: #24443d; background: #edf2ee; font-size: 16px; cursor: pointer; }
+.cave-choice[aria-pressed="true"] { background: #397b67; color: #fff; }
+.cave-page :focus-visible, .cave-button:focus-visible, .cave-link:focus-visible { outline: 2px solid #397b67; outline-offset: 4px; }
+.cave-page button:disabled { cursor: default; opacity: .5; }

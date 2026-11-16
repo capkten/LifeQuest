@@ -52,7 +52,9 @@ def test_mcp_focus_session_flow(mcp_db):
     completed = mcp_server.complete_focus_session(session_id=session_id)
     assert completed is not None
     assert completed["status"] == "completed"
-    assert completed["exp_gained"] >= 250
+    assert completed["exp_gained"] == 6
+    assert completed["coins_gained"] == 3
+    assert completed["qi_gained"] == 25
 
     # 5. Verify active session is now None
     assert mcp_server.get_active_focus_session() is None

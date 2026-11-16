@@ -91,6 +91,21 @@ test('useCultivationRetreat completes session and captures encounter', async () 
   assert.equal(retreat.latestEncounter.value.title, '仙人指路')
 })
 
+test('B-rule sessions become ready at 80 percent of the target duration', async () => {
+  const api = {
+    getActive: async () => ({
+      id: 'b-session', rule_version: 'b_v1', target_duration: 25,
+      status: 'active', started_at: '2026-11-16T02:00:00Z',
+    }),
+  }
+  const retreat = useCultivationRetreat(api, { autoTick: false })
+  await retreat.fetchActive()
+  retreat.tick(Date.parse('2026-11-16T02:19:59Z'))
+  assert.equal(retreat.canComplete.value, false)
+  retreat.tick(Date.parse('2026-11-16T02:20:00Z'))
+  assert.equal(retreat.canComplete.value, true)
+})
+
 test('useCultivationRetreat aborts session cleanly', async () => {
   const api = createMockApi()
   const retreat = useCultivationRetreat(api, { autoTick: false })

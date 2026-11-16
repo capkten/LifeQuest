@@ -28,18 +28,6 @@ test('shop item grid renders through the shared list primitive', async () => {
   assert.match(shop, /<\/AppList>/)
 })
 
-test('home quick actions sit on the single identity band', async () => {
-  const home = await source('./Home.vue')
-
-  // Quick actions are chips on the identity band instead of a second card
-  // competing with the workbench, so home stays one flowing surface.
-  assert.match(home, /class="identity-chips"/)
-  assert.match(home, /todayWorkbench\?\.focusQuickAdd\(\)/)
-  assert.match(home, /to="\/projects"/)
-  assert.match(home, /to="\/finance"/)
-  assert.doesNotMatch(home, /class="quick-actions-card"/)
-})
-
 test('numeric readouts share one tabular figure treatment', async () => {
   const [app, home, stats, profile] = await Promise.all([
     source('../App.vue'),
@@ -63,15 +51,11 @@ test('achievement titles carry the gold reward semantic', async () => {
 })
 
 test('motivation pulse is a shared composable that respects reduced motion', async () => {
-  const [pulse, home] = await Promise.all([
-    source('../composables/useValuePulse.js'),
-    source('./Home.vue'),
-  ])
+  const pulse = await source('../composables/useValuePulse.js')
 
   assert.match(pulse, /export function useValuePulse/)
   assert.match(pulse, /prefers-reduced-motion/)
   assert.match(pulse, /matchMedia/)
-  assert.match(home, /useValuePulse/)
 })
 
 test('login keeps the card centred on phones and the brand on tablets', async () => {
