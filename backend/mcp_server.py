@@ -30,8 +30,8 @@ from uuid import UUID
 # Ensure backend package is importable
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from mcp.server.fastmcp import FastMCP
 from mcp.server.lowlevel.server import request_ctx
+from app.mcp.tool_annotations import LifeQuestFastMCP
 
 from app.database import SessionLocal, engine, Base
 from app import models  # noqa: F401  # Register all ORM models before create_all.
@@ -463,7 +463,7 @@ def create_http_app():
 # MCP Server
 # ---------------------------------------------------------------------------
 
-mcp = FastMCP(
+mcp = LifeQuestFastMCP(
     name="lifequest",
     instructions=(
         "LifeQuest 是一个个人成长 gamification 系统。"

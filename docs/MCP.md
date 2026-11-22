@@ -71,6 +71,8 @@ Authorization: Bearer <LifeQuest MCP access token>
 
 PAT 连接时，使用 LifeQuest 已有 MCP Token 管理接口创建的个人访问令牌；启用 OAuth 后，也可使用上述 OAuth 流程取得的 MCP 访问令牌。两者均不能使用普通登录 JWT 替代。权限等于该用户通过现有 Service 可执行的业务权限，目前没有每个工具的细粒度权限范围；`LIFEQUEST_MCP_SERVICE_USER_ID` 只是用户绑定限制，不是只读权限。Token 管理仍使用登录后的网页或 `/api/auth/mcp-tokens`：创建、查看元数据、撤销；创建响应只应保存到客户端的凭据配置中。工具不会替用户签发新 Token。
 
+`tools/list` 为所有工具声明 MCP safety annotations。当前 69 个查询工具标记为 `readOnlyHint=true`、`destructiveHint=false`；26 个删除、退款、消耗或高风险状态变更工具标记为 `readOnlyHint=false`、`destructiveHint=true`；其余 78 个普通写入工具标记为 `readOnlyHint=false`、`destructiveHint=false`。Gemini 等客户端可据此避免把纯查询误判为写入，同时继续对写操作执行确认。新增工具默认按普通写入处理，必须补充到显式只读或破坏性工具清单并更新测试。
+
 从 `backend/` 启动本地远程服务：
 
 ```bash
